@@ -32,7 +32,8 @@
     changes_stream_times_test/1,
     changes_stream_file_location_test/1,
     changes_stream_request_several_records_test/1,
-    changes_stream_on_multi_provider_test/1
+    changes_stream_on_multi_provider_test/1,
+    changes_stream_closed_on_disconnection/1
 ]).
 
 all() ->
@@ -42,8 +43,9 @@ all() ->
         changes_stream_json_metadata_test,
         changes_stream_times_test,
         changes_stream_file_location_test,
-        changes_stream_request_several_records_test
-%%        changes_stream_on_multi_provider_test
+        changes_stream_request_several_records_test,
+%%        changes_stream_on_multi_provider_test,
+        changes_stream_closed_on_disconnection
     ]).
 
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
@@ -352,6 +354,52 @@ changes_stream_on_multi_provider_test(Config) ->
     end, Changes)).
 
 
+changes_stream_closed_on_disconnection(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId}, Config),
+
+    Json = #{<<"fileLocation">> => #{<<"fields">> => [<<"size">>]}},
+
+    spawn(fun() ->
+        get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 40000}])
+%%        rest_test_utils:request(WorkerP1, <<"changes/metadata/space1">>,
+%%            get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}])
+    end),
+
+    timer:sleep(timer:seconds(1)),
+    receive
+        {stream_pid, StreamPid} ->
+            ?assertEqual(true, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid]))
+    end,
+
+    get_changes(Config, WorkerP1, SpaceId, Json, 100, [{recv_timeout, 400}]),
+%%    rest_test_utils:request(WorkerP1, <<"changes/metadata/space1?timeout=100">>,
+%%        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 400}]),
+    receive
+        {stream_pid, StreamPid1} ->
+            ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid1]))
+    end,
+
+    utils:pforeach(fun(_) ->
+        Pid = spawn(fun() ->
+            get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 4000}])
+%%            rest_test_utils:request(WorkerP1, <<"changes/metadata/space1">>,
+%%                get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 4000}])
+        end),
+        timer:sleep(timer:seconds(1)),
+        exit(Pid, kill)
+    end, lists:seq(0,10)),
+
+    timer:sleep(timer:seconds(1)),
+    lists:foreach(fun(_) ->
+        receive
+            {stream_pid, StreamPid2} ->
+                ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid2]))
+        end
+    end, lists:seq(0,10)).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -392,10 +440,29 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 
+init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
+    ct:timetrap(timer:minutes(3)),
+    Workers = ?config(op_worker_nodes, Config),
+    Pid = self(),
+    ok = test_utils:mock_new(Workers, changes),
+    ok = test_utils:mock_expect(Workers, changes, init_stream,
+        fun(State) ->
+            State1 = meck:passthrough([State]),
+            StreamPid = maps:get(changes_stream, State1, undefined),
+            Pid ! {stream_pid, StreamPid},
+            State1
+        end),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
+
+end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, changes),
+    end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
@@ -411,9 +478,21 @@ get_changes(Config, Worker, SpaceId, Json) ->
 
 
 get_changes(Config, Worker, SpaceId, Json, Timeout) ->
+    case Timeout of
+        <<"infinity">> ->
+            get_changes(Config, Worker, SpaceId, Json, Timeout, [{recv_timeout, 40000}]);
+        _ ->
+            Opts = [{recv_timeout, min(100000, Timeout + 1000)}],
+            get_changes(Config, Worker, SpaceId, Json, Timeout, Opts)
+    end.
+
+
+get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
     Qs = case Timeout of
         undefined ->
             <<>>;
+        <<"infinity">> ->
+            <<"?timeout=infinity">>;
         _ ->
             <<"?timeout=", (integer_to_binary(Timeout))/binary>>
     end,
@@ -422,7 +501,6 @@ get_changes(Config, Worker, SpaceId, Json, Timeout) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [
         {<<"content-type">>, <<"application/json">>}
     ]),
-    Opts = [{recv_timeout, min(100000, Timeout + 1000)}],
 
     case rest_test_utils:request(Worker, Path, post, Headers, Payload, Opts) of
         {ok, 200, _, Body} ->
@@ -432,6 +510,5 @@ get_changes(Config, Worker, SpaceId, Json, Timeout) ->
             [_EmptyMap | RealChanges] = lists:reverse(Changes),
             {ok, RealChanges};
         {ok, Code, _, Body} ->
-            {Code, json_utils:decode(Body)};
-        Else -> ct:pal("~p", [Else])
+            {Code, json_utils:decode(Body)}
     end.

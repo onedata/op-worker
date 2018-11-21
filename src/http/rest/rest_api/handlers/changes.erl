@@ -113,6 +113,9 @@
 %% resource functions
 -export([stream_space_changes/2]).
 
+%% for tests
+-export([init_stream/1]).
+
 -record(change_req, {
     record :: file_meta | file_location | times | custom_metadata,
     always = false :: boolean(),
@@ -192,7 +195,7 @@ stream_space_changes(Req, State) ->
     {ok, Body, Req5} = cowboy_req:read_body(Req4),
     State5 = parse_body(Body, State4),
 
-    State6 = init_stream(State5),
+    State6 = ?MODULE:init_stream(State5),
     Req6 = cowboy_req:stream_reply(
         ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req5
     ),
@@ -313,7 +316,6 @@ times_field_idx(FieldName) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Init changes stream.
 %% @end
@@ -329,7 +331,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->
             notify(Pid, Ref, Feed)
-        end, [{since, Since}]]),
+        end, [{since, Since}], [Pid]]),
 
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
