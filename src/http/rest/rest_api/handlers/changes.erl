@@ -577,7 +577,7 @@ get_record_changes(Changed, FieldsNames, ExistsNames, #document{
         <<"changed">> => Changed,
         <<"deleted">> => Deleted,
         <<"fields">> => Fields,
-        <<"exist">> => Exists
+        <<"exists">> => Exists
     };
 
 get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
@@ -587,7 +587,7 @@ get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
     value = Record
 }) ->
     Fields = lists:foldl(fun({FieldName, FieldIndex}, Acc) ->
-        Acc#{FieldName => element(FieldIndex + 1, Record)}
+        Acc#{FieldName => element(FieldIndex, Record)}
     end, #{}, FieldsNamesAndIndexes),
 
     #{
