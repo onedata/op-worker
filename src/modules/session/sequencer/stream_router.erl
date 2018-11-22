@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module decides where to send incoming client messages.
+%%% This module decides where to send incoming stream messages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(stream_router).
--author("Tomasz Lichon").
+-author("Michal Wrzeszcz").
 
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").

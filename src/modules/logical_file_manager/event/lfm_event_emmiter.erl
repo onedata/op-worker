@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Auxiliary functions for sending and flushing events.
+%%% Auxiliary functions for sending events.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(lfm_event_emmiter).

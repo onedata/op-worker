@@ -1,16 +1,16 @@
 %%%--------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Auxiliary functions for sending and flushing events.
+%%% Auxiliary functions for flushing events.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(lfm_event_controller).
--author("Tomasz Lichon").
+-author("Michal Wrzeszcz").
 
 -include("modules/events/definitions.hrl").
 -include("timeouts.hrl").

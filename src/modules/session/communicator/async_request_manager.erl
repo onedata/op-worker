@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module decides where to send incoming client messages.
+%%% This module provides functionality of async messages handling.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(async_request_manager).
--author("Tomasz Lichon").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/server_messages.hrl").

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc
+%%% @doc Module containing subscriptions of monitoring events.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(monitoring_event_subscriptions).
@@ -24,11 +24,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%%
+%% Returns subscription for monitoring events.
 %% @end
 %%--------------------------------------------------------------------
-%%-spec init(Args :: term()) -> Result when
-%%    Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
+-spec monitoring_subscription() -> subscription:base().
 monitoring_subscription() ->
     #subscription{
         id = ?MONITORING_SUB_ID,

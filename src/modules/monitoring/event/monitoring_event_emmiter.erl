@@ -1,15 +1,15 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Wrona
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Module containing functions used to handle monitoring events.
+%%% @doc Module containing functions used to emit monitoring events.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(monitoring_event_emmiter).
--author("Michal Wrona").
+-author("Michal Wrzeszcz").
 
 -include("modules/events/definitions.hrl").
 -include("modules/monitoring/events.hrl").
