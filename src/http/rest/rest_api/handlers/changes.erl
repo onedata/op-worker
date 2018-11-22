@@ -266,7 +266,10 @@ parse_body(Body, State) ->
             throw(?ERROR_INVALID_FORMAT(RecordName))
     end, [], Json),
 
-    State#{changes_reqs => ChangesReqs}.
+    case ChangesReqs of
+        [] -> throw(?ERROR_INVALID_CHANGES_REQ);
+        _ -> State#{changes_reqs => ChangesReqs}
+    end.
 
 
 %% @private

@@ -92,7 +92,7 @@
                             "cm"
                         ],
                         "db_nodes": [
-                            "127.0.0.1:49161"
+                            "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
                         "graph_sync_healthcheck_interval": 999999999

@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("rest_test_utils.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -26,6 +27,7 @@
 ]).
 
 -export([
+    invalid_request_should_fail/1,
     changes_stream_file_meta_test/1,
     changes_stream_xattr_test/1,
     changes_stream_json_metadata_test/1,
@@ -38,13 +40,14 @@
 
 all() ->
     ?ALL([
+        invalid_request_should_fail,
         changes_stream_file_meta_test,
         changes_stream_xattr_test,
         changes_stream_json_metadata_test,
         changes_stream_times_test,
         changes_stream_file_location_test,
         changes_stream_request_several_records_test,
-%%        changes_stream_on_multi_provider_test,
+        changes_stream_on_multi_provider_test,
         changes_stream_closed_on_disconnection
     ]).
 
@@ -56,6 +59,21 @@ all() ->
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+invalid_request_should_fail(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    lists:foreach(fun({Json, ExpError}) ->
+        ?assertMatch(ExpError, get_changes(Config, WorkerP1, SpaceId, Json))
+    end, [
+        {<<"ASD">>, ?ERROR_INVALID_CHANGES_REQ},
+        {#{}, ?ERROR_INVALID_CHANGES_REQ},
+        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_INVALID_FORMAT(<<"fielMeta">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_INVALID_FORMAT(<<"fileMeta">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"HEH">>)}
+    ]).
 
 
 changes_stream_file_meta_test(Config) ->
@@ -322,36 +340,39 @@ changes_stream_request_several_records_test(Config) ->
 changes_stream_on_multi_provider_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
-    SessionIdP1 = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionIdP2 = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP2)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    [_, {SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file8_csompt"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionIdP1, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionIdP2, File, 8#700),
 
     % when
     spawn(fun() ->
-%%        timer:sleep(500),
-        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionIdP1, {guid, FileGuid}, write),
-        lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>)
+        timer:sleep(500),
+        {ok, Handle} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write),
+        lfm_proxy:write(WorkerP2, Handle, 0, <<"data">>)
     end),
-    ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write), 20),
 
     Json = #{<<"fileLocation">> => #{
-        <<"fields">> => [<<"size">>],
-        <<"always">> => true
+        <<"fields">> => [<<"size">>, <<"provider_id">>]
     }},
-    {ok, Changes} = get_changes(Config, WorkerP2, SpaceId, Json),
-    ct:pal("~p", [Changes]),
+
+    {ok, Changes} = get_changes(Config, WorkerP1, SpaceId, Json),
     ?assert(length(Changes) >= 1),
 
-    ?assert(lists:any(fun(Change) ->
-        <<"file4_csompt">> == maps:get(<<"name">>, Change) andalso
-            4 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
-            0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
-            0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)) andalso
-            0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))
-    end, Changes)).
+    [LastChange | _] = Changes,
+
+    DomainP2 = domain(WorkerP2),
+    ?assertMatch(#{
+        <<"fileLocation">> := #{
+            <<"changed">> := true,
+            <<"mutators">> := [DomainP2],
+            <<"fields">> := #{
+                <<"size">> := 4,
+                <<"provider_id">> := DomainP2
+            }
+        }
+    }, LastChange).
 
 
 changes_stream_closed_on_disconnection(Config) ->
@@ -363,8 +384,6 @@ changes_stream_closed_on_disconnection(Config) ->
 
     spawn(fun() ->
         get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 40000}])
-%%        rest_test_utils:request(WorkerP1, <<"changes/metadata/space1">>,
-%%            get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}])
     end),
 
     timer:sleep(timer:seconds(1)),
@@ -374,8 +393,6 @@ changes_stream_closed_on_disconnection(Config) ->
     end,
 
     get_changes(Config, WorkerP1, SpaceId, Json, 100, [{recv_timeout, 400}]),
-%%    rest_test_utils:request(WorkerP1, <<"changes/metadata/space1?timeout=100">>,
-%%        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 400}]),
     receive
         {stream_pid, StreamPid1} ->
             ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid1]))
@@ -384,8 +401,6 @@ changes_stream_closed_on_disconnection(Config) ->
     utils:pforeach(fun(_) ->
         Pid = spawn(fun() ->
             get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 4000}])
-%%            rest_test_utils:request(WorkerP1, <<"changes/metadata/space1">>,
-%%                get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 4000}])
         end),
         timer:sleep(timer:seconds(1)),
         exit(Pid, kill)
@@ -473,6 +488,10 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
+domain(Node) ->
+    atom_to_binary(?GET_DOMAIN(Node), utf8).
+
+
 get_changes(Config, Worker, SpaceId, Json) ->
     get_changes(Config, Worker, SpaceId, Json, 50000).
 
@@ -482,7 +501,7 @@ get_changes(Config, Worker, SpaceId, Json, Timeout) ->
         <<"infinity">> ->
             get_changes(Config, Worker, SpaceId, Json, Timeout, [{recv_timeout, 40000}]);
         _ ->
-            Opts = [{recv_timeout, min(100000, Timeout + 1000)}],
+            Opts = [{recv_timeout, max(60000, Timeout + 10000)}],
             get_changes(Config, Worker, SpaceId, Json, Timeout, Opts)
     end.
 
