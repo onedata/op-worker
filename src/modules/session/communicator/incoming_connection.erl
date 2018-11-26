@@ -344,7 +344,7 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
             Type, Reason
         ]),
         send_server_message(State,
-            fuse_auth_manager:report_handshake_error(Reason)),
+            fuse_auth_manager:get_handshake_error(Reason)),
         State#state{continue = false}
     end.
 
