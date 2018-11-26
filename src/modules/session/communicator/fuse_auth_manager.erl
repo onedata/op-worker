@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/2]).
+-export([handle_handshake/2, get_handshake_error/1]).
 
 %%%===================================================================
 %%% API
@@ -43,6 +43,50 @@ handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, ver
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
     {UserId, SessId}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a server message with the handshake error details.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_handshake_error(Error :: term()) -> #server_message{}.
+get_handshake_error(incompatible_client_version) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'INCOMPATIBLE_VERSION'
+        }
+    };
+get_handshake_error(invalid_token) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_MACAROON'
+        }
+    };
+get_handshake_error(invalid_provider) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_PROVIDER'
+        }
+    };
+get_handshake_error(invalid_nonce) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_NONCE'
+        }
+    };
+get_handshake_error({badmatch, {error, Error}}) ->
+    get_handshake_error(Error);
+get_handshake_error({Code, Error, _Description}) when is_integer(Code) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = translator:translate_handshake_error(Error)
+        }
+    };
+get_handshake_error(_) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'INTERNAL_SERVER_ERROR'
+        }
+    }.
 
 %%%===================================================================
 %%% Internal functions

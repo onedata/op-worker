@@ -326,13 +326,11 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
                 {UserId, SessionId} = fuse_auth_manager:handle_handshake(
                     HandshakeMsg, IpAddress
                 ),
-                put(session_id, SessionId),
                 State#state{peer_type = fuse_client, peer_id = UserId, session_id = SessionId};
             #provider_handshake_request{} ->
                 {ProviderId, SessionId} = provider_auth_manager:handle_handshake(
                     HandshakeMsg, IpAddress
                 ),
-                put(session_id, SessionId),
                 State#state{peer_type = provider, peer_id = ProviderId, session_id = SessionId}
         end,
         % Result is ignored as there is no possible fallback if
@@ -345,57 +343,10 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
         ?debug_stacktrace("Invalid handshake request - ~p:~p", [
             Type, Reason
         ]),
-        report_handshake_error(State, Reason),
+        send_server_message(State,
+            fuse_auth_manager:report_handshake_error(Reason)),
         State#state{continue = false}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends a server message with the handshake error details.
-%% @end
-%%--------------------------------------------------------------------
--spec report_handshake_error(state(), Error :: term()) -> {Result :: ok | {error, term()}, state()}.
-report_handshake_error(State, incompatible_client_version) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INCOMPATIBLE_VERSION'
-        }
-    });
-report_handshake_error(State, invalid_token) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_MACAROON'
-        }
-    });
-report_handshake_error(State, invalid_provider) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_PROVIDER'
-        }
-    });
-report_handshake_error(State, invalid_nonce) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_NONCE'
-        }
-    });
-report_handshake_error(State, {badmatch, {error, Error}}) ->
-    report_handshake_error(State, Error);
-report_handshake_error(State, {Code, Error, _Description}) when is_integer(Code) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = translator:translate_handshake_error(Error)
-        }
-    });
-report_handshake_error(State, _) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INTERNAL_SERVER_ERROR'
-        }
-    }).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -405,16 +356,16 @@ report_handshake_error(State, _) ->
 %%--------------------------------------------------------------------
 -spec handle_normal_message(state(), #client_message{} | #server_message{}) -> state().
 handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
-    peer_id = ProviderId, wait_map = WaitMap, wait_pids = Pids}, Msg0) ->
-    {Msg, EffectiveSessionId} = case {PeerType, Msg0} of
+    peer_id = ProviderId, wait_map = WaitMap, wait_pids = Pids}, Msg) ->
+    EffectiveSessionId = case {PeerType, Msg} of
         %% If message comes from provider and proxy session is requested - proceed
         %% with authorization and switch context to the proxy session.
         {provider, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}}
             when ProxySessionId =/= undefined, Auth =/= undefined ->
             {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
-            {Msg0, ProxySessionId};
+            ProxySessionId;
         _ ->
-            {Msg0, SessId}
+            SessId
     end,
 
     case router:route_message(Msg, EffectiveSessionId) of
