@@ -41,9 +41,6 @@
 -spec route_message(Msg :: #client_message{} | #server_message{},
     SessId :: session:id()) -> ok | {ok, #server_message{}} |
     async_request_manager:delegate_ans() | {error, term()}.
-route_message(#client_message{proxy_session_id = TargetSessionId} = Msg, SessId)
-    when TargetSessionId =/= SessId, is_binary(TargetSessionId) ->
-    event_router:route_message(Msg, TargetSessionId);
 route_message(Msg, SessId) ->
     case stream_router:route_message(Msg, SessId) of
         direct_message ->
