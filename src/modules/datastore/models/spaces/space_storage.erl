@@ -89,35 +89,38 @@ add(SpaceId, StorageId) ->
 -spec add(od_space:id(), storage:id(), boolean()) ->
     {ok, od_space:id()} | {error, Reason :: term()}.
 add(SpaceId, StorageId, MountInRoot) ->
-    Diff = fun(#space_storage{
-        storage_ids = StorageIds,
-        mounted_in_root = MountedInRoot
-    } = Model) ->
-        case lists:member(StorageId, StorageIds) of
-            true -> {error, already_exists};
-            false ->
-                SpaceStorage = Model#space_storage{
-                    storage_ids = [StorageId | StorageIds]
-                },
-                case MountInRoot of
-                    true ->
-                        {ok, SpaceStorage#space_storage{
-                            mounted_in_root = [StorageId | MountedInRoot]
-                        }};
-                    _ ->
-                        {ok, SpaceStorage}
-                end
-        end
-    end,
-    #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
+    % critical section to avoid race in {@link storage:safe_remove/1}
+    critical_section:run({storage_to_space, StorageId}, fun() ->
+        Diff = fun(#space_storage{
+            storage_ids = StorageIds,
+            mounted_in_root = MountedInRoot
+        } = Model) ->
+            case lists:member(StorageId, StorageIds) of
+                true -> {error, already_exists};
+                false ->
+                    SpaceStorage = Model#space_storage{
+                        storage_ids = [StorageId | StorageIds]
+                    },
+                    case MountInRoot of
+                        true ->
+                            {ok, SpaceStorage#space_storage{
+                                mounted_in_root = [StorageId | MountedInRoot]
+                            }};
+                        _ ->
+                            {ok, SpaceStorage}
+                    end
+            end
+        end,
+        #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
 
-    case datastore_model:update(?CTX, SpaceId, Diff, Default) of
-        {ok, _} ->
-            ok = space_strategies:add_storage(SpaceId, StorageId),
-            {ok, SpaceId};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+        case datastore_model:update(?CTX, SpaceId, Diff, Default) of
+            {ok, _} ->
+                ok = space_strategies:add_storage(SpaceId, StorageId),
+                {ok, SpaceId};
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc

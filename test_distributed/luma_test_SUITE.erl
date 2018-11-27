@@ -111,10 +111,13 @@ all() ->
     key = ?POSIX_STORAGE_ID,
     value = #storage{
         name = <<"POSIX">>,
-        helpers = [helper:new_posix_helper(
-            <<"mountPoint">>,
-            #{},
+        helpers = [helper:new_helper(
+            ?POSIX_HELPER_NAME,
+            #{
+                <<"mountPoint">> => <<"mountPoint">>
+            },
             helper:new_posix_user_ctx(0, 0),
+            false,
             ?CANONICAL_STORAGE_PATH
         )],
         luma_config = undefined
@@ -125,10 +128,13 @@ all() ->
     key = ?POSIX_STORAGE_ID,
     value = #storage{
         name = <<"POSIX">>,
-        helpers = [helper:new_posix_helper(
-            <<"mountPoint">>,
-            #{},
+        helpers = [helper:new_helper(
+            ?POSIX_HELPER_NAME,
+            #{
+                <<"mountPoint">> => <<"mountPoint">>
+            },
             helper:new_posix_user_ctx(0, 0),
+            false,
             ?CANONICAL_STORAGE_PATH
         )],
         luma_config = ?LUMA_CONFIG
@@ -139,10 +145,13 @@ all() ->
     key = ?POSIX_STORAGE_ID,
     value = #storage{
         name = <<"POSIX">>,
-        helpers = [helper:new_posix_helper(
-            <<"mountPoint">>,
-            #{},
+        helpers = [helper:new_helper(
+            ?POSIX_HELPER_NAME,
+            #{
+                <<"mountPoint">> => <<"mountPoint">>
+            },
             helper:new_posix_user_ctx(0, 0),
+            false,
             ?CANONICAL_STORAGE_PATH
         )],
         luma_config = LumaConfig
@@ -153,11 +162,13 @@ all() ->
     key = <<"cephStorageId">>,
     value = #storage{
         name = <<"CEPH">>,
-        helpers = [helper:new_ceph_helper(
-            <<"monitorHostname">>,
-            <<"clusterName">>,
-            <<"poolName">>,
-            #{},
+        helpers = [helper:new_helper(
+            ?CEPH_HELPER_NAME,
+            #{
+                <<"monitorHostname">> => <<"monitorHostname">>,
+                <<"clusterName">> => <<"clusterName">>,
+                <<"poolName">> => <<"poolName">>
+            },
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
             Insecure,
             ?FLAT_STORAGE_PATH
@@ -172,11 +183,13 @@ all() ->
     key = ?CEPH_STORAGE_ID,
     value = #storage{
         name = <<"CEPH">>,
-        helpers = [helper:new_ceph_helper(
-            <<"monitorHostname">>,
-            <<"clusterName">>,
-            <<"poolName">>,
-            #{},
+        helpers = [helper:new_helper(
+            ?CEPH_HELPER_NAME,
+            #{
+                <<"monitorHostname">> => <<"monitorHostname">>,
+                <<"clusterName">> => <<"clusterName">>,
+                <<"poolName">> => <<"poolName">>
+            },
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
             Insecure,
             ?FLAT_STORAGE_PATH
@@ -189,11 +202,13 @@ all() ->
     key = ?CEPH_STORAGE_ID,
     value = #storage{
         name = <<"CEPH">>,
-        helpers = [helper:new_ceph_helper(
-            <<"monitorHostname">>,
-            <<"clusterName">>,
-            <<"poolName">>,
-            #{},
+        helpers = [helper:new_helper(
+            ?CEPH_HELPER_NAME,
+            #{
+                <<"monitorHostname">> => <<"monitorHostname">>,
+                <<"clusterName">> => <<"clusterName">>,
+                <<"poolName">> => <<"poolName">>
+            },
             helper:new_ceph_user_ctx(<<"username">>, <<"key">>),
             Insecure,
             ?FLAT_STORAGE_PATH

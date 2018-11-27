@@ -340,11 +340,14 @@ setup_storage([Worker | Rest], Config) ->
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
     StorageDoc = storage:new(
-        <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
-        [helper:new_posix_helper(
-            list_to_binary(TmpDir),
-            #{},
+        <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
+        [helper:new_helper(
+            ?POSIX_HELPER_NAME,
+            #{
+                <<"mountPoint">> => list_to_binary(TmpDir)
+            },
             helper:new_posix_user_ctx(0, 0),
+            false,
             ?CANONICAL_STORAGE_PATH
         )]
     ),

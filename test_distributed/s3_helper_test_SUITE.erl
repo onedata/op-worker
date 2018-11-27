@@ -233,15 +233,17 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
 
-    UserCtx = helper:new_s3_user_ctx(
-        atom_to_binary(?config(access_key, S3Config), utf8),
-        atom_to_binary(?config(secret_key, S3Config), utf8)
-    ),
-    Helper = helper:new_s3_helper(
-        atom_to_binary(?config(host_name, S3Config), utf8),
-        ?S3_BUCKET_NAME,
-        false,
-        #{},
+    UserCtx = #{
+        <<"accessKey">> => atom_to_binary(?config(access_key, S3Config), utf8),
+        <<"secretKey">> => atom_to_binary(?config(secret_key, S3Config), utf8)
+    },
+    Helper = helper:new_helper(
+        ?S3_HELPER_NAME,
+        #{
+            <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
+            <<"bucketName">> => ?S3_BUCKET_NAME,
+            <<"scheme">> => <<"http">>
+        },
         UserCtx,
         false,
         ?FLAT_STORAGE_PATH

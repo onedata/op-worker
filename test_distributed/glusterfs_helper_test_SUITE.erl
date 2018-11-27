@@ -388,11 +388,12 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     GlusterFSConfig = ?config(glusterfs, ?config(glusterfs, ?config(storages, Config))),
-    UserCtx = helper:new_glusterfs_user_ctx(0, 0),
-    Helper = helper:new_glusterfs_helper(
-        ?GLUSTERFS_VOLUME,
-        atom_to_binary(?config(host_name, GlusterFSConfig), utf8),
+    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    Helper = helper:new_helper(
+        ?GLUSTERFS_HELPER_NAME,
         #{
+            <<"volume">> => ?GLUSTERFS_VOLUME,
+            <<"hostname">> => atom_to_binary(?config(host_name, GlusterFSConfig), utf8),
             <<"port">> => integer_to_binary(?GLUSTERFS_PORT),
             <<"transport">> => atom_to_binary(?config(transport, GlusterFSConfig), utf8),
             <<"mountPoint">> => atom_to_binary(?config(mountpoint, GlusterFSConfig), utf8),
@@ -401,7 +402,7 @@ new_helper(Config) ->
         UserCtx,
         true,
         ?CANONICAL_STORAGE_PATH
-      ),
+    ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)
     end).

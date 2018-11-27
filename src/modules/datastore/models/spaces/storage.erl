@@ -18,10 +18,16 @@
 
 %% API
 -export([new/2, new/4]).
--export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1,
-    get_luma_config/1, get_luma_config_map/1]).
--export([select_helper/2, update_helper/3, select/1]).
+-export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, get_luma_config_map/1]).
+-export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
+-export([supports_any_space/1]).
+
+%% Exports for onepanel RPC
+-export([update_name/2, update_helper_args/3, update_admin_ctx/3,
+    update_luma_config/2, set_luma_config/2, set_insecure/3,
+    set_readonly/2, safe_remove/1]).
+-export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -63,7 +69,7 @@ update(Key, Diff) ->
 create(#document{value = #storage{}} = Doc) ->
     case ?extract_key(datastore_model:create(?CTX, Doc)) of
         {ok, StorageId} ->
-            rtransfer_config:add_storage(Doc#document{key = StorageId}),
+            rtransfer_put_storage(Doc#document{key = StorageId}),
             {ok, StorageId};
         Other ->
             Other
@@ -119,6 +125,7 @@ list() ->
 new(Name, Helpers) ->
     new(Name, Helpers, false, undefined).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs storage record.
@@ -145,6 +152,7 @@ get_id(<<_/binary>> = StorageId) ->
 get_id(#document{key = StorageId, value = #storage{}}) ->
     StorageId.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns storage name.
@@ -156,6 +164,7 @@ get_name(#storage{name = Name}) ->
 get_name(#document{value = #storage{} = Value}) ->
     get_name(Value).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks whether storage is readonly.
@@ -166,6 +175,7 @@ is_readonly(#storage{readonly = ReadOnly}) ->
     ReadOnly;
 is_readonly(#document{value = #storage{} = Value}) ->
     is_readonly(Value).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -180,6 +190,7 @@ get_helpers(#document{value = #storage{} = Value}) ->
 get_helpers(StorageId) ->
     {ok, StorageDoc} = ?MODULE:get(StorageId),
     get_helpers(StorageDoc).
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -196,6 +207,7 @@ get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
     };
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -218,24 +230,142 @@ select_helper(Storage, HelperName) ->
         Error -> Error
     end.
 
+
+-spec update_name(StorageId :: id(), NewName :: name()) -> ok.
+update_name(StorageId, NewName) ->
+    Result = update(StorageId, fun(#storage{} = Storage) ->
+        {ok, Storage#storage{name = NewName}}
+    end),
+    case Result of
+        {ok, _} -> rtransfer_put_storage(StorageId);
+        Error -> Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates storage helper arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec update_helper(storage:id(), helper:name(), helpers:args()) ->
-    {ok, id()} | {error, term()}.
-update_helper(StorageId, HelperName, NewArgs) ->
-    update(StorageId, fun(#storage{helpers = Helpers} = Storage) ->
-        case select_helper(Storage, HelperName) of
-            {ok, #helper{args = Args} = Helper} ->
-                Helper2 = Helper#helper{args = maps:merge(Args, NewArgs)},
-                Helpers2 = lists:keyreplace(HelperName, 2, Helpers, Helper2),
-                {ok, Storage#storage{helpers = Helpers2}};
-            {error, Reason} ->
-                {error, Reason}
+-spec update_helper_args(storage:id(), helper:name(), helper:args()) ->
+    ok | {error, term()}.
+update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
+    Result = update_helper(StorageId, HelperName, fun
+        (#helper{args = Args} = Helper) ->
+            Helper#helper{args = maps:merge(Args, Changes)}
+    end),
+    case Result of
+        ok -> rtransfer_put_storage(StorageId);
+        Error -> Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage helper admin ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_admin_ctx(storage:id(), helper:name(), helper:user_ctx()) ->
+    ok | {error, term()}.
+update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
+    update_helper(StorageId, HelperName, fun
+        (#helper{admin_ctx = #{} = AdminCtx} = Helper) ->
+            Helper#helper{admin_ctx = maps:merge(AdminCtx, Changes)}
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates LUMA configuration of the storage.
+%% LUMA cannot be enabled or disabled, only its parameters may be changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_luma_config(storage:id(), Changes) -> ok | {error, term()}
+    when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
+update_luma_config(StorageId, Changes) when is_map(Changes) ->
+    ?extract_ok(update(StorageId, fun
+        (#storage{luma_config = undefined}) ->
+            {error, luma_disabled};
+        (#storage{luma_config = #luma_config{url = Url, api_key = ApiKey}} = Storage) ->
+            NewConfig = luma_config:new(
+                maps:get(url, Changes, Url),
+                maps:get(api_key, Changes, ApiKey)
+            ),
+            {ok, Storage#storage{luma_config = NewConfig}}
+    end)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates LUMA configuration of the storage.
+%% LUMA cannot be enabled or disabled, only its parameters may be changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_luma_config(storage:id(), LumaConfig :: luma_config:config() | undefined) ->
+    ok | {error, term()}.
+set_luma_config(StorageId, LumaConfig) ->
+    ?extract_ok(update(StorageId, fun(#storage{} = Storage) ->
+        {ok, Storage#storage{luma_config = LumaConfig}}
+    end)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage helper 'insecure' setting.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_insecure(storage:id(), helper:name(), Insecure :: boolean()) ->
+    ok | {error, term()}.
+set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
+    update_helper(StorageId, HelperName, fun(Helper) ->
+        Helper#helper{insecure = Insecure}
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage's 'readonly' setting.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_readonly(StorageId :: storage:id(), Readonly :: boolean()) ->
+    ok | {error, term()}.
+set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
+    ?extract_ok(update(StorageId, fun(#storage{} = Storage) ->
+        {ok, Storage#storage{readonly = Readonly}}
+    end)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes storage. Fails with an error if the storage supports
+%% any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec safe_remove(id()) -> ok | {error, storage_in_use | term()}.
+safe_remove(StorageId) ->
+    critical_section:run({storage_to_space, StorageId}, fun() ->
+        case supports_any_space(StorageId) of
+            true ->
+                {error, storage_in_use};
+            false ->
+                % TODO VFS-5124 Remove from rtransfer
+                delete(StorageId)
         end
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given storage supports any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec supports_any_space(StorageId :: id()) -> boolean().
+supports_any_space(StorageId) ->
+    {ok, Spaces} = provider_logic:get_spaces(),
+    lists:any(fun(SpaceId) ->
+        lists:member(StorageId, space_storage:get_storage_ids(SpaceId))
+    end, Spaces).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -255,8 +385,8 @@ select(Name) ->
             end
     end.
 
+
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns luma_config field for given storage.
 %% @end
@@ -267,8 +397,8 @@ get_luma_config(#storage{luma_config = LumaConfig}) ->
 get_luma_config(#document{value = Storage = #storage{}}) ->
     get_luma_config(Storage).
 
+
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Checks whether luma is enabled for given storage.
 %% @end
@@ -279,7 +409,11 @@ is_luma_enabled(#storage{luma_config = undefined}) ->
 is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
     true;
 is_luma_enabled(#document{value = #storage{} = Storage}) ->
+    is_luma_enabled(Storage);
+is_luma_enabled(StorageId) when is_binary(StorageId) ->
+    {ok, #document{value = #storage{} = Storage}} = ?MODULE:get(StorageId),
     is_luma_enabled(Storage).
+
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -294,6 +428,7 @@ is_luma_enabled(#document{value = #storage{} = Storage}) ->
 get_ctx() ->
     ?CTX.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns model's record version.
@@ -302,6 +437,7 @@ get_ctx() ->
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     5.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -433,8 +569,49 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
                 extended_direct_io = ExtendedDirectIO,
                 storage_path_type = ?CANONICAL_STORAGE_PATH
             } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
-                  ExtendedDirectIO} <- Helpers
+                ExtendedDirectIO} <- Helpers
         ],
         readonly = Readonly,
         luma_config = LumaConfig
     }}.
+
+
+%%%===================================================================
+%%% Internal functons
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates selected storage helper in the datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_helper(StorageId :: storage:id(), HelperName :: helper:name(),
+    DiffFun :: fun((helper()) -> helper())) ->
+    ok | {error, term()}.
+update_helper(StorageId, HelperName, DiffFun) ->
+    ?extract_ok(update(StorageId, fun(#storage{helpers = Helpers} = Storage) ->
+        case select_helper(Storage, HelperName) of
+            {ok, Helper} ->
+                NewHelper = DiffFun(Helper),
+                NewHelpers = lists:keyreplace(HelperName, 2, Helpers, NewHelper),
+                {ok, Storage#storage{helpers = NewHelpers}};
+            {error, _} = Error -> Error
+        end
+    end)).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds or updates storage in rtransfer config.
+%% @end
+%%--------------------------------------------------------------------
+-spec rtransfer_put_storage(doc() | id()) -> ok.
+rtransfer_put_storage(#document{} = Doc) ->
+    rtransfer_config:add_storage(Doc),
+    ok;
+
+rtransfer_put_storage(StorageId) ->
+    {ok, Doc} = ?MODULE:get(StorageId),
+    rtransfer_put_storage(Doc).
