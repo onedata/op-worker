@@ -30,8 +30,7 @@
     error :: atom(),
     % connection state
     session_id :: undefined | session:id(),
-    peer_type = unknown :: unknown | fuse_client | provider,
-    peer_id = undefined :: undefined | od_user:id() | od_provider:id(),
+    peer_id = undefined :: undefined | od_provider:id(),
     continue = true,
     wait_map = #{} :: map(),
     wait_pids = #{} :: map(),
@@ -112,7 +111,6 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         ok = Ok,
         closed = Closed,
         error = Error,
-        peer_type = unknown,
         last_message_timestamp = os:timestamp()
     },
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
@@ -323,15 +321,15 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
         NewState = case HandshakeMsg of
             #client_handshake_request{} ->
-                {UserId, SessionId} = fuse_auth_manager:handle_handshake(
+                {_UserId, SessionId} = fuse_auth_manager:handle_handshake(
                     HandshakeMsg, IpAddress
                 ),
-                State#state{peer_type = fuse_client, peer_id = UserId, session_id = SessionId};
+                State#state{session_id = SessionId};
             #provider_handshake_request{} ->
                 {ProviderId, SessionId} = provider_auth_manager:handle_handshake(
                     HandshakeMsg, IpAddress
                 ),
-                State#state{peer_type = provider, peer_id = ProviderId, session_id = SessionId}
+                State#state{peer_id = ProviderId, session_id = SessionId}
         end,
         % Result is ignored as there is no possible fallback if
         % send_server_message fails (the connection will close then).
@@ -354,21 +352,20 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
 %% Handle normal incoming message.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(state(), #client_message{} | #server_message{}) -> state().
-handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
-    peer_id = ProviderId, wait_map = WaitMap, wait_pids = Pids}, Msg) ->
-    EffectiveSessionId = case {PeerType, Msg} of
+-spec handle_normal_message(state(), #client_message{}) -> state().
+handle_normal_message(State = #state{peer_id = ProviderId,
+    wait_map = WaitMap, wait_pids = Pids}, Msg) ->
+    case Msg of
         %% If message comes from provider and proxy session is requested - proceed
         %% with authorization and switch context to the proxy session.
-        {provider, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}}
-            when ProxySessionId =/= undefined, Auth =/= undefined ->
-            {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
-            ProxySessionId;
+        #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}
+            when ProxySessionId =/= undefined ->
+            {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse);
         _ ->
-            SessId
+            ok
     end,
 
-    case router:route_message(Msg, EffectiveSessionId) of
+    case router:route_message(Msg, undefined) of
         ok ->
             State;
         {ok, ServerMsg} ->

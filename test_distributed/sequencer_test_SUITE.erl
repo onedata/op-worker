@@ -89,7 +89,7 @@ send_message_should_inject_stream_id_into_message(Config) ->
 route_message_should_forward_message(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Msg = client_message(?config(session_id, Config), 1, 0),
-    route_message(Worker, ?config(session_id, Config), Msg),
+    route_message(Worker, Msg),
     ?assertReceivedMatch(Msg, ?TIMEOUT).
 
 route_message_should_forward_messages_to_the_same_stream(Config) ->
@@ -97,7 +97,7 @@ route_message_should_forward_messages_to_the_same_stream(Config) ->
     SessId = ?config(session_id, Config),
     Msgs = lists:map(fun(SeqNum) ->
         Msg = client_message(SessId, 1, SeqNum),
-        route_message(Worker, SessId, Msg),
+        route_message(Worker, Msg),
         Msg
     end, lists:seq(9, 0, -1)),
     lists:foreach(fun(Msg) ->
@@ -109,7 +109,7 @@ route_message_should_forward_messages_to_different_streams(Config) ->
     SessId = ?config(session_id, Config),
     Msgs = lists:map(fun(StmId) ->
         Msg = client_message(SessId, StmId, 0),
-        route_message(Worker, SessId, Msg),
+        route_message(Worker, Msg),
         Msg
     end, lists:seq(1, 10)),
     lists:foreach(fun(Msg) ->
@@ -250,9 +250,9 @@ send_message(Worker, SessId, StmId, Msg) ->
 %% Sends message to sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Worker :: node(), SessId :: session:id(), Msg :: term()) -> ok.
-route_message(Worker, SessId, Msg) ->
-    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg, SessId])).
+-spec route_message(Worker :: node(), Msg :: term()) -> ok.
+route_message(Worker, Msg) ->
+    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg])).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -17,7 +17,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([route_message/2]).
+-export([route_message/1]).
 
 %%%===================================================================
 %%% API
@@ -28,54 +28,40 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{} | #server_message{},
-    SessId :: session:id()) -> ok | direct_message | {error, term()}.
-route_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#client_message{message_body = #message_acknowledgement{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#client_message{message_body = #end_of_message_stream{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#client_message{message_body = #message_stream_reset{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#server_message{message_body = #message_request{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#server_message{message_body = #message_acknowledgement{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#server_message{message_body = #end_of_message_stream{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#server_message{message_body = #message_stream_reset{}} = Msg,
-    SessId) ->
-    sequencer:route_message(Msg, SessId);
-route_message(#client_message{message_stream = undefined}, _SessId) ->
+-spec route_message(Msg :: #client_message{} | #server_message{}) ->
+    ok | direct_message | {error, term()}.
+route_message(#client_message{message_body = #message_request{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#client_message{message_body = #message_acknowledgement{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#client_message{message_body = #end_of_message_stream{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#client_message{message_body = #message_stream_reset{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#server_message{message_body = #message_request{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#server_message{message_body = #message_acknowledgement{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#server_message{message_body = #end_of_message_stream{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#server_message{message_body = #message_stream_reset{}} = Msg) ->
+    sequencer:route_message(Msg);
+route_message(#client_message{message_stream = undefined}) ->
     direct_message;
-route_message(#client_message{message_body = #subscription{}} = Msg, SessId) ->
+route_message(#client_message{} = Msg) ->
+    SessId = router:effective_session_id(Msg),
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
         false ->
-            sequencer:route_message(Msg, SessId)
+            sequencer:route_message(Msg)
     end;
-route_message(#client_message{message_body = #subscription_cancellation{}} = Msg,
-    SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end;
-route_message(#server_message{message_stream = undefined}, _SessId) ->
+route_message(#server_message{message_stream = undefined}) ->
     direct_message;
-route_message(Msg, SessId) ->
+route_message(#server_message{proxy_session_id = SessId} = Msg) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
             ok;
         false ->
-            sequencer:route_message(Msg, SessId)
+            sequencer:route_message(Msg)
     end.

@@ -92,7 +92,7 @@ route_message_should_forward_messages_in_right_order_base(Config) ->
   % Send 'MsgNum' messages in 'MsgOrd' order.
   {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
     lists:foreach(fun(SeqNum) ->
-      route_message(Worker, SessId, client_message(SessId, StmId, SeqNum))
+      route_message(Worker, client_message(SessId, StmId, SeqNum))
     end, SeqNums)
   end),
 
@@ -150,7 +150,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
       utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
           [Wrk | _] = utils:random_shuffle(Workers),
-          route_message(Wrk, SessId, #client_message{session_id = SessId,
+          route_message(Wrk, #client_message{session_id = SessId,
             message_stream = Msg#message_stream{stream_id = StmId}
           })
         end, utils:random_shuffle(Msgs))
@@ -246,9 +246,9 @@ session_teardown(Worker, SessId) ->
 %% Sends message to sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Worker :: node(), SessId :: session:id(), Msg :: term()) -> ok.
-route_message(Worker, SessId, Msg) ->
-    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg, SessId])).
+-spec route_message(Worker :: node(), Msg :: term()) -> ok.
+route_message(Worker, Msg) ->
+    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg])).
 
 %%--------------------------------------------------------------------
 %% @private

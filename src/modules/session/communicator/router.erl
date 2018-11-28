@@ -41,8 +41,8 @@
 -spec route_message(Msg :: #client_message{} | #server_message{},
     SessId :: session:id()) -> ok | {ok, #server_message{}} |
     async_request_manager:delegate_ans() | {error, term()}.
-route_message(Msg, SessId) ->
-    case stream_router:route_message(Msg, SessId) of
+route_message(Msg, _SessId) ->
+    case stream_router:route_message(Msg) of
         direct_message ->
             router:route_message(Msg);
         Ans ->

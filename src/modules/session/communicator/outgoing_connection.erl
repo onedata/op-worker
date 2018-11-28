@@ -395,12 +395,15 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
 %% Handle incoming message data.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_server_message_unsafe(#state{}, #client_message{} | #server_message{}) ->
+-spec handle_server_message_unsafe(#state{}, #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message_unsafe(State = #state{session_id = SessId,
+handle_server_message_unsafe(State = #state{session_id = SessId},
+    #server_message{proxy_session_id = undefined} = Msg) ->
+    handle_server_message_unsafe(State, Msg#server_message{proxy_session_id = SessId});
+handle_server_message_unsafe(State = #state{
     wait_map = WaitMap, wait_pids = Pids}, Msg) ->
-    case router:route_message(Msg, SessId) of
+    case router:route_message(Msg, undefined) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->
