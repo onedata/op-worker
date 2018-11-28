@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 -include("fuse_utils.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -29,11 +30,22 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("clproto/include/messages.hrl").
 
--export([connect_via_macaroon/1, connect_via_macaroon/2, connect_via_macaroon/3]).
+-export([
+    connect_via_macaroon/1, connect_via_macaroon/2,
+    connect_via_macaroon/3, connect_via_macaroon/4
+]).
 -export([receive_server_message/0, receive_server_message/1]).
 -export([generate_delete_file_message/2, generate_open_file_message/2, generate_get_children_message/2, 
     generate_fsync_message/2, generate_create_message/3]).
 
+-export([
+    open/2, open/3, open/4,
+    proxy_read/5, proxy_read/6,
+    proxy_write/5, proxy_write/6
+]).
+
+-define(MSG_ID, integer_to_binary(erlang:unique_integer([positive, monotonic]))).
+-define(IRRELEVANT_FIELD_VALUE, <<"needless">>).
 
 %% ====================================================================
 %% API
@@ -61,12 +73,27 @@ connect_via_macaroon(Node, SocketOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Connect to given node using macaroon, with custom socket opts
+%% @equiv connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10))
+%% @end
+%%--------------------------------------------------------------------
+connect_via_macaroon(Node, SocketOpts, SessionId) ->
+    connect_via_macaroon(Node, SocketOpts, SessionId, #macaroon_auth{
+        macaroon = ?MACAROON,
+        disch_macaroons = ?DISCH_MACAROONS
+    }).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Connect to given node using a macaroon, with custom socket opts and session id.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_macaroon(Node :: node(), SocketOpts :: list(), session:id()) ->
+-spec connect_via_macaroon(Node :: node(), SocketOpts :: list(), session:id(), #macaroon_auth{}) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_macaroon(Node, SocketOpts, SessId) ->
+connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
+    macaroon = Macaroon,
+    disch_macaroons = DischMacaroons}
+) ->
     % given
     {ok, [Version | _]} = rpc:call(
         Node, application, get_env, [?APP_NAME, compatible_oc_versions]
@@ -75,7 +102,7 @@ connect_via_macaroon(Node, SocketOpts, SessId) ->
     MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = SessId,
-            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
             version = list_to_binary(Version)
         }
     }},
@@ -162,11 +189,17 @@ generate_fsync_message(RootGuid, MsgId) ->
     messages:encode_msg(Message).
 
 generate_open_file_message(FileGuid, MsgId) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = FileGuid,
-            file_request = {open_file, #'OpenFile'{flag = 'READ_WRITE'}}}
-    }}}
+    generate_open_file_message(FileGuid, 'READ_WRITE', MsgId).
+
+generate_open_file_message(FileGuid, Mode, MsgId) ->
+    Message = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {fuse_request, #'FuseRequest'{
+            fuse_request = {file_request, #'FileRequest'{
+                context_guid = FileGuid,
+                file_request = {open_file, #'OpenFile'{flag = Mode}}}
+            }
+        }}
     },
     messages:encode_msg(Message).
 
@@ -178,3 +211,94 @@ generate_delete_file_message(FileGuid, MsgId) ->
     }}}
     },
     messages:encode_msg(Message).
+
+open(Conn, FileGuid) ->
+    open(Conn, FileGuid, 'READ_WRITE').
+
+open(Conn, FileGuid, Mode) ->
+    open(Conn, FileGuid, Mode, ?MSG_ID).
+
+open(Conn, FileGuid, Mode, MsgId) ->
+    RawMsg = generate_open_file_message(FileGuid, Mode, MsgId),
+    ok = ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{
+            fuse_response = {file_opened, #'FileOpened'{handle_id = HandleId}}
+        }
+    }} = ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = MsgId}, receive_server_message()),
+
+    HandleId.
+
+proxy_read(Conn, FileGuid, HandleId, Offset, Size) ->
+    proxy_read(Conn, FileGuid, HandleId, Offset, Size, ?MSG_ID).
+
+proxy_read(Conn, FileGuid, HandleId, Offset, Size, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {
+            proxyio_request, #'ProxyIORequest'{
+                storage_id = ?IRRELEVANT_FIELD_VALUE,
+                file_id = ?IRRELEVANT_FIELD_VALUE,
+                parameters = [
+                    #'Parameter'{key = ?PROXYIO_PARAMETER_HANDLE_ID, value = HandleId},
+                    #'Parameter'{key = ?PROXYIO_PARAMETER_FILE_GUID, value = FileGuid}
+                ],
+                proxyio_request = {remote_read, #'RemoteRead'{
+                    offset = Offset,
+                    size = Size
+                }}
+            }
+        }
+    },
+
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{message_body = {
+        proxyio_response, #'ProxyIOResponse'{
+            proxyio_response = {remote_data, #'RemoteData'{data = Data}}
+        }
+    }} = ?assertMatch(#'ServerMessage'{message_body = {
+        proxyio_response, #'ProxyIOResponse'{status = #'Status'{code = ok}}
+    }, message_id = MsgId}, receive_server_message()),
+
+    Data.
+
+proxy_write(Conn, FileGuid, HandleId, Offset, Data) ->
+    proxy_write(Conn, FileGuid, HandleId, Offset, Data, ?MSG_ID).
+
+proxy_write(Conn, FileGuid, HandleId, Offset, Data, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {
+            proxyio_request, #'ProxyIORequest'{
+                storage_id = ?IRRELEVANT_FIELD_VALUE,
+                file_id = ?IRRELEVANT_FIELD_VALUE,
+                parameters = [
+                    #'Parameter'{key = ?PROXYIO_PARAMETER_HANDLE_ID, value = HandleId},
+                    #'Parameter'{key = ?PROXYIO_PARAMETER_FILE_GUID, value = FileGuid}
+                ],
+                proxyio_request = {remote_write, #'RemoteWrite'{
+                    byte_sequence = [
+                        #'ByteSequence'{offset = Offset, data = Data}
+                    ]
+                }}
+            }
+        }
+    },
+
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{message_body = {
+        proxyio_response, #'ProxyIOResponse'{
+            proxyio_response = {remote_write_result, #'RemoteWriteResult'{wrote = NBytes}}
+        }
+    }} = ?assertMatch(#'ServerMessage'{message_body = {
+        proxyio_response, #'ProxyIOResponse'{status = #'Status'{code = ok}}
+    }, message_id = MsgId}, receive_server_message()),
+
+    NBytes.
