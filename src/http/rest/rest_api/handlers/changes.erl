@@ -49,7 +49,8 @@
 %%% fields to return (`fields`), fields for which check existence
 %%% (`exists` - only possible for `customMetadata`),
 %%% whether information about this record should be send always or
-%%% on this record changes only (`always`).
+%%% on this record changes only (`always` boolean flag with default value
+%%% being 'false' - not sending information on other docs changes).
 %%%
 %%% <record>:
 %%%     [fields: <fields>]
@@ -75,20 +76,22 @@
 %%% seq: 100
 %%% fileMeta:
 %%%     rev: 2-c500a5eb026d9474429903d47841f9c5
-%%%     mutators: [<<"p1.1542789098.test">>]
+%%%     mutators: ["p1.1542789098.test"]
 %%%     changed: true
 %%%     deleted: false
 %%%     fields:
 %%%         owner: john
 %%% customMetadata:
 %%%     rev: 1-09f941b4e8452ef6a244c5181d894814
-%%%     mutators: [<<"p1.1542789098.test">>]
+%%%     mutators: ["p1.1542789098.test"]
 %%%     changed: false
 %%%     deleted: false
 %%%     exists:
-%%%         onedata_json: true
+%%%         onedata_rdf: true
 %%%     fields:
-%%%         onedata_rdf: false
+%%%         onedata_json:
+%%%             name1: value1
+%%%             name2: value2
 %%%
 %%% @end
 %%%--------------------------------------------------------------------
@@ -126,7 +129,7 @@
 -type change_req() :: #change_req{}.
 
 -define(DEFAULT_ALWAYS, false).
--define(ONEDATA_ATTRS, [<<"onedata_json">>, <<"onedata_rdf">>]).
+-define(ONEDATA_SPECIAL_XATTRS, [<<"onedata_json">>, <<"onedata_rdf">>]).
 
 
 %%%===================================================================
@@ -558,7 +561,7 @@ get_record_changes(Changed, FieldsNames, ExistsNames, #document{
 }) ->
     Fields = lists:foldl(fun
         (<<"onedata_keyvalue">>, Acc) ->
-            KeyValues = case maps:without(?ONEDATA_ATTRS, Metadata) of
+            KeyValues = case maps:without(?ONEDATA_SPECIAL_XATTRS, Metadata) of
                 Map when map_size(Map) == 0 -> null;
                 Map -> Map
             end,
@@ -570,7 +573,7 @@ get_record_changes(Changed, FieldsNames, ExistsNames, #document{
     Exists = lists:foldl(fun
         (<<"onedata_keyvalue">>, Acc) ->
             Acc#{<<"onedata_keyvalue">> => map_size(
-                maps:without(?ONEDATA_ATTRS, Metadata)) > 0
+                maps:without(?ONEDATA_SPECIAL_XATTRS, Metadata)) > 0
             };
         (FieldName, Acc) ->
             Acc#{FieldName => maps:is_key(FieldName, Metadata)}
