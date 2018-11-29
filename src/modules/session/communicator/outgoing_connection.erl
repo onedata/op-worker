@@ -403,7 +403,7 @@ handle_server_message_unsafe(State = #state{session_id = SessId},
     handle_server_message_unsafe(State, Msg#server_message{proxy_session_id = SessId});
 handle_server_message_unsafe(State = #state{
     wait_map = WaitMap, wait_pids = Pids}, Msg) ->
-    case router:route_message(Msg, undefined) of
+    case router:route_message(Msg) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->

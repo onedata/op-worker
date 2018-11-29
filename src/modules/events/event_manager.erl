@@ -25,6 +25,8 @@
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% TODO - dodac API na wysylanie eventow do stream'u - w sequencerze tez
+
 %% API
 -export([start_link/2]).
 

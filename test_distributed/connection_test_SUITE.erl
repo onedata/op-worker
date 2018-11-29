@@ -557,7 +557,7 @@ protobuf_msg_test(Config) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
-        }]}}, _) -> ok
+        }]}}) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,

@@ -365,7 +365,7 @@ handle_normal_message(State = #state{peer_id = ProviderId,
             ok
     end,
 
-    case router:route_message(Msg, undefined) of
+    case router:route_message(Msg) of
         ok ->
             State;
         {ok, ServerMsg} ->

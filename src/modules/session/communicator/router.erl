@@ -26,7 +26,7 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 
 %% API
--export([route_message/2, route_message/1]).
+-export([route_message/1]).
 -export([effective_session_id/1]).
 
 %%%===================================================================
@@ -35,57 +35,19 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if message is sequential, if so - proxy it throught sequencer
-%% @end
-%%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{} | #server_message{},
-    SessId :: session:id()) -> ok | {ok, #server_message{}} |
-    async_request_manager:delegate_ans() | {error, term()}.
-route_message(Msg, _SessId) ->
-    case stream_router:route_message(Msg) of
-        direct_message ->
-            router:route_message(Msg);
-        Ans ->
-            Ans
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Route message to adequate handler, this function should never throw
+%% Check if message is sequential, if so - proxy it through sequencer,
+%% otherwise routes it directly
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: #client_message{} | #server_message{}) ->
-    ok | {ok, #server_message{}} | async_request_manager:delegate_ans() |
-    {error, term()}.
-route_message(Msg = #client_message{message_id = undefined}) ->
-    route_and_ignore_answer(Msg);
-route_message(Msg = #client_message{message_id = #message_id{
-    issuer = Issuer,
-    recipient = Recipient
-}}) ->
-    case oneprovider:is_self(Issuer) of
-        true when Recipient =:= undefined ->
-            route_and_ignore_answer(Msg);
-        true ->
-            Pid = binary_to_term(Recipient),
-            Pid ! Msg,
-            ok;
-        false ->
-            route_and_send_answer(Msg)
-    end;
-route_message(Msg = #server_message{message_id = #message_id{
-    issuer = Issuer,
-    recipient = Recipient
-}}) ->
-    case oneprovider:is_self(Issuer) of
-        true when Recipient =:= undefined ->
-            ok;
-        true ->
-            Pid = binary_to_term(Recipient),
-            Pid ! Msg,
-            ok;
-        false ->
-            ok
+    ok | {ok, #server_message{}} |
+    async_request_manager:delegate_ans() | {error, term()}.
+route_message(Msg) ->
+    case stream_router:route_message(Msg) of
+        direct_message ->
+            route_direct_message(Msg);
+        Ans ->
+            Ans
     end.
 
 %%--------------------------------------------------------------------
@@ -104,6 +66,47 @@ effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Route message to adequate handler, this function should never throw
+%% @end
+%%--------------------------------------------------------------------
+-spec route_direct_message(Msg :: #client_message{} | #server_message{}) ->
+    ok | {ok, #server_message{}} | async_request_manager:delegate_ans() |
+    {error, term()}.
+route_direct_message(Msg = #client_message{message_id = undefined}) ->
+    route_and_ignore_answer(Msg);
+route_direct_message(Msg = #client_message{message_id = #message_id{
+    issuer = Issuer,
+    recipient = Recipient
+}}) ->
+    case oneprovider:is_self(Issuer) of
+        true when Recipient =:= undefined ->
+            route_and_ignore_answer(Msg);
+        true ->
+            Pid = binary_to_term(Recipient),
+            Pid ! Msg,
+            ok;
+        false ->
+            route_and_send_answer(Msg)
+    end;
+route_direct_message(Msg = #server_message{message_id = #message_id{
+    issuer = Issuer,
+    recipient = Recipient
+}}) ->
+    case oneprovider:is_self(Issuer) of
+        true when Recipient =:= undefined ->
+            ok;
+        true ->
+            Pid = binary_to_term(Recipient),
+            Pid ! Msg,
+            ok;
+        false ->
+            ok
+    end.
+
+% TODO - spec, doc
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
     ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest});
 route_and_ignore_answer(ClientMsg = #client_message{
