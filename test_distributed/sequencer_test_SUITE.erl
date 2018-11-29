@@ -299,7 +299,7 @@ mock_communicator(Worker, MockFun) ->
 mock_router(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, [router]),
-    test_utils:mock_expect(Worker, router, route_message, fun
+    test_utils:mock_expect(Worker, router, route_direct_message, fun
         (Msg) -> Self ! Msg
     end).
 

@@ -1128,9 +1128,9 @@ init_per_testcase(Case, Config) when
     % the server and connection close.
     test_utils:mock_new(Workers, router),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(Msg, SessionId) ->
+        fun(Msg) ->
             timer:sleep(2000),
-            meck:passthrough([Msg, SessionId])
+            meck:passthrough([Msg])
         end
     ),
 
