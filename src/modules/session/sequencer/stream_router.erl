@@ -17,7 +17,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([route_message/1]).
+-export([is_stream_message/1, route_message/1]).
 
 %%%===================================================================
 %%% API
@@ -28,40 +28,61 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{} | #server_message{}) ->
-    ok | direct_message | {error, term()}.
-route_message(#client_message{message_body = #message_request{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#client_message{message_body = #message_acknowledgement{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#client_message{message_body = #end_of_message_stream{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#client_message{message_body = #message_stream_reset{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#server_message{message_body = #message_request{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#server_message{message_body = #message_acknowledgement{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#server_message{message_body = #end_of_message_stream{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#server_message{message_body = #message_stream_reset{}} = Msg) ->
-    sequencer:route_message(Msg);
-route_message(#client_message{message_stream = undefined}) ->
-    direct_message;
-route_message(#client_message{} = Msg) ->
+-spec is_stream_message(Msg :: #client_message{} | #server_message{}) ->
+    boolean() | ignore.
+is_stream_message(#client_message{message_body = #message_request{}}) ->
+    true;
+is_stream_message(#client_message{message_body = #message_acknowledgement{}}) ->
+    true;
+is_stream_message(#client_message{message_body = #end_of_message_stream{}}) ->
+    true;
+is_stream_message(#client_message{message_body = #message_stream_reset{}}) ->
+    true;
+is_stream_message(#server_message{message_body = #message_request{}}) ->
+    true;
+is_stream_message(#server_message{message_body = #message_acknowledgement{}}) ->
+    true;
+is_stream_message(#server_message{message_body = #end_of_message_stream{}}) ->
+    true;
+is_stream_message(#server_message{message_body = #message_stream_reset{}}) ->
+    true;
+is_stream_message(#client_message{message_stream = undefined}) ->
+    false;
+is_stream_message(#client_message{} = Msg) ->
     SessId = router:effective_session_id(Msg),
     case session_manager:is_provider_session_id(SessId) of
         true ->
-            ok;
+            ignore;
         false ->
-            sequencer:route_message(Msg)
+            true
     end;
-route_message(#server_message{message_stream = undefined}) ->
-    direct_message;
-route_message(#server_message{proxy_session_id = SessId} = Msg) ->
+is_stream_message(#server_message{message_stream = undefined}) ->
+    false;
+is_stream_message(#server_message{proxy_session_id = SessId}) ->
     case session_manager:is_provider_session_id(SessId) of
         true ->
-            ok;
+            ignore;
         false ->
-            sequencer:route_message(Msg)
+            true
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Forwards message to the sequencer stream for incoming messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec route_message(Msg :: term()) -> ok | {error, Reason :: term()}.
+route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId} = Msg) ->
+    case {session_manager:is_provider_session_id(From), is_binary(ProxySessionId)} of
+        {true, true} ->
+            ProviderId = session_manager:session_id_to_provider_id(From),
+            SequencerSessionId = session_manager:get_provider_session_id(outgoing, ProviderId),
+            provider_communicator:ensure_connected(SequencerSessionId),
+            sequencer:send_to_sequencer_manager(Msg, SequencerSessionId);
+        {true, false} ->
+            ok;
+        {false, _} ->
+            sequencer:send_to_sequencer_manager(Msg, From)
+    end;
+route_message(#server_message{proxy_session_id = Ref} = Msg) ->
+    sequencer:send_to_sequencer_manager(Msg, Ref).

@@ -18,8 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([open_stream/1, close_stream/2, send_message/3, route_message/1]).
--export([term_to_stream_id/1]).
+-export([open_stream/1, close_stream/2, send_message/3]).
+-export([send_to_sequencer_manager/2, term_to_stream_id/1]).
 
 -export_type([stream_id/0, sequence_number/0]).
 
@@ -69,28 +69,6 @@ send_message(#client_message{} = Msg, StmId, Ref) ->
 
 send_message(Msg, StmId, Ref) ->
     send_message(#server_message{message_body = Msg}, StmId, Ref).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Forwards message to the sequencer stream for incoming messages.
-%% @end
-%%--------------------------------------------------------------------
--spec route_message(Msg :: term()) -> ok | {error, Reason :: term()}.
-route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId} = Msg) ->
-    case {session_manager:is_provider_session_id(From), is_binary(ProxySessionId)} of
-        {true, true} ->
-            ProviderId = session_manager:session_id_to_provider_id(From),
-            SequencerSessionId = session_manager:get_provider_session_id(outgoing, ProviderId),
-            provider_communicator:ensure_connected(SequencerSessionId),
-            send_to_sequencer_manager(Msg, SequencerSessionId);
-        {true, false} ->
-            ok;
-        {false, _} ->
-            send_to_sequencer_manager(Msg, From)
-    end;
-route_message(#server_message{proxy_session_id = Ref} = Msg) ->
-    send_to_sequencer_manager(Msg, Ref).
-
 
 %%--------------------------------------------------------------------
 %% @doc

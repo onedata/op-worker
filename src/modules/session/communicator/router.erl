@@ -43,11 +43,13 @@
     ok | {ok, #server_message{}} |
     async_request_manager:delegate_ans() | {error, term()}.
 route_message(Msg) ->
-    case stream_router:route_message(Msg) of
-        direct_message ->
+    case stream_router:is_stream_message(Msg) of
+        true ->
+            stream_router:route_message(Msg);
+        false ->
             route_direct_message(Msg);
-        Ans ->
-            Ans
+        ignore ->
+            ok
     end.
 
 %%--------------------------------------------------------------------

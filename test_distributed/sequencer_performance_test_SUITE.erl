@@ -248,7 +248,7 @@ session_teardown(Worker, SessId) ->
 %%--------------------------------------------------------------------
 -spec route_message(Worker :: node(), Msg :: term()) -> ok.
 route_message(Worker, Msg) ->
-    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg])).
+    ?assertEqual(ok, rpc:call(Worker, stream_router, route_message, [Msg])).
 
 %%--------------------------------------------------------------------
 %% @private
