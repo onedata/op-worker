@@ -40,8 +40,11 @@
 
 -export([
     open/2, open/3, open/4,
+    close/3, close/4,
     proxy_read/5, proxy_read/6,
-    proxy_write/5, proxy_write/6
+    proxy_write/5, proxy_write/6,
+    fsync/4, fsync/5,
+    emit_file_read_event/5
 ]).
 
 -define(MSG_ID, integer_to_binary(erlang:unique_integer([positive, monotonic]))).
@@ -179,12 +182,20 @@ generate_get_children_message(RootGuid, MsgId) ->
     messages:encode_msg(Message).
 
 generate_fsync_message(RootGuid, MsgId) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = RootGuid,
-            file_request = {fsync,
-                #'FSync'{data_only = false}}}
-    }}}
+    generate_fsync_message(RootGuid, undefined, false, MsgId).
+
+generate_fsync_message(RootGuid, HandleId, DataOnly, MsgId) ->
+    Message = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {fuse_request, #'FuseRequest'{
+            fuse_request = {file_request, #'FileRequest'{
+                context_guid = RootGuid,
+                file_request = {fsync, #'FSync'{
+                    data_only = DataOnly,
+                    handle_id = HandleId
+                }}
+            }}
+        }}
     },
     messages:encode_msg(Message).
 
@@ -231,6 +242,27 @@ open(Conn, FileGuid, Mode, MsgId) ->
     }, message_id = MsgId}, receive_server_message()),
 
     HandleId.
+
+close(Conn, FileGuid, HandleId) ->
+    close(Conn, FileGuid, HandleId, ?MSG_ID).
+
+close(Conn, FileGuid, HandleId, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {fuse_request, #'FuseRequest'{
+            fuse_request = {file_request, #'FileRequest'{
+                context_guid = FileGuid,
+                file_request = {release, #'Release'{handle_id = HandleId}}
+            }}
+        }}
+    },
+
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg),
+
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = MsgId}, receive_server_message()).
 
 proxy_read(Conn, FileGuid, HandleId, Offset, Size) ->
     proxy_read(Conn, FileGuid, HandleId, Offset, Size, ?MSG_ID).
@@ -302,3 +334,36 @@ proxy_write(Conn, FileGuid, HandleId, Offset, Data, MsgId) ->
     }, message_id = MsgId}, receive_server_message()),
 
     NBytes.
+
+fsync(Conn, FileGuid, HandleId, DataOnly) ->
+    fsync(Conn, FileGuid, HandleId, DataOnly, ?MSG_ID).
+
+fsync(Conn, FileGuid, HandleId, DataOnly, MsgId) ->
+    RawMsg = generate_fsync_message(FileGuid, HandleId, DataOnly, MsgId),
+    ok = ssl:send(Conn, RawMsg),
+
+    ?assertMatch(#'ServerMessage'{message_body = {
+        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+    }, message_id = MsgId}, receive_server_message()).
+
+emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
+    {BlocksRead, BlocksSize} = lists:foldr(fun({Offset, Size}, {AccBlocks, AccSize}) ->
+        {[#'FileBlock'{offset = Offset, size = Size} | AccBlocks], AccSize + Size}
+    end, {[], 0}, Blocks),
+
+    Msg = #'ClientMessage'{
+        message_stream = #'MessageStream'{
+            stream_id = StreamId,
+            sequence_number = Seq
+        },
+        message_body = {events, #'Events'{events = [#'Event'{
+            type = {file_read, #'FileReadEvent'{
+                counter = length(BlocksRead),
+                file_uuid = FileGuid,
+                size = BlocksSize,
+                blocks = BlocksRead
+            }}
+        }]}}
+    },
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg).
