@@ -1267,7 +1267,7 @@ init_per_testcase(Case, Config) when
     Case =:= file_popularity_should_have_correct_file_size
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_expect(W, space_storage, is_file_popularity_enabled, fun(_) -> true end),
+    ok = test_utils:mock_expect(W, space_quota, is_file_popularity_enabled, fun(_) -> true end),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->

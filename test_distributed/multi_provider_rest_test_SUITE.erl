@@ -177,7 +177,7 @@ end, __Distributions))).
 
 -define(assertAutocleaningReports(ExpectedReports, Worker, SpaceId, Attempts),
     ?assertMatch(ExpectedReports, begin
-        Reports = rpc:call(Worker, autocleaning, list_reports_since, [SpaceId, 0]),
+        Reports = rpc:call(Worker, autocleaning_run, list_reports_since, [SpaceId, 0]),
         ReportMaps = [maps:from_list(R) || R <- Reports],
         lists:sort(fun(#{startedAt:= S1}, #{startedAt:= S2}) ->
             S1 =< S2
@@ -359,7 +359,7 @@ basic_autocleaning_test(Config) ->
     ],
     ?assertDistributionProxyByGuid(WorkerP1, SessionIdP1, ExpectedDistribution0, File1Guid),
 
-    rpc:call(WorkerP2, space_cleanup_api, force_cleanup, [SpaceId]),
+    rpc:call(WorkerP2, autocleaning_api, force_start, [SpaceId]),
     ExpectedDistribution1 = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, Size]]},
         #{<<"providerId">> => DomainP2, <<"blocks">> => []}
@@ -392,7 +392,7 @@ automatic_cleanup_should_evict_unpopular_files(Config) ->
     File4 = <<"/space3/file4_too_big">>,
     File5 = <<"/space3/file5_to_write">>,
     % threshold is 35
-    % size of files File1-4 is 4 + 9 + 9 + 11 = 33
+    % total sum of files File1-File4 sizes is: 4 + 9 + 9 + 11 = 33
     % target is 30
 
     File1Guid = create_test_file(WorkerP1, SessionIdP1, File1, ?TEST_DATA),
@@ -400,6 +400,19 @@ automatic_cleanup_should_evict_unpopular_files(Config) ->
     File3Guid = create_test_file(WorkerP1, SessionIdP1, File3, ?TEST_DATA2),
     File4Guid = create_test_file(WorkerP1, SessionIdP1, File4, BigData),
     File5Guid = create_test_file(WorkerP1, SessionIdP1, File5, ?TEST_DATA2),
+
+    ct:pal(
+    "File1: G = ~p, U = ~p~n"
+    "File2: G = ~p, U = ~p~n"
+    "File3: G = ~p, U = ~p~n"
+    "File4: G = ~p, U = ~p~n"
+    "File5: G = ~p, U = ~p~n", [
+        File1Guid, fslogic_uuid:guid_to_uuid(File1Guid),
+        File2Guid, fslogic_uuid:guid_to_uuid(File2Guid),
+        File3Guid, fslogic_uuid:guid_to_uuid(File3Guid),
+        File4Guid, fslogic_uuid:guid_to_uuid(File4Guid),
+        File5Guid, fslogic_uuid:guid_to_uuid(File5Guid)
+    ]),
 
     % synchronize files
     {ok, ReadHandle1} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, File1Guid}, read), ?ATTEMPTS),
@@ -415,32 +428,33 @@ automatic_cleanup_should_evict_unpopular_files(Config) ->
     ?assertMatch({ok, BigData}, lfm_proxy:read(WorkerP2, ReadHandle4, 0, BigSize), ?ATTEMPTS),
     lfm_proxy:close(WorkerP2, ReadHandle4),
 
-    ExpectedDistribution1 = [
-        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]},
-        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, NormalSize]]}
-    ],
-    ExpectedDistribution2 = [
+    ExpectedDistributionSmall = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, SmallSize]]},
         #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, SmallSize]]}
     ],
-    ExpectedDistribution3 = [
+    ExpectedDistributionNormal = [
+        #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]},
+        #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, NormalSize]]}
+    ],
+    ExpectedDistributionBig = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, BigSize]]},
         #{<<"providerId">> => DomainP2, <<"blocks">> => [[0, BigSize]]}
     ],
-    ExpectedDistribution4 = [
+
+    ExpectedDistributionNormalBeforeReplication = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]}
     ],
 
-    ExpectedDistribution5 = [
+    ExpectedDistributionNormalCleaned = [
         #{<<"providerId">> => DomainP1, <<"blocks">> => [[0, NormalSize]]},
         #{<<"providerId">> => DomainP2, <<"blocks">> => []}
     ],
 
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution2, File1Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File2Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File3Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution3, File4Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution4, File5Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionSmall, File1Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionNormal, File2Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionNormal, File3Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionBig, File4Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionNormalBeforeReplication, File5Guid),
 
     % pretend File3 hasn't been opened for 24 hours
     File3Uuid = fslogic_uuid:guid_to_uuid(File3Guid),
@@ -457,15 +471,15 @@ automatic_cleanup_should_evict_unpopular_files(Config) ->
     {ok, ?TEST_DATA2} = lfm_proxy:read(WorkerP2, ReadHandle5, 0, NormalSize),
     lfm_proxy:close(WorkerP2, ReadHandle5),
 
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution2, File1Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File2Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution5, File3Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution3, File4Guid),
-    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistribution1, File5Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionSmall, File1Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionNormal, File2Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionNormalCleaned, File3Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionBig, File4Guid),
+    ?assertDistributionProxyByGuid(WorkerP2, SessionIdP2, ExpectedDistributionNormalCleaned, File5Guid),
 
-    [Report] = rpc:call(WorkerP2, autocleaning, list_reports_since, [<<"space3">>, 0]),
+    [Report] = rpc:call(WorkerP2, autocleaning_run, list_reports_since, [<<"space3">>, 0]),
     ?assertMatch(#{
-        bytesToRelease := 12,
+        bytesToRelease := 18,
         releasedBytes := NormalSize,
         filesNumber := 1,
         startedAt := _,
@@ -1407,18 +1421,18 @@ init_per_testcase(Case, Config) when
     Case =:= basic_autocleaning_test ->
     SpaceId = <<"space3">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [SpaceId]),
+    {ok, _} = rpc:call(WorkerP2, file_popularity_config, enable, [SpaceId]),
     AutocleaningConfig = ?AUTOCLEANING_CONFIG(1, undefined, 0, 0, 1),
-    {ok, _} = rpc:call(WorkerP2, space_cleanup_api, configure_autocleaning, [SpaceId, AutocleaningConfig]),
-    {ok, _} = rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
+    ok = rpc:call(WorkerP2, autocleaning_api, configure, [SpaceId, AutocleaningConfig]),
+    ok = rpc:call(WorkerP2, autocleaning_api, disable, [SpaceId]),
     init_per_testcase(all, [{space_id, SpaceId} | Config]);
 
 init_per_testcase(automatic_cleanup_should_evict_unpopular_files, Config) ->
     SpaceId = <<"space3">>,
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [SpaceId]),
+    {ok, _} = rpc:call(WorkerP2, file_popularity_config, enable, [SpaceId]),
     AutocleaningConfig = ?AUTOCLEANING_CONFIG(5, 10, 15, 30, 35),
-    {ok, _} = rpc:call(WorkerP2, space_cleanup_api, configure_autocleaning, [SpaceId, AutocleaningConfig]),
+    ok = rpc:call(WorkerP2, autocleaning_api, configure, [SpaceId, AutocleaningConfig]),
     init_per_testcase(all, [{space_id, SpaceId} | Config]);
 
 init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
@@ -1448,8 +1462,8 @@ end_per_testcase(Case, Config) when
     Case =:= basic_autocleaning_test ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    rpc:call(WorkerP2, space_storage, disable_file_popularity, [SpaceId]),
-    rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
+    rpc:call(WorkerP2, file_popularity_config, disable, [SpaceId]),
+    rpc:call(WorkerP2, autocleaning_api, disable, [SpaceId]),
     clean_space(WorkerP1, SpaceId),
     clean_space(WorkerP2, SpaceId),
     check_if_space_empty(WorkerP1, SpaceId),
@@ -1460,8 +1474,8 @@ end_per_testcase(Case, Config) when
 end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    rpc:call(WorkerP2, space_storage, disable_file_popularity, [SpaceId]),
-    rpc:call(WorkerP2, space_cleanup_api, disable_autocleaning, [SpaceId]),
+    rpc:call(WorkerP2, file_popularity_config, disable, [SpaceId]),
+    rpc:call(WorkerP2, autocleaning_api, disable, [SpaceId]),
     remove_autocleaning_reports(WorkerP2, SpaceId),
     clean_space(WorkerP1, SpaceId),
     clean_space(WorkerP2, SpaceId),
@@ -1702,9 +1716,9 @@ space_guid(SpaceId) ->
     fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
 
 remove_autocleaning_reports(Worker, SpaceId) ->
-    {ok, ACIds} = rpc:call(Worker, autocleaning, list, [SpaceId]),
+    {ok, ACIds} = rpc:call(Worker, autocleaning_api, list, [SpaceId]),
     lists:foreach(fun(ACId) ->
-        ok = rpc:call(Worker, autocleaning, delete, [ACId, SpaceId])
+        ok = rpc:call(Worker, autocleaning_run, delete, [ACId, SpaceId])
     end, ACIds).
 
 clean_space(Worker, SpaceId) ->

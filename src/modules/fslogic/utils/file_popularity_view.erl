@@ -18,9 +18,17 @@
 -define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
 
 %% API
--export([create/1, get_unpopular_files/8, rest_url/1]).
+-export([create/1, get_unpopular_files/3, rest_url/1, initial_token/2]).
 
--define(INFINITY, 100000000000000000). % 100PB
+-record(token, {
+    last_doc_id :: undefined | binary(),
+    start_key :: binary(),
+    end_key :: binary()
+}).
+
+-type  token() :: #token{}.
+
+-export_type([token/0]).
 
 %%%===================================================================
 %%% API
@@ -41,12 +49,12 @@ create(SpaceId) ->
         "{ "
         "      emit("
         "         ["
-        "             doc['size'],",
-        "             doc['last_open'],",
         "             doc['open_count'],",
+        "             doc['last_open'],",
+        "             doc['size'],",
         "             doc['hr_mov_avg'],",
         "             doc['dy_mov_avg'],",
-        "             doc['mth_mov_avg']",
+        "             doc['mth_mov_avg']"
         "         ],"
         "         doc['_key']"
         "      );"
@@ -54,48 +62,57 @@ create(SpaceId) ->
         "}">>,
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    couchbase_driver:save_spatial_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).
+    couchbase_driver:save_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Converts StartKey and EndKey to token that can be used to
+%% query the view.
+%% @end
+%%-------------------------------------------------------------------
+-spec initial_token(binary(), binary()) -> token().
+initial_token(StartKey, EndKey) ->
+    #token{
+        last_doc_id = undefined,
+        start_key = StartKey,
+        end_key = EndKey
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Finds unpopular files in space
 %% @end
 %%--------------------------------------------------------------------
--spec get_unpopular_files(od_space:id(), SizeLowerLimit :: null | non_neg_integer(),
-    SizeUpperLimit :: null | non_neg_integer(),
-    HoursSinceLastOpen :: null | non_neg_integer(), TotalOpenLimit :: null | non_neg_integer(),
-    HourAverageLimit :: null | non_neg_integer(), DayAverageLimit :: null | non_neg_integer(),
-    MonthAverageLimit :: null | non_neg_integer()) -> [file_ctx:ctx()].
-get_unpopular_files(SpaceId, SizeLowerLimit, SizeUpperLimit, HoursSinceLastOpenLimit,
-    TotalOpenLimit, HourAverageLimit, DayAverageLimit, MonthAverageLimit
-) ->
-    Ctx = datastore_model_default:get_ctx(file_popularity),
-    DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    CurrentTimeInHours = time_utils:cluster_time_seconds() div 3600,
-    HoursTimestampLimit = case HoursSinceLastOpenLimit of
-        null ->
-            null;
-        _ ->
-            CurrentTimeInHours - HoursSinceLastOpenLimit
-    end,
+-spec get_unpopular_files(od_space:id(), token(), non_neg_integer()) ->
+    {[file_ctx:ctx()], token()}.
+get_unpopular_files(SpaceId, Token = #token{
+    last_doc_id = undefined,
+    start_key = LastKey,
+    end_key = EndKey
+}, Limit) ->
     Options = [
-        {spatial, true},
         {stale, false},
-        {start_range, [SizeLowerLimit, 0, 0, 0, 0, 0]},
-        {end_range, [
-            SizeUpperLimit,
-            HoursTimestampLimit,
-            TotalOpenLimit,
-            HourAverageLimit,
-            DayAverageLimit,
-            MonthAverageLimit
-        ]}
+        {descending, true},
+        {startkey, LastKey},
+        {endkey, EndKey},
+        {limit, Limit}
     ],
-    {ok, {Rows}} = query([DiscCtx, ?VIEW_NAME(SpaceId), ?VIEW_NAME(SpaceId), Options]),
-    lists:map(fun(Row) ->
-        {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
-        file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))
-    end, Rows).
+    query(SpaceId, Options, Token);
+get_unpopular_files(SpaceId, Token = #token{
+    last_doc_id = LastDocId,
+    start_key = LastKey,
+    end_key = EndKey
+},  Limit) ->
+    Options = [
+        {stale, false},
+        {descending, true},
+        {startkey, LastKey},
+        {startkey_docid, LastDocId},
+        {endkey, EndKey},
+        {limit, Limit},
+        {skip, 1}
+    ],
+    query(SpaceId, Options, Token).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -104,13 +121,31 @@ get_unpopular_files(SpaceId, SizeLowerLimit, SizeUpperLimit, HoursSinceLastOpenL
 %%-------------------------------------------------------------------
 -spec rest_url(od_space:id()) -> binary().
 rest_url(SpaceId) ->
-    Endpoint = oneprovider:get_rest_endpoint(str_utils:format("query-index/file-popularity-~s", [SpaceId])),
+    Endpoint = oneprovider:get_rest_endpoint(str_utils:format("spaces/~s/indexes/file-popularity/query", [SpaceId])),
     list_to_binary(Endpoint).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec query(od_space:id(), [couchbase_driver:view_opt()], token()) -> {[file_ctx:ctx()], token()}.
+query(SpaceId, Options, Token) ->
+    Ctx = datastore_model_default:get_ctx(file_popularity),
+    DiscCtx = maps:get(disc_driver_ctx, Ctx),
+    {ok, {Rows}} = query([DiscCtx, ?VIEW_NAME(SpaceId), ?VIEW_NAME(SpaceId), Options]),
+    ?critical("Rows num: ~p", [length(Rows)]),
+    {RevertedFileCtxs, NewToken} = lists:foldl(fun(Row, {RevertedFileCtxsIn, TokenIn}) ->
+        {<<"key">>, Key} = lists:keyfind(<<"key">>, 1, Row),
+        {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
+        {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
+        FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+        {[FileCtx | RevertedFileCtxsIn], TokenIn#token{
+            start_key = json_utils:encode(Key),
+            last_doc_id = DocId
+        }}
+    end, {[], Token}, Rows),
+    {lists:reverse(RevertedFileCtxs), NewToken}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -121,3 +156,4 @@ rest_url(SpaceId) ->
 -spec query(list()) -> {ok, datastore_json2:ejson()} | {error, term()}.
 query(Args) ->
     apply(fun couchbase_driver:query_view/4, Args).
+

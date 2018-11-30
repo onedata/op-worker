@@ -714,8 +714,8 @@ init_per_testcase(Case, Config) when
     Case =:= spatial_flag_test
 ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [?SPACE_ID]),
-    {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [?SPACE_ID]),
+    {ok, _} = rpc:call(WorkerP1, file_popularity_config, enable, [?SPACE_ID]),
+    {ok, _} = rpc:call(WorkerP2, file_popularity_config, enable, [?SPACE_ID]),
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -727,8 +727,8 @@ end_per_testcase(Case, Config) when
     Case =:= spatial_flag_test
 ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    rpc:call(WorkerP1, space_storage, disable_file_popularity, [?SPACE_ID]),
-    rpc:call(WorkerP2, space_storage, disable_file_popularity, [?SPACE_ID]),
+    rpc:call(WorkerP1, file_popularity_config, disable, [?SPACE_ID]),
+    rpc:call(WorkerP2, file_popularity_config, disable, [?SPACE_ID]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

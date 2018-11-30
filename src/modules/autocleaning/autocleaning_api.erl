@@ -1,0 +1,186 @@
+%%%--------------------------------------------------------------------
+%%% @author Jakub Kudzia
+%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% API for auto-cleaning mechanism.
+%%% Auto-cleaning runs are started basing on #autocleaning{} record.
+%%% Each auto-cleaning run is associated with exactly one #autocleaning_run{}
+%%% document that contains information about this operation and exactly
+%%% one autocleaning_controller gen_server that is responsible for
+%%% deletion of unpopular file replicas.
+%%% @end
+%%%--------------------------------------------------------------------
+-module(autocleaning_api).
+-author("Jakub Kudzia").
+
+-include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+%% API
+-export([force_start/1, maybe_start/2,
+    configure/2, disable/1,
+    get_configuration/1, status/1,
+    list_reports_since/2, list/1, list/4,
+    restart_autocleaning_run/1]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function starts autocleaning forcefully (even if storage
+%% occupancy hasn't reached the configured threshold).
+%% @end
+%%-------------------------------------------------------------------
+-spec force_start(od_space:id()) -> ok | {error, term()}.
+force_start(SpaceId) ->
+    CurrentSize = space_quota:current_size(SpaceId),
+    Config = autocleaning:get_config(SpaceId),
+    autocleaning_run:start(SpaceId, Config, CurrentSize).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is responsible for scheduling autocleaning operations.
+%% It schedules autocleaning if cleanup is enabled and current storage
+%% occupation has reached threshold defined in cleanup configuration in
+%% space_storage record or if flag Force is set to true.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_start(od_space:id(), space_quota:record()) -> ok.
+maybe_start(SpaceId, SpaceQuota) ->
+    case exists_and_is_enabled(SpaceId) of
+        {true, AC} ->
+            Config = autocleaning:get_config(AC),
+            CurrentSize = space_quota:current_size(SpaceQuota),
+            case autocleaning_config:threshold_exceeded(CurrentSize, Config) of
+                true -> autocleaning_run:start(SpaceId, Config, CurrentSize);
+                _ -> ok
+            end;
+        _ -> ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns autocleaning details for given space.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_configuration(od_space:id()) -> maps:map().
+get_configuration(SpaceId) ->
+    case autocleaning:get_config(SpaceId) of
+        undefined ->
+            #{};
+        Config ->
+            autocleaning_config:to_map(Config)
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is responsible for updating auto-cleaning configuration.
+%% @end
+%%-------------------------------------------------------------------
+-spec configure(od_space:id(), maps:map()) -> ok | {error,  term()}.
+configure(SpaceId, Configuration) ->
+    case file_popularity_config:is_enabled(SpaceId) of
+        true ->
+            SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
+            autocleaning:configure(SpaceId, Configuration, SupportSize);
+        false ->
+            {error, file_popularity_disabled}
+    end.
+
+-spec disable(od_space:id()) -> ok | {error, term()}.
+disable(SpaceId) ->
+    SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
+    autocleaning:configure(SpaceId, #{enable => false}, SupportSize).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns map describing status of autocleaning in given space,
+%% understandable by onepanel.
+%% @end
+%%-------------------------------------------------------------------
+-spec status(od_space:id()) -> maps:map().
+status(SpaceId) ->
+    CurrentSize = space_quota:current_size(SpaceId),
+    InProgress = case autocleaning:get_current_run(SpaceId) of
+        undefined ->
+            false;
+        _ ->
+            true
+    end,
+    #{
+        in_progress => InProgress,
+        space_occupancy => CurrentSize
+    }.
+
+
+-spec list(od_space:id()) -> {ok, [autocleaning_run:id()]}.
+list(SpaceId) ->
+    list(SpaceId, undefined, 0, all).
+
+-spec list(od_space:id(), autocleaning_run:id() | undefined,
+    autocleaning_run_links:offset(), autocleaning_run_links:list_limit()) ->
+    {ok, [autocleaning_run:id()]}.
+list(SpaceId, StartId, Offset, Limit) ->
+    autocleaning_run_links:list(SpaceId, StartId, Offset, Limit).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns list of autocleaning reports, that has been scheduled later
+%% than Since.
+%% @end
+%%-------------------------------------------------------------------
+-spec list_reports_since(od_space:id(), binary()) -> [maps:map()].
+list_reports_since(SpaceId, Since) ->
+    SinceEpoch = time_utils:iso8601_to_epoch(Since),
+    autocleaning_run:list_reports_since(SpaceId, SinceEpoch).
+
+
+-spec restart_autocleaning_run(autocleaning:id()) -> ok | {error, term()}.
+restart_autocleaning_run(SpaceId) ->
+    case autocleaning:get(SpaceId) of
+        {ok, #document{value = #autocleaning{current_run = undefined}}} ->
+            % there is no autocleaning_run to restart
+            ok;
+        {ok, #document{value = #autocleaning{current_run = ARId}}} ->
+            case autocleaning_run:restart(ARId) of
+                {error, autocleaning_disabled} ->
+                    ?warning("Could not restart auto-cleaning run ~p in space "
+                    "because auto-cleaning mechanism has been disabled", [ARId]);
+                {error, Reason} ->
+                    ?error("Could not restart auto-cleaning run ~p in space ~p due to ~p",
+                        [ARId, SpaceId, Reason]),
+                    autocleaning:mark_run_finished(SpaceId);
+                ok ->
+                    ?debug("Restarted auto-cleaning run ~p in space ~p",
+                        [ARId, SpaceId])
+            end;
+        Error ->
+            ?error("Could not restart auto-cleaning run in space ~p due to ~p",
+                [SpaceId, Error])
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec exists_and_is_enabled(autocleaning:id()) -> {true, autocleaning:record()} | false.
+exists_and_is_enabled(SpaceId) ->
+    case autocleaning:get(SpaceId) of
+        {ok, #document{value = AC}} ->
+            case autocleaning:is_enabled(AC) of
+                true -> {true, AC};
+                false -> false
+            end;
+        _ ->
+            false
+    end.

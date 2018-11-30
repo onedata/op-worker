@@ -123,7 +123,7 @@ handle_cast({?DELETE_REPLICA, FileUuid, SpaceId, Blocks, VV, RDId, Type, Id}, St
             Error
     end,
     replica_deletion:release_supporting_lock(RDId),
-    replica_deletion_master:process_result(Type, FileUuid, Result, Id),
+    replica_deletion_master:process_result(Type, SpaceId, FileUuid, Result, Id),
     {noreply, State};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),

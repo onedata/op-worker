@@ -279,41 +279,70 @@
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()],
-    file_popularity_enabled = false :: boolean(),
-    cleanup_enabled = false :: boolean(),
-    cleanup_in_progress :: undefined | autocleaning:id(),
-    autocleaning_config :: undefined | autocleaning_config:config()
+    mounted_in_root = [] :: [storage:id()]
+}).
+
+-record(file_popularity_config, {
+    enabled = false :: boolean()
+}).
+
+%% Record containing record describing setting of autocleaning selective rule.
+-record(autocleaning_rule_setting, {
+    enabled = false :: boolean(),
+    value = 0 :: non_neg_integer()
+}).
+
+%% Record containing record describing autocleaning selective rules.
+-record(autocleaning_rules, {
+    % informs whether selective rules should be used by auto-cleaning mechanism
+    enabled = false :: boolean(),
+    % lowest size of file that can be evicted during autocleaning
+    lower_file_size_limit = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % highest size of file that can be evicted during autocleaning
+    upper_file_size_limit = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that haven't been opened for longer than or equal to given
+    % period [h] may be cleaned.
+    min_hours_since_last_open = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have been opened less than max_open_count times may be cleaned.
+    max_open_count = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have moving average of open operations count per hour less
+    % than given value may be cleaned. The average is calculated in 24 hours window.
+    max_hourly_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have moving average of open operations count per day less than
+    % given value may be cleaned. The average is calculated in 31 days window.
+    max_daily_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have moving average of open operations count per month less
+    % than given value may be cleaned. The average is calculated in 12 months window.
+    max_monthly_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting()
 }).
 
 %% Record containing autocleaning configuration
 -record(autocleaning_config, {
-    % lowest size of file that can be invalidated during autocleaning
-    lower_file_size_limit :: undefined | non_neg_integer(),
-    % highest size of file that can be invalidated during autocleaning
-    upper_file_size_limit :: undefined |  non_neg_integer(),
-    % if file hasn't been opened for this number of hours or longer it will be deleted
-    max_file_not_opened_hours :: undefined |  non_neg_integer(),
+    enabled = false :: boolean(),
     % storage occupancy at which autocleaning will stop
-    target :: non_neg_integer(),
+    target = 0 :: non_neg_integer(),
     % autocleaning will start after exceeding threshold level of occupancy
-    threshold :: non_neg_integer()
+    threshold = 0 :: non_neg_integer(),
+    rules = #autocleaning_rules{} :: autocleaning_config:rules()
 }).
 
-%% Model for holding information about autocleaning procedures
--record(autocleaning, {
+%% Model for holding information about autocleaning runs
+-record(autocleaning_run, {
     space_id :: undefined | od_space:id(),
     started_at = 0 :: non_neg_integer(),
     stopped_at :: undefined | non_neg_integer(),
-
-    files_to_process = 0 :: non_neg_integer(),
-    files_processed = 0 :: non_neg_integer(),
+    status :: undefined | autocleaning_run:status(),
 
     released_bytes = 0 :: non_neg_integer(),
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
-    status :: undefined | autocleaning:status(),
-    config :: undefined | autocleaning_config:config()
+
+    token :: undefined | file_popularity_view:token()
+}).
+
+-record(autocleaning, {
+    current_run :: undefined | autocleaning:run_id(),
+    config :: undefined | autocleaning:config()
 }).
 
 -record(helper_handle, {
@@ -434,7 +463,8 @@
 
 %% Model for holding current quota state for spaces
 -record(space_quota, {
-    current_size = 0 :: non_neg_integer()
+    current_size = 0 :: non_neg_integer(),
+    last_autocleaning_check = 0 :: non_neg_integer()
 }).
 
 %% Record that holds monitoring id
