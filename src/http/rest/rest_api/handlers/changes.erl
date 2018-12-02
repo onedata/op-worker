@@ -194,6 +194,8 @@ stream_space_changes(Req, State) ->
 
     #{auth := Auth, space_id := SpaceId} = State4,
     space_membership:check_with_auth(Auth, SpaceId),
+    put(auth, Auth),
+    put(space_id, SpaceId),
 
     {ok, Body, Req5} = cowboy_req:read_body(Req4),
     State5 = parse_body(Body, State4),
@@ -227,21 +229,21 @@ parse_body(Body, State) ->
         (<<"fileMeta">> = RecName, RawSpec, Acc) when is_map(RawSpec) ->
             ChangesReq = #change_req{
                 record = file_meta,
-                always = maps:get(<<"always">>, RawSpec, ?DEFAULT_ALWAYS),
+                always = parse_always_flag(RecName, RawSpec),
                 fields = parse_fields(RecName, maps:get(<<"fields">>, RawSpec, []))
             },
             [ChangesReq | Acc];
         (<<"fileLocation">> = RecName, RawSpec, Acc) when is_map(RawSpec) ->
             ChangesReq = #change_req{
                 record = file_location,
-                always = maps:get(<<"always">>, RawSpec, ?DEFAULT_ALWAYS),
+                always = parse_always_flag(RecName, RawSpec),
                 fields = parse_fields(RecName, maps:get(<<"fields">>, RawSpec, []))
             },
             [ChangesReq | Acc];
         (<<"times">> = RecName, RawSpec, Acc) when is_map(RawSpec) ->
             ChangesReq = #change_req{
                 record = times,
-                always = maps:get(<<"always">>, RawSpec, ?DEFAULT_ALWAYS),
+                always = parse_always_flag(RecName, RawSpec),
                 fields = parse_fields(RecName, maps:get(<<"fields">>, RawSpec, []))
             },
             [ChangesReq | Acc];
@@ -260,7 +262,7 @@ parse_body(Body, State) ->
             end,
             ChangesReq = #change_req{
                 record = custom_metadata,
-                always = maps:get(<<"always">>, RawSpec, ?DEFAULT_ALWAYS),
+                always = parse_always_flag(RecName, RawSpec),
                 fields = Fields,
                 exists = Exists
             },
@@ -272,6 +274,19 @@ parse_body(Body, State) ->
     case ChangesReqs of
         [] -> throw(?ERROR_INVALID_CHANGES_REQ);
         _ -> State#{changes_reqs => ChangesReqs}
+    end.
+
+
+%% @private
+-spec parse_always_flag(binary(), maps:map()) -> true | false.
+parse_always_flag(RecName, Spec) ->
+    case maps:get(<<"always">>, Spec, ?DEFAULT_ALWAYS) of
+        true ->
+            true;
+        false ->
+            false;
+        _ ->
+            throw(?ERROR_INVALID_FIELD(RecName, <<"always">>))
     end.
 
 
@@ -586,6 +601,39 @@ get_record_changes(Changed, FieldsNames, ExistsNames, #document{
         <<"deleted">> => Deleted,
         <<"fields">> => Fields,
         <<"exists">> => Exists
+    };
+
+get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
+    key = FileUuid,
+    revs = [Rev | _],
+    mutators = Mutators,
+    deleted = Deleted,
+    value = #file_meta{} = Record
+}) ->
+    Fields = lists:foldl(
+        fun
+            ({<<"name">>, _FieldIndex}, Acc) ->
+                Auth = get(auth),
+                SpaceId = get(space_id),
+                SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                Name = case FileUuid =:= SpaceUuid of
+                    true ->
+                        {ok, SpaceName} = space_logic:get_name(Auth, SpaceId),
+                        SpaceName;
+                    false ->
+                        Record#file_meta.name
+                end,
+                Acc#{<<"name">> => Name};
+            ({FieldName, FieldIndex}, Acc) ->
+                Acc#{FieldName => element(FieldIndex, Record)}
+        end, #{}, FieldsNamesAndIndexes),
+
+    #{
+        <<"rev">> => Rev,
+        <<"mutators">> => Mutators,
+        <<"changed">> => Changed,
+        <<"deleted">> => Deleted,
+        <<"fields">> => Fields
     };
 
 get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{

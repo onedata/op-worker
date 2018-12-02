@@ -72,7 +72,8 @@ invalid_request_should_fail(Config) ->
         {#{}, ?ERROR_INVALID_CHANGES_REQ},
         {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_INVALID_FORMAT(<<"fielMeta">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_INVALID_FORMAT(<<"fileMeta">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"HEH">>)}
+        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"HEH">>)},
+        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"always">>)}
     ]).
 
 
