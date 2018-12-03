@@ -48,8 +48,6 @@ is_stream_message(#server_message{message_body = #message_stream_reset{}}) ->
     true;
 is_stream_message(#client_message{message_stream = undefined}) ->
     false;
-is_stream_message(#client_message{message_stream = #message_stream{stream_id = undefined}}) ->
-    false;
 is_stream_message(#client_message{} = Msg) ->
     SessId = router:effective_session_id(Msg),
     case session_manager:is_provider_session_id(SessId) of
