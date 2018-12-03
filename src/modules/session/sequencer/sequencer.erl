@@ -19,7 +19,7 @@
 
 %% API
 -export([open_stream/1, close_stream/2, send_message/3]).
--export([send_to_sequencer_manager/2, term_to_stream_id/1]).
+-export([communicate_with_sequencer_manager/2, term_to_stream_id/1]).
 
 -export_type([stream_id/0, sequence_number/0]).
 
@@ -49,7 +49,7 @@ open_stream(Ref) ->
 -spec close_stream(StmId :: stream_id(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
 close_stream(StmId, Ref) ->
-    send_to_sequencer_manager({close_stream, StmId}, Ref).
+    communicate_with_sequencer_manager({close_stream, StmId}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,11 +59,11 @@ close_stream(StmId, Ref) ->
 -spec send_message(Msg :: term(), StmId :: stream_id(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
 send_message(#server_message{} = Msg, StmId, Ref) ->
-    send_to_sequencer_manager(Msg#server_message{
+    communicate_with_sequencer_manager(Msg#server_message{
         message_stream = #message_stream{stream_id = StmId}
     }, Ref);
 send_message(#client_message{} = Msg, StmId, Ref) ->
-    send_to_sequencer_manager(Msg#client_message{
+    communicate_with_sequencer_manager(Msg#client_message{
         message_stream = #message_stream{stream_id = StmId}
     }, Ref);
 
@@ -82,29 +82,6 @@ term_to_stream_id(Term) ->
     PHash2 = erlang:phash2(Binary, 4294967296),
     PHash1 + PHash2.
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends a message to the sequencer manager referenced by pid or session ID.
-%% @end
-%%--------------------------------------------------------------------
--spec send_to_sequencer_manager(Msg :: term(), Ref :: sequencer_manager_ref()) ->
-    ok | {error, Reason :: term()}.
-send_to_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
-    gen_server2:cast(Ref, Msg);
-
-send_to_sequencer_manager(Msg, Ref) ->
-
-    case session:get_sequencer_manager(Ref) of
-        {ok, ManPid} -> send_to_sequencer_manager(Msg, ManPid);
-        {error, Reason} -> {error, Reason}
-    end.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -114,10 +91,14 @@ send_to_sequencer_manager(Msg, Ref) ->
 -spec communicate_with_sequencer_manager(Msg :: term(),
     Ref :: sequencer_manager_ref()) -> Reply :: term().
 communicate_with_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
-    gen_server2:call(Ref, Msg);
+    sequencer_manager:send(Ref, Msg);
 
 communicate_with_sequencer_manager(Msg, Ref) ->
     case session:get_sequencer_manager(Ref) of
         {ok, ManPid} -> communicate_with_sequencer_manager(Msg, ManPid);
         {error, Reason} -> {error, Reason}
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

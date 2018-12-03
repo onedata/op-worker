@@ -78,14 +78,14 @@ route_message(#client_message{session_id = From, proxy_session_id = ProxySession
             ProviderId = session_manager:session_id_to_provider_id(From),
             SequencerSessionId = session_manager:get_provider_session_id(outgoing, ProviderId),
             provider_communicator:ensure_connected(SequencerSessionId),
-            sequencer:send_to_sequencer_manager(Msg, SequencerSessionId);
+            sequencer:communicate_with_sequencer_manager(Msg, SequencerSessionId);
         {true, false} ->
             ok;
         {false, _} ->
-            sequencer:send_to_sequencer_manager(Msg, From)
+            sequencer:communicate_with_sequencer_manager(Msg, From)
     end;
 route_message(#server_message{proxy_session_id = Ref} = Msg) ->
-    sequencer:send_to_sequencer_manager(Msg, Ref).
+    sequencer:communicate_with_sequencer_manager(Msg, Ref).
 
 make_message_direct(Msg) ->
     Msg#client_message{message_stream = undefined}.

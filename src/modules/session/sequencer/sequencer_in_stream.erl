@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/3, send/2]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3,
@@ -75,6 +75,9 @@
     {ok, SeqStm :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqMan, StmId, SessId) ->
     gen_fsm:start_link(?MODULE, [SeqMan, StmId, SessId], []).
+
+send(Manager, Message) ->
+    gen_fsm:send_event(Manager, Message).
 
 %%%===================================================================
 %%% gen_fsm callbacks

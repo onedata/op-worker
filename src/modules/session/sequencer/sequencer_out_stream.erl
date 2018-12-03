@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/3, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -65,6 +65,9 @@
     {ok, SeqStm :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqMan, StmId, SessId) ->
     gen_server2:start_link(?MODULE, [SeqMan, StmId, SessId], []).
+
+send(Manager, Message) ->
+    gen_server2:cast(Manager, Message).
 
 %%%===================================================================
 %%% gen_server callbacks
