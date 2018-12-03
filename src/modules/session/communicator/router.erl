@@ -26,7 +26,7 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 
 %% API
--export([route_message/1, route_direct_message/1]).
+-export([route_message/1]).
 -export([effective_session_id/1]).
 
 %%%===================================================================
@@ -53,6 +53,23 @@ route_message(Msg) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc
+%% Returns session's ID that shall be used for given message.
+%% @end
+%%--------------------------------------------------------------------
+-spec effective_session_id(#client_message{}) ->
+  session:id().
+effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
+  SessionId;
+effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
+  ProxySessionId.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Route message to adequate handler, this function should never throw
 %% @end
@@ -90,22 +107,6 @@ route_direct_message(Msg = #server_message{message_id = #message_id{
         false ->
             ok
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns session's ID that shall be used for given message.
-%% @end
-%%--------------------------------------------------------------------
--spec effective_session_id(#client_message{}) ->
-  session:id().
-effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
-  SessionId;
-effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
-  ProxySessionId.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 % TODO - spec, doc
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->

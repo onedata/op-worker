@@ -168,7 +168,8 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     rpc:call(Worker, session, delete, [<<"session_id">>]),
     stop_sequencer_in_stream(?config(sequencer_in_stream, Config)),
-    test_utils:mock_validate_and_unload(Worker, [communicator, router]).
+    test_utils:mock_validate_and_unload(Worker, [communicator, router,
+        stream_router]).
 
 %%%===================================================================
 %%% Internal functions
@@ -271,8 +272,12 @@ mock_communicator(Worker) ->
 mock_router(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, [router]),
-    test_utils:mock_expect(Worker, router, route_direct_message, fun
+    test_utils:mock_expect(Worker, router, route_message, fun
         (Msg) -> Self ! Msg, ok
+    end),
+    test_utils:mock_new(Worker, [stream_router]),
+    test_utils:mock_expect(Worker, stream_router, make_message_direct, fun
+        (Msg) -> Msg
     end).
 
 

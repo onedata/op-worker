@@ -17,7 +17,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([is_stream_message/1, route_message/1]).
+-export([is_stream_message/1, route_message/1, make_message_direct/1]).
 
 %%%===================================================================
 %%% API
@@ -47,6 +47,8 @@ is_stream_message(#server_message{message_body = #end_of_message_stream{}}) ->
 is_stream_message(#server_message{message_body = #message_stream_reset{}}) ->
     true;
 is_stream_message(#client_message{message_stream = undefined}) ->
+    false;
+is_stream_message(#client_message{message_stream = #message_stream{stream_id = undefined}}) ->
     false;
 is_stream_message(#client_message{} = Msg) ->
     SessId = router:effective_session_id(Msg),
@@ -86,3 +88,6 @@ route_message(#client_message{session_id = From, proxy_session_id = ProxySession
     end;
 route_message(#server_message{proxy_session_id = Ref} = Msg) ->
     sequencer:send_to_sequencer_manager(Msg, Ref).
+
+make_message_direct(Msg) ->
+    Msg#client_message{message_stream = undefined}.
