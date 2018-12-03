@@ -264,6 +264,8 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         }
     catch
         Error:Reason ->
+            ?error_stacktrace("create_file_insecure error: ~p:~p",
+                [Error, Reason]),
             sfm_utils:delete_storage_file(FileCtx, UserCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),

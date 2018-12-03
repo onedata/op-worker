@@ -129,7 +129,7 @@ add_missing_helper(SessId, SpaceId, StorageDoc) ->
     case session:add_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
         link_key(StorageId, SpaceId), HandleId
     ) of
-        {ok, _} ->
+        ok ->
             {ok, HelperHandle};
         {error, Reason} ->
             helper_handle:delete(HandleId),
