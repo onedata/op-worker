@@ -317,7 +317,7 @@ terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     case SessId of
         undefined -> ok;
-        _ -> session:remove_connection(SessId, self())
+        _ -> session_connections:remove_connection(SessId, self())
     end,
     ssl:close(Socket),
     State.

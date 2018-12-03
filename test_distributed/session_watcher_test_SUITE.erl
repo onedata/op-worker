@@ -62,7 +62,7 @@ session_watcher_should_remove_session_without_connections(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
-    ?call(Worker, remove_connection, [SessId, Self]),
+    ?call(Worker, session_connections, remove_connection, [SessId, Self]),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
 session_watcher_should_remove_inactive_session(Config) ->

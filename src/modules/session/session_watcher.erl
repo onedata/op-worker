@@ -151,7 +151,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
         fun({Pid, QueueLen}, AccIn) ->
             case utils:process_info(Pid, message_queue_len) of
                 undefined ->
-                    session:remove_connection(SessId, Pid),
+                    session_connections:remove_connection(SessId, Pid),
                     AccIn;
                 {message_queue_len, NewQueueLen} when NewQueueLen < ?MAX_PENDING_REQUESTS_PER_CONNECTION ->
                     %% Queue is still not too long
@@ -162,7 +162,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
                 {message_queue_len, NewQueueLen} ->
                     ?error("Connection ~p on session ~p hang with ~p messages
                             in request queue. Removing.", [Pid, SessId, NewQueueLen]),
-                    session:remove_connection(SessId, Pid),
+                    session_connections:remove_connection(SessId, Pid),
                     erlang:exit(Pid, kill),
                     AccIn
             end

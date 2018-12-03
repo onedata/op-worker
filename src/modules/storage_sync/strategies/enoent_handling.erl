@@ -217,7 +217,7 @@ main_worker_pool() ->
 -spec get_canonical_file_entry(user_ctx:ctx(), [file_meta:path()]) ->
     file_meta:entry() | no_return().
 get_canonical_file_entry(UserCtx, Tokens) ->
-    case session:is_special(user_ctx:get_session_id(UserCtx)) of
+    case session_utils:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             {path, fslogic_path:join(Tokens)};
         false ->

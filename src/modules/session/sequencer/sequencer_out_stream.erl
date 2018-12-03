@@ -275,7 +275,7 @@ process_request(#message_request{lower_sequence_number = LowerSeqNum,
     stream_id = StmId, sequence_number = SeqNum, session_id = SessId} = State) ->
     case LowerSeqNum < SeqNum of
         true ->
-            {ok, Con} = session:get_random_connection(SessId),
+            {ok, Con} = session_connections:get_random_connection(SessId),
             ok = resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con),
             State;
         false ->
@@ -331,7 +331,7 @@ remove_messages(SeqNum, Msgs) ->
 -spec resend_all_messages(Msgs :: messages(), SessId :: session:id()) ->
     {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
 resend_all_messages(Msgs, SessId) ->
-    {ok, Con} = session:get_random_connection(SessId),
+    {ok, Con} = session_connections:get_random_connection(SessId),
     resend_all_messages(Msgs, Con, 0, queue:new()).
 
 %%--------------------------------------------------------------------

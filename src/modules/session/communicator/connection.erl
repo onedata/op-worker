@@ -48,7 +48,7 @@ send(Msg, Ref) when is_pid(Ref) ->
     end;
 send(Msg, SessionId) ->
     MsgWithProxyInfo = fill_proxy_info(Msg, SessionId),
-    case session:get_random_connection(SessionId) of
+    case session_connections:get_random_connection(SessionId) of
         {ok, Con} -> send(MsgWithProxyInfo, Con);
         {error, Reason} -> {error, Reason}
     end.
@@ -64,7 +64,7 @@ send_async(Msg, Ref) when is_pid(Ref) ->
     Ref ! {send_async, Msg},
     ok;
 send_async(Msg, Ref) ->
-    case session:get_random_connection(Ref) of
+    case session_connections:get_random_connection(Ref) of
         {ok, Con} -> send_async(Msg, Con);
         {error, Reason} -> {error, Reason}
     end.

@@ -211,7 +211,7 @@ communicate_async(Msg, Ref, Recipient) ->
 ensure_connected(Conn) when is_pid(Conn) ->
     ok;
 ensure_connected(SessId) ->
-    case session:get_random_connection(SessId, true) of
+    case session_connections:get_random_connection(SessId, true) of
         {error, _} ->
             ProviderId = case session:get(SessId) of
                 {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(
@@ -239,7 +239,7 @@ ensure_connected(SessId) ->
                     Port = https_listener:port(),
                     critical_section:run([?MODULE, ProviderId, SessId], fun() ->
                         % check once more to prevent races
-                        case session:get_random_connection(SessId, true) of
+                        case session_connections:get_random_connection(SessId, true) of
                             {error, _} ->
                                 outgoing_connection:start(ProviderId, SessId,
                                     Domain, Host, Port, ranch_ssl, timer:seconds(5));
@@ -252,7 +252,7 @@ ensure_connected(SessId) ->
         {ok, Pid} ->
             case utils:process_info(Pid, initial_call) of
                 undefined ->
-                    ok = session:remove_connection(SessId, Pid),
+                    ok = session_connections:remove_connection(SessId, Pid),
                     ensure_connected(SessId);
                 _ ->
                     ok

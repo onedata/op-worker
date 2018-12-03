@@ -84,7 +84,7 @@ reuse_or_create_rest_session(Iden) ->
     Auth :: session:auth() | undefined) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
-    SessId = session:get_rest_session_id(Iden),
+    SessId = session_utils:get_rest_session_id(Iden),
     case user_logic:exists(?ROOT_SESS_ID, UserId) of
         true ->
             reuse_or_create_session(SessId, rest, Iden, Auth, []);

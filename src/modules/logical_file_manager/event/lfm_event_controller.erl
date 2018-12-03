@@ -31,7 +31,7 @@
 -spec flush_event_queue(session:id(), od_provider:id(), file_meta:uuid()) ->
     ok | {error, term()}.
 flush_event_queue(SessionId, ProviderId, FileUuid) ->
-    case session:is_special(SessionId) of
+    case session_utils:is_special(SessionId) of
         true ->
             ok;
         false ->

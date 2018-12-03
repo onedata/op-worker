@@ -98,7 +98,7 @@ get_auth(#user_ctx{session = Session}) ->
 %%--------------------------------------------------------------------
 -spec is_root(ctx()) -> boolean().
 is_root(#user_ctx{session = #document{key = SessId}}) ->
-    session:is_root(SessId).
+    session_utils:is_root(SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,7 +107,7 @@ is_root(#user_ctx{session = #document{key = SessId}}) ->
 %%--------------------------------------------------------------------
 -spec is_guest(ctx()) -> boolean().
 is_guest(#user_ctx{session = #document{key = SessId}}) ->
-    session:is_guest(SessId).
+    session_utils:is_guest(SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,7 +116,7 @@ is_guest(#user_ctx{session = #document{key = SessId}}) ->
 %%--------------------------------------------------------------------
 -spec is_normal_user(ctx()) -> boolean().
 is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
-    not session:is_special(SessId).
+    not session_utils:is_special(SessId).
 
 %%--------------------------------------------------------------------
 %% @doc

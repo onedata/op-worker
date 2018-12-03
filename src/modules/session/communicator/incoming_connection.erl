@@ -177,7 +177,7 @@ handler_loop(State) ->
         false ->
             case NewState#state.session_id of
                 undefined -> ok;
-                SessId -> session:remove_connection(SessId, self())
+                SessId -> session_connections:remove_connection(SessId, self())
             end,
             % Fulfill remaining promises before shutdown
             fulfill_pending_promises(NewState#state{continue = true})
@@ -269,7 +269,7 @@ send_server_message(State = #state{session_id = SessionId, transport = Transport
                 ok ->
                     {ok, State};
                 {error, _} ->
-                    session:remove_connection(SessionId, self()),
+                    session_connections:remove_connection(SessionId, self()),
                     Result = send_via_other_connection(State, ServerMsg),
                     % Terminate as the connection was closed
                     {Result, State#state{continue = false}}
@@ -449,7 +449,7 @@ fulfill_pending_promises(#state{wait_map = WaitMap, wait_pids = Pids} = State) -
 %%--------------------------------------------------------------------
 -spec send_via_other_connection(state(), #server_message{}) -> ok | {error, term()}.
 send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
-    {ok, Connections} = session:get_connections(SessionId),
+    {ok, Connections} = session_connections:get_connections(SessionId),
     % Try to send the message via another connection of this session. This must
     % be delegated to an asynchronous process so the connection process can
     % still receive messages in the meantime. Otherwise, a deadlock is possible
