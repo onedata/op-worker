@@ -161,7 +161,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_out_stream(?config(sequencer_out_stream, Config)),
-    test_utils:mock_validate_and_unload(Worker, [communicator, session]).
+    test_utils:mock_validate_and_unload(Worker,
+        [communicator, session_connections]).
 
 %%%===================================================================
 %%% Internal functions
@@ -245,7 +246,7 @@ mock_communicator(Worker) ->
 -spec mock_session(Worker :: node()) -> ok.
 mock_session(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, session),
-    test_utils:mock_expect(Worker, session, get_random_connection, fun
+    test_utils:mock_new(Worker, session_connections),
+    test_utils:mock_expect(Worker, session_connections, get_random_connection, fun
         (_) -> {ok, Self}
     end).
