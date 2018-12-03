@@ -137,7 +137,7 @@ get_provider_support(SessionId, SpaceId) ->
 -spec get_provider_support(gs_client_worker:client(), od_space:id(),
     od_provider:id()) -> integer() | gs_protocol:error().
 get_provider_support(SessionId, SpaceId, ProviderId) ->
-    case get_providers_supports(SessionId, SpaceId) of
+    case space_logic:get_providers_supports(SessionId, SpaceId) of
         {ok, SupportsMap} ->
             maps:get(ProviderId, SupportsMap);
         {error, _} = Error ->

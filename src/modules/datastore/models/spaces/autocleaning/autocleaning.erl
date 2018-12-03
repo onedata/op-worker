@@ -12,6 +12,8 @@
 -module(autocleaning).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -28,7 +30,7 @@
 
 %% API
 -export([get/1, is_enabled/1, get_config/1, get_current_run/1,
-    configure/3, maybe_mark_current_run/2, mark_run_finished/1]).
+    configure/2, maybe_mark_current_run/2, mark_run_finished/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -74,8 +76,9 @@ get_current_run(SpaceId) ->
             undefined
     end.
 
--spec configure(id(), maps:map(), non_neg_integer()) -> ok | error().
-configure(SpaceId, NewConfiguration, SupportSize) ->
+-spec configure(id(), maps:map()) -> ok | error().
+configure(SpaceId, NewConfiguration) ->
+    SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
     case autocleaning:get(SpaceId) of
         {error, not_found} ->
             create(SpaceId, NewConfiguration, SupportSize);

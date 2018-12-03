@@ -90,16 +90,14 @@ get_configuration(SpaceId) ->
 configure(SpaceId, Configuration) ->
     case file_popularity_config:is_enabled(SpaceId) of
         true ->
-            SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
-            autocleaning:configure(SpaceId, Configuration, SupportSize);
+            autocleaning:configure(SpaceId, Configuration);
         false ->
             {error, file_popularity_disabled}
     end.
 
 -spec disable(od_space:id()) -> ok | {error, term()}.
 disable(SpaceId) ->
-    SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
-    autocleaning:configure(SpaceId, #{enable => false}, SupportSize).
+    configure(SpaceId, #{enable => false}).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -163,6 +161,8 @@ restart_autocleaning_run(SpaceId) ->
                     ?debug("Restarted auto-cleaning run ~p in space ~p",
                         [ARId, SpaceId])
             end;
+        {error, not_found} ->
+            ok;
         Error ->
             ?error("Could not restart auto-cleaning run in space ~p due to ~p",
                 [SpaceId, Error])

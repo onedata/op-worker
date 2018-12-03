@@ -644,4 +644,4 @@ new_batch_counters(FilesToProcess) ->
 -spec query(od_space:id(), non_neg_integer(), file_popularity_view:token()) ->
     {[file_ctx:ctx()], file_popularity_view:token()}.
 query(SpaceId, BatchSize, Token) ->
-    file_popularity_view:get_unpopular_files(SpaceId, Token, BatchSize).
+    file_popularity_api:query(SpaceId, Token, BatchSize).
