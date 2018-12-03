@@ -22,7 +22,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/3, send/2]).
 %% export for spawning
 -export([execute_event_handler/2]).
 
@@ -91,6 +91,9 @@
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(Mgr, Sub, SessId) ->
     gen_server2:start_link(?MODULE, [Mgr, Sub, SessId], []).
+
+send(Stream, Message) ->
+    gen_server2:call(Stream, Message).
 
 %%%===================================================================
 %%% Exometer API

@@ -248,7 +248,7 @@ send_to_event_managers({aggregated, Messages}, Managers) ->
 send_to_event_managers(Message, Managers) ->
     lists:foreach(fun(Manager) ->
         % TODO - zwrocic blad
-        gen_server2:call(Manager, Message)
+        event_manager:send(Manager, Message)
     end, Managers).
 
 %%--------------------------------------------------------------------

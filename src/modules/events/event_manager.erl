@@ -28,7 +28,7 @@
 % TODO - dodac API na wysylanie eventow do stream'u - w sequencerze tez
 
 %% API
--export([start_link/2]).
+-export([start_link/2, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -68,6 +68,9 @@
     {ok, Mgr :: pid()} | ignore | {error, Reason :: term()}.
 start_link(MgrSup, SessId) ->
     gen_server2:start_link(?MODULE, [MgrSup, SessId], []).
+
+send(Manager, Message) ->
+    gen_server2:call(Manager, Message).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -169,17 +172,12 @@ handle_cast(Request, State) ->
 handle_info({'EXIT', MgrSup, shutdown}, #state{manager_sup = MgrSup} = State) ->
     {stop, normal, State};
 
-handle_info(timeout, #state{manager_sup = MgrSup, session_id = SessId} = State) ->
-    {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
-    {Stms, Subs} = start_event_streams(StmsSup, SessId),
-    {noreply, State#state{
-        streams_sup = StmsSup,
-        streams = Stms,
-        subscriptions = Subs
-    }};
+handle_info(timeout, State) ->
+    State2 = start_event_streams(State),
+    {noreply, State2};
 
 handle_info({retry_request, RetryCounter, Request}, State) ->
-    gen_server2:cast(self(), {internal, RetryCounter - 1, Request}),
+    handle_retry_info(Request, RetryCounter),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -314,7 +312,7 @@ handle_locally({unregister_stream, StmKey}, #state{streams = Stms} = State) ->
 handle_locally(#event{} = Evt, #state{streams = Stms} = State) ->
     StmKey = event_type:get_stream_key(Evt),
     Stm = maps:get(StmKey, Stms, undefined),
-    gen_server2:call(Stm, Evt),
+    event_stream:send(Stm, Evt),
     {noreply, State};
 
 handle_locally(#flush_events{} = Request, #state{} = State) ->
@@ -322,7 +320,7 @@ handle_locally(#flush_events{} = Request, #state{} = State) ->
     #state{streams = Stms, subscriptions = Subs} = State,
     {_, StmKey} = maps:get(SubId, Subs, {local, undefined}),
     Stm = maps:get(StmKey, Stms, undefined),
-    gen_server2:call(Stm, {flush, NotifyFun}),
+    event_stream:send(Stm, {flush, NotifyFun}),
     {noreply, State};
 
 handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
@@ -335,7 +333,7 @@ handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
     StmKey = subscription_type:get_stream_key(Sub),
     NewStms = case maps:find(StmKey, Stms) of
         {ok, Stm} ->
-            gen_server2:call(Stm, {add_subscription, Sub}),
+            event_stream:send(Stm, {add_subscription, Sub}),
             Stms;
         error ->
             {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
@@ -351,7 +349,7 @@ handle_locally(#subscription_cancellation{id = SubId} = Can, #state{} = State) -
     case maps:get(SubId, Subs, {local, undefined}) of
         {local, StmKey} ->
             Stm = maps:get(StmKey, Stms, undefiend),
-            gen_server2:call(Stm, {remove_subscription, SubId});
+            event_stream:send(Stm, {remove_subscription, SubId});
         {remote, ProviderId} ->
             handle_remotely(Can, ProviderId, State)
     end,
@@ -433,16 +431,26 @@ get_context(_) ->
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_streams(StmsSup :: pid(), SessId :: session:id()) ->
-    {Stms :: streams(), Subs :: subscriptions()}.
-start_event_streams(StmsSup, SessId) ->
+%%-spec start_event_streams(StmsSup :: pid(), SessId :: session:id()) ->
+%%    {Stms :: streams(), Subs :: subscriptions()}.
+start_event_streams(#state{streams_sup = undefined, manager_sup = MgrSup} = State) ->
+    {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
+    start_event_streams(State#state{streams_sup = StmsSup});
+start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) ->
     {ok, Docs} = subscription:list_durable_subscriptions(),
 
-    lists:foldl(fun(#document{value = #subscription{id = Id} = Sub}, {Stms, Subs}) ->
+    {Stms, Subs} = lists:foldl(fun(#document{value = #subscription{id = Id} = Sub},
+        {Stms, Subs}) ->
         StmKey = subscription_type:get_stream_key(Sub),
         {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
         {maps:put(StmKey, Stm, Stms), maps:put(Id, {local, StmKey}, Subs)}
-    end, {#{}, #{}}, Docs).
+    end, {#{}, #{}}, Docs),
+
+    State#state{
+        streams_sup = StmsSup,
+        streams = Stms,
+        subscriptions = Subs
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -461,3 +469,6 @@ send_retry_message(Request, 0) ->
 send_retry_message(Request, RetryCounter) ->
     RetryAfter = application:get_env(?APP_NAME, event_manager_retry_after, 1000),
     erlang:send_after(RetryAfter, self(), {retry_request, RetryCounter, Request}).
+
+handle_retry_info(Request, RetryCounter) ->
+    gen_server2:cast(self(), {internal, RetryCounter - 1, Request}).
