@@ -12,11 +12,12 @@
 -module(session_helpers).
 -author("Michal Wrzeszcz").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([get_helper/3, delete_helpers_on_this_node/1]).
+-export([get_helper/3, delete_helpers/1]).
 
 -define(HELPER_HANDLES_TREE_ID, <<"helper_handles">>).
 
@@ -36,23 +37,18 @@
 get_helper(SessId, SpaceId, StorageDoc) ->
     get_helper(SessId, SpaceId, StorageDoc, false).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes all associated helper handles present on the node.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_helpers_on_this_node(SessId :: session:id()) ->
-    ok | {error, term()}.
-delete_helpers_on_this_node(SessId) ->
-    {ok, Links} = session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
-        fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
-    ),
-    Names = lists:map(fun(#link{name = Name, target = HandleId}) ->
-        helper_handle:delete(HandleId),
-        Name
-    end, Links),
-    session:delete_local_links(SessId, ?HELPER_HANDLES_TREE_ID, Names),
-    ok.
+delete_helpers(SessId) ->
+    {ok, Nodes} = request_dispatcher:get_worker_nodes(?SESSION_MANAGER_WORKER),
+    lists:foreach(fun(Node) ->
+        worker_proxy:cast(
+            {?SESSION_MANAGER_WORKER, Node},
+            {apply, fun() ->
+                delete_helpers_on_this_node(SessId) end},
+            undefined,
+            undefined,
+            direct
+        )
+    end, Nodes).
 
 %%%===================================================================
 %%% Internal functions
@@ -135,6 +131,26 @@ add_missing_helper(SessId, SpaceId, StorageDoc) ->
             helper_handle:delete(HandleId),
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes all associated helper handles present on the node.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_helpers_on_this_node(SessId :: session:id()) ->
+    ok | {error, term()}.
+delete_helpers_on_this_node(SessId) ->
+    {ok, Links} = session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
+        fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
+    ),
+    Names = lists:map(fun(#link{name = Name, target = HandleId}) ->
+        helper_handle:delete(HandleId),
+        Name
+    end, Links),
+    session:delete_local_links(SessId, ?HELPER_HANDLES_TREE_ID, Names),
+    ok.
+
 
 %%--------------------------------------------------------------------
 %% @private

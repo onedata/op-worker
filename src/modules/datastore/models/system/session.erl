@@ -13,7 +13,6 @@
 -module(session).
 -author("Tomasz Lichon").
 
--include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -31,7 +30,6 @@
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_auth/1, get_user_id/1]).
--export([add_open_file/2, remove_open_file/2]).
 -export([set_direct_io/2]).
 
 % exometer callbacks
@@ -132,29 +130,9 @@ update(SessId, Diff) when is_function(Diff) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{key = SessId, value = #session{open_files = OpenFiles}}} ->
-            {ok, Nodes} = request_dispatcher:get_worker_nodes(?SESSION_MANAGER_WORKER),
-            lists:foreach(fun(Node) ->
-                worker_proxy:cast(
-                    {?SESSION_MANAGER_WORKER, Node},
-                    {apply, fun() ->
-                        session_helpers:delete_helpers_on_this_node(SessId) end},
-                    undefined,
-                    undefined,
-                    direct
-                )
-            end, Nodes),
-
-            lists:foreach(fun(FileGuid) ->
-                FileCtx = file_ctx:new_by_guid(FileGuid),
-                file_handles:invalidate_session_entry(FileCtx, SessId)
-            end, sets:to_list(OpenFiles));
-        _ ->
-            ok
-    end,
-
     ?update_counter(?EXOMETER_NAME(active_sessions), -1),
+    session_helpers:delete_helpers(SessId),
+    session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
 
 %%%===================================================================
@@ -279,40 +257,6 @@ get_auth(#session{auth = Auth}) ->
     Auth;
 get_auth(#document{value = Session}) ->
     get_auth(Session).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds open file UUId to session.
-%% @end
-%%--------------------------------------------------------------------
--spec add_open_file(id(), fslogic_worker:file_guid()) ->
-    ok | {error, term()}.
-add_open_file(SessId, FileGuid) ->
-    Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:add_element(FileGuid, OpenFiles)}}
-    end,
-
-    case update(SessId, Diff) of
-        {ok, _} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes open file UUId from session.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_open_file(id(), fslogic_worker:file_guid()) ->
-    ok | {error, term()}.
-remove_open_file(SessId, FileGuid) ->
-    Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:del_element(FileGuid, OpenFiles)}}
-    end,
-
-    case update(SessId, Diff) of
-        {ok, _} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
