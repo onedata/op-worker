@@ -88,7 +88,7 @@ get_configuration(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec configure(od_space:id(), maps:map()) -> ok | {error,  term()}.
 configure(SpaceId, Configuration) ->
-    case file_popularity_config:is_enabled(SpaceId) of
+    case file_popularity_api:is_enabled(SpaceId) of
         true ->
             autocleaning:configure(SpaceId, Configuration);
         false ->
@@ -97,7 +97,7 @@ configure(SpaceId, Configuration) ->
 
 -spec disable(od_space:id()) -> ok | {error, term()}.
 disable(SpaceId) ->
-    configure(SpaceId, #{enable => false}).
+    configure(SpaceId, #{enabled => false}).
 
 %%-------------------------------------------------------------------
 %% @doc

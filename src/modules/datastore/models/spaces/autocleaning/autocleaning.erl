@@ -81,7 +81,7 @@ configure(SpaceId, NewConfiguration) ->
     SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
     case autocleaning:get(SpaceId) of
         {error, not_found} ->
-            create(SpaceId, NewConfiguration, SupportSize);
+            ?extract_ok(create(SpaceId, NewConfiguration, SupportSize));
         {ok, _} ->
             ?extract_ok(update(SpaceId, fun(AC = #autocleaning{config = CurrentConfig}) ->
                 case autocleaning_config:configure(CurrentConfig, NewConfiguration, SupportSize) of
