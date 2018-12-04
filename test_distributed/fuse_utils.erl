@@ -44,10 +44,14 @@
     proxy_read/5, proxy_read/6,
     proxy_write/5, proxy_write/6,
     fsync/4, fsync/5,
-    emit_file_read_event/5
+    emit_file_read_event/5,
+    get_configuration/1, get_configuration/2,
+    get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
+    flush_events/3
 ]).
 
--define(MSG_ID, integer_to_binary(erlang:unique_integer([positive, monotonic]))).
+-define(ID, erlang:unique_integer([positive, monotonic])).
+-define(MSG_ID, integer_to_binary(?ID)).
 -define(IRRELEVANT_FIELD_VALUE, <<"needless">>).
 
 %% ====================================================================
@@ -223,6 +227,7 @@ generate_delete_file_message(FileGuid, MsgId) ->
     },
     messages:encode_msg(Message).
 
+
 open(Conn, FileGuid) ->
     open(Conn, FileGuid, 'READ_WRITE').
 
@@ -242,6 +247,7 @@ open(Conn, FileGuid, Mode, MsgId) ->
     }, message_id = MsgId}, receive_server_message()),
 
     HandleId.
+
 
 close(Conn, FileGuid, HandleId) ->
     close(Conn, FileGuid, HandleId, ?MSG_ID).
@@ -263,6 +269,7 @@ close(Conn, FileGuid, HandleId, MsgId) ->
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = MsgId}, receive_server_message()).
+
 
 proxy_read(Conn, FileGuid, HandleId, Offset, Size) ->
     proxy_read(Conn, FileGuid, HandleId, Offset, Size, ?MSG_ID).
@@ -298,6 +305,7 @@ proxy_read(Conn, FileGuid, HandleId, Offset, Size, MsgId) ->
     }, message_id = MsgId}, receive_server_message()),
 
     Data.
+
 
 proxy_write(Conn, FileGuid, HandleId, Offset, Data) ->
     proxy_write(Conn, FileGuid, HandleId, Offset, Data, ?MSG_ID).
@@ -335,6 +343,7 @@ proxy_write(Conn, FileGuid, HandleId, Offset, Data, MsgId) ->
 
     NBytes.
 
+
 fsync(Conn, FileGuid, HandleId, DataOnly) ->
     fsync(Conn, FileGuid, HandleId, DataOnly, ?MSG_ID).
 
@@ -345,6 +354,7 @@ fsync(Conn, FileGuid, HandleId, DataOnly, MsgId) ->
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = MsgId}, receive_server_message()).
+
 
 emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
     {BlocksRead, BlocksSize} = lists:foldr(fun({Offset, Size}, {AccBlocks, AccSize}) ->
@@ -364,6 +374,61 @@ emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
                 blocks = BlocksRead
             }}
         }]}}
+    },
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg).
+
+
+get_configuration(Conn) ->
+    get_configuration(Conn, ?MSG_ID).
+
+get_configuration(Conn, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {get_configuration, #'GetConfiguration'{}}
+    },
+
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{message_body = {
+        configuration, #'Configuration'{} = Configuration}
+    } = ?assertMatch(#'ServerMessage'{message_id = MsgId}, receive_server_message()),
+
+    Configuration.
+
+
+get_subscriptions(Conn) ->
+    get_subscriptions(Conn, all).
+
+get_subscriptions(Conn, ChosenSubscriptions) ->
+    get_subscriptions(Conn, ChosenSubscriptions, ?MSG_ID).
+
+get_subscriptions(Conn, ChosenSubscriptions, MsgId) ->
+    Configuration = get_configuration(Conn, MsgId),
+    Subscriptions = Configuration#'Configuration'.subscriptions,
+
+    case ChosenSubscriptions of
+        all ->
+            Subscriptions;
+        _ ->
+            lists:filter(fun(#'Subscription'{type = {Type, _}}) ->
+                lists:member(Type, ChosenSubscriptions)
+            end, Subscriptions)
+    end.
+
+
+flush_events(Conn, ProviderId, SubscriptionId) ->
+    flush_events(Conn, ProviderId, SubscriptionId, ?MSG_ID).
+
+flush_events(Conn, ProviderId, SubscriptionId, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {flush_events, #'FlushEvents'{
+            provider_id = ProviderId,
+            context = term_to_binary(?IRRELEVANT_FIELD_VALUE),
+            subscription_id = SubscriptionId
+        }}
     },
     RawMsg = messages:encode_msg(Msg),
     ok = ssl:send(Conn, RawMsg).
