@@ -118,7 +118,9 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(remove_session, #state{session_id = SessId} = State) ->
-    worker_proxy:cast(?SESSION_MANAGER_WORKER, {remove_session, SessId}),
+    spawn(fun() ->
+        session_manager:remove_session(SessId)
+    end),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
@@ -199,7 +201,9 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    worker_proxy:cast(?SESSION_MANAGER_WORKER, {remove_session, SessId}).
+    spawn(fun() ->
+        session_manager:remove_session(SessId)
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

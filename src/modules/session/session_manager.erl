@@ -151,7 +151,25 @@ create_guest_session() ->
 %%--------------------------------------------------------------------
 -spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
 remove_session(SessId) ->
-    worker_proxy:call(?SESSION_MANAGER_WORKER, {remove_session, SessId}).
+    case session:get(SessId) of
+        {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
+            session:delete(SessId),
+            % Czy polaczenia nie powinny sie zamknac najpierw i potem dopiero sesja zniknac?
+            close_connections(Cons);
+        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
+            try
+                supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
+            catch
+                exit:{noproc, _} -> ok;
+                exit:{shutdown, _} -> ok
+            end,
+            session:delete(SessId),
+            close_connections(Cons);
+        {error, not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions exported for tests
@@ -208,3 +226,15 @@ start_session(Doc, SessType) ->
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Closes connections to remote client.
+%% @end
+%%--------------------------------------------------------------------
+-spec close_connections(Cons :: [pid()]) -> ok.
+close_connections(Cons) ->
+    lists:foreach(fun(Con) ->
+        Con ! disconnect
+    end, Cons).

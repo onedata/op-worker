@@ -102,6 +102,8 @@ get_new_record_and_update_fun(NewCons, ProxyVia, SessType, Auth, Iden) ->
         connections = NewCons, type = SessType, proxy_via = ProxyVia},
     Diff = fun
         (#session{status = inactive}) ->
+            % TODO - tu chyba jest potencjalny race z zamykaniem
+            % (pozwalamy tworzyc a jeszcze nie posprzatalismy)
             {error, not_found};
         (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
             case Iden of
