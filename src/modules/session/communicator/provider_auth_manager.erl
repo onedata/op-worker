@@ -53,6 +53,6 @@ handle_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = N
     end,
 
     Identity = #user_identity{provider_id = ProviderId},
-    SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
+    SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
     {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, self()),
     {ProviderId, SessionId}.

@@ -379,7 +379,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
         proxy_session_id = SessId,
         proxy_session_auth = Auth
     },
-    Ref = session_manager:get_provider_session_id(outgoing, ProviderId),
+    Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
         receive
             % TODO VFS-4025 - multiprovider communication
@@ -403,7 +403,7 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
         message_body = Request,
         proxy_session_id = SessId,
         proxy_session_auth = Auth
-    }, session_manager:get_provider_session_id(outgoing, ProviderId), 1),
+    }, session_utils:get_provider_session_id(outgoing, ProviderId), 1),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

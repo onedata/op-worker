@@ -17,7 +17,7 @@
 %% API
 -export([get_random_connection/1, get_random_connection/2]).
 -export([get_connections/1, get_connections/2]).
--export([remove_connection/2]).
+-export([get_new_record_and_update_fun/5, remove_connection/2]).
 
 %%%===================================================================
 %%% API
@@ -69,7 +69,7 @@ get_connections(SessId) ->
 get_connections(SessId, HideOverloaded) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
-            ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
+            ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),
             get_connections(ProxyViaSession, HideOverloaded);
         {ok, #document{value = #session{connections = Cons, watcher = SessionWatcher}}} ->
@@ -96,6 +96,24 @@ get_connections(SessId, HideOverloaded) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+get_new_record_and_update_fun(NewCons, ProxyVia, SessType, Auth, Iden) ->
+    Sess = #session{status = active, identity = Iden, auth = Auth,
+        connections = NewCons, type = SessType, proxy_via = ProxyVia},
+    Diff = fun
+        (#session{status = inactive}) ->
+            {error, not_found};
+        (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
+            case Iden of
+                ValidIden ->
+                    {ok, ExistingSess#session{
+                        connections = NewCons ++ Cons
+                    }};
+                _ ->
+                    {error, {invalid_identity, Iden}}
+            end
+    end,
+    {Sess, Diff}.
 
 %%--------------------------------------------------------------------
 %% @doc

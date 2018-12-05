@@ -218,7 +218,7 @@ ensure_connected(SessId) ->
                     ProxyVia) ->
                     ProxyVia;
                 _ ->
-                    session_manager:session_id_to_provider_id(SessId)
+                    session_utils:session_id_to_provider_id(SessId)
             end,
 
             case oneprovider:get_id() of

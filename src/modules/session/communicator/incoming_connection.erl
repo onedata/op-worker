@@ -463,7 +463,7 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
                     ok;
                 _ ->
                     try
-                        case session_manager:is_provider_session_id(SessionId) of
+                        case session_utils:is_provider_session_id(SessionId) of
                             true ->
                                 provider_communicator:send(ServerMsg, Pid);
                             false ->

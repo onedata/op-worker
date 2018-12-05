@@ -86,7 +86,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     Intervals = application:get_env(
         ?APP_NAME, providers_reconnect_intervals, #{}
     ),
-    ProviderId = session_manager:session_id_to_provider_id(SessionId),
+    ProviderId = session_utils:session_id_to_provider_id(SessionId),
     {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
         {time_utils:cluster_time_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
     ),
@@ -521,7 +521,7 @@ init_provider_conn(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout
     {Ok, Closed, Error} = Transport:messages(),
 
     session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
-        provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
+        provider_id = session_utils:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),
     self() ! upgrade_protocol,

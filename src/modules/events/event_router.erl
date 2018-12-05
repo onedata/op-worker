@@ -47,7 +47,7 @@ route_message(#client_message{message_body = #events{events = Evts}}, SessionID)
         event:emit(Evt, SessionID) end, Evts),
     ok;
 route_message(#client_message{message_body = #subscription{} = Sub}, SessionID) ->
-    case session_manager:is_provider_session_id(SessionID) of
+    case session_utils:is_provider_session_id(SessionID) of
         true ->
             ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
         false ->
@@ -55,7 +55,7 @@ route_message(#client_message{message_body = #subscription{} = Sub}, SessionID) 
             ok
     end;
 route_message(#client_message{message_body = #subscription_cancellation{} = SubCan}, SessionID) ->
-    case session_manager:is_provider_session_id(SessionID) of
+    case session_utils:is_provider_session_id(SessionID) of
         true ->
             ok; %% Do not route subscription_cancellations from other providers
         false ->

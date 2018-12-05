@@ -57,5 +57,5 @@ reroute(UserCtx, ProviderId, Request) ->
             message_body = Request,
             proxy_session_id = SessId,
             proxy_session_auth = Auth
-        }, session_manager:get_provider_session_id(outgoing, ProviderId)),
+        }, session_utils:get_provider_session_id(outgoing, ProviderId)),
     MsgBody.
