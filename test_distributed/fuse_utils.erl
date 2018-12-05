@@ -357,9 +357,11 @@ fsync(Conn, FileGuid, HandleId, DataOnly, MsgId) ->
 
 
 emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
-    {BlocksRead, BlocksSize} = lists:foldr(fun({Offset, Size}, {AccBlocks, AccSize}) ->
-        {[#'FileBlock'{offset = Offset, size = Size} | AccBlocks], AccSize + Size}
-    end, {[], 0}, Blocks),
+    {BlocksRead, BlocksSize} = lists:foldr(
+        fun(#file_block{offset = O, size = S}, {AccBlocks, AccSize}) ->
+            {[#'FileBlock'{offset = O, size = S} | AccBlocks], AccSize + S}
+        end,
+    {[], 0}, Blocks),
 
     Msg = #'ClientMessage'{
         message_stream = #'MessageStream'{
