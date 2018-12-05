@@ -85,7 +85,8 @@ get_connections(SessId, HideOverloaded) ->
                                     ok = session_connections:remove_connection(SessId, Pid),
                                     AccIn;
                                 {message_queue_len, QueueLen} when QueueLen > 15 ->
-                                    SessionWatcher ! {overloaded_connection, Pid},
+                                    session_watcher:send(SessionWatcher,
+                                        {overloaded_connection, Pid}),
                                     AccIn;
                                 _ ->
                                     [Pid | AccIn]

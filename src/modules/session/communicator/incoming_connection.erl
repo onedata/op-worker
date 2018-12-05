@@ -30,7 +30,7 @@
     error :: atom(),
     % connection state
     session_id :: undefined | session:id(),
-    peer_id = undefined :: undefined | od_provider:id(),
+    peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
     continue = true,
     wait_map = #{} :: map(),
     wait_pids = #{} :: map(),
@@ -319,18 +319,10 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
     try
         #client_message{message_body = HandshakeMsg} = ClientMsg,
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
-        NewState = case HandshakeMsg of
-            #client_handshake_request{} ->
-                {_UserId, SessionId} = fuse_auth_manager:handle_handshake(
-                    HandshakeMsg, IpAddress
-                ),
-                State#state{session_id = SessionId};
-            #provider_handshake_request{} ->
-                {ProviderId, SessionId} = provider_auth_manager:handle_handshake(
-                    HandshakeMsg, IpAddress
-                ),
-                State#state{peer_id = ProviderId, session_id = SessionId}
-        end,
+        {PeerId, SessionId} = auth_manager:handle_handshake(
+            HandshakeMsg, IpAddress
+        ),
+        NewState = State#state{peer_id = PeerId, session_id = SessionId},
         % Result is ignored as there is no possible fallback if
         % send_server_message fails (the connection will close then).
         {_, EndState} = send_server_message(NewState, #server_message{
@@ -342,7 +334,7 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
             Type, Reason
         ]),
         send_server_message(State,
-            fuse_auth_manager:get_handshake_error(Reason)),
+            auth_manager:get_handshake_error(Reason)),
         State#state{continue = false}
     end.
 

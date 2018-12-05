@@ -71,10 +71,11 @@ send(Msg, Ref, Retry) ->
 %%--------------------------------------------------------------------
 -spec send_async(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
+% TODO - nieuzywane
 send_async(#server_message{} = Msg, Ref) ->
     connection:send_async(Msg, Ref);
 send_async(Msg, Ref) ->
-    communicator:send_async(#server_message{message_body = Msg}, Ref).
+    send_async(#server_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,6 +84,7 @@ send_async(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec communicate(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     {ok, #client_message{}} | {error, timeout}.
+% TODO - uzywane tylko w testach
 communicate(#server_message{} = ServerMsg, Ref) ->
     {ok, MsgId} = communicate_async(ServerMsg, Ref, self()),
     receive
@@ -104,6 +106,7 @@ communicate(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec communicate_async(Msg :: #server_message{}, Ref :: connection:ref()) ->
     {ok, #message_id{}}.
+% TODO - uzywane tylko w testach
 communicate_async(Msg, Ref) ->
     communicate_async(Msg, Ref, undefined).
 
@@ -117,6 +120,7 @@ communicate_async(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec communicate_async(Msg :: #server_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
+% TODO - uzywane tylko w testach
 communicate_async(#server_message{message_id = undefined} = Msg, Ref, Recipient) ->
     {ok, MsgId} = message_id:generate(Recipient),
     communicate_async(Msg#server_message{message_id = MsgId}, Ref, Recipient);

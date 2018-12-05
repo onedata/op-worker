@@ -74,6 +74,7 @@ send_async(Msg, Ref) ->
 %% Fills message with info about session to which it should be proxied.
 %% @end
 %%--------------------------------------------------------------------
+% TODO - private
 -spec fill_proxy_info(#server_message{} | #client_message{}, session:id()) ->
     #server_message{} | #client_message{}.
 fill_proxy_info(Msg, SessionId) ->

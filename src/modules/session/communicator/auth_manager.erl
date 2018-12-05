@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Client authentication library.
+%%% Client and provider authentication library.
 %%% @end
 %%%-------------------------------------------------------------------
--module(fuse_auth_manager).
+-module(auth_manager).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -26,22 +26,10 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles client handshake request
-%% @end
-%%--------------------------------------------------------------------
--spec handle_handshake(#client_handshake_request{}, inet:ip_address()) ->
-    {od_user:id(), session:id()} | no_return().
-handle_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version}, IpAddress)
-    when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
-
-    assert_client_compatibility(Version, IpAddress),
-    {ok, #document{
-        value = Iden = #user_identity{user_id = UserId}
-    }} = user_identity:get_or_fetch(Auth),
-    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
-    {UserId, SessId}.
+handle_handshake(#client_handshake_request{} = Request, IpAddress) ->
+    handle_client_handshake(Request, IpAddress);
+handle_handshake(#provider_handshake_request{} = Request, IpAddress) ->
+    handle_provider_handshake(Request, IpAddress).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,6 +79,58 @@ get_handshake_error(_) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles client handshake request
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
+    {od_user:id(), session:id()} | no_return().
+handle_client_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version}, IpAddress)
+    when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
+
+    assert_client_compatibility(Version, IpAddress),
+    {ok, #document{
+        value = Iden = #user_identity{user_id = UserId}
+    }} = user_identity:get_or_fetch(Auth),
+    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
+    {UserId, SessId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles provider handshake request
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_provider_handshake(#provider_handshake_request{}, IpAddress :: inet:ip_address()) ->
+    {od_provider:id(), session:id()} | no_return().
+handle_provider_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce}, IpAddress)
+    when is_binary(ProviderId) andalso is_binary(Nonce) ->
+
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok ->
+            ok;
+        Error ->
+            ?debug("Discarding provider connection (~s @ ~s) as its identity cannot be verified: ~p", [
+                ProviderId, inet_parse:ntoa(IpAddress), Error
+            ]),
+            throw(invalid_provider)
+    end,
+
+    case provider_logic:verify_provider_nonce(ProviderId, Nonce) of
+        ok ->
+            ok;
+        Error1 ->
+            ?debug("Discarding provider connection (~s @ ~s) as its nonce cannot be verified: ~p", [
+                ProviderId, inet_parse:ntoa(IpAddress), Error1
+            ]),
+            throw(invalid_nonce)
+    end,
+
+    Identity = #user_identity{provider_id = ProviderId},
+    SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
+    {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, self()),
+    {ProviderId, SessionId}.
 
 %%--------------------------------------------------------------------
 %% @private
