@@ -250,6 +250,26 @@
     <<"Given transfer could not be rerun because it has not ended yet.">>)
 ).
 
+% Changes errors
+-define(ERROR_INVALID_CHANGES_REQ, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_invalid_changes_req">>,
+    <<"Given metadata changes request has invalid format.">>
+)).
+-define(ERROR_INVALID_FIELD(__Record, __Field), ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_invalid_field">>,
+    <<
+        "Given field(s) \"", __Field/binary, "\"
+        is/are invalidly specified for ", __Record/binary, " record."
+    >>
+)).
+-define(ERROR_INVALID_FORMAT(__Record), ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_invalid_format">>,
+    <<"Invalid record \"", __Record/binary, "\" or it's specification.">>
+)).
+
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(
     ?NOT_AUTHORIZED,
