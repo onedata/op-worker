@@ -99,7 +99,7 @@ init([SpaceId, Opts]) ->
         {since, proplists:get_value(since, Opts, Since)},
         {until, proplists:get_value(until, Opts, infinity)},
         {except_mutator, proplists:get_value(except_mutator, Opts, <<>>)}
-    ]),
+    ], []),
     {ok, schedule_docs_handling(#state{
         since = proplists:get_value(since, Opts, Since),
         until = proplists:get_value(since, Opts, Since),
