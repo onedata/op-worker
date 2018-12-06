@@ -20,22 +20,12 @@
 -include("timeouts.hrl").
 
 %% API
--export([send/2, send/3, stream/4, send_async/2, communicate/2,
+-export([stream/4, send_async/2, communicate/2,
     communicate/3, communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv send(Msg, SessId, 1)
-%% @end
-%%--------------------------------------------------------------------
--spec send(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    ok | {error, Reason :: term()}.
-send(Msg, Ref) ->
-    provider_communicator:send(Msg, Ref, 2).
 
 %%--------------------------------------------------------------------
 %% @doc

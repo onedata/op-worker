@@ -299,7 +299,7 @@ process_request(#client_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#client_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = provider_communicator:send(NewMsg, SessId),
+    ok = communicator:send_to_provider(NewMsg, SessId),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -357,7 +357,7 @@ resend_all_messages(Msgs, Con, SeqNum, MsgsAcc) ->
             NewMsg = Msg#client_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = provider_communicator:send(NewMsg, Con),
+            ok = communicator:send_to_provider(NewMsg, Con),
             resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         empty ->
             {SeqNum, MsgsAcc}

@@ -457,7 +457,7 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
                     try
                         case session_utils:is_provider_session_id(SessionId) of
                             true ->
-                                provider_communicator:send(ServerMsg, Pid);
+                                communicator:send_to_provider(ServerMsg, Pid);
                             false ->
                                 communicator:send_to_client(ServerMsg, Pid)
                         end

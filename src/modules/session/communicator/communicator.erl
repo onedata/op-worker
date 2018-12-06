@@ -18,8 +18,11 @@
 -include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
 
-%% API
--export([send_to_client/2, send_to_client/3, communicate/3]).
+%%% API - convenience functions
+-export([send_to_client/2, send_to_client/3, send_to_provider/2,
+    send_to_provider/3]).
+%%% API - generic function
+-export([communicate/3]).
 
 %%%===================================================================
 %%% API - convenience functions
@@ -32,6 +35,15 @@ send_to_client(#server_message{} = Msg, Ref, Options) ->
     communicate(Msg, Ref, Options);
 send_to_client(Msg, Ref, Options) ->
     send_to_client(#server_message{message_body = Msg}, Ref, Options).
+
+send_to_provider(Msg, Ref) ->
+    send_to_provider(Msg, Ref, false).
+
+send_to_provider(#server_message{} = Msg, Ref, Async) ->
+    communicate(Msg, Ref, #{error_on_empty_pool => false,
+        ignore_send_errors => Async});
+send_to_provider(Msg, Ref, Async) ->
+    send_to_provider(#client_message{message_body = Msg}, Ref, Async).
 
 
 %%%===================================================================
@@ -77,8 +89,10 @@ retry(Msg, Ref, Options, Retry) ->
 send(Msg, Ref, Options) ->
     {Msg2, ReturnMsgID} = complete_msg(Msg, Options),
 
-    SendAns = case maps:get(stream, Options, false) of
-        {true, StmId} -> sequencer:send_message(Msg2, StmId, Ref);
+    SendAns = case {maps:get(stream, Options, false),
+        maps:get(ignore_send_errors, Options, false)} of
+        {{true, StmId}, _} -> sequencer:send_message(Msg2, StmId, Ref);
+        {_, true} -> connection:send_async(Msg2, Ref);
         _ -> connection:send(Msg2, Ref)
     end,
 
