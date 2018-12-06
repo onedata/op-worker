@@ -24,7 +24,7 @@
 -export_type([id/0]).
 
 %% API
--export([disable/1, enable/1, is_enabled/1]).
+-export([disable/1, enable/1, is_enabled/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -59,6 +59,9 @@ is_enabled(SpaceId) ->
             false
     end.
 
+-spec delete(id()) -> ok.
+delete(SpaceId) ->
+    datastore_model:delete(?CTX, SpaceId).
 
 %%%===================================================================
 %%% Internal functions

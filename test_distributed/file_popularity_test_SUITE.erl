@@ -130,7 +130,7 @@ query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     FilePath = ?FILE_PATH(FileName),
     {ok, _} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_file_has_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -183,7 +183,7 @@ query_should_return_empty_list_when_number_of_opens_is_less_than_endkey(Config) 
     end, lists:seq(1, NumberOfOpens)),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_number_of_opens_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -208,7 +208,7 @@ query_should_return_file_when_number_of_opens_is_between_startkey_and_endkey(Con
 query_should_return_empty_list_when_last_open_timestamp_is_newer_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     LastOpen = 10,
-    StartKey = [1, 0, LastOpen - 1, 100, 100, 100],
+    StartKey = [1, LastOpen - 1, 0, 100, 100, 100],
     EndKey = [1, 0, 0, 0, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
@@ -226,13 +226,13 @@ query_should_return_empty_list_when_last_open_timestamp_is_newer_than_startkey(C
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_empty_list_when_last_open_timestamp_is_older_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     LastOpen = 10,
-    StartKey = [1, 0, 100, 100, 100, 100],
-    EndKey = [1, 0, LastOpen + 1, 0, 0, 0],
+    StartKey = [1, 100, 100, 100, 100, 100],
+    EndKey = [1, LastOpen + 1, 0, 0, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -249,7 +249,7 @@ query_should_return_empty_list_when_last_open_timestamp_is_older_than_endkey(Con
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_last_open_timestamp_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -305,7 +305,7 @@ query_should_return_empty_list_when_size_is_less_than_endkey(Config) ->
     ok = lfm_proxy:close(W, H),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_size_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -331,8 +331,8 @@ query_should_return_empty_list_when_hourly_avg_is_greater_than_startkey(Config) 
     [W | _] = ?config(op_worker_nodes, Config),
     HrMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, HrMovingAvg - 1, 100, 100],
-    EndKey = [1, 0, CurrentTimestampHours, 0, 0, 0],
+    StartKey = [1, CurrentTimestampHours, 0, HrMovingAvg - 1, 100, 100],
+    EndKey = [1, CurrentTimestampHours, 0, 0, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -349,14 +349,14 @@ query_should_return_empty_list_when_hourly_avg_is_greater_than_startkey(Config) 
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_empty_list_when_hourly_avg_is_less_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     HrMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 100, 100, 100],
-    EndKey = [1, 0, CurrentTimestampHours, HrMovingAvg + 1, 0, 0],
+    StartKey = [1, CurrentTimestampHours, 0, 100, 100, 100],
+    EndKey = [1, CurrentTimestampHours, 0, HrMovingAvg + 1, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -373,13 +373,13 @@ query_should_return_empty_list_when_hourly_avg_is_less_than_endkey(Config) ->
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_hourly_avg_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 2, 100, 100],
-    EndKey = [1, 0, CurrentTimestampHours, 0, 0, 0],
+    StartKey = [1, CurrentTimestampHours, 0,  2, 100, 100],
+    EndKey = [1, CurrentTimestampHours, 0, 0, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -388,16 +388,17 @@ query_should_return_file_when_hourly_avg_is_between_startkey_and_endkey(Config) 
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
+    Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+    ?assertMatch({[Ctx], #token{}},
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_empty_list_when_daily_avg_is_greater_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     DyMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 1, DyMovingAvg - 1, 100],
-    EndKey = [1, 0, CurrentTimestampHours, 1, 0, 0],
+    StartKey = [1, CurrentTimestampHours, 0, 1, DyMovingAvg - 1, 100],
+    EndKey = [1, CurrentTimestampHours, 0, 1, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -414,14 +415,14 @@ query_should_return_empty_list_when_daily_avg_is_greater_than_startkey(Config) -
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_empty_list_when_daily_avg_is_less_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     DyMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 1, 100, 100],
-    EndKey = [1, 0, CurrentTimestampHours, 1, DyMovingAvg + 1, 0],
+    StartKey = [1, CurrentTimestampHours, 0, 1, 100, 100],
+    EndKey = [1, CurrentTimestampHours, 0, 1, DyMovingAvg + 1, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -438,13 +439,13 @@ query_should_return_empty_list_when_daily_avg_is_less_than_endkey(Config) ->
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_daily_avg_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 1, 2, 100],
-    EndKey = [1, 0, CurrentTimestampHours, 1, 0, 0],
+    StartKey = [1, CurrentTimestampHours, 0, 1, 2, 100],
+    EndKey = [1, CurrentTimestampHours, 0, 1, 0, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -453,16 +454,17 @@ query_should_return_file_when_daily_avg_is_between_startkey_and_endkey(Config) -
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
+    Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+    ?assertMatch({[Ctx], #token{}},
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_empty_list_when_monthly_avg_is_greater_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     MthMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 1, 1, MthMovingAvg - 1],
-    EndKey = [1, 0, CurrentTimestampHours, 1, 1, 0],
+    StartKey = [1, CurrentTimestampHours, 0, 1, 1, MthMovingAvg - 1],
+    EndKey = [1, CurrentTimestampHours, 0, 1, 1, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -479,14 +481,14 @@ query_should_return_empty_list_when_monthly_avg_is_greater_than_startkey(Config)
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_empty_list_when_monthly_avg_is_less_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     MthMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 1, 1, 100],
-    EndKey = [1, 0, CurrentTimestampHours, 1, 1, MthMovingAvg + 1],
+    StartKey = [1, CurrentTimestampHours, 0, 1, 1, 100],
+    EndKey = [1, CurrentTimestampHours, 0, 1, 1, MthMovingAvg + 1],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -503,13 +505,13 @@ query_should_return_empty_list_when_monthly_avg_is_less_than_endkey(Config) ->
     end]),
 
     ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_monthly_avg_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, 0, CurrentTimestampHours, 1, 1, 2],
-    EndKey = [1, 0, CurrentTimestampHours, 1, 1, 0],
+    StartKey = [1, CurrentTimestampHours, 0, 1, 1, 2],
+    EndKey = [1, CurrentTimestampHours, 0, 1, 1, 0],
     Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
@@ -518,9 +520,10 @@ query_should_return_file_when_monthly_avg_is_between_startkey_and_endkey(Config)
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
+    Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+    ?assertMatch({[Ctx], #token{}},
+        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_files_sorted_by_number_of_opens(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -585,93 +588,16 @@ query_with_option_limit_should_return_limited_number_of_files(Config) ->
     ?assertMatch({ExpectedResult, #token{}}, query(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
 
 iterate_over_100_results_using_limit_1_and_startkey_docid(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [101, 100, 100, 100, 100, 100],
-    EndKey = [0, 0, 0, 0, 0, 0],
-    Token = initial_token(W, StartKey, EndKey),
-    ok = enable_file_popularity(W, ?SPACE_ID),
-    FilePrefix = <<"file_">>,
-    Limit = 1,
-    NumberOfFiles = 100,
-    SessId = ?SESSION(W, Config),
-
-    CtxsAndOpensNum = lists:map(fun(N) ->
-        % each file will be opened N times
-        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
-        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-        open_and_close_file(W, SessId, G, N),
-        {file_ctx:new_by_guid(G), N}
-    end, lists:seq(NumberOfFiles, 1, -1)),
-    Ctxs = [C || {C, _} <- CtxsAndOpensNum],
-
-    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
+    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1).
 
 iterate_over_100_results_using_limit_10_and_startkey_docid(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [101, 100, 100, 100, 100, 100],
-    EndKey = [0, 0, 0, 0, 0, 0],
-    Token = initial_token(W, StartKey, EndKey),
-    ok = enable_file_popularity(W, ?SPACE_ID),
-    FilePrefix = <<"file_">>,
-    Limit = 10,
-    NumberOfFiles = 100,
-    SessId = ?SESSION(W, Config),
-
-    CtxsAndOpensNum = lists:map(fun(N) ->
-        % each file will be opened N times
-        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
-        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-        open_and_close_file(W, SessId, G, N),
-        {file_ctx:new_by_guid(G), N}
-    end, lists:seq(NumberOfFiles, 1, -1)),
-    Ctxs = [C || {C, _} <- CtxsAndOpensNum],
-
-    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
+    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 10).
 
 iterate_over_100_results_using_limit_100_and_startkey_docid(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [101, 100, 100, 100, 100, 100],
-    EndKey = [0, 0, 0, 0, 0, 0],
-    Token = initial_token(W, StartKey, EndKey),
-    ok = enable_file_popularity(W, ?SPACE_ID),
-    FilePrefix = <<"file_">>,
-    Limit = 100,
-    NumberOfFiles = 100,
-    SessId = ?SESSION(W, Config),
-
-    CtxsAndOpensNum = lists:map(fun(N) ->
-        % each file will be opened N times
-        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
-        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-        open_and_close_file(W, SessId, G, N),
-        {file_ctx:new_by_guid(G), N}
-    end, lists:seq(NumberOfFiles, 1, -1)),
-    Ctxs = [C || {C, _} <- CtxsAndOpensNum],
-
-    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
-
+    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 100).
 
 iterate_over_100_results_using_limit_1000_and_startkey_docid(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [101, 100, 100, 100, 100, 100],
-    EndKey = [0, 0, 0, 0, 0, 0],
-    Token = initial_token(W, StartKey, EndKey),
-    ok = enable_file_popularity(W, ?SPACE_ID),
-    FilePrefix = <<"file_">>,
-    Limit = 1000,
-    NumberOfFiles = 100,
-    SessId = ?SESSION(W, Config),
-
-    CtxsAndOpensNum = lists:map(fun(N) ->
-        % each file will be opened N times
-        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
-        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-        open_and_close_file(W, SessId, G, N),
-        {file_ctx:new_by_guid(G), N}
-    end, lists:seq(NumberOfFiles, 1, -1)),
-    Ctxs = [C || {C, _} <- CtxsAndOpensNum],
-
-    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
+   iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1000).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -689,7 +615,8 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
-    delete_view(Config, ?SPACE_ID),
+    [W | _] = ?config(op_worker_nodes, Config),
+    disable_file_popularity(W, ?SPACE_ID),
     clean_space(?SPACE_ID, Config),
     lfm_proxy:teardown(Config).
 
@@ -701,6 +628,27 @@ end_per_suite(Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    StartKey = [101, 100, 100, 100, 100, 100],
+    EndKey = [0, 0, 0, 0, 0, 0],
+    Token = initial_token(W, StartKey, EndKey),
+    ok = enable_file_popularity(W, ?SPACE_ID),
+    FilePrefix = <<"file_">>,
+    NumberOfFiles = 100,
+    SessId = ?SESSION(W, Config),
+
+    CtxsAndOpensNum = lists:map(fun(N) ->
+        % each file will be opened N times
+        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
+        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+        open_and_close_file(W, SessId, G, N),
+        {file_ctx:new_by_guid(G), N}
+    end, lists:seq(NumberOfFiles, 1, -1)),
+    Ctxs = [C || {C, _} <- CtxsAndOpensNum],
+
+    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
 
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
@@ -714,11 +662,6 @@ initial_token(Worker, StartKey, EndKey) ->
 query(Worker, SpaceId, Token, Limit) ->
     rpc:call(Worker, file_popularity_api, query, [SpaceId, Token, Limit]).
 
-delete_view(Config, SpaceId) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    ok = disable_file_popularity(W, SpaceId),
-    rpc:call(W, file_popularity_view, delete, [SpaceId]).
-
 clean_space(SpaceId, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESSION(Worker, Config),
@@ -729,15 +672,15 @@ clean_space(SpaceId, Config) ->
 clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
     {ok, GuidsAndPaths} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
     FilesNum = length(GuidsAndPaths),
+    delete_files(Worker, SessId, GuidsAndPaths),
     case FilesNum < BatchSize of
         true ->
-            remove_files(Worker, SessId, GuidsAndPaths);
+            ok;
         false ->
-            remove_files(Worker, SessId, GuidsAndPaths),
             clean_space(Worker, SessId, SpaceGuid, Offset + BatchSize, BatchSize)
     end.
 
-remove_files(Worker, SessId, GuidsAndPaths) ->
+delete_files(Worker, SessId, GuidsAndPaths) ->
     lists:foreach(fun({G, _}) ->
         ok = lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
     end, GuidsAndPaths).

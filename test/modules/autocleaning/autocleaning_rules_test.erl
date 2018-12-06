@@ -20,8 +20,8 @@
 
 -define(RULES_RECORD, #autocleaning_rules{
     enabled = true,
-    lower_file_size_limit = ?SETTING(1),
-    upper_file_size_limit = ?SETTING(2),
+    min_file_size = ?SETTING(1),
+    max_file_size = ?SETTING(2),
     min_hours_since_last_open = ?SETTING(3),
     max_open_count = ?SETTING(4),
     max_hourly_moving_average = ?SETTING(5),
@@ -31,8 +31,8 @@
 
 -define(RULES_RECORD2, #autocleaning_rules{
     enabled = true,
-    lower_file_size_limit = ?SETTING(10),
-    upper_file_size_limit = ?SETTING(20),
+    min_file_size = ?SETTING(10),
+    max_file_size = ?SETTING(20),
     min_hours_since_last_open = ?SETTING(30),
     max_open_count = ?SETTING(40),
     max_hourly_moving_average = ?SETTING(50),
@@ -47,8 +47,8 @@
 -define(RULES_MAP,
     #{
         enabled => true,
-        lower_file_size_limit => ?SETTING_MAP(1),
-        upper_file_size_limit => ?SETTING_MAP(2),
+        min_file_size => ?SETTING_MAP(1),
+        max_file_size => ?SETTING_MAP(2),
         min_hours_since_last_open => ?SETTING_MAP(3),
         max_open_count => ?SETTING_MAP(4),
         max_hourly_moving_average => ?SETTING_MAP(5),
@@ -60,8 +60,8 @@
 -define(RULES_MAP2,
     #{
         enabled => true,
-        lower_file_size_limit => ?SETTING_MAP(10),
-        upper_file_size_limit => ?SETTING_MAP(20),
+        min_file_size => ?SETTING_MAP(10),
+        max_file_size => ?SETTING_MAP(20),
         min_hours_since_last_open => ?SETTING_MAP(30),
         max_open_count => ?SETTING_MAP(40),
         max_hourly_moving_average => ?SETTING_MAP(50),
@@ -74,13 +74,11 @@
 %%% Tests
 %%%===================================================================
 
--export([setting_enabled_field_to_not_boolean_should_throw_illegal_type_exception_test_helper/1]).
-
 autocleaning_rules_to_map_test() ->
     ?assertEqual(#{
         enabled => true,
-        lower_file_size_limit => #{enabled => true, value => 1},
-        upper_file_size_limit => #{enabled => true, value => 2},
+        min_file_size => #{enabled => true, value => 1},
+        max_file_size => #{enabled => true, value => 2},
         min_hours_since_last_open => #{enabled => true, value => 3},
         max_open_count => #{enabled => true, value => 4},
         max_hourly_moving_average => #{enabled => true, value => 5},
@@ -125,14 +123,9 @@ setting_rule_value_to_negative_integer_should_throw_negative_rule_setting_except
         setting_rule_value_to_negative_integer_should_throw_negative_rule_setting_exception_test_helper(FieldName)
     end, list_rules()).
 
-setting_enabled_field_to_not_boolean_should_throw_illegal_type_exception_test_helper(FieldToUpdate) ->
-    ?assertException(throw, {illegal_type, FieldToUpdate},
-        autocleaning_rules:update(undefined, #{enabled => not_boolean})).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 disable_just_one_rule_test_helper(FieldToDisable) ->
     UpdatedRules = autocleaning_rules:update(?RULES_RECORD, #{

@@ -73,8 +73,8 @@ delete(SpaceId) ->
 initial_token(StartKey, EndKey) ->
     #token{
         last_doc_id = undefined,
-        start_key = ensure_key_encoded(StartKey),
-        end_key = ensure_key_encoded(EndKey)
+        start_key = StartKey,
+        end_key = EndKey
     }.
 
 -spec query(od_space:id(), token(), non_neg_integer()) ->
@@ -86,14 +86,13 @@ query(SpaceId, Token, Limit) ->
     ViewName = ?VIEW_NAME(SpaceId),
     case query([DiscCtx, ViewName, ViewName, Options]) of
         {ok, {Rows}} ->
-            ?critical("Rows num: ~p", [length(Rows)]),
             {RevertedFileCtxs, NewToken} = lists:foldl(fun(Row, {RevertedFileCtxsIn, TokenIn}) ->
                 {<<"key">>, Key} = lists:keyfind(<<"key">>, 1, Row),
                 {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
                 {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
                 FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
                 {[FileCtx | RevertedFileCtxsIn], TokenIn#token{
-                    start_key = json_utils:encode(Key),
+                    start_key = Key,
                     last_doc_id = DocId
                 }}
             end, {[], Token}, Rows),
@@ -155,10 +154,3 @@ token_to_opts(#token{
 -spec query(list()) -> {ok, datastore_json2:ejson()} | {error, term()}.
 query(Args) ->
     apply(fun couchbase_driver:query_view/4, Args).
-
--spec ensure_key_encoded(binary() | list()) -> binary().
-ensure_key_encoded(Key) ->
-    case is_binary(Key) of
-        true -> Key;
-        false -> json_utils:encode(Key)
-    end.

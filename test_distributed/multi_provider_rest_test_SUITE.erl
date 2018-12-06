@@ -196,8 +196,8 @@ end, __Distributions))).
     Target, Threshold),
     #{
         enabled => true,
-        lower_file_size_limit => LowerSizeLimit,
-        upper_file_size_limit => UpperSizeLimit, % todo VFS-4041
+        min_file_size => LowerSizeLimit,
+        max_file_size => UpperSizeLimit, % todo VFS-4041
         max_file_not_opened_hours => MaxInactiveTime,
         target => Target,
         threshold => Threshold
@@ -330,8 +330,8 @@ transfers_should_be_ordered_by_timestamps(Config) ->
 
 basic_autocleaning_test(Config) ->
     % autocleaning configuration
-    %   lower_file_size_limit => 0,
-    %   upper_file_size_limit => undefined, % todo VFS-4041
+    %   min_file_size => 0,
+    %   max_file_size => undefined, % todo VFS-4041
     %   max_file_not_opened_hours => 0
     %   target => 0
     %   threshold => 1

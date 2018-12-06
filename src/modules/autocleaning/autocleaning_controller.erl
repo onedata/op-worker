@@ -99,21 +99,16 @@
 
 -define(NAME(SpaceId), {global, {?SERVER, SpaceId}}).
 
-
-% TODO
-
-%%TODO refactor this module
-
-%%TODO TESTS:
-%%TODO  * test whether reports are sorted
-%%TODO  * batching
-%%TODO  * filtering
-
-
 -define(BATCH_SIZE, application:get_env(?APP_NAME,
-    autocleaning_files_batch_size, 1000)).
+    autocleaning_view_batch_size, 1000)).
 -define(REPLICA_DELETION_MAX_ACTIVE_TASKS,
     application:get_env(?APP_NAME, max_active_deletion_tasks, 2000)).
+-define(AUTOCLEANING_CONTROLLER_NEXT_BATCH_RATIO,
+    application:get_env(?APP_NAME, autocleaning_controller_next_batch_ratio, 1.5)).
+
+-define(NEXT_BATCH_THRESHOLD,
+    ?AUTOCLEANING_CONTROLLER_NEXT_BATCH_RATIO * ?REPLICA_DELETION_MAX_ACTIVE_TASKS
+).
 
 -define(ID_SEP, <<"##">>).
 
@@ -481,9 +476,8 @@ maybe_schedule_cleaning(State = #state{
     queue_len = QLen,
     queue = Queue
 }) when QLen > 0 ->
-    case (FilesToProcess - FilesProcessed) < (3 / 2 * ?REPLICA_DELETION_MAX_ACTIVE_TASKS) of
+    case (FilesToProcess - FilesProcessed) < ?NEXT_BATCH_THRESHOLD of
         true ->
-            %todo make 3/2 ratio a parameter
             QueueList = queue:to_list(Queue),
             ToSchedule = lists:sublist(QueueList, ?REPLICA_DELETION_MAX_ACTIVE_TASKS),
             ToScheduleLen = length(ToSchedule),

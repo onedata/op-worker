@@ -145,7 +145,7 @@ handle(?RESTART_AUTOCLEANING_RUNS) ->
     restart_autocleaning_runs(),
     ok;
 handle(?PERIODICAL_SPACES_CLEANUP) ->
-    ?critical("Triggering periodical spaces cleanup"),  %todo debug
+    ?debug("Triggering periodical spaces cleanup"),
     periodical_spaces_cleanup(),
     schedule_periodical_spaces_cleanup();
 handle({fuse_request, SessId, FuseRequest}) ->

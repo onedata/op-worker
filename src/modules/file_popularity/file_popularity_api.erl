@@ -13,7 +13,7 @@
 
 
 %% API
--export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/3, initial_token/2]).
+-export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/3, initial_token/2, delete_config/1]).
 
 %%%===================================================================
 %%% API
@@ -27,9 +27,13 @@ enable(SpaceId) ->
 
 -spec disable(file_popularity_config:id()) -> ok | {error, term()}.
 disable(SpaceId) ->
-    % todo should we delete the view?
     autocleaning_api:disable(SpaceId),
-    file_popularity_config:disable(SpaceId).
+    file_popularity_config:disable(SpaceId),
+    file_popularity_view:delete(SpaceId).
+
+-spec delete_config(file_popularity_config:id()) -> ok.
+delete_config(SpaceId) ->
+    file_popularity_config:delete(SpaceId).
 
 -spec is_enabled(file_popularity_config:id()) -> boolean().
 is_enabled(SpaceId) ->

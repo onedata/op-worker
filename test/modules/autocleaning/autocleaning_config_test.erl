@@ -25,8 +25,8 @@
         threshold = 1,
         rules = #autocleaning_rules{
             enabled = true,
-            lower_file_size_limit = ?SETTING(2),
-            upper_file_size_limit = ?SETTING(3),
+            min_file_size = ?SETTING(2),
+            max_file_size = ?SETTING(3),
             min_hours_since_last_open = ?SETTING(4),
             max_open_count = ?SETTING(5),
             max_hourly_moving_average = ?SETTING(6),
@@ -41,8 +41,8 @@
         threshold = 100,
         rules = #autocleaning_rules{
             enabled = true,
-            lower_file_size_limit = ?SETTING(20),
-            upper_file_size_limit = ?SETTING(30),
+            min_file_size = ?SETTING(20),
+            max_file_size = ?SETTING(30),
             min_hours_since_last_open = ?SETTING(40),
             max_open_count = ?SETTING(50),
             max_hourly_moving_average = ?SETTING(60),
@@ -70,8 +70,8 @@
         threshold => 1,
         rules => #{
             enabled => true,
-            lower_file_size_limit => ?SETTING_MAP(2),
-            upper_file_size_limit => ?SETTING_MAP(3),
+            min_file_size => ?SETTING_MAP(2),
+            max_file_size => ?SETTING_MAP(3),
             min_hours_since_last_open => ?SETTING_MAP(4),
             max_open_count => ?SETTING_MAP(5),
             max_hourly_moving_average => ?SETTING_MAP(6),
@@ -86,8 +86,8 @@
         threshold => 100,
         rules => #{
             enabled => true,
-            lower_file_size_limit => ?SETTING_MAP(20),
-            upper_file_size_limit => ?SETTING_MAP(30),
+            min_file_size => ?SETTING_MAP(20),
+            max_file_size => ?SETTING_MAP(30),
             min_hours_since_last_open => ?SETTING_MAP(40),
             max_open_count => ?SETTING_MAP(50),
             max_hourly_moving_average => ?SETTING_MAP(60),
@@ -106,8 +106,8 @@ autocleaning_config_to_map_test() ->
         threshold => 1,
         rules => #{
             enabled => true,
-            lower_file_size_limit => #{enabled => true, value => 2},
-            upper_file_size_limit => #{enabled => true, value => 3},
+            min_file_size => #{enabled => true, value => 2},
+            max_file_size => #{enabled => true, value => 3},
             min_hours_since_last_open => #{enabled => true, value => 4},
             max_open_count => #{enabled => true, value => 5},
             max_hourly_moving_average => #{enabled => true, value => 6},
@@ -131,8 +131,8 @@ all_rules_should_be_disabled_by_default_test() ->
         threshold = 1,
         rules = #autocleaning_rules{
             enabled = false,
-            lower_file_size_limit = #autocleaning_rule_setting{enabled = false},
-            upper_file_size_limit = #autocleaning_rule_setting{enabled = false},
+            min_file_size = #autocleaning_rule_setting{enabled = false},
+            max_file_size = #autocleaning_rule_setting{enabled = false},
             min_hours_since_last_open = #autocleaning_rule_setting{enabled = false},
             max_open_count = #autocleaning_rule_setting{enabled = false},
             max_hourly_moving_average = #autocleaning_rule_setting{enabled = false},
@@ -153,8 +153,8 @@ only_explicitly_passed_params_are_changed_test() ->
         threshold = 50,
         rules = #autocleaning_rules{
             enabled = true,
-            lower_file_size_limit = #autocleaning_rule_setting{enabled = true, value = 2},
-            upper_file_size_limit = #autocleaning_rule_setting{enabled = true, value = 3},
+            min_file_size = #autocleaning_rule_setting{enabled = true, value = 2},
+            max_file_size = #autocleaning_rule_setting{enabled = true, value = 3},
             min_hours_since_last_open = #autocleaning_rule_setting{enabled = true, value = 4},
             max_open_count = #autocleaning_rule_setting{enabled = true, value = 5},
             max_hourly_moving_average = #autocleaning_rule_setting{enabled = true, value = 6},
@@ -210,10 +210,10 @@ setting_threshold_greater_than_support_size_should_throw_value_greater_than_exce
         autocleaning_config:configure(?CONFIG_RECORD, #{threshold => 11}, 10)).
 
 setting_rule_to_negative_value_should_return_negative_value_error_test() ->
-    ?assertEqual({error, {negative_value, lower_file_size_limit}},
+    ?assertEqual({error, {negative_value, min_file_size}},
         autocleaning_config:configure(?CONFIG_RECORD, #{
             rules => #{
-                lower_file_size_limit => #{value => -1}
+                min_file_size => #{value => -1}
         }}, 10)
     ).
 

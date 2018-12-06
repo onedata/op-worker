@@ -27,7 +27,7 @@
     configure/2, disable/1,
     get_configuration/1, status/1,
     list_reports_since/2, list/1, list/4,
-    restart_autocleaning_run/1]).
+    restart_autocleaning_run/1, delete_config/1]).
 
 %%%===================================================================
 %%% API
@@ -41,9 +41,19 @@
 %%-------------------------------------------------------------------
 -spec force_start(od_space:id()) -> ok | {error, term()}.
 force_start(SpaceId) ->
-    CurrentSize = space_quota:current_size(SpaceId),
-    Config = autocleaning:get_config(SpaceId),
-    autocleaning_run:start(SpaceId, Config, CurrentSize).
+    case file_popularity_api:is_enabled(SpaceId) of
+        true ->
+            case exists_and_is_enabled(SpaceId) of
+                {true, AC} ->
+                    Config = autocleaning:get_config(AC),
+                    CurrentSize = space_quota:current_size(SpaceId),
+                    autocleaning_run:start(SpaceId, Config, CurrentSize);
+                false ->
+                    {error, autocleaning_disabled}
+            end;
+        false ->
+            {error, file_popularity_disabled}
+    end .
 
 
 %%-------------------------------------------------------------------
@@ -56,15 +66,20 @@ force_start(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec maybe_start(od_space:id(), space_quota:record()) -> ok.
 maybe_start(SpaceId, SpaceQuota) ->
-    case exists_and_is_enabled(SpaceId) of
-        {true, AC} ->
-            Config = autocleaning:get_config(AC),
-            CurrentSize = space_quota:current_size(SpaceQuota),
-            case autocleaning_config:threshold_exceeded(CurrentSize, Config) of
-                true -> autocleaning_run:start(SpaceId, Config, CurrentSize);
+    case file_popularity_api:is_enabled(SpaceId) of
+        true ->
+            case exists_and_is_enabled(SpaceId) of
+                {true, AC} ->
+                    Config = autocleaning:get_config(AC),
+                    CurrentSize = space_quota:current_size(SpaceQuota),
+                    case autocleaning_config:threshold_exceeded(CurrentSize, Config) of
+                        true -> autocleaning_run:start(SpaceId, Config, CurrentSize);
+                        _ -> ok
+                    end;
                 _ -> ok
             end;
-        _ -> ok
+        false ->
+            ok
     end.
 
 %%-------------------------------------------------------------------
@@ -86,7 +101,7 @@ get_configuration(SpaceId) ->
 %% This function is responsible for updating auto-cleaning configuration.
 %% @end
 %%-------------------------------------------------------------------
--spec configure(od_space:id(), maps:map()) -> ok | {error,  term()}.
+-spec configure(od_space:id(), maps:map()) -> ok | {error, term()}.
 configure(SpaceId, Configuration) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -168,6 +183,9 @@ restart_autocleaning_run(SpaceId) ->
                 [SpaceId, Error])
     end.
 
+-spec delete_config(autocleaning:id()) -> ok.
+delete_config(SpaceId) ->
+    autocleaning:delete(SpaceId).
 
 %%%===================================================================
 %%% Internal functions

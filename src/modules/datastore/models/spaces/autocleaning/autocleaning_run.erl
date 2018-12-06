@@ -32,7 +32,7 @@
     mark_started_batch/2,
     get_token/1, get_bytes_to_release/1, get_released_bytes/1,
     restart/1
-]).
+    , get_info/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -157,7 +157,7 @@ mark_completed(ARId) ->
         {ok, #document{value = #autocleaning_run{space_id = SpaceId}}} ->
             autocleaning:mark_run_finished(SpaceId);
         Error ->
-            ?error_stacktrace("Fail to mark auto-cleaning run ~p as completed due to ~p",
+            ?error("Fail to mark auto-cleaning run ~p as completed due to ~p",
                 [ARId, Error]),
             Error
     end.
@@ -210,12 +210,7 @@ restart(ARId) ->
             Error
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns info about given auto-cleaning run in the form
 %% understandable by onepanel.
@@ -240,7 +235,12 @@ get_info(#autocleaning_run{
         released_bytes => ReleasedBytes,
         bytes_to_release => BytesToRelease,
         files_number => ReleasedFiles
-    }.
+    };
+get_info(ARId) ->
+    case autocleaning_run:get(ARId) of
+        {ok, #document{value = AR}} -> get_info(AR);
+        Error -> Error
+    end.
 
 -spec finished(record()) -> boolean().
 finished(#autocleaning_run{status = active}) -> false;

@@ -282,26 +282,36 @@
     mounted_in_root = [] :: [storage:id()]
 }).
 
+%% Model that stores config of file-popularity mechanism per given space.
 -record(file_popularity_config, {
     enabled = false :: boolean()
 }).
 
-%% Record containing record describing setting of autocleaning selective rule.
+%% Helper record for autocleaning model.
+%% Record contains setting of one autocleaning selective rule.
 -record(autocleaning_rule_setting, {
+    %% The rule can be enabled/disabled by setting enabled field.
     enabled = false :: boolean(),
+    %% The value is a numerical value, which defines the limit value for given rule.
+    %% Depending on the rule's name, the value can be lower/upper limit.
     value = 0 :: non_neg_integer()
 }).
 
-%% Record containing record describing autocleaning selective rules.
+%% Helper record for autocleaning model.
+%% Record contains settings for all autocleaning selective rules.
+%% Each rule is defined by one #autocleaning_rule_setting record.
 -record(autocleaning_rules, {
     % informs whether selective rules should be used by auto-cleaning mechanism
+    % this field has higher priority than enabled field in each #autocleaning_rule_setting
+    % which means that setting this field to false results in ignoring all rules,
+    % because it overrides specific rules' settings
     enabled = false :: boolean(),
-    % lowest size of file that can be evicted during autocleaning
-    lower_file_size_limit = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
-    % highest size of file that can be evicted during autocleaning
-    upper_file_size_limit = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
-    % files that haven't been opened for longer than or equal to given
-    % period [h] may be cleaned.
+    % min size of file that can be evicted during autocleaning
+    min_file_size = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % max size of file that can be evicted during autocleaning
+    max_file_size = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files which were opened for the last time more than given number of
+    % hours ago may be cleaned
     min_hours_since_last_open = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
     % files that have been opened less than max_open_count times may be cleaned.
     max_open_count = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
@@ -316,17 +326,20 @@
     max_monthly_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting()
 }).
 
-%% Record containing autocleaning configuration
+%% Helper record for autocleaning model.
+%% Record contains configuration of auto-cleaning mechanism for given space.
 -record(autocleaning_config, {
+    % this field enables/disables auto-cleaning mechanism in given space
     enabled = false :: boolean(),
-    % storage occupancy at which autocleaning will stop
+    % storage occupancy at which auto-cleaning will stop
     target = 0 :: non_neg_integer(),
-    % autocleaning will start after exceeding threshold level of occupancy
+    % auto-cleaning will start after exceeding threshold level of occupancy
     threshold = 0 :: non_neg_integer(),
     rules = #autocleaning_rules{} :: autocleaning_config:rules()
 }).
 
-%% Model for holding information about autocleaning runs
+%% Model for holding information about auto-cleaning runs.
+%% Each record stores information about one specific run.
 -record(autocleaning_run, {
     space_id :: undefined | od_space:id(),
     started_at = 0 :: non_neg_integer(),
@@ -340,8 +353,11 @@
     token :: undefined | file_popularity_view:token()
 }).
 
+%% Model which stores information about auto-cleaning per given space.
 -record(autocleaning, {
+    % id of current auto-cleaning run
     current_run :: undefined | autocleaning:run_id(),
+    % record describing configuration of auto-cleaning per given space
     config :: undefined | autocleaning:config()
 }).
 

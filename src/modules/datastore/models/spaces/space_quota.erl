@@ -23,7 +23,7 @@
 -export([create/1, get/1, delete/1, update/2]).
 -export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
     get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1,
-    create_or_update/2, maybe_check_and_start_autocleaning/1]).
+    create_or_update/2, maybe_check_and_start_autocleaning/1, update_last_check_timestamp/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
@@ -64,7 +64,7 @@ get(SpaceId) ->
         {ok, Doc} ->
             {ok, Doc};
         {error, not_found} ->
-            case datastore_model:create(?CTX, default_doc(SpaceId)) of
+            case space_quota:create(default_doc(SpaceId)) of
                 {ok, _} -> space_quota:get(SpaceId);
                 {error, already_exists} -> space_quota:get(SpaceId);
                 {error, Reason} -> {error, Reason}
@@ -236,6 +236,12 @@ maybe_check_and_start_autocleaning(SpaceId) ->
         _ -> ok
     end.
 
+-spec update_last_check_timestamp(id(), non_neg_integer()) -> ok | {error, term()}.
+update_last_check_timestamp(SpaceId, NewLastCheckTimestamp) ->
+    ok = ?extract_ok(update(SpaceId, fun(SQ) ->
+        {ok, SQ#space_quota{last_autocleaning_check = NewLastCheckTimestamp}}
+    end)).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -259,6 +265,10 @@ default_doc(SpaceId, DefaultValue) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_check_and_start_autocleaning(id(), record()) -> ok.
+maybe_check_and_start_autocleaning(_SpaceId, #space_quota{
+    current_size = 0
+}) ->
+    ok;
 maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
     last_autocleaning_check = LastCheckTimestamp
 }) ->
@@ -272,7 +282,6 @@ maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
     end.
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Checks whether last autocleaning check has been performed longer than
 %% ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
@@ -281,12 +290,6 @@ maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
 -spec should_check_autocleaning(non_neg_integer(), non_neg_integer()) -> boolean().
 should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
     CurrentTimestamp - LastCheckTimestamp >= ?AUTOCLEANING_CHECK_INTERVAL.
-
--spec update_last_check_timestamp(id(), non_neg_integer()) -> ok | {error, term()}.
-update_last_check_timestamp(SpaceId, NewLastCheckTimestamp) ->
-    ok = ?extract_ok(update(SpaceId, fun(SQ) ->
-        {ok, SQ#space_quota{last_autocleaning_check = NewLastCheckTimestamp}}
-    end)).
 
 %%%===================================================================
 %%% datastore_model callbacks

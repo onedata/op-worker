@@ -30,7 +30,7 @@
 
 %% API
 -export([get/1, is_enabled/1, get_config/1, get_current_run/1,
-    configure/2, maybe_mark_current_run/2, mark_run_finished/1]).
+    configure/2, maybe_mark_current_run/2, mark_run_finished/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -95,7 +95,7 @@ configure(SpaceId, NewConfiguration) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sets given AutocleaningRunId as current_run, of the field is
+%% Sets given AutocleaningRunId as current_run, if the field is
 %% undefined. Otherwise does noting.
 %% @end
 %%-------------------------------------------------------------------
@@ -113,6 +113,16 @@ mark_run_finished(SpaceId) ->
     ok = ?extract_ok(update(SpaceId, fun(AC) ->
         {ok, AC#autocleaning{current_run = undefined}}
     end)).
+
+-spec delete(id()) -> ok.
+delete(SpaceId) ->
+    case get_current_run(SpaceId) of
+        undefined -> ok;
+        ARId ->
+            autocleaning_controller:stop_cleaning(SpaceId),
+            autocleaning_run:delete(ARId, SpaceId)
+    end,
+    datastore_model:delete(?CTX, SpaceId).
 
 %%%===================================================================
 %%% Internal functions
@@ -177,11 +187,11 @@ get_record_struct(1) ->
             {threshold, integer},
             {rules, {record, [
                 {enabled, boolean},
-                {lower_file_size_limit, {record, [
+                {min_file_size, {record, [
                     {enabled, boolean},
                     {value, integer}
                 ]}},
-                {upper_file_size_limit, {record, [
+                {max_file_size, {record, [
                     {enabled, boolean},
                     {value, integer}
                 ]}},

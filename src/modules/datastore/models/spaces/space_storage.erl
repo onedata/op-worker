@@ -64,6 +64,10 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
+    autocleaning_api:disable(Key),
+    autocleaning_api:delete_config(Key),
+    file_popularity_api:disable(Key),
+    file_popularity_api:delete_config(Key),
     space_strategies:delete(Key),
     datastore_model:delete(?CTX, Key).
 
@@ -231,7 +235,7 @@ upgrade_record(1, {?MODULE, StorageIds}) ->
 upgrade_record(2, {?MODULE, StorageIds, MountedInRoot}) ->
     {3, {?MODULE, StorageIds, MountedInRoot, false}};
 upgrade_record(3, {?MODULE, StorageIds, MountedInRoot, CleanupEnabled}) ->
-    {4, {?MODULE, StorageIds, MountedInRoot, CleanupEnabled, undefined}};
+    {4, {?MODULE, StorageIds, MountedInRoot, false, CleanupEnabled, undefined, undefined}};
 upgrade_record(4, {?MODULE, StorageIds, MountedInRoot, _FilePopularityEnabled,
     _CleanupEnabled, _CleanupInProgress, _AutocleaningConfig}) ->
     {5, {?MODULE, StorageIds, MountedInRoot}}.
