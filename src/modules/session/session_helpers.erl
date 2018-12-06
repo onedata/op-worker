@@ -40,7 +40,7 @@ get_helper(SessId, SpaceId, StorageDoc) ->
     get_helper(SessId, SpaceId, StorageDoc, false).
 
 delete_helpers(SessId) ->
-    {ok, Nodes} = request_dispatcher:get_worker_nodes(?SESSION_MANAGER_WORKER),
+    Nodes = consistent_hasing:get_all_nodes(),
     lists:foreach(fun(Node) ->
         spawn(Node, ?MODULE, delete_helpers_on_node, [SessId])
     end, Nodes).
