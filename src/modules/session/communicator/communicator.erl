@@ -120,12 +120,12 @@ complete_msg_id(#server_message{message_id = MsgId} = Msg, _Recipient) ->
 %%--------------------------------------------------------------------
 %%- spec receive_message(MsgId :: #message_id{}) ->
 %%    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
-receive_message(#client_message{message_id = MsgId}) ->
+receive_message(#client_message{message_id = MsgId} = Msg) ->
     Timeout = 3 * async_request_manager:get_processes_check_interval(),
     receive
         #server_message{message_id = MsgId,
             message_body = #processing_status{code = 'IN_PROGRESS'}} ->
-            receive_message(MsgId);
+            receive_message(Msg);
         #server_message{message_id = MsgId} = ServerMsg ->
             {ok, ServerMsg}
     after
