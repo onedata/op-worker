@@ -399,11 +399,11 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, Auth} = session:get_auth(SessId),
-    provider_communicator:stream(StreamId, #client_message{
+    communicator:stream_to_provider(#client_message{
         message_body = Request,
         proxy_session_id = SessId,
         proxy_session_auth = Auth
-    }, session_utils:get_provider_session_id(outgoing, ProviderId), 1),
+    }, session_utils:get_provider_session_id(outgoing, ProviderId), StreamId),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

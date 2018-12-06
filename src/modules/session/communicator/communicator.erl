@@ -20,7 +20,7 @@
 
 %%% API - convenience functions
 -export([send_to_client/2, send_to_client/3, send_to_provider/2,
-    send_to_provider/3]).
+    send_to_provider/3, stream_to_provider/3]).
 %%% API - generic function
 -export([communicate/3]).
 
@@ -39,12 +39,17 @@ send_to_client(Msg, Ref, Options) ->
 send_to_provider(Msg, Ref) ->
     send_to_provider(Msg, Ref, false).
 
-send_to_provider(#server_message{} = Msg, Ref, Async) ->
+send_to_provider(#client_message{} = Msg, Ref, Async) ->
     communicate(Msg, Ref, #{error_on_empty_pool => false,
         ignore_send_errors => Async});
 send_to_provider(Msg, Ref, Async) ->
     send_to_provider(#client_message{message_body = Msg}, Ref, Async).
 
+stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
+    communicate(Msg, Ref, #{error_on_empty_pool => false,
+        stream => {true, StmId}});
+stream_to_provider(Msg, Ref, StmId) ->
+    send_to_provider(#client_message{message_body = Msg}, Ref, StmId).
 
 %%%===================================================================
 %%% API - generic function

@@ -20,7 +20,7 @@
 -include("timeouts.hrl").
 
 %% API
--export([stream/4, send_async/2, communicate/2,
+-export([communicate/2,
     communicate/3, communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
@@ -82,20 +82,6 @@ stream(StmId, #client_message{} = Msg, Ref, 1) ->
     sequencer:send_message(Msg, StmId, Ref);
 stream(StmId, Msg, Ref, Retry) ->
     provider_communicator:stream(StmId, #client_message{message_body = Msg}, Ref, Retry).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Similar to communicator:send/2, but does not wait until message is sent.
-%% Always returns 'ok' for non-empty connection pool or existing connection.
-%% @end
-%%--------------------------------------------------------------------
--spec send_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    ok | {error, Reason :: term()}.
-send_async(#client_message{} = Msg, Ref) ->
-    ensure_connected(Ref),
-    connection:send_async(Msg, Ref);
-send_async(Msg, Ref) ->
-    send_async(#client_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
