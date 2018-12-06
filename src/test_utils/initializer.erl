@@ -393,8 +393,7 @@ space_storage_mock(Workers, StorageId) ->
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
     catch test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
-    test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
+    test_utils:mock_expect(Workers, communicator, send_to_client, fun(_, _) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @doc

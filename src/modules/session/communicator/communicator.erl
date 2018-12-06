@@ -25,7 +25,7 @@
 %%% API - convenience functions
 %%%===================================================================
 
-send_to_client(Msg, Ref) ->
+send_to_client(#server_message{} = Msg, Ref) ->
     communicate(Msg, Ref, #{});
 send_to_client(Msg, Ref) ->
     send_to_client(#server_message{message_body = Msg}, Ref).
