@@ -19,16 +19,19 @@
 -include("timeouts.hrl").
 
 %% API
--export([send_to_client/2, communicate/3]).
+-export([send_to_client/2, send_to_client/3, communicate/3]).
 
 %%%===================================================================
 %%% API - convenience functions
 %%%===================================================================
 
-send_to_client(#server_message{} = Msg, Ref) ->
-    communicate(Msg, Ref, #{});
 send_to_client(Msg, Ref) ->
-    send_to_client(#server_message{message_body = Msg}, Ref).
+    ?MODULE:send_to_client(Msg, Ref, #{}).
+
+send_to_client(#server_message{} = Msg, Ref, Options) ->
+    communicate(Msg, Ref, Options);
+send_to_client(Msg, Ref, Options) ->
+    send_to_client(#server_message{message_body = Msg}, Ref, Options).
 
 
 %%%===================================================================
@@ -115,8 +118,8 @@ complete_msg_id(#server_message{message_id = MsgId} = Msg, _Recipient) ->
 %% Receives reply from other provider
 %% @end
 %%--------------------------------------------------------------------
-- spec receive_message(MsgId :: #message_id{}) ->
-    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
+%%- spec receive_message(MsgId :: #message_id{}) ->
+%%    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 receive_message(#client_message{message_id = MsgId}) ->
     Timeout = 3 * async_request_manager:get_processes_check_interval(),
     receive

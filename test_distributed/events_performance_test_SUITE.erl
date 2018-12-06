@@ -370,10 +370,10 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, fun
-        (#file_written_subscription{} = Msg, _) -> Self ! Msg, ok;
-        (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
-        (_, _) -> ok
+    test_utils:mock_expect(Workers, communicator, send_to_client, fun
+        (#file_written_subscription{} = Msg, _, _) -> Self ! Msg, ok;
+        (#subscription_cancellation{} = Msg, _, _) -> Self ! Msg, ok;
+        (_, _, _) -> ok
     end),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
@@ -389,8 +389,8 @@ init_per_testcase(_Case, Config) ->
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send, fun
-        (_, _) -> ok
+    test_utils:mock_expect(Worker, communicator, send_to_client, fun
+        (_, _, _) -> ok
     end),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
