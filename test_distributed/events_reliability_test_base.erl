@@ -42,6 +42,10 @@
 
 -define(PROVIDER_ID(__Node), rpc:call(__Node, oneprovider, get_id, [])).
 
+-define(SMALL_NUM_OF_ATTEMPTS, 5).
+-define(MEDIUM_NUM_OF_ATTEMPTS, 20).
+-define(ATTEMPTS_INTERVAL, 50).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -73,8 +77,6 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     fuse_utils:emit_file_read_event(Sock, 0, 1, FileGuid, [Block1]),
     timer:sleep(100),
     fuse_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block2]),
-
-    timer:sleep(100),
     assert_aggregate_read_events_called(AssertionWorker, FileGuid, Block1, Block2),
 
     % Assert that file read events handler was not called before aggregation time expires
@@ -106,6 +108,9 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
+    mock_events_utils(AssertionWorker),
+    mock_aggregate_read_events(AssertionWorker),
+
     mock_event_handler(AssertionWorker),
     mock_handle_file_read_events(AssertionWorker),
 
@@ -121,6 +126,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     fuse_utils:emit_file_read_event(Sock, 0, 1, FileGuid, [Block1]),
     timer:sleep(100),
     fuse_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block2]),
+    assert_aggregate_read_events_called(AssertionWorker, FileGuid, Block1, Block2),
 
     % Assert that file read events handler was not called before aggregation time expires
     timer:sleep(100),
@@ -128,7 +134,6 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
 
     % Assert that after forcing flush handler is called before aggregation time expires
     fuse_utils:flush_events(Sock, ?PROVIDER_ID(AssertionWorker), SubscriptionId),
-    timer:sleep(100),
     assert_handle_file_read_events_called(AssertionWorker, [#file_read_event{
         counter = 2,
         file_guid = FileGuid,
@@ -136,6 +141,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
+    unmock_events_utils(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -158,6 +164,7 @@ init_per_suite(Config) ->
 
 
 init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 5}),
     initializer:remove_pending_messages(),
     lfm_proxy:init(Config).
 
@@ -213,7 +220,7 @@ assert_handle_file_read_events_called(Worker, ExpEvents) ->
     ?assertMatch(ExpEvents,
         rpc:call(Worker, meck, capture, [
             1, fslogic_event_handler, handle_file_read_events, '_', 1
-        ])
+        ]), ?SMALL_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL
     ),
     ok.
 
@@ -230,13 +237,9 @@ assert_aggregate_read_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
     Mod = event_utils,
     Fun = aggregate_file_read_events,
 
-    [{_, {_, _, [#file_read_event{blocks = [Block1]}, #file_read_event{blocks = [Block2]}]}, Res}] =
-        ?assertMatch([{_, {Mod, Fun, _}, _}], rpc:call(Worker, meck, history, [Mod])),
-
-    ?assert(Block1 =:= ExpBlock1 orelse Block1 =:= ExpBlock2),
-    ?assert(Block2 =:= ExpBlock1 orelse Block2 =:= ExpBlock2),
-
     ExpBlocks = lists:sort([ExpBlock1, ExpBlock2]),
-    ?assertMatch(#file_read_event{file_guid = FileGuid, blocks = ExpBlocks}, Res),
+    ?assertMatch([{
+        _, {Mod, Fun, _}, #file_read_event{file_guid = FileGuid, blocks = ExpBlocks}
+    }], rpc:call(Worker, meck, history, [Mod]), ?MEDIUM_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL),
 
     ok.
