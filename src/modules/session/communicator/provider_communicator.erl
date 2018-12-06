@@ -20,8 +20,8 @@
 -include("timeouts.hrl").
 
 %% API
--export([send/2, send/3, stream/3, stream/4, send_async/2, communicate/2,
-    communicate/3, communicate_async/2, communicate_async/3, ensure_connected/1]).
+-export([send/2, send/3, stream/4, send_async/2, communicate/2,
+    communicate/3, communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
 %%% API
@@ -63,17 +63,6 @@ send(#client_message{} = Msg, Ref, 1) ->
     connection:send(Msg, Ref);
 send(Msg, Ref, Retry) ->
     provider_communicator:send(#client_message{message_body = Msg}, Ref, Retry).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv stream(StmId, Msg, SessId, 1)
-%% @end
-%%--------------------------------------------------------------------
--spec stream(StmId :: sequencer:stream_id(), Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    ok | {error, Reason :: term()}.
-stream(StmId, Msg, Ref) ->
-    provider_communicator:stream(StmId, Msg, Ref, 1).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,20 +142,6 @@ communicate(#client_message{} = ClientMsg, Ref, Retires) ->
     end;
 communicate(Msg, Ref, Retires) ->
     communicate(#client_message{message_body = Msg}, Ref, Retires).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends a message and expects to handle a reply (with generated message ID)
-%% by default worker associated with the reply type.
-%% @equiv communicate_async(Msg, SessId, undefined)
-%% @end
-%%--------------------------------------------------------------------
--spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    {ok, #message_id{}} | {error, Reason :: term()}.
-communicate_async(#client_message{} = ClientMsg, Ref) ->
-    communicate_async(ClientMsg, Ref, undefined);
-communicate_async(Msg, Ref) ->
-    communicate_async(#client_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc

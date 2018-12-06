@@ -72,7 +72,7 @@ route_message(#client_message{
         % Spawn because send can wait and block event_stream
         % Probably not needed after migration to asynchronous connections
         spawn(fun() ->
-            communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
+            communicator:send_to_client(Result#server_message{message_id = MsgId}, OriginSessId)
         end)
     end
     }, SessionID),

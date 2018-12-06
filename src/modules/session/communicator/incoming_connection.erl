@@ -459,7 +459,7 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
                             true ->
                                 provider_communicator:send(ServerMsg, Pid);
                             false ->
-                                communicator:send(ServerMsg, Pid)
+                                communicator:send_to_client(ServerMsg, Pid)
                         end
                     catch _:_ ->
                         {error, closed}

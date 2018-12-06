@@ -291,7 +291,7 @@ process_request(#server_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = communicator:send(NewMsg, SessId),
+    ok = communicator:send_to_client(NewMsg, SessId),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)};
 
 process_request(#client_message{message_stream = MsgStm} = Msg, #state{
@@ -351,7 +351,7 @@ resend_all_messages(Msgs, Con, SeqNum, MsgsAcc) ->
             NewMsg = Msg#server_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = communicator:send(NewMsg, Con),
+            ok = communicator:send_to_client(NewMsg, Con),
             resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         {value, #client_message{message_stream = MsgStm} = Msg} ->
             NewMsg = Msg#client_message{
@@ -379,7 +379,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con) ->
         {value, #server_message{message_stream = #message_stream{
             sequence_number = LowerSeqNum
         }} = Msg} ->
-            ok = communicator:send(Msg, Con),
+            ok = communicator:send_to_client(Msg, Con),
             resend_messages(LowerSeqNum + 1, UpperSeqNum, queue:drop(Msgs), StmId, Con);
         {value, #server_message{message_stream = #message_stream{
             sequence_number = SeqNum

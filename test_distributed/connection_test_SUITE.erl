@@ -653,7 +653,8 @@ client_send_test(Config) ->
     },
 
     % when
-    ?assertEqual(ok, rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId])),
+    ?assertEqual(ok, rpc:call(Worker1, communicator, send_to_client,
+        [ServerMsgInternal, SessionId])),
 
     % then
     ?assertEqual(ServerMessageProtobuf, fuse_utils:receive_server_message()),
@@ -668,7 +669,7 @@ client_communicate_test(Config) ->
     % when
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
     CommunicateResult = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId]),
+        [ServerMsgInternal, SessionId, #{wait_for_ans => true}]),
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
@@ -686,8 +687,8 @@ client_communicate_async_test(Config) ->
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, MsgId} = rpc:call(Worker1, communicator, communicate_async,
-        [ServerMsgInternal, SessionId, Self]),
+    {ok, MsgId} = rpc:call(Worker1, communicator, communicate,
+        [ServerMsgInternal, SessionId, #{use_msg_id => {true, Self}}]),
 
     % then
     ?assertReceivedMatch(#client_message{
@@ -704,8 +705,8 @@ client_communicate_async_test(Config) ->
     end),
 
     % when
-    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate_async,
-        [ServerMsgInternal, SessionId]),
+    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate,
+        [ServerMsgInternal, SessionId, #{use_msg_id => true}]),
 
     % then
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),

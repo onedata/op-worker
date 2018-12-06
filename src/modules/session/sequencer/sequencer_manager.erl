@@ -273,7 +273,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec ensure_sent(Msg :: term(), SessId :: session:id()) -> ok.
 ensure_sent(Msg, SessId) ->
-    case communicator:send(Msg, SessId) of
+    case communicator:send_to_client(Msg, SessId) of
         ok ->
             ok;
         {error, Reason} ->
