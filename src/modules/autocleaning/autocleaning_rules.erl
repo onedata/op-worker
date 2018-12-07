@@ -171,8 +171,8 @@ to_file_popularity_start_key(#autocleaning_rules{
 }) ->
     to_file_popularity_start_key(
       get_value(max_open_count, MaxOpenCountSetting),
-      get_value(max_file_size, MaxFileSizeSetting),
       get_value(min_hours_since_last_open, MinHoursSinceLastOpenSetting),
+      get_value(max_file_size, MaxFileSizeSetting),
       get_value(max_hourly_moving_average, MaxHourlyMovingAvgSetting),
       get_value(max_daily_moving_average, MaxDailyMovingAvgSetting),
       get_value(max_monthly_moving_average, MaxMonthlyMovingAvgSetting)
