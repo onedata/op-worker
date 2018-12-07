@@ -56,6 +56,7 @@
     changes_stream_times_test/1,
     changes_stream_file_location_test/1,
     changes_stream_on_multi_provider_test/1,
+    changes_stream_closed_on_disconnection/1,
     list_spaces/1,
     get_space/1,
     set_get_json_metadata/1,
@@ -100,6 +101,7 @@ all() ->
         changes_stream_times_test,
         changes_stream_file_location_test,
         changes_stream_on_multi_provider_test,
+        changes_stream_closed_on_disconnection,
         list_spaces,
         get_space,
         set_get_json_metadata,
@@ -884,6 +886,45 @@ changes_stream_on_multi_provider_test(Config) ->
             0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))
     end, DecodedChanges)).
 
+
+changes_stream_closed_on_disconnection(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    spawn(fun() ->
+        rest_test_utils:request(WorkerP1, <<"changes/metadata/space1">>,
+            get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}])
+    end),
+    timer:sleep(timer:seconds(1)),
+    receive
+        {stream_pid, StreamPid} ->
+            ?assertEqual(true, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid]))
+    end,
+
+    rest_test_utils:request(WorkerP1, <<"changes/metadata/space1?timeout=100">>,
+        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 400}]),
+    receive
+        {stream_pid, StreamPid1} ->
+            ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid1]))
+    end,
+
+    utils:pforeach(fun(_) ->
+        Pid = spawn(fun() ->
+            rest_test_utils:request(WorkerP1, <<"changes/metadata/space1">>,
+                get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 4000}])
+        end),
+        timer:sleep(timer:seconds(1)),
+        exit(Pid, kill)
+    end, lists:seq(0,10)),
+
+    timer:sleep(timer:seconds(1)),
+    lists:foreach(fun(_) ->
+        receive
+            {stream_pid, StreamPid2} ->
+                ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid2]))
+        end 
+    end, lists:seq(0,10)).
+    
+
 list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -1380,6 +1421,20 @@ init_per_testcase(automatic_cleanup_should_evict_unpopular_files, Config) ->
     {ok, _} = rpc:call(WorkerP2, space_cleanup_api, configure_autocleaning, [SpaceId, AutocleaningConfig]),
     init_per_testcase(all, [{space_id, SpaceId} | Config]);
 
+init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
+    ct:timetrap(timer:minutes(3)),
+    Workers = ?config(op_worker_nodes, Config),
+    Pid = self(),
+    ok = test_utils:mock_new(Workers, changes),
+    ok = test_utils:mock_expect(Workers, changes, init_stream,
+    fun(State) ->
+        State1 = meck:passthrough([State]),
+        StreamPid = maps:get(changes_stream, State1, undefined),
+        Pid ! {stream_pid, StreamPid},
+        State1
+    end),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
@@ -1421,6 +1476,11 @@ end_per_testcase(Case, Config) when
     Case =:= rerun_dir_replication;
     Case =:= rerun_eviction_of_file_replica_with_migration
     ->
+    end_per_testcase(all, Config);
+
+end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, changes),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
