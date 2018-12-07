@@ -208,11 +208,11 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(upgrade_protocol, State = #state{ip = Hostname}) ->
-    socket_send(State, connection:protocol_upgrade_request(Hostname)),
+    socket_send(State, protocol_utils:protocol_upgrade_request(Hostname)),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
 
 handle_info({Ok, Socket, Data}, State = #state{status = upgrading_protocol, ok = Ok}) ->
-    case connection:verify_protocol_upgrade_response(Data) of
+    case protocol_utils:verify_protocol_upgrade_response(Data) of
         false ->
             ?error("Received invalid protocol upgrade response: ~p", [Data]),
             {stop, normal, State};

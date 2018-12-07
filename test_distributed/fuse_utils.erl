@@ -105,9 +105,9 @@ connect_and_upgrade_proto(Hostname, Port) ->
     {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
         {active, once}, {reuse_sessions, false}
     ], timer:minutes(1))),
-    ssl:send(Sock, connection:protocol_upgrade_request(list_to_binary(Hostname))),
+    ssl:send(Sock, protocol_utils:protocol_upgrade_request(list_to_binary(Hostname))),
     receive {ssl, Sock, Data} ->
-        ?assert(connection:verify_protocol_upgrade_response(Data)),
+        ?assert(protocol_utils:verify_protocol_upgrade_response(Data)),
         ssl:setopts(Sock, [{active, once}, {packet, 4}]),
         {ok, Sock}
     after timer:minutes(1) ->

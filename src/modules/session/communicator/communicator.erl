@@ -24,6 +24,7 @@
     communicate_with_provider/3]).
 %%% API - generic function
 -export([communicate/3]).
+-export([ensure_connected/1]).
 
 %%%===================================================================
 %%% API - convenience functions
@@ -120,11 +121,10 @@ send(Msg, Ref, Options) ->
         _ -> ok
     end,
 
-    SendAns = case {maps:get(stream, Options, false),
-        maps:get(ignore_send_errors, Options, false)} of
-        {{true, StmId}, _} -> sequencer:send_message(Msg2, StmId, Ref);
-        {_, true} -> connection:send_async(Msg2, Ref);
-        _ -> connection:send(Msg2, Ref)
+    SendAns = case maps:get(stream, Options, false) of
+        {true, StmId} -> sequencer:send_message(Msg2, StmId, Ref);
+        _ -> forward_to_connection_proc(Msg2, Ref,
+            maps:get(ignore_send_errors, Options, false))
     end,
 
     case {SendAns, maps:get(wait_for_ans, Options, false)} of
@@ -137,6 +137,36 @@ send(Msg, Ref, Options) ->
             end;
         _ ->
             SendAns
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+%%-spec send(#server_message{} | #client_message{}, ref()) ->
+%%    ok | {error, Reason :: term()} | {exit, Reason :: term()}.
+forward_to_connection_proc(Msg, Ref, true) when is_pid(Ref) ->
+    Ref ! {send_async, Msg},
+    ok;
+forward_to_connection_proc(Msg, Ref, false) when is_pid(Ref) ->
+    try
+        Ref ! {send_sync, self(), Msg},
+        receive
+            {result, Resp} ->
+                Resp
+        after
+            ?DEFAULT_REQUEST_TIMEOUT ->
+                {error, timeout}
+        end
+    catch
+        _:Reason -> {error, Reason}
+    end;
+forward_to_connection_proc(Msg, SessionId, Async) ->
+    MsgWithProxyInfo = protocol_utils:fill_proxy_info(Msg, SessionId),
+    case session_connections:get_random_connection(SessionId) of
+        {ok, Con} -> forward_to_connection_proc(MsgWithProxyInfo, Con, Async);
+        {error, Reason} -> {error, Reason}
     end.
 
 complete_msg(Msg, Options) ->

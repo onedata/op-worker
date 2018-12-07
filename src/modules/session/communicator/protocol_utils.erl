@@ -9,18 +9,17 @@
 %%% This module handles client and provider requests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(connection).
+-module(protocol_utils).
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/gui_paths.hrl").
--include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([send/2, send_async/2]).
+-export([fill_proxy_info/2]).
 -export([protocol_upgrade_request/1, verify_protocol_upgrade_response/1]).
 
 -type ref() :: pid() | session:id().
@@ -28,53 +27,9 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Synchronously sends a message to a client or server.
-%% @end
-%%--------------------------------------------------------------------
--spec send(#server_message{} | #client_message{}, ref()) ->
-    ok | {error, Reason :: term()} | {exit, Reason :: term()}.
-send(Msg, Ref) when is_pid(Ref) ->
-    try
-        Ref ! {send_sync, self(), Msg},
-        receive
-            {result, Resp} ->
-                Resp
-        after
-            ?DEFAULT_REQUEST_TIMEOUT ->
-                {error, timeout}
-        end
-    catch
-        _:Reason -> {error, Reason}
-    end;
-send(Msg, SessionId) ->
-    MsgWithProxyInfo = fill_proxy_info(Msg, SessionId),
-    case session_connections:get_random_connection(SessionId) of
-        {ok, Con} -> send(MsgWithProxyInfo, Con);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Asynchronously sends a message to a client or server.
-%% @end
-%%--------------------------------------------------------------------
--spec send_async(#server_message{} | #client_message{}, ref()) ->
-    ok | {error, Reason :: term()}.
-send_async(Msg, Ref) when is_pid(Ref) ->
-    Ref ! {send_async, Msg},
-    ok;
-send_async(Msg, Ref) ->
-    case session_connections:get_random_connection(Ref) of
-        {ok, Con} -> send_async(Msg, Con);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Fills message with info about session to which it should be proxied.
 %% @end
 %%--------------------------------------------------------------------
-% TODO - private
 -spec fill_proxy_info(#server_message{} | #client_message{}, session:id()) ->
     #server_message{} | #client_message{}.
 fill_proxy_info(Msg, SessionId) ->
