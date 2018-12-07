@@ -51,7 +51,7 @@
 -spec update_size(file_ctx:ctx(), non_neg_integer()) -> ok | {error, term()}.
 update_size(FileCtx, NewSize) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case file_popularity_config:is_enabled(SpaceId) of
+    case file_popularity_api:is_enabled(SpaceId) of
         true ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             DefaultFilePopularity = empty_file_popularity(FileCtx),
@@ -81,7 +81,7 @@ update_size(FileCtx, NewSize) ->
 -spec increment_open(FileCtx :: file_ctx:ctx()) -> ok | {error, term()}.
 increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case file_popularity_config:is_enabled(SpaceId) of
+    case file_popularity_api:is_enabled(SpaceId) of
         true ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             Diff = fun(FilePopularity) ->

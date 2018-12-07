@@ -502,7 +502,7 @@ refill_queue_with_one_batch(State = #state{
 }) ->
     StartKey = autocleaning_rules:to_file_popularity_start_key(ACRules),
     EndKey = autocleaning_rules:to_file_popularity_end_key(ACRules),
-    Token = file_popularity_view:initial_token(StartKey, EndKey),
+    Token = file_popularity_api:initial_token(StartKey, EndKey),
     refill_queue_with_one_batch(State#state{next_batch_token = Token});
 refill_queue_with_one_batch(State = #state{
     space_id = SpaceId,

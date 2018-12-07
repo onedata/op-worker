@@ -152,6 +152,22 @@ are_rules_satisfied(FileCtx, #autocleaning_rules{
 %%-------------------------------------------------------------------
 -spec to_file_popularity_start_key(rules()) -> [non_neg_integer()].
 to_file_popularity_start_key(#autocleaning_rules{enabled = false}) ->
+    [0, 0, 0, 0, 0, 0];
+to_file_popularity_start_key(#autocleaning_rules{enabled = true,
+    min_file_size = MinFileSizeSetting
+}) ->
+    MinFileSize = get_value(min_file_size, MinFileSizeSetting),
+    [0, 0, MinFileSize, 0, 0, 0].
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns JSON encoded end_key understandable by the
+%% file_popularity_view. The key is constructed basing on
+%% the #autocleaning_rules{} record.
+%% @end
+%%-------------------------------------------------------------------
+-spec to_file_popularity_end_key(rules()) -> [non_neg_integer()].
+to_file_popularity_end_key(#autocleaning_rules{enabled = false}) ->
     to_file_popularity_start_key(
         maps:get(max_open_count, ?DEFAULTS),
         maps:get(min_hours_since_last_open, ?DEFAULTS),
@@ -160,7 +176,7 @@ to_file_popularity_start_key(#autocleaning_rules{enabled = false}) ->
         maps:get(max_daily_moving_average, ?DEFAULTS),
         maps:get(max_monthly_moving_average, ?DEFAULTS)
     );
-to_file_popularity_start_key(#autocleaning_rules{
+to_file_popularity_end_key(#autocleaning_rules{
     enabled = true,
     max_open_count = MaxOpenCountSetting,
     max_file_size = MaxFileSizeSetting,
@@ -177,22 +193,6 @@ to_file_popularity_start_key(#autocleaning_rules{
       get_value(max_daily_moving_average, MaxDailyMovingAvgSetting),
       get_value(max_monthly_moving_average, MaxMonthlyMovingAvgSetting)
     ).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns JSON encoded end_key understandable by the
-%% file_popularity_view. The key is constructed basing on
-%% the #autocleaning_rules{} record.
-%% @end
-%%-------------------------------------------------------------------
--spec to_file_popularity_end_key(rules()) -> [non_neg_integer()].
-to_file_popularity_end_key(#autocleaning_rules{enabled = false}) ->
-    [0, 0, 0, 0, 0, 0];
-to_file_popularity_end_key(#autocleaning_rules{enabled = true,
-    min_file_size = MinFileSizeSetting
-}) ->
-    MinFileSize = get_value(min_file_size, MinFileSizeSetting),
-    [0, 0, MinFileSize, 0, 0, 0].
 
 %%%===================================================================
 %%% Internal functions
@@ -283,7 +283,7 @@ is_max_monthly_moving_average_rule_satisfied(#file_popularity{mth_mov_avg = MthM
 
 -spec to_file_popularity_start_key(non_neg_integer(), non_neg_integer(),
     non_neg_integer(), non_neg_integer(), non_neg_integer(),
-    non_neg_integer()) -> binary().
+    non_neg_integer()) -> [non_neg_integer()].
 to_file_popularity_start_key(MaxOpenCount, MinHoursSinceLastOpen,
     MaxFileSize, MaxHourlyMovingAvg, MaxDailyMovingAvg, MaxMonthlyMovingAvg
 ) ->

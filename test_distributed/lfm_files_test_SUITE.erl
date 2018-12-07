@@ -126,6 +126,8 @@
     ls_test, ls_with_stats_test, echo_loop_test
 ]).
 
+-define(SPACE_ID, <<"space1">>).
+
 all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
@@ -1118,6 +1120,7 @@ opening_file_should_increase_file_popularity(Config) ->
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>, 8#755),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
     SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
     % when
     TimeBeforeFirstOpen = rpc:call(W, time_utils, cluster_time_seconds, []) div 3600,
@@ -1174,6 +1177,7 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     {ok, PopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/popular_file">>, 8#755),
     {ok, UnpopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/unpopular_file">>, 8#755),
     SpaceId = fslogic_uuid:guid_to_space_id(PopularFileGuid),
+    ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
     {ok, PopularHandle} = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
     ok = lfm_proxy:close(W, PopularHandle),
@@ -1182,11 +1186,13 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     timer:sleep(timer:seconds(10)),
 
-    UnpopularFiles1 = ?assertMatch([_ | _],
-        rpc:call(W, file_popularity_view, get_unpopular_files,
-            [SpaceId, null, null, null, 10, null, null, null]
-        )
-    ),
+    {UnpopularFiles1, _}  = ?assertMatch({[_ | _], _}, begin
+        Token = rpc:call(W, file_popularity_api, initial_token, [
+            [0, 0, 0, 0, 0, 0, 0],
+            [10, 0, 0, 0, 0, 0, 0]
+        ]),
+        rpc:call(W, file_popularity_api, query, [SpaceId, Token, 100])
+    end),
     ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
 
@@ -1194,11 +1200,13 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     [lfm_proxy:close(W, Handle) || {ok, Handle} <- Handles],
 
     timer:sleep(timer:seconds(10)),
-    UnpopularFiles2 = ?assertMatch([_ | _],
-        rpc:call(W, file_popularity_view, get_unpopular_files,
-            [SpaceId, null, null, null, 10, null, null, null]
-        )
-    ),
+    {UnpopularFiles2, _} = ?assertMatch({[_ | _], _}, begin
+        Token = rpc:call(W, file_popularity_api, initial_token, [
+            [0, 0, 0, 0, 0, 0, 0],
+            [10, 0, 0, 0, 0, 0, 0]
+        ]),
+        rpc:call(W, file_popularity_api, query, [SpaceId, Token, 100])
+    end),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
 
@@ -1206,6 +1214,8 @@ file_popularity_should_have_correct_file_size(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>, 8#755),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
     {ok, 5} = lfm_proxy:write(W, Handle, 0, <<"01234">>),
@@ -1261,15 +1271,6 @@ init_per_testcase(ShareTest, Config) when
     test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, _Name, _SpaceId, _ShareFileGuid) -> {ok, ShareId} end),
     init_per_testcase(default, Config);
 
-init_per_testcase(Case, Config) when
-    Case =:= opening_file_should_increase_file_popularity;
-    Case =:= file_popularity_view_should_return_unpopular_files;
-    Case =:= file_popularity_should_have_correct_file_size
-    ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_expect(W, space_quota, is_file_popularity_enabled, fun(_) -> true end),
-    init_per_testcase(default, Config);
-
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -1289,6 +1290,16 @@ end_per_testcase(ShareTest, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, share_logic),
     end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= opening_file_should_increase_file_popularity;
+    Case =:= file_popularity_view_should_return_unpopular_files;
+    Case =:= file_popularity_should_have_correct_file_size
+->
+    [W | _] = ?config(op_worker_nodes, Config),
+    rpc:call(W, file_popularity_api, disable, [?SPACE_ID]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),

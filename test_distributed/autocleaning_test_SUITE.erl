@@ -77,16 +77,16 @@ all() -> [
 -define(RULE_SETTING(Value), ?RULE_SETTING(true, Value)).
 -define(RULE_SETTING(Enabled, Value), #{enabled => Enabled, value => Value}).
 
--define(DIST(ProviderId, Size),
-    case Size == 0 of
+-define(DIST(ProviderId, __Size),
+    case __Size == 0 of
         true ->
             [#{<<"providerId">> => ProviderId, <<"blocks">> => []}];
         false ->
-            [#{<<"providerId">> => ProviderId, <<"blocks">> => [[0, Size]]}]
+            [#{<<"providerId">> => ProviderId, <<"blocks">> => [[0, __Size]]}]
     end).
 
--define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, Size}) ->
-    ?DIST(PId, Size)
+-define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, __Size}) ->
+    ?DIST(PId, __Size)
 end, lists:zip(ProviderIds, Sizes))).
 
 -define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
@@ -106,8 +106,8 @@ end, __Distributions))).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
     ?assertMatch([], begin
-        StartKey = lists:duplicate(6, ?MAX_VAL),
-        EndKey = lists:duplicate(6, 0),
+        StartKey = lists:duplicate(6, 0),
+        EndKey = lists:duplicate(6, ?MAX_VAL),
         Token = rpc:call(Worker, file_popularity_api, initial_token, [StartKey, EndKey]),
         {FileCtxs, _} = rpc:call(Worker, file_popularity_api, query, [SpaceId, Token, ?MAX_LIMIT]),
         __Guids = [file_ctx:get_guid_const(F) || F <- FileCtxs],

@@ -69,7 +69,7 @@ delete(SpaceId) ->
 %% query the view.
 %% @end
 %%-------------------------------------------------------------------
--spec initial_token(binary() | [non_neg_integer()], binary() | [non_neg_integer()]) -> token().
+-spec initial_token([non_neg_integer()], [non_neg_integer()]) -> token().
 initial_token(StartKey, EndKey) ->
     #token{
         last_doc_id = undefined,
@@ -125,7 +125,6 @@ token_to_opts(#token{
 }, Limit) ->
     [
         {stale, false},
-        {descending, true},
         {startkey, LastKey},
         {endkey, EndKey},
         {limit, Limit}
@@ -137,7 +136,6 @@ token_to_opts(#token{
 }, Limit) ->
     [
         {stale, false},
-        {descending, true},
         {startkey, LastKey},
         {startkey_docid, LastDocId},
         {endkey, EndKey},
