@@ -483,6 +483,7 @@ end_per_testcase(_Case, Config) ->
     disable_file_popularity(W, ?SPACE_ID),
     disable_autocleaning(W, ?SPACE_ID),
     clean_space(?SPACE_ID, Config),
+    ensure_space_empty(?SPACE_ID, Config),
     reset_autocleaning_check_timestamp(W, ?SPACE_ID),
     lfm_proxy:teardown(Config).
 
@@ -583,9 +584,17 @@ clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
     end.
 
 delete_files(Worker, SessId, GuidsAndPaths) ->
-    lists:foreach(fun({G, P}) ->
+    lists:foreach(fun({G, _P}) ->
         ok = lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
     end, GuidsAndPaths).
+
+ensure_space_empty(SpaceId, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    lists:foreach(fun(W) ->
+        ?assertMatch({ok, []}, lfm_proxy:ls(W, ?SESSION(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS)
+    end, Workers).
+
 
 clean_autocleaning_run_model(Worker, SpaceId) ->
     clean_autocleaning_run_model(Worker, SpaceId, undefined, 0, 1000).
@@ -608,9 +617,6 @@ delete_autocleaning_runs(Worker, ARIds, SpaceId) ->
 %% autocleaning_api module rpc calls
 configure_autocleaning(Worker, SpaceId, Configuration) ->
     rpc:call(Worker, autocleaning_api, configure, [SpaceId, Configuration]).
-
-enable_autocleaning(Worker, SpaceId) ->
-    rpc:call(Worker, autocleaning_api, configure, [SpaceId, #{enabled => true}]).
 
 disable_autocleaning(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, disable, [SpaceId]).

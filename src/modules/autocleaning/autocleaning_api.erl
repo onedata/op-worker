@@ -134,11 +134,22 @@ status(SpaceId) ->
         space_occupancy => CurrentSize
     }.
 
-
+%%-------------------------------------------------------------------
+%% @doc
+%% List all reports of auto-cleaning runs. The list is decreasingly
+%% sorted by start time.
+%% @end
+%%-------------------------------------------------------------------
 -spec list(od_space:id()) -> {ok, [autocleaning_run:id()]}.
 list(SpaceId) ->
     list(SpaceId, undefined, 0, all).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% List up to Limit reports of auto-cleaning runs starting from
+%% Offset after StartId. The list is decreasingly sorted by start time.
+%% @end
+%%-------------------------------------------------------------------
 -spec list(od_space:id(), autocleaning_run:id() | undefined,
     autocleaning_run_links:offset(), autocleaning_run_links:list_limit()) ->
     {ok, [autocleaning_run:id()]}.
