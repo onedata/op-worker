@@ -21,7 +21,7 @@
 
 %% API
 -export([communicate/2,
-    communicate/3, communicate_async/3, ensure_connected/1]).
+    communicate/3, ensure_connected/1]).
 
 %%%===================================================================
 %%% API

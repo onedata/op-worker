@@ -389,7 +389,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
             ok
         end
     end),
-    provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
+    communicator:communicate_with_provider(ClientMsg, Ref, RequestTranslator),
     {noreply, State};
 
 handle_remotely(#event{} = Evt, ProviderId, State) ->
