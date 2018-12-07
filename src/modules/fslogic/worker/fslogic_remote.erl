@@ -53,7 +53,7 @@ reroute(UserCtx, ProviderId, Request) ->
     SessId = user_ctx:get_session_id(UserCtx),
     Auth = user_ctx:get_auth(UserCtx),
     {ok, #server_message{message_body = MsgBody}} =
-        provider_communicator:communicate(#client_message{
+        communicator:communicate_with_provider(#client_message{
             message_body = Request,
             proxy_session_id = SessId,
             proxy_session_auth = Auth

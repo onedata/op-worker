@@ -199,7 +199,7 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
     MySecret = do_generate_secret(),
     Request = #generate_rtransfer_conn_secret{secret = MySecret},
     {ok, #server_message{message_body = #rtransfer_conn_secret{secret = PeerSecret}}} =
-        provider_communicator:communicate(Request, SessId),
+        communicator:communicate_with_provider(Request, SessId),
     {MySecret, PeerSecret}.
 
 %%--------------------------------------------------------------------

@@ -20,7 +20,8 @@
 
 %%% API - convenience functions
 -export([send_to_client/2, send_to_client/3, send_to_provider/2,
-    send_to_provider/3, stream_to_provider/3, communicate_with_provider/3]).
+    send_to_provider/3, stream_to_provider/3, communicate_with_provider/2,
+    communicate_with_provider/3]).
 %%% API - generic function
 -export([communicate/3]).
 
@@ -51,9 +52,17 @@ stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
 stream_to_provider(Msg, Ref, StmId) ->
     send_to_provider(#client_message{message_body = Msg}, Ref, StmId).
 
+communicate_with_provider(Msg, Ref) ->
+    communicate_with_provider(Msg, Ref, wait_for_ans).
+
 communicate_with_provider(#client_message{} = Msg, Ref, Recipent) ->
-    Options = #{error_on_empty_pool => false, ensure_connected => true,
-        use_msg_id => {true, Recipent}},
+    Options = case Recipent of
+        wait_for_ans -> #{error_on_empty_pool => false, ensure_connected => true,
+            wait_for_ans => true};
+        _ ->
+            #{error_on_empty_pool => false, ensure_connected => true,
+                use_msg_id => {true, Recipent}}
+    end,
     Options2 = case Msg of
         #client_message{message_stream = #message_stream{stream_id = StmId}}
             when is_integer(StmId) -> Options#{stream => {true, StmId}};
