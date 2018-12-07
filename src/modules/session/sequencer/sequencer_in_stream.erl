@@ -444,6 +444,6 @@ communicate(false, Msg, SessionID, true) ->
 communicate(false, Msg, SessionID, _) ->
     communicator:send_to_client(Msg, SessionID);
 communicate(true, Msg, SessionID, true) ->
-    communicator:send_to_provider(Msg, SessionID, infinity);
+    communicator:send_to_provider(Msg, SessionID, #{repeats => infinity});
 communicate(true, Msg, SessionID, _) ->
     communicator:send_to_provider(Msg, SessionID).

@@ -39,13 +39,13 @@ send_to_client(Msg, Ref, Options) ->
     send_to_client(#server_message{message_body = Msg}, Ref, Options).
 
 send_to_provider(Msg, Ref) ->
-    send_to_provider(Msg, Ref, false).
+    send_to_provider(Msg, Ref, #{ignore_send_errors => false}).
 
-send_to_provider(#client_message{} = Msg, Ref, Async) ->
-    communicate(Msg, Ref, #{error_on_empty_pool => false,
-        ensure_connected => true, ignore_send_errors => Async});
-send_to_provider(Msg, Ref, Async) ->
-    send_to_provider(#client_message{message_body = Msg}, Ref, Async).
+send_to_provider(#client_message{} = Msg, Ref, Options) ->
+    communicate(Msg, Ref, Options#{error_on_empty_pool => false,
+        ensure_connected => true});
+send_to_provider(Msg, Ref, Options) ->
+    send_to_provider(#client_message{message_body = Msg}, Ref, Options).
 
 stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
     communicate(Msg, Ref, #{error_on_empty_pool => false,
@@ -163,7 +163,10 @@ forward_to_connection_proc(Msg, Ref, false) when is_pid(Ref) ->
         _:Reason -> {error, Reason}
     end;
 forward_to_connection_proc(Msg, SessionId, Async) ->
-    MsgWithProxyInfo = protocol_utils:fill_proxy_info(Msg, SessionId),
+    MsgWithProxyInfo = case Async of
+        true -> Msg;
+        false -> protocol_utils:fill_proxy_info(Msg, SessionId)
+    end,
     case session_connections:get_random_connection(SessionId) of
         {ok, Con} -> forward_to_connection_proc(MsgWithProxyInfo, Con, Async);
         {error, Reason} -> {error, Reason}
