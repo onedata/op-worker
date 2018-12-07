@@ -41,13 +41,13 @@ send_to_provider(Msg, Ref) ->
 
 send_to_provider(#client_message{} = Msg, Ref, Async) ->
     communicate(Msg, Ref, #{error_on_empty_pool => false,
-        ignore_send_errors => Async});
+        ensure_connected => true, ignore_send_errors => Async});
 send_to_provider(Msg, Ref, Async) ->
     send_to_provider(#client_message{message_body = Msg}, Ref, Async).
 
 stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
     communicate(Msg, Ref, #{error_on_empty_pool => false,
-        stream => {true, StmId}});
+        ensure_connected => true, stream => {true, StmId}});
 stream_to_provider(Msg, Ref, StmId) ->
     send_to_provider(#client_message{message_body = Msg}, Ref, StmId).
 
@@ -73,7 +73,6 @@ communicate_loop(Msg, Ref, Options, Retry) ->
                 true ->
                     {error, empty_connection_pool};
                 _ ->
-                    ensure_connected(Ref),
                     retry(Msg, Ref, Options, Retry)
             end;
         {error, _} ->
@@ -93,6 +92,11 @@ retry(Msg, Ref, Options, Retry) ->
 
 send(Msg, Ref, Options) ->
     {Msg2, ReturnMsgID} = complete_msg(Msg, Options),
+
+    case maps:get(ensure_connected, Options, false) of
+        true -> ensure_connected(Ref);
+        _ -> ok
+    end,
 
     SendAns = case {maps:get(stream, Options, false),
         maps:get(ignore_send_errors, Options, false)} of
