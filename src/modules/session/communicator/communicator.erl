@@ -27,36 +27,96 @@
 -export([communicate/3]).
 -export([ensure_connected/1]).
 
+-type message() :: #client_message{} | #server_message{}.
+-type generic_message() :: tuple().
+%%-type options() :: map().
+-type options() ::  #{wait_for_ans => boolean(), % default: false
+                    repeats => non_neg_integer() | infinity, % default: 2
+                    error_on_empty_pool => boolean(), % default: true
+                    ensure_connected => boolean(), % default: false
+                    stream => {true, sequencer:stream_id()} | false, % default: false
+                    ignore_send_errors => boolean(), % default: false
+                    use_msg_id => boolean() | {true, pid()}}. % default: false
+-type asyn_ans() :: ok | {ok | message_id:id()} | {error, Reason :: term()}.
+-type sync_answer() :: ok | {ok, message()} | {error, Reason :: term()}.
+-type answer() :: asyn_ans() | sync_answer().
+-type ref() :: pid() | session:id().
+
 %%%===================================================================
 %%% API - convenience functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to client with default options.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_client(generic_message(), ref()) -> asyn_ans().
 send_to_client(Msg, Ref) ->
     ?MODULE:send_to_client(Msg, Ref, #{}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to client.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_client(generic_message(), ref(), options()) -> asyn_ans().
 send_to_client(#server_message{} = Msg, Ref, Options) ->
     communicate(Msg, Ref, Options);
 send_to_client(Msg, Ref, Options) ->
     send_to_client(#server_message{message_body = Msg}, Ref, Options).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to provider with default options. Does not wait for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_provider(generic_message(), ref()) -> asyn_ans().
 send_to_provider(Msg, Ref) ->
     send_to_provider(Msg, Ref, #{ignore_send_errors => false}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to provider. Does not wait for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_provider(generic_message(), ref(), options()) -> asyn_ans().
 send_to_provider(#client_message{} = Msg, Ref, Options) ->
     communicate(Msg, Ref, Options#{error_on_empty_pool => false,
         ensure_connected => true});
 send_to_provider(Msg, Ref, Options) ->
     send_to_provider(#client_message{message_body = Msg}, Ref, Options).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends stream message to provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec stream_to_provider(generic_message(), ref(), sequencer:stream_id()) ->
+    asyn_ans().
 stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
     communicate(Msg, Ref, #{error_on_empty_pool => false,
         ensure_connected => true, stream => {true, StmId}});
 stream_to_provider(Msg, Ref, StmId) ->
     send_to_provider(#client_message{message_body = Msg}, Ref, StmId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Communicates with provider and waits for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate_with_provider(generic_message(), ref()) ->
+    sync_answer().
 communicate_with_provider(Msg, Ref) ->
     communicate_with_provider(Msg, Ref, wait_for_ans).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Communicates with provider and waits for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate_with_provider(generic_message(), ref(), wait_for_ans | pid()) ->
+    sync_answer().
 communicate_with_provider(#client_message{} = Msg, Ref, Recipent) ->
     Options = case Recipent of
         wait_for_ans -> #{error_on_empty_pool => false, ensure_connected => true,
@@ -78,7 +138,13 @@ communicate_with_provider(Msg, Ref, Async) ->
 %%% API - generic function
 %%%===================================================================
 
-% TODO - sprawdzic ustawienia ilosci powtorzen
+%%--------------------------------------------------------------------
+%% @doc
+%% Basic function that is responsible for communication with clients and other
+%% providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate(message(), ref(), options()) -> answer().
 communicate(Msg, Ref, Options) ->
     Options2 = case maps:get(wait_for_ans, Options, false) of
         true -> Options#{use_msg_id => {true, self()}};
@@ -86,12 +152,24 @@ communicate(Msg, Ref, Options) ->
     end,
     communicate_loop(Msg, Ref, Options2, maps:get(repeats, Options2, 2)).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Loop that tries to send message.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate_loop(message(), ref(), options(),
+    non_neg_integer() | infinity) -> answer().
 communicate_loop(Msg, Ref, Options, 1) ->
     send(Msg, Ref, Options);
 communicate_loop(Msg, Ref, Options, Retry) ->
     case send(Msg, Ref, Options) of
         ok -> ok;
-        {ok, MsgId} -> {ok, MsgId};
+        {ok, Ans} -> {ok, Ans};
         {error, empty_connection_pool} ->
             case maps:get(error_on_empty_pool, Options, true) of
                 true ->
@@ -103,10 +181,14 @@ communicate_loop(Msg, Ref, Options, Retry) ->
             retry(Msg, Ref, Options, Retry)
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Retry to send message.
+%% @end
+%%--------------------------------------------------------------------
+-spec retry(message(), ref(), options(), non_neg_integer() | infinity) ->
+    answer().
 retry(Msg, Ref, Options, Retry) ->
     timer:sleep(?SEND_RETRY_DELAY),
     case Retry of
@@ -114,6 +196,13 @@ retry(Msg, Ref, Options, Retry) ->
         _ -> communicate_loop(Msg, Ref, Options, Retry - 1)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tries to send message once.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(message(), ref(), options()) -> answer().
 send(Msg, Ref, Options) ->
     {Msg2, ReturnMsgID} = complete_msg(Msg, Options),
 
@@ -141,12 +230,13 @@ send(Msg, Ref, Options) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%%
+%% Forwards message to connection.
 %% @end
 %%--------------------------------------------------------------------
-%%-spec send(#server_message{} | #client_message{}, ref()) ->
-%%    ok | {error, Reason :: term()} | {exit, Reason :: term()}.
+-spec forward_to_connection_proc(message(), ref(), Async :: boolean()) ->
+    ok | {error, Reason :: term()}.
 forward_to_connection_proc(Msg, Ref, true) when is_pid(Ref) ->
     Ref ! {send_async, Msg},
     ok;
@@ -173,6 +263,15 @@ forward_to_connection_proc(Msg, SessionId, Async) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Completes message with generated message ID. Returns information if message ID
+%% should be used.
+%% @end
+%%--------------------------------------------------------------------
+- spec complete_msg(message(), options()) ->
+    {message(), {true, message_id:id()} | false}.
 complete_msg(Msg, Options) ->
     case maps:get(use_msg_id, Options, false) of
         {true, Recipient} -> complete_msg_id(Msg, Recipient);
@@ -180,6 +279,7 @@ complete_msg(Msg, Options) ->
         _ -> {Msg, false}
     end.
 
+- spec complete_msg_id(message(), pid() | undefined) -> {message(), {true, message_id:id()}}.
 complete_msg_id(#client_message{message_id = undefined} = Msg, Recipient) ->
     {ok, MsgId} = message_id:generate(Recipient),
     {Msg#client_message{message_id = MsgId}, {true, MsgId}};
@@ -194,11 +294,10 @@ complete_msg_id(#server_message{message_id = MsgId} = Msg, _Recipient) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Receives reply from other provider
+%% Receives reply from other provider or client
 %% @end
 %%--------------------------------------------------------------------
-%%- spec receive_message(MsgId :: #message_id{}) ->
-%%    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
+- spec receive_message(message()) -> {ok, message()} | {error, timeout}.
 receive_message(#client_message{message_id = MsgId} = Msg) ->
     Timeout = 3 * async_request_manager:get_processes_check_interval(),
     receive
@@ -221,6 +320,7 @@ receive_message(#server_message{message_id = MsgId}) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Ensures that there is at least one outgoing connection for given session.
 %% @end

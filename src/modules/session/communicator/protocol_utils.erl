@@ -22,9 +22,6 @@
 -export([fill_proxy_info/2]).
 -export([protocol_upgrade_request/1, verify_protocol_upgrade_response/1]).
 
--type ref() :: pid() | session:id().
--export_type([ref/0]).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Fills message with info about session to which it should be proxied.
