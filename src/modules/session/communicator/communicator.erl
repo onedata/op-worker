@@ -165,6 +165,7 @@ communicate(Msg, Ref, Options) ->
     non_neg_integer() | infinity) -> answer().
 communicate_loop(Msg, Ref, Options, 1) ->
     send(Msg, Ref, Options);
+% TODO - w przypadku bledu leciec po kolejnych polaczeniach
 communicate_loop(Msg, Ref, Options, Retry) ->
     case send(Msg, Ref, Options) of
         ok -> ok;
