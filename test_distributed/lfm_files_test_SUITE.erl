@@ -1187,11 +1187,8 @@ file_popularity_view_should_return_unpopular_files(Config) ->
     timer:sleep(timer:seconds(10)),
 
     {UnpopularFiles1, _}  = ?assertMatch({[_ | _], _}, begin
-        Token = rpc:call(W, file_popularity_api, initial_token, [
-            [0, 0, 0, 0, 0, 0, 0],
-            [10, 0, 0, 0, 0, 0, 0]
-        ]),
-        rpc:call(W, file_popularity_api, query, [SpaceId, Token, 100])
+        IndexToken = rpc:call(W, file_popularity_api, initial_index_token, [undefined, [10, 0, 0, 0, 0, 0, 0]]),
+        rpc:call(W, file_popularity_api, query, [SpaceId, IndexToken, 100])
     end),
     ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
@@ -1201,11 +1198,8 @@ file_popularity_view_should_return_unpopular_files(Config) ->
 
     timer:sleep(timer:seconds(10)),
     {UnpopularFiles2, _} = ?assertMatch({[_ | _], _}, begin
-        Token = rpc:call(W, file_popularity_api, initial_token, [
-            [0, 0, 0, 0, 0, 0, 0],
-            [10, 0, 0, 0, 0, 0, 0]
-        ]),
-        rpc:call(W, file_popularity_api, query, [SpaceId, Token, 100])
+        IndexToken2 = rpc:call(W, file_popularity_api, initial_index_token, [undefined, [10, 0, 0, 0, 0, 0, 0]]),
+        rpc:call(W, file_popularity_api, query, [SpaceId, IndexToken2, 100])
     end),
     ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
     ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).

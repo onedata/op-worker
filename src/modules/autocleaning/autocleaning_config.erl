@@ -21,8 +21,8 @@
 -export_type([rule_setting/0, rules/0, config/0]).
 
 %% API
--export([is_enabled/1, configure/3, to_map/1,
-    threshold_exceeded/2, target_reached/2,
+-export([is_enabled/1, create_or_update/3, to_map/1,
+    is_threshold_exceeded/2, is_target_reached/2,
     get_target/1, get_threshold/1]).
 
 %%%===================================================================
@@ -33,27 +33,33 @@
 is_enabled(undefined) -> false;
 is_enabled(#autocleaning_config{enabled = Enabled}) -> Enabled.
 
--spec configure(config() | undefined, maps:map(), non_neg_integer()) ->
+%%-------------------------------------------------------------------
+%% @doc
+%% This function creates or updates existing #autocleaning_config record
+%% basing on NewConfiguration map.
+%% @end
+%%-------------------------------------------------------------------
+-spec create_or_update(config() | undefined, maps:map(), non_neg_integer()) ->
     {ok, config()} | error().
-configure(undefined, Configuration, SupportSize) ->
-    configure(default(SupportSize, SupportSize), Configuration, SupportSize);
-configure(#autocleaning_config{
+create_or_update(undefined, NewConfiguration, SupportSize) ->
+    create_or_update(default(SupportSize, SupportSize), NewConfiguration, SupportSize);
+create_or_update(#autocleaning_config{
     enabled = CurrentEnabled,
     target = CurrentTarget,
     threshold = CurrentThreshold,
     rules = CurrentRules
-}, Configuration, SupportSize) ->
+}, NewConfiguration, SupportSize) ->
     try
-        Enabled = autocleaning_utils:get_defined(enabled, Configuration, CurrentEnabled),
-        Target = autocleaning_utils:get_defined(target, Configuration, CurrentTarget),
-        Threshold = autocleaning_utils:get_defined(threshold, Configuration, CurrentThreshold),
+        Enabled = autocleaning_utils:get_defined(enabled, NewConfiguration, CurrentEnabled),
+        Target = autocleaning_utils:get_defined(target, NewConfiguration, CurrentTarget),
+        Threshold = autocleaning_utils:get_defined(threshold, NewConfiguration, CurrentThreshold),
         autocleaning_utils:assert_boolean(Enabled, enabled),
         autocleaning_utils:assert_non_negative_integer(Target, target),
         autocleaning_utils:assert_non_negative_integer(Threshold, threshold),
         autocleaning_utils:assert_not_greater_then(Target, Threshold, target, threshold),
         autocleaning_utils:assert_not_greater_then(Threshold, SupportSize, threshold, support_size),
 
-        RulesUpdateMap = autocleaning_utils:get_defined(rules, Configuration, #{}),
+        RulesUpdateMap = autocleaning_utils:get_defined(rules, NewConfiguration, #{}),
         {ok, #autocleaning_config{
             enabled = Enabled,
             target = Target,
@@ -65,14 +71,14 @@ configure(#autocleaning_config{
             {error, Error}
     end.
 
--spec threshold_exceeded(non_neg_integer(), config()) -> boolean().
-threshold_exceeded(0, #autocleaning_config{}) ->
+-spec is_threshold_exceeded(non_neg_integer(), config()) -> boolean().
+is_threshold_exceeded(0, #autocleaning_config{}) ->
     false;
-threshold_exceeded(CurrentSize, #autocleaning_config{threshold = Threshold}) ->
+is_threshold_exceeded(CurrentSize, #autocleaning_config{threshold = Threshold}) ->
     CurrentSize >= Threshold.
 
--spec target_reached(non_neg_integer(), config()) -> boolean().
-target_reached(CurrentSize, #autocleaning_config{threshold = Target}) ->
+-spec is_target_reached(non_neg_integer(), config()) -> boolean().
+is_target_reached(CurrentSize, #autocleaning_config{threshold = Target}) ->
     CurrentSize =< Target.
 
 -spec get_target(config()) -> non_neg_integer().

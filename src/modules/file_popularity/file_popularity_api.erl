@@ -13,7 +13,8 @@
 
 
 %% API
--export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/3, initial_token/2, delete_config/1]).
+-export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/2, query/3,
+    initial_index_token/2, delete_config/1]).
 
 %%%===================================================================
 %%% API
@@ -45,12 +46,17 @@ get_configuration(SpaceId) -> #{
     rest_url => file_popularity_view:rest_url(SpaceId)
 }.
 
--spec query(od_space:id(), file_popularity_view:token(), non_neg_integer()) ->
-    {[file_ctx:ctx()], file_popularity_view:token()} | {error, term()}.
-query(SpaceId, Token, Limit) ->
-    file_popularity_view:query(SpaceId, Token, Limit).
+-spec query(od_space:id(), non_neg_integer()) ->
+    {[file_ctx:ctx()], file_popularity_view:index_token() | undefined} | {error, term()}.
+query(SpaceId, Limit) ->
+    file_popularity_view:query(SpaceId, undefined, Limit).
 
--spec initial_token(binary() | [non_neg_integer()], binary() | [non_neg_integer()]) ->
-    file_popularity_view:token().
-initial_token(StartKey, EndKey) ->
-    file_popularity_view:initial_token(StartKey, EndKey).
+-spec query(od_space:id(), file_popularity_view:index_token(), non_neg_integer()) ->
+    {[file_ctx:ctx()], file_popularity_view:index_token()} | {error, term()}.
+query(SpaceId, IndexToken, Limit) ->
+    file_popularity_view:query(SpaceId, IndexToken, Limit).
+
+-spec initial_index_token(undefined | [non_neg_integer()], undefined | [non_neg_integer()]) ->
+    file_popularity_view:index_token().
+initial_index_token(StartKey, EndKey) ->
+    file_popularity_view:initial_index_token(StartKey, EndKey).

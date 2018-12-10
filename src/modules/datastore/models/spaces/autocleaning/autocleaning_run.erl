@@ -25,14 +25,10 @@
 -export_type([id/0, status/0]).
 
 %% API
--export([get/1, update/2, delete/2,
-    start/3, list_reports_since/2,
-    mark_completed/1, mark_failed/1,
-    mark_released_file/2,
-    mark_started_batch/2,
-    get_token/1, get_bytes_to_release/1, get_released_bytes/1,
-    restart/1
-    , get_info/1]).
+-export([get/1, update/2, delete/2, start/3, list_reports_since/2,
+    mark_completed/1, mark_failed/1, mark_released_file/2, set_index_token/2,
+    get_token/1, get_bytes_to_release/1, get_released_bytes/1, restart/1,
+    get_info/1, get_index_token/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -67,7 +63,8 @@ delete(ARId, SpaceId) ->
 %% won't start.
 %% @end
 %%-------------------------------------------------------------------
--spec start(od_space:id(), autocleaning:config(), non_neg_integer()) -> ok.
+-spec start(od_space:id(), autocleaning:config(), non_neg_integer()) ->
+    {ok, doc()} | {error, term()}.
 start(SpaceId, Config, CurrentSize) ->
     Target = autocleaning_config:get_target(Config),
     BytesToRelease = CurrentSize - Target,
@@ -75,25 +72,25 @@ start(SpaceId, Config, CurrentSize) ->
         true ->
             NewDoc = #document{
                 scope = SpaceId,
-                value = AutocleaningRun = #autocleaning_run{
+                value = #autocleaning_run{
                     status = active,
                     space_id = SpaceId,
                     started_at = StartTime = time_utils:cluster_time_seconds(),
                     bytes_to_release = CurrentSize - Target
                 }
             },
-            {ok, ARId} = ?extract_key(datastore_model:create(?CTX, NewDoc)),
+            {ok, ARDoc = #document{key = ARId}} = datastore_model:create(?CTX, NewDoc),
             {ok, ACDoc} = autocleaning:maybe_mark_current_run(SpaceId, ARId),
              case autocleaning:get_current_run(ACDoc) of
                  ARId ->
                      ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
-                     ok = autocleaning_controller:start(ARId, AutocleaningRun, Config);
-                 _ ->
+                     {ok, ARDoc};
+                 OtherARId ->
                      % other auto-cleaning run is in progress
-                     ok
+                     {error, {already_started, OtherARId}}
             end;
         _ ->
-            ok
+            {error, nothing_to_clean}
     end.
 
 %%-------------------------------------------------------------------
@@ -162,13 +159,18 @@ mark_completed(ARId) ->
             Error
     end.
 
-mark_started_batch(ARId, Token) ->
+-spec set_index_token(id(), file_popularity_view:index_token()) -> ok.
+set_index_token(ARId, IndexToken) ->
     ok = ?extract_ok(update(ARId, fun(AC) ->
-        {ok, AC#autocleaning_run{token = Token}}
+        {ok, AC#autocleaning_run{index_token = IndexToken}}
     end)).
 
--spec get_token(record()) -> file_popularity_view:token().
-get_token(#autocleaning_run{token = Token}) -> Token.
+-spec get_index_token(record()) -> file_popularity_view:index_token().
+get_index_token(#autocleaning_run{index_token = IndexToken}) ->
+    IndexToken.
+
+-spec get_token(record()) -> file_popularity_view:index_token().
+get_token(#autocleaning_run{index_token = Token}) -> Token.
 
 -spec get_bytes_to_release(record()) -> non_neg_integer().
 get_bytes_to_release(#autocleaning_run{bytes_to_release = BytesToRelease}) ->
@@ -185,24 +187,18 @@ get_started_at(ARId) ->
     {ok, #document{value = AR}} = autocleaning_run:get(ARId),
     get_started_at(AR).
 
--spec restart(id()) -> ok | error().
+-spec restart(id()) -> {ok, record()} | error().
 restart(ARId) ->
     case autocleaning_run:get(ARId) of
         {ok, #document{value = AR = #autocleaning_run{
             space_id = SpaceId,
             started_at = StartTime
         }}} ->
-            case finished(AR) of
+            case is_finished(AR) of
                 false ->
                     % ensure that there is a link for given autocleaning_run
                     ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
-                    Config = autocleaning:get_config(SpaceId),
-                    case autocleaning_config:is_enabled(Config) of
-                        true ->
-                            ok = autocleaning_controller:start(ARId, AR, Config);
-                        _ ->
-                            {error, autocleaning_disabled}
-                    end;
+                    {ok, AR};
                 true ->
                     {error, autocleaning_finished} 
             end;
@@ -242,9 +238,9 @@ get_info(ARId) ->
         Error -> Error
     end.
 
--spec finished(record()) -> boolean().
-finished(#autocleaning_run{status = active}) -> false;
-finished(#autocleaning_run{}) -> true.
+-spec is_finished(record()) -> boolean().
+is_finished(#autocleaning_run{status = active}) -> false;
+is_finished(#autocleaning_run{}) -> true.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -276,7 +272,7 @@ get_record_struct(1) ->
         {bytes_to_release, integer},
         {released_files, integer},
         {status, atom},
-        {token, {record, [
+        {index_token, {record, [
             {last_doc_id, string},
             {last_key, string},
             {end_key, string}

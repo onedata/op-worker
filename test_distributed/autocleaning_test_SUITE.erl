@@ -38,8 +38,8 @@
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_file_size_rule/1,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_hourly_moving_average_rule/1,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_daily_moving_average_rule/1,
-    autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_moving_average_rule/1
-]).
+    autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_moving_average_rule/1,
+    restart_autocleaning_run_test/1]).
 
 all() -> [
     autocleaning_run_should_not_start_when_file_popularity_is_disabled,
@@ -57,7 +57,8 @@ all() -> [
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_file_size_rule,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_hourly_moving_average_rule,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_daily_moving_average_rule,
-    autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_moving_average_rule
+    autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_moving_average_rule,
+    restart_autocleaning_run_test
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -108,7 +109,7 @@ end, __Distributions))).
     ?assertMatch([], begin
         StartKey = lists:duplicate(6, 0),
         EndKey = lists:duplicate(6, ?MAX_VAL),
-        Token = rpc:call(Worker, file_popularity_api, initial_token, [StartKey, EndKey]),
+        Token = rpc:call(Worker, file_popularity_api, initial_index_token, [StartKey, EndKey]),
         {FileCtxs, _} = rpc:call(Worker, file_popularity_api, query, [SpaceId, Token, ?MAX_LIMIT]),
         __Guids = [file_ctx:get_guid_const(F) || F <- FileCtxs],
         ExpectedGuids -- __Guids
@@ -195,15 +196,14 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
-    ?assertEqual(Size, rpc:call(W1, space_quota, current_size, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     configure_autocleaning(W1, ?SPACE_ID, #{
         enabled => true,
         target => 0,
         threshold => Size - 1
     }),
-    ok = force_start(W1, ?SPACE_ID),
-
-    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, ARId} = force_start(W1, ?SPACE_ID),
+    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertMatch(#{
@@ -226,15 +226,16 @@ autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) -
     Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
     schedule_file_replication(W1, SessId, Guid, ProviderId1),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
 
     configure_autocleaning(W1, ?SPACE_ID, #{
         enabled => true,
         target => 0,
         threshold => Size - 1
     }),
-    ok = force_start(W1, ?SPACE_ID),
+    {ok, ARId} = force_start(W1, ?SPACE_ID),
 
-    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
 
@@ -296,7 +297,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     timer:sleep(timer:seconds(1)),
     read_file(W1, SessId, EG, ExtraFileSize),
 
-    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertEqual(true, current_size(W1, ?SPACE_ID) =< Target, ?ATTEMPTS).
 
@@ -316,7 +317,7 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
-    ?assertEqual(Size, rpc:call(W1, space_quota, current_size, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     ok = configure_autocleaning(W1, ?SPACE_ID, #{
         enabled => true,
         target => 0,
@@ -331,9 +332,9 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
             max_daily_moving_average => ?RULE_SETTING(1),
             max_monthly_moving_average => ?RULE_SETTING(1)
         }}),
-    ok = force_start(W1, ?SPACE_ID),
+    {ok, ARId} = force_start(W1, ?SPACE_ID),
 
-    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertMatch(#{
@@ -461,6 +462,57 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_
             max_monthly_moving_average => ?RULE_SETTING(0)
         }}).
 
+restart_autocleaning_run_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESSION(W1, Config),
+    SessId2 = ?SESSION(W2, Config),
+    FileName = <<"file">>,
+    Size = 10,
+    DomainP1 = ?GET_DOMAIN_BIN(W1),
+    DomainP2 = ?GET_DOMAIN_BIN(W2),
+    Target = 0,
+    Threshold = Size - 1,
+
+    enable_file_popularity(W1, ?SPACE_ID),
+    Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
+
+    % read file on W2 to replicate it
+    read_file(W2, SessId2, Guid, Size),
+
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
+    % pretend that there is stalled autocleaning_run
+    Ctx = rpc:call(W1, autocleaning_run, get_ctx, []),
+    Doc = #document{
+        value = #autocleaning_run{
+            status = active,
+            space_id = ?SPACE_ID,
+            started_at = StartTime = rpc:call(W1, time_utils, cluster_time_seconds, []),
+            bytes_to_release = Size - Target
+        },
+        scope = ?SPACE_ID
+    },
+    {ok, #document{key = ARId}} = rpc:call(W1, datastore_model, create, [Ctx, Doc]),
+    ok = rpc:call(W1, autocleaning_run_links, add_link, [ARId, ?SPACE_ID, StartTime]),
+
+    ok = configure_autocleaning(W1, ?SPACE_ID, #{
+        enabled => true,
+        target => Target,
+        threshold => Threshold
+    }),
+    {ok, _} = rpc:call(W1, autocleaning, maybe_mark_current_run, [?SPACE_ID, ARId]),
+    {ok, ARId} = restart_autocleaning_run(W1, ?SPACE_ID),
+    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertRunFinished(W1, ARId),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
+    ?assertMatch(#{
+        released_bytes := Size,
+        bytes_to_release := Size,
+        files_number := 1
+    }, get_info(W1, ARId)).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -511,11 +563,11 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
-    ?assertEqual(Size, rpc:call(W1, space_quota, current_size, [?SPACE_ID]), ?ATTEMPTS),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
-    ok = force_start(W1, ?SPACE_ID),
+    {ok, ARId} = force_start(W1, ?SPACE_ID),
 
-    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertMatch(#{
@@ -624,11 +676,14 @@ disable_autocleaning(Worker, SpaceId) ->
 force_start(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, force_start, [SpaceId]).
 
+restart_autocleaning_run(Worker, SpaceId) ->
+    rpc:call(Worker, autocleaning_api, restart_autocleaning_run, [SpaceId]).
+
 list(Worker, SpaceId) ->
-    rpc:call(Worker, autocleaning_api, list, [SpaceId]).
+    rpc:call(Worker, autocleaning_api, list_reports, [SpaceId]).
 
 list(Worker, SpaceId, LinkId, Offset, Limit) ->
-    rpc:call(Worker, autocleaning_api, list, [SpaceId, LinkId, Offset, Limit]).
+    rpc:call(Worker, autocleaning_api, list_reports, [SpaceId, LinkId, Offset, Limit]).
 
 %% autocleaning_run module rpc calls
 get_info(Worker, ARId) ->

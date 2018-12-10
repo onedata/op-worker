@@ -12,7 +12,7 @@
 -define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
 
 % this record may be used to query file-popularity view using batches
--record(token, {
+-record(index_token, {
     % doc_id of the last returned row
     % if defined it will be used with start_key to start the query
     % from the previously finished row
@@ -20,6 +20,6 @@
     % start_key, it is updated with the key of the last returned row
     % it is used (with last_doc_id) to start the query
     % from the previously finished row
-    start_key :: [non_neg_integer()],
-    end_key :: [non_neg_integer()]
+    start_key :: undefined | [non_neg_integer()],
+    end_key :: undefined | [non_neg_integer()]
 }).

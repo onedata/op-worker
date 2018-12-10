@@ -25,7 +25,7 @@
 
 %% API
 -export([start/3, stop_cleaning/1, process_replica_deletion_result/4, check/1,
-    notify_processed_file/2]).
+    notify_processed_file/2, restart/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -57,7 +57,7 @@
     cleaning_stopped = false :: boolean(),
     scheduled_cancelling = false :: boolean(),
 
-    next_batch_token :: undefined | file_popularity_view:token(),
+    next_batch_token :: undefined | file_popularity_view:index_token(),
 
     batches_counter = 0 :: non_neg_integer(),
 
@@ -99,18 +99,35 @@
 
 -define(NAME(SpaceId), {global, {?SERVER, SpaceId}}).
 
--define(BATCH_SIZE, application:get_env(?APP_NAME,
+% batch size used to query the file_popularity_view
+-define(VIEW_BATCH_SIZE, application:get_env(?APP_NAME,
     autocleaning_view_batch_size, 1000)).
+
+% max number of active tasks being simultaneously processed by the
+% replica_deletion_master process
+% if more tasks are added, replica_deletion_master's queues them in the memory
 -define(REPLICA_DELETION_MAX_ACTIVE_TASKS,
     application:get_env(?APP_NAME, max_active_deletion_tasks, 2000)).
+
+% ratio used to calculate the ?NEXT_BATCH_THRESHOLD which defines
+% when autocleaning_controller should schedule next batch of file replicas to
+% be deleted to replica_deletion_master
+% calculated threshold is proportional to ?REPLICA_DELETION_MAX_ACTIVE_TASKS
 -define(AUTOCLEANING_CONTROLLER_NEXT_BATCH_RATIO,
     application:get_env(?APP_NAME, autocleaning_controller_next_batch_ratio, 1.5)).
 
+% if number of files currently processed (which is basically equal to files_to_process - files_processed)
+% by replica_deletion_master is less than ?NEXT_BATCH_THRESHOLD, autocleaning_controller
+% will schedule deletion of ?DELETION_BATCH_SIZE number of replicas
 -define(NEXT_BATCH_THRESHOLD,
     ?AUTOCLEANING_CONTROLLER_NEXT_BATCH_RATIO * ?REPLICA_DELETION_MAX_ACTIVE_TASKS
 ).
 
--define(ID_SEP, <<"##">>).
+% number of file replicas which will be scheduled for deletion in one batch
+-define(DELETION_BATCH_SIZE,
+    application:get_env(?APP_NAME, autocleaning_deletion_batch_size, ?REPLICA_DELETION_MAX_ACTIVE_TASKS)).
+
+-define(ID_SEPARATOR, <<"##">>).
 
 
 -define(run_and_catch_errors(Fun, State),
@@ -121,6 +138,7 @@
             ?error_stacktrace("autocleaning_controller of run ~p failed unexpectedly due to ~p:~p",
                 [State#state.autocleaning_run_id, Error, Reason]
             ),
+            autocleaning_run:mark_failed(State#state.autocleaning_run_id),
             {stop, {Error, Reason}, State}
     end
 ).
@@ -134,11 +152,32 @@
 %% Starts process responsible for performing autocleaning
 %% @end
 %%-------------------------------------------------------------------
--spec start(autocleaning_run:id(), autocleaning_run:record(), autocleaning:config()) -> ok.
-start(ARId, AR = #autocleaning_run{space_id = SpaceId}, Config) ->
-    {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
-        [ARId, SpaceId, AR, Config], []),
-    ok.
+-spec start(od_space:id(), autocleaning:config(), non_neg_integer()) ->
+    {ok, autocleaning_run:id()} | {error, term()}.
+start(SpaceId, Config, CurrentSize) ->
+    case autocleaning_run:start(SpaceId, Config, CurrentSize) of
+        {ok, #document{key = ARId, value = AR}} ->
+            {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
+                [ARId, SpaceId, AR, Config], []),
+            {ok, ARId};
+        Other ->
+            Other
+    end.
+
+-spec restart(autocleaning_run:id(), od_space:id(), autocleaning:config()) ->
+    {ok, autocleaning:run_id()} | ok.
+restart(ARId, SpaceId, Config) ->
+    case autocleaning_run:restart(ARId) of
+        {ok, AR} ->
+            {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
+                [ARId, SpaceId, AR, Config], []),
+            ?debug("Restarted auto-cleaning run ~p in space ~p", [ARId, SpaceId]),
+            {ok, ARId};
+        {error, Reason} ->
+            ?error("Could not restart auto-cleaning run ~p in space ~p due to ~p",
+                [ARId, SpaceId, Reason]),
+            autocleaning:mark_run_finished(SpaceId)
+    end.
 
 -spec start_cleaning(od_space:id()) -> ok.
 start_cleaning(SpaceId) ->
@@ -188,11 +227,11 @@ process_replica_deletion_result(Error, SpaceId, FileUuid, ReportId) ->
 
 -spec to_batch_id(autocleaning_run:id(), non_neg_integer()) -> batch_id().
 to_batch_id(ARId, Int) ->
-    <<ARId/binary, ?ID_SEP/binary, (integer_to_binary(Int))/binary>>.
+    <<ARId/binary, ?ID_SEPARATOR/binary, (integer_to_binary(Int))/binary>>.
 
 -spec from_batch_id(batch_id()) -> {autocleaning_run:id(), non_neg_integer()}.
 from_batch_id(BatchId) ->
-    [ARId, BatchNum] = binary:split(BatchId, ?ID_SEP),
+    [ARId, BatchNum] = binary:split(BatchId, ?ID_SEPARATOR),
     {ARId, binary_to_integer(BatchNum)}.
 
 %%%===================================================================
@@ -211,12 +250,14 @@ from_batch_id(BatchId) ->
 init([ARId, SpaceId, AutocleaningRun, Config]) ->
     BytesToRelease = autocleaning_run:get_bytes_to_release(AutocleaningRun),
     AlreadyReleasedBytes = autocleaning_run:get_released_bytes(AutocleaningRun),
+    NextBatchToken = autocleaning_run:get_index_token(AutocleaningRun),
     start_cleaning(SpaceId),
     {ok, #state{
         autocleaning_run_id = ARId,
         space_id = SpaceId,
         config = Config,
-        bytes_to_release = BytesToRelease - AlreadyReleasedBytes
+        bytes_to_release = BytesToRelease - AlreadyReleasedBytes,
+        next_batch_token = NextBatchToken
     }}.
 
 %%--------------------------------------------------------------------
@@ -263,7 +304,7 @@ handle_cast(?START_CLEANING, State = #state{
 }) ->
     ?run_and_catch_errors(fun() ->
         ?debug("Auto-cleaning run ~p of space ~p started", [ARId, SpaceId]),
-        State2 = start(State),
+        State2 = start_cleaning_internal(State),
         State3 = process_updated_state(State2),
         {noreply, State3}
     end, State);
@@ -337,8 +378,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec start(state()) -> state().
-start(State) ->
+-spec start_cleaning_internal(state()) -> state().
+start_cleaning_internal(State) ->
     State2 = maybe_refill_queue(State, ?REPLICA_DELETION_MAX_ACTIVE_TASKS),
     maybe_schedule_cleaning(State2).
 
@@ -442,7 +483,7 @@ persist_finished_batches(State = #state{
     {BatchNumToPersist, BatchesStripped, BatchesToPersist2} =
         strip_if_continuous(LastPersistedBatch, ordsets:to_list(BatchesToPersist)),
     {BatchToken, BatchesTokens2} = maps:take(BatchNumToPersist, BatchesTokens),
-    autocleaning_run:mark_started_batch(ARId, BatchToken),
+    autocleaning_run:set_index_token(ARId, BatchToken),
 
     BatchesTokens3 = lists:foldl(fun(StrippedBatchNum, BatchesTokensIn) ->
         maps:remove(StrippedBatchNum, BatchesTokensIn)
@@ -479,7 +520,7 @@ maybe_schedule_cleaning(State = #state{
     case (FilesToProcess - FilesProcessed) < ?NEXT_BATCH_THRESHOLD of
         true ->
             QueueList = queue:to_list(Queue),
-            ToSchedule = lists:sublist(QueueList, ?REPLICA_DELETION_MAX_ACTIVE_TASKS),
+            ToSchedule = lists:sublist(QueueList, ?DELETION_BATCH_SIZE),
             ToScheduleLen = length(ToSchedule),
             Queue2 = queue:from_list(lists:nthtail(ToScheduleLen, QueueList)),
             ScheduledNum = schedule_file_replicas_deletion(ToSchedule, ARId, SpaceId),
@@ -502,8 +543,8 @@ refill_queue_with_one_batch(State = #state{
 }) ->
     StartKey = autocleaning_rules:to_file_popularity_start_key(ACRules),
     EndKey = autocleaning_rules:to_file_popularity_end_key(ACRules),
-    Token = file_popularity_api:initial_token(StartKey, EndKey),
-    refill_queue_with_one_batch(State#state{next_batch_token = Token});
+    IndexToken = file_popularity_api:initial_index_token(StartKey, EndKey),
+    refill_queue_with_one_batch(State#state{next_batch_token = IndexToken});
 refill_queue_with_one_batch(State = #state{
     space_id = SpaceId,
     config = #autocleaning_config{rules = ACRules},
@@ -515,7 +556,7 @@ refill_queue_with_one_batch(State = #state{
     queue = Queue
 }) ->
     BatchesCounter2 = BatchesCounter + 1,
-    case query(SpaceId, ?BATCH_SIZE, NextBatchToken) of
+    case query(SpaceId, ?VIEW_BATCH_SIZE, NextBatchToken) of
         {[], NextBatchToken} ->
             State#state{
                 end_of_view_reached = true
@@ -547,7 +588,7 @@ filter(PreselectedFiles, ACRules) ->
         Uuid = file_ctx:get_uuid_const(FileCtx),
         SpaceId = file_ctx:get_space_id_const(FileCtx),
         try
-            autocleaning_rules:are_rules_satisfied(FileCtx, ACRules)
+            autocleaning_rules:are_all_rules_satisfied(FileCtx, ACRules)
         catch
             Error:Reason ->
                 ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
@@ -635,7 +676,7 @@ new_batch_counters(FilesToProcess) ->
     }.
 
 
--spec query(od_space:id(), non_neg_integer(), file_popularity_view:token()) ->
-    {[file_ctx:ctx()], file_popularity_view:token()}.
-query(SpaceId, BatchSize, Token) ->
-    file_popularity_api:query(SpaceId, Token, BatchSize).
+-spec query(od_space:id(), non_neg_integer(), file_popularity_view:index_token()) ->
+    {[file_ctx:ctx()], file_popularity_view:index_token()}.
+query(SpaceId, BatchSize, IndexToken) ->
+    file_popularity_api:query(SpaceId, IndexToken, BatchSize).

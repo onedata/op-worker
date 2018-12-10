@@ -117,11 +117,11 @@ autocleaning_config_to_map_test() ->
 
 autocleaning_configure_undefined_test() ->
     ?assertEqual({ok, ?CONFIG_RECORD},
-        autocleaning_config:configure(undefined, ?CONFIG_MAP, 10)).
+        autocleaning_config:create_or_update(undefined, ?CONFIG_MAP, 10)).
 
 autocleaning_configure_test() ->
     ?assertEqual({ok, ?CONFIG_RECORD2},
-        autocleaning_config:configure(?CONFIG_RECORD, ?CONFIG_MAP2, 1000)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, ?CONFIG_MAP2, 1000)).
 
 all_rules_should_be_disabled_by_default_test() ->
     SupportSize = 10,
@@ -139,7 +139,7 @@ all_rules_should_be_disabled_by_default_test() ->
             max_daily_moving_average = #autocleaning_rule_setting{enabled = false},
             max_monthly_moving_average = #autocleaning_rule_setting{enabled = false}
         }
-    }}, autocleaning_config:configure(undefined, #{
+    }}, autocleaning_config:create_or_update(undefined, #{
         enabled => true,
         target => 0,
         threshold => 1
@@ -161,7 +161,7 @@ only_explicitly_passed_params_are_changed_test() ->
             max_daily_moving_average = #autocleaning_rule_setting{enabled = true, value = 7},
             max_monthly_moving_average = #autocleaning_rule_setting{enabled = true, value = 8}
         }
-    }}, autocleaning_config:configure(?CONFIG_RECORD, #{
+    }}, autocleaning_config:create_or_update(?CONFIG_RECORD, #{
         enabled => false,
         threshold => 50
     }, SupportSize)).
@@ -172,46 +172,46 @@ configuring_only_enable_param_for_the_first_time_should_set_target_and_threshold
         enabled = true,
         target = SupportSize,
         threshold = SupportSize
-    }}, autocleaning_config:configure(undefined, #{enabled => true}, SupportSize)).
+    }}, autocleaning_config:create_or_update(undefined, #{enabled => true}, SupportSize)).
 
 configuring_only_enable_param_should_leave_target_and_threshold_values_unchanged_test() ->
     ?assertEqual({ok, ?CONFIG_RECORD#autocleaning_config{
         enabled = false,
         target = 0,
         threshold = 1
-    }}, autocleaning_config:configure(?CONFIG_RECORD, #{enabled => false}, 10)).
+    }}, autocleaning_config:create_or_update(?CONFIG_RECORD, #{enabled => false}, 10)).
 
 setting_enabled_to_not_boolean_value_should_throw_illegal_type_exception_test() ->
     ?assertEqual({error, {illegal_type, enabled}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{enabled => not_boolean}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{enabled => not_boolean}, 10)).
 
 setting_target_to_not_integer_value_should_throw_illegal_type_exception_test() ->
     ?assertEqual({error, {illegal_type, target}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{target => not_integer}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{target => not_integer}, 10)).
 
 setting_threshold_to_not_integer_value_should_throw_illegal_type_exception_test() ->
     ?assertEqual({error, {illegal_type, threshold}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{threshold => not_integer}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{threshold => not_integer}, 10)).
 
 setting_target_negative_integer_value_should_throw_negative_value_exception_test() ->
     ?assertEqual({error, {negative_value, target}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{target => -1}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{target => -1}, 10)).
 
 setting_threshold_negative_integer_value_should_throw_negative_value_exception_test() ->
     ?assertEqual({error, {negative_value, threshold}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{threshold => -1}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{threshold => -1}, 10)).
 
 setting_target_greater_than_threshold_should_throw_value_greater_than_exception_test() ->
     ?assertEqual({error, {value_grater_than, target, threshold}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{target => 1, threshold => 0}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{target => 1, threshold => 0}, 10)).
 
 setting_threshold_greater_than_support_size_should_throw_value_greater_than_exception_test() ->
     ?assertEqual({error, {value_grater_than, threshold, support_size}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{threshold => 11}, 10)).
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{threshold => 11}, 10)).
 
 setting_rule_to_negative_value_should_return_negative_value_error_test() ->
     ?assertEqual({error, {negative_value, min_file_size}},
-        autocleaning_config:configure(?CONFIG_RECORD, #{
+        autocleaning_config:create_or_update(?CONFIG_RECORD, #{
             rules => #{
                 min_file_size => #{value => -1}
         }}, 10)

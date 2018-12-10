@@ -26,7 +26,7 @@
 -export_type([rule_setting/0, rules/0]).
 
 %% API
--export([to_map/1, update/2, default/0, are_rules_satisfied/2,
+-export([to_map/1, update/2, default/0, are_all_rules_satisfied/2,
     to_file_popularity_start_key/1, to_file_popularity_end_key/1]).
 
 %%defaults
@@ -120,10 +120,10 @@ default() ->
         max_monthly_moving_average = default(?DEFAULT_MAX_MONTHLY_MOVING_AVG)
     }.
 
--spec are_rules_satisfied(file_ctx:ctx(), rules()) -> boolean().
-are_rules_satisfied(_FileCtx, #autocleaning_rules{enabled = false}) ->
+-spec are_all_rules_satisfied(file_ctx:ctx(), rules()) -> boolean().
+are_all_rules_satisfied(_FileCtx, #autocleaning_rules{enabled = false}) ->
     true;
-are_rules_satisfied(FileCtx, #autocleaning_rules{
+are_all_rules_satisfied(FileCtx, #autocleaning_rules{
     enabled = true,
     max_open_count = MaxOpenCountSetting,
     min_file_size = MinFileSizeSetting,
@@ -150,9 +150,9 @@ are_rules_satisfied(FileCtx, #autocleaning_rules{
 %% the #autocleaning_rules{} record.
 %% @end
 %%-------------------------------------------------------------------
--spec to_file_popularity_start_key(rules()) -> [non_neg_integer()].
+-spec to_file_popularity_start_key(rules()) -> [non_neg_integer()] | undefined.
 to_file_popularity_start_key(#autocleaning_rules{enabled = false}) ->
-    [0, 0, 0, 0, 0, 0];
+    undefined;
 to_file_popularity_start_key(#autocleaning_rules{enabled = true,
     min_file_size = MinFileSizeSetting
 }) ->
@@ -166,16 +166,9 @@ to_file_popularity_start_key(#autocleaning_rules{enabled = true,
 %% the #autocleaning_rules{} record.
 %% @end
 %%-------------------------------------------------------------------
--spec to_file_popularity_end_key(rules()) -> [non_neg_integer()].
+-spec to_file_popularity_end_key(rules()) -> [non_neg_integer()] | undefined.
 to_file_popularity_end_key(#autocleaning_rules{enabled = false}) ->
-    to_file_popularity_start_key(
-        maps:get(max_open_count, ?DEFAULTS),
-        maps:get(min_hours_since_last_open, ?DEFAULTS),
-        maps:get(max_file_size, ?DEFAULTS),
-        maps:get(max_hourly_moving_average, ?DEFAULTS),
-        maps:get(max_daily_moving_average, ?DEFAULTS),
-        maps:get(max_monthly_moving_average, ?DEFAULTS)
-    );
+    undefined;
 to_file_popularity_end_key(#autocleaning_rules{
     enabled = true,
     max_open_count = MaxOpenCountSetting,

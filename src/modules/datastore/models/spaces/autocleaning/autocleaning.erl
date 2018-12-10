@@ -30,7 +30,7 @@
 
 %% API
 -export([get/1, is_enabled/1, get_config/1, get_current_run/1,
-    configure/2, maybe_mark_current_run/2, mark_run_finished/1, delete/1]).
+    create_or_update/2, maybe_mark_current_run/2, mark_run_finished/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -76,15 +76,15 @@ get_current_run(SpaceId) ->
             undefined
     end.
 
--spec configure(id(), maps:map()) -> ok | error().
-configure(SpaceId, NewConfiguration) ->
+-spec create_or_update(id(), maps:map()) -> ok | error().
+create_or_update(SpaceId, NewConfiguration) ->
     SupportSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
     case autocleaning:get(SpaceId) of
         {error, not_found} ->
             ?extract_ok(create(SpaceId, NewConfiguration, SupportSize));
         {ok, _} ->
             ?extract_ok(update(SpaceId, fun(AC = #autocleaning{config = CurrentConfig}) ->
-                case autocleaning_config:configure(CurrentConfig, NewConfiguration, SupportSize) of
+                case autocleaning_config:create_or_update(CurrentConfig, NewConfiguration, SupportSize) of
                     {ok, NewConfig} ->
                         {ok, AC#autocleaning{config = NewConfig}};
                     Error ->
@@ -145,7 +145,7 @@ update(SpaceId, UpdateFun) ->
 
 -spec default_doc(id(), maps:map(), non_neg_integer()) -> {ok, doc()} | error().
 default_doc(SpaceId, Configuration, SupportSize) ->
-    case autocleaning_config:configure(undefined, Configuration, SupportSize) of
+    case autocleaning_config:create_or_update(undefined, Configuration, SupportSize) of
         {ok, NewConfig} ->
             {ok, #document{
                 key = SpaceId,

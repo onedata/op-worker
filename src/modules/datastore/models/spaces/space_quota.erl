@@ -278,7 +278,8 @@ maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
             ok;
         true ->
             update_last_check_timestamp(SpaceId, CurrentTimestamp),
-            autocleaning_api:maybe_start(SpaceId, SQ)
+            autocleaning_api:maybe_start(SpaceId, SQ),
+            ok
     end.
 
 %%-------------------------------------------------------------------

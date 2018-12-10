@@ -350,7 +350,7 @@
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
 
-    token :: undefined | file_popularity_view:token()
+    index_token :: undefined | file_popularity_view:index_token()
 }).
 
 %% Model which stores information about auto-cleaning per given space.

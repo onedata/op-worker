@@ -26,7 +26,7 @@
 -export([force_start/1, maybe_start/2,
     configure/2, disable/1,
     get_configuration/1, status/1,
-    list_reports_since/2, list/1, list/4,
+    list_reports_since/2, list_reports/1, list_reports/4,
     restart_autocleaning_run/1, delete_config/1]).
 
 %%%===================================================================
@@ -39,7 +39,7 @@
 %% occupancy hasn't reached the configured threshold).
 %% @end
 %%-------------------------------------------------------------------
--spec force_start(od_space:id()) -> ok | {error, term()}.
+-spec force_start(od_space:id()) -> {ok, autocleaning_run:id()} | {error, term()}.
 force_start(SpaceId) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -47,7 +47,7 @@ force_start(SpaceId) ->
                 {true, AC} ->
                     Config = autocleaning:get_config(AC),
                     CurrentSize = space_quota:current_size(SpaceId),
-                    autocleaning_run:start(SpaceId, Config, CurrentSize);
+                    autocleaning_controller:start(SpaceId, Config, CurrentSize);
                 false ->
                     {error, autocleaning_disabled}
             end;
@@ -64,7 +64,8 @@ force_start(SpaceId) ->
 %% space_storage record or if flag Force is set to true.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_start(od_space:id(), space_quota:record()) -> ok.
+-spec maybe_start(od_space:id(), space_quota:record()) ->
+    ok | {ok, autocleaning_run:id()} | {error, term()}.
 maybe_start(SpaceId, SpaceQuota) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -72,8 +73,8 @@ maybe_start(SpaceId, SpaceQuota) ->
                 {true, AC} ->
                     Config = autocleaning:get_config(AC),
                     CurrentSize = space_quota:current_size(SpaceQuota),
-                    case autocleaning_config:threshold_exceeded(CurrentSize, Config) of
-                        true -> autocleaning_run:start(SpaceId, Config, CurrentSize);
+                    case autocleaning_config:is_threshold_exceeded(CurrentSize, Config) of
+                        true -> autocleaning_controller:start(SpaceId, Config, CurrentSize);
                         _ -> ok
                     end;
                 _ -> ok
@@ -91,6 +92,7 @@ maybe_start(SpaceId, SpaceQuota) ->
 get_configuration(SpaceId) ->
     case autocleaning:get_config(SpaceId) of
         undefined ->
+            ?warning("undefined configuration for auto-cleaning in space ~p", [SpaceId]),
             #{};
         Config ->
             autocleaning_config:to_map(Config)
@@ -105,7 +107,7 @@ get_configuration(SpaceId) ->
 configure(SpaceId, Configuration) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
-            autocleaning:configure(SpaceId, Configuration);
+            autocleaning:create_or_update(SpaceId, Configuration);
         false ->
             {error, file_popularity_disabled}
     end.
@@ -140,9 +142,9 @@ status(SpaceId) ->
 %% sorted by start time.
 %% @end
 %%-------------------------------------------------------------------
--spec list(od_space:id()) -> {ok, [autocleaning_run:id()]}.
-list(SpaceId) ->
-    list(SpaceId, undefined, 0, all).
+-spec list_reports(od_space:id()) -> {ok, [autocleaning_run:id()]}.
+list_reports(SpaceId) ->
+    list_reports(SpaceId, undefined, 0, all).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -150,10 +152,10 @@ list(SpaceId) ->
 %% Offset after StartId. The list is decreasingly sorted by start time.
 %% @end
 %%-------------------------------------------------------------------
--spec list(od_space:id(), autocleaning_run:id() | undefined,
+-spec list_reports(od_space:id(), autocleaning_run:id() | undefined,
     autocleaning_run_links:offset(), autocleaning_run_links:list_limit()) ->
     {ok, [autocleaning_run:id()]}.
-list(SpaceId, StartId, Offset, Limit) ->
+list_reports(SpaceId, StartId, Offset, Limit) ->
     autocleaning_run_links:list(SpaceId, StartId, Offset, Limit).
 
 %%-------------------------------------------------------------------
@@ -168,24 +170,20 @@ list_reports_since(SpaceId, Since) ->
     autocleaning_run:list_reports_since(SpaceId, SinceEpoch).
 
 
--spec restart_autocleaning_run(autocleaning:id()) -> ok | {error, term()}.
+-spec restart_autocleaning_run(autocleaning:id()) ->
+    ok | {ok, autocleaning_run:id()} | {error, term()}.
 restart_autocleaning_run(SpaceId) ->
     case autocleaning:get(SpaceId) of
         {ok, #document{value = #autocleaning{current_run = undefined}}} ->
             % there is no autocleaning_run to restart
             ok;
-        {ok, #document{value = #autocleaning{current_run = ARId}}} ->
-            case autocleaning_run:restart(ARId) of
-                {error, autocleaning_disabled} ->
+        {ok, #document{value = #autocleaning{current_run = ARId, config = Config}}} ->
+            case autocleaning_config:is_enabled(Config) of
+                true ->
+                    autocleaning_controller:restart(ARId, SpaceId, Config);
+                false ->
                     ?warning("Could not restart auto-cleaning run ~p in space "
-                    "because auto-cleaning mechanism has been disabled", [ARId]);
-                {error, Reason} ->
-                    ?error("Could not restart auto-cleaning run ~p in space ~p due to ~p",
-                        [ARId, SpaceId, Reason]),
-                    autocleaning:mark_run_finished(SpaceId);
-                ok ->
-                    ?debug("Restarted auto-cleaning run ~p in space ~p",
-                        [ARId, SpaceId])
+                    "because auto-cleaning mechanism has been disabled", [ARId])
             end;
         {error, not_found} ->
             ok;

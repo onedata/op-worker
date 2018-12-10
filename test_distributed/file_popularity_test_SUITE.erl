@@ -29,23 +29,23 @@
     query_should_return_empty_list_when_file_popularity_is_enabled/1,
     query_should_return_empty_list_when_file_has_not_been_opened/1,
     query_should_return_file_when_file_has_been_opened/1,
-    query_should_return_empty_list_when_number_of_opens_is_greater_than_startkey/1,
-    query_should_return_empty_list_when_number_of_opens_is_less_than_endkey/1,
+    query_should_return_empty_list_when_number_of_opens_is_greater_than_endkey/1,
+    query_should_return_empty_list_when_number_of_opens_is_less_than_startkey/1,
     query_should_return_file_when_number_of_opens_is_between_startkey_and_endkey/1,
-    query_should_return_empty_list_when_last_open_timestamp_is_newer_than_startkey/1,
-    query_should_return_empty_list_when_last_open_timestamp_is_older_than_endkey/1,
+    query_should_return_empty_list_when_last_open_timestamp_is_newer_than_endkey/1,
+    query_should_return_empty_list_when_last_open_timestamp_is_older_than_startkey/1,
     query_should_return_file_when_last_open_timestamp_is_between_startkey_and_endkey/1,
-    query_should_return_empty_list_when_size_is_greater_than_startkey/1,
-    query_should_return_empty_list_when_size_is_less_than_endkey/1,
+    query_should_return_empty_list_when_size_is_greater_than_endkey/1,
+    query_should_return_empty_list_when_size_is_less_than_startkey/1,
     query_should_return_file_when_size_is_between_startkey_and_endkey/1,
-    query_should_return_empty_list_when_hourly_avg_is_greater_than_startkey/1,
-    query_should_return_empty_list_when_hourly_avg_is_less_than_endkey/1,
+    query_should_return_empty_list_when_hourly_avg_is_greater_than_endkey/1,
+    query_should_return_empty_list_when_hourly_avg_is_less_than_startkey/1,
     query_should_return_file_when_hourly_avg_is_between_startkey_and_endkey/1,
-    query_should_return_empty_list_when_daily_avg_is_greater_than_startkey/1,
-    query_should_return_empty_list_when_daily_avg_is_less_than_endkey/1,
+    query_should_return_empty_list_when_daily_avg_is_greater_than_endkey/1,
+    query_should_return_empty_list_when_daily_avg_is_less_than_startkey/1,
     query_should_return_file_when_daily_avg_is_between_startkey_and_endkey/1,
-    query_should_return_empty_list_when_monthly_avg_is_greater_than_startkey/1,
-    query_should_return_empty_list_when_monthly_avg_is_less_than_endkey/1,
+    query_should_return_empty_list_when_monthly_avg_is_greater_than_endkey/1,
+    query_should_return_empty_list_when_monthly_avg_is_less_than_startkey/1,
     query_should_return_file_when_monthly_avg_is_between_startkey_and_endkey/1,
     query_should_return_files_sorted_by_number_of_opens_ascending/1,
     query_with_option_limit_should_return_limited_number_of_files/1,
@@ -61,23 +61,23 @@ all() -> [
     query_should_return_empty_list_when_file_popularity_is_enabled,
     query_should_return_empty_list_when_file_has_not_been_opened,
     query_should_return_file_when_file_has_been_opened,
-    query_should_return_empty_list_when_number_of_opens_is_greater_than_startkey,
-    query_should_return_empty_list_when_number_of_opens_is_less_than_endkey,
+    query_should_return_empty_list_when_number_of_opens_is_greater_than_endkey,
+    query_should_return_empty_list_when_number_of_opens_is_less_than_startkey,
     query_should_return_file_when_number_of_opens_is_between_startkey_and_endkey,
-    query_should_return_empty_list_when_last_open_timestamp_is_newer_than_startkey,
-    query_should_return_empty_list_when_last_open_timestamp_is_older_than_endkey,
+    query_should_return_empty_list_when_last_open_timestamp_is_newer_than_endkey,
+    query_should_return_empty_list_when_last_open_timestamp_is_older_than_startkey,
     query_should_return_file_when_last_open_timestamp_is_between_startkey_and_endkey,
-    query_should_return_empty_list_when_size_is_greater_than_startkey,
-    query_should_return_empty_list_when_size_is_less_than_endkey,
+    query_should_return_empty_list_when_size_is_greater_than_endkey,
+    query_should_return_empty_list_when_size_is_less_than_startkey,
     query_should_return_file_when_size_is_between_startkey_and_endkey,
-    query_should_return_empty_list_when_hourly_avg_is_greater_than_startkey,
-    query_should_return_empty_list_when_hourly_avg_is_less_than_endkey,
+    query_should_return_empty_list_when_hourly_avg_is_greater_than_endkey,
+    query_should_return_empty_list_when_hourly_avg_is_less_than_startkey,
     query_should_return_file_when_hourly_avg_is_between_startkey_and_endkey,
-    query_should_return_empty_list_when_daily_avg_is_greater_than_startkey,
-    query_should_return_empty_list_when_daily_avg_is_less_than_endkey,
+    query_should_return_empty_list_when_daily_avg_is_greater_than_endkey,
+    query_should_return_empty_list_when_daily_avg_is_less_than_startkey,
     query_should_return_file_when_daily_avg_is_between_startkey_and_endkey,
-    query_should_return_empty_list_when_monthly_avg_is_greater_than_startkey,
-    query_should_return_empty_list_when_monthly_avg_is_less_than_endkey,
+    query_should_return_empty_list_when_monthly_avg_is_greater_than_endkey,
+    query_should_return_empty_list_when_monthly_avg_is_less_than_startkey,
     query_should_return_file_when_monthly_avg_is_between_startkey_and_endkey,
     query_should_return_files_sorted_by_number_of_opens_ascending,
     query_with_option_limit_should_return_limited_number_of_files,
@@ -105,38 +105,26 @@ all() -> [
 
 query_should_return_error_when_file_popularity_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
     ?assertMatch({error, {<<"not_found">>, _}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+        query(W, ?SPACE_ID, ?LIMIT)).
 
 query_should_return_empty_list_when_file_popularity_is_enabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT)).
+    ?assertMatch({[], undefined},
+        query(W, ?SPACE_ID, ?LIMIT)).
 
 query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     {ok, _} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], undefined},
+        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_file_has_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -144,15 +132,15 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
     Ctx = file_ctx:new_by_guid(G),
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_number_of_opens_is_greater_than_startkey(Config) ->
+query_should_return_empty_list_when_number_of_opens_is_greater_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     NumberOfOpens = 10,
-    StartKey = [0, 0, 0, 0, 0, 0],
+    StartKey = undefined,
     EndKey = [NumberOfOpens - 1, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -163,15 +151,15 @@ query_should_return_empty_list_when_number_of_opens_is_greater_than_startkey(Con
         ok = lfm_proxy:close(W, H)
     end, lists:seq(1, NumberOfOpens)),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_number_of_opens_is_less_than_endkey(Config) ->
+query_should_return_empty_list_when_number_of_opens_is_less_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     NumberOfOpens = 10,
     StartKey = [NumberOfOpens + 1, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    EndKey = undefined,
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -182,15 +170,15 @@ query_should_return_empty_list_when_number_of_opens_is_less_than_endkey(Config) 
         ok = lfm_proxy:close(W, H)
     end, lists:seq(1, NumberOfOpens)),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_number_of_opens_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     NumberOfOpens = 10,
     StartKey = [NumberOfOpens - 1, 0, 0, 0, 0, 0],
     EndKey = [NumberOfOpens + 1, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -202,15 +190,15 @@ query_should_return_file_when_number_of_opens_is_between_startkey_and_endkey(Con
     end, lists:seq(1, NumberOfOpens)),
 
     Ctx = file_ctx:new_by_guid(G),
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_last_open_timestamp_is_newer_than_startkey(Config) ->
+query_should_return_empty_list_when_last_open_timestamp_is_newer_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     LastOpen = 10,
-    StartKey = [1, 0, 0, 0, 0, 0],
+    StartKey = undefined,
     EndKey = [1, LastOpen - 1, 0, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -225,15 +213,15 @@ query_should_return_empty_list_when_last_open_timestamp_is_newer_than_startkey(C
         {ok, FP#file_popularity{last_open = LastOpen}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_last_open_timestamp_is_older_than_endkey(Config) ->
+query_should_return_empty_list_when_last_open_timestamp_is_older_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     LastOpen = 10,
     StartKey = [1, LastOpen + 1, 0, 0, 0, 0],
-    EndKey = [1, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    EndKey = undefined,
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -248,15 +236,15 @@ query_should_return_empty_list_when_last_open_timestamp_is_older_than_endkey(Con
         {ok, FP#file_popularity{last_open = LastOpen}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_last_open_timestamp_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours - 1, 0, 0, 0, 0],
     EndKey = [1, CurrentTimestampHours + 1, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -266,16 +254,16 @@ query_should_return_file_when_last_open_timestamp_is_between_startkey_and_endkey
     ok = lfm_proxy:close(W, H),
     Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_size_is_greater_than_startkey(Config) ->
+query_should_return_empty_list_when_size_is_greater_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Size = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, CurrentTimestampHours, 0, 0, 0, 0],
+    StartKey = undefined,
     EndKey = [1, CurrentTimestampHours, Size - 1, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -285,16 +273,16 @@ query_should_return_empty_list_when_size_is_greater_than_startkey(Config) ->
     {ok, _} = lfm_proxy:write(W, H, 0, crypto:strong_rand_bytes(Size)),
     ok = lfm_proxy:close(W, H),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_size_is_less_than_endkey(Config) ->
+query_should_return_empty_list_when_size_is_less_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Size = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, Size + 1, 0, 0, 0],
-    EndKey = [1, CurrentTimestampHours, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    EndKey = undefined,
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -304,8 +292,8 @@ query_should_return_empty_list_when_size_is_less_than_endkey(Config) ->
     {ok, _} = lfm_proxy:write(W, H, 0, crypto:strong_rand_bytes(Size)),
     ok = lfm_proxy:close(W, H),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_size_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -313,7 +301,7 @@ query_should_return_file_when_size_is_between_startkey_and_endkey(Config) ->
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, Size - 1, 0, 0, 0],
     EndKey = [1, CurrentTimestampHours, Size + 1, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -324,16 +312,16 @@ query_should_return_file_when_size_is_between_startkey_and_endkey(Config) ->
     ok = lfm_proxy:close(W, H),
     Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_hourly_avg_is_greater_than_startkey(Config) ->
+query_should_return_empty_list_when_hourly_avg_is_greater_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     HrMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, CurrentTimestampHours, 0, 0, 0, 0],
+    StartKey = undefined,
     EndKey = [1, CurrentTimestampHours, 0, HrMovingAvg - 1, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -348,16 +336,16 @@ query_should_return_empty_list_when_hourly_avg_is_greater_than_startkey(Config) 
         {ok, FP#file_popularity{hr_mov_avg = HrMovingAvg}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_hourly_avg_is_less_than_endkey(Config) ->
+query_should_return_empty_list_when_hourly_avg_is_less_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     HrMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, 0, HrMovingAvg + 1, 0, 0],
-    EndKey = [1, CurrentTimestampHours, 0, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    EndKey = undefined,
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -372,15 +360,15 @@ query_should_return_empty_list_when_hourly_avg_is_less_than_endkey(Config) ->
         {ok, FP#file_popularity{hr_mov_avg = HrMovingAvg}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_hourly_avg_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, 0, 0, 0, 0],
     EndKey = [1, CurrentTimestampHours, 0,  2, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -390,16 +378,16 @@ query_should_return_file_when_hourly_avg_is_between_startkey_and_endkey(Config) 
     ok = lfm_proxy:close(W, H),
     Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_daily_avg_is_greater_than_startkey(Config) ->
+query_should_return_empty_list_when_daily_avg_is_greater_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     DyMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, CurrentTimestampHours, 0, 1, 0, 0],
+    StartKey = undefined,
     EndKey = [1, CurrentTimestampHours, 0, 1, DyMovingAvg - 1, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -414,16 +402,16 @@ query_should_return_empty_list_when_daily_avg_is_greater_than_startkey(Config) -
         {ok, FP#file_popularity{dy_mov_avg = DyMovingAvg}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_daily_avg_is_less_than_endkey(Config) ->
+query_should_return_empty_list_when_daily_avg_is_less_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     DyMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, 0, 1, DyMovingAvg + 1, 0],
-    EndKey = [1, CurrentTimestampHours, 0, 1, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    EndKey = undefined,
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -438,15 +426,15 @@ query_should_return_empty_list_when_daily_avg_is_less_than_endkey(Config) ->
         {ok, FP#file_popularity{dy_mov_avg = DyMovingAvg}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_daily_avg_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, 0, 1, 0, 0],
     EndKey = [1, CurrentTimestampHours, 0, 1, 2, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -456,16 +444,16 @@ query_should_return_file_when_daily_avg_is_between_startkey_and_endkey(Config) -
     ok = lfm_proxy:close(W, H),
     Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_monthly_avg_is_greater_than_startkey(Config) ->
+query_should_return_empty_list_when_monthly_avg_is_greater_than_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     MthMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
-    StartKey = [1, CurrentTimestampHours, 0, 1, 1, 0],
+    StartKey = undefined,
     EndKey = [1, CurrentTimestampHours, 0, 1, 1, MthMovingAvg - 1],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -480,16 +468,16 @@ query_should_return_empty_list_when_monthly_avg_is_greater_than_startkey(Config)
         {ok, FP#file_popularity{mth_mov_avg = MthMovingAvg}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
-query_should_return_empty_list_when_monthly_avg_is_less_than_endkey(Config) ->
+query_should_return_empty_list_when_monthly_avg_is_less_than_startkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     MthMovingAvg = 10,
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, 0, 1, 1, MthMovingAvg + 1],
-    EndKey = [1, CurrentTimestampHours, 0, 1, 1, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    EndKey = undefined,
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -504,15 +492,15 @@ query_should_return_empty_list_when_monthly_avg_is_less_than_endkey(Config) ->
         {ok, FP#file_popularity{mth_mov_avg = MthMovingAvg}}
     end]),
 
-    ?assertMatch({[], #token{last_doc_id = undefined}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[], #index_token{last_doc_id = undefined}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_file_when_monthly_avg_is_between_startkey_and_endkey(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     CurrentTimestampHours = current_timestamp_hours(W),
     StartKey = [1, CurrentTimestampHours, 0, 1, 1, 0],
     EndKey = [1, CurrentTimestampHours, 0, 1, 1, 2],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
@@ -522,14 +510,11 @@ query_should_return_file_when_monthly_avg_is_between_startkey_and_endkey(Config)
     ok = lfm_proxy:close(W, H),
     Ctx = file_ctx:new_by_guid(G),
 
-    ?assertMatch({[Ctx], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx], #index_token{}},
+        query(W, ?SPACE_ID, IndexToken, ?LIMIT), ?ATTEMPTS).
 
 query_should_return_files_sorted_by_number_of_opens_ascending(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName1 = <<"file1">>,
     FileName2 = <<"file2">>,
@@ -561,14 +546,11 @@ query_should_return_files_sorted_by_number_of_opens_ascending(Config) ->
     Ctx2 = file_ctx:new_by_guid(G2),
     Ctx3 = file_ctx:new_by_guid(G3),
 
-    ?assertMatch({[Ctx1, Ctx2, Ctx3], #token{}},
-        query(W, ?SPACE_ID, Token, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch({[Ctx1, Ctx2, Ctx3], #index_token{}},
+        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
 
 query_with_option_limit_should_return_limited_number_of_files(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
-    EndKey = [100, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FilePrefix = <<"file_">>,
     Limit = 3,
@@ -585,7 +567,7 @@ query_with_option_limit_should_return_limited_number_of_files(Config) ->
     Ctxs = [C || {C, _} <- CtxsAndOpensNum],
     ExpectedResult = lists:sublist(Ctxs, Limit),
 
-    ?assertMatch({ExpectedResult, #token{}}, query(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
+    ?assertMatch({ExpectedResult, #index_token{}}, query(W, ?SPACE_ID, Limit), ?ATTEMPTS).
 
 iterate_over_100_results_using_limit_1_and_startkey_docid(Config) ->
     iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1).
@@ -631,9 +613,9 @@ end_per_suite(Config) ->
 
 iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StartKey = [0, 0, 0, 0, 0, 0],
+    StartKey = undefined,
     EndKey = [101, 100, 100, 100, 100, 100],
-    Token = initial_token(W, StartKey, EndKey),
+    IndexToken = initial_token(W, StartKey, EndKey),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FilePrefix = <<"file_">>,
     NumberOfFiles = 100,
@@ -648,7 +630,7 @@ iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
     end, lists:seq(1, NumberOfFiles)),
     Ctxs = [C || {C, _} <- CtxsAndOpensNum],
 
-    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, Token, Limit), ?ATTEMPTS).
+    ?assertMatch(Ctxs, iterate(W, ?SPACE_ID, IndexToken, Limit), ?ATTEMPTS).
 
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
@@ -657,10 +639,13 @@ disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
 
 initial_token(Worker, StartKey, EndKey) ->
-    rpc:call(Worker, file_popularity_api, initial_token, [StartKey, EndKey]).
+    rpc:call(Worker, file_popularity_api, initial_index_token, [StartKey, EndKey]).
 
-query(Worker, SpaceId, Token, Limit) ->
-    rpc:call(Worker, file_popularity_api, query, [SpaceId, Token, Limit]).
+query(Worker, SpaceId, Limit) ->
+    rpc:call(Worker, file_popularity_api, query, [SpaceId, Limit]).
+
+query(Worker, SpaceId, IndexToken, Limit) ->
+    rpc:call(Worker, file_popularity_api, query, [SpaceId, IndexToken, Limit]).
 
 clean_space(SpaceId, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -697,13 +682,13 @@ open_and_close_file(Worker, SessId, Guid) ->
     {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, read),
     ok = lfm_proxy:close(Worker, H).
 
-iterate(Worker, SpaceId, Token, Limit) ->
-    iterate(Worker, SpaceId, Token, Limit, []).
+iterate(Worker, SpaceId, IndexToken, Limit) ->
+    iterate(Worker, SpaceId, IndexToken, Limit, []).
 
-iterate(Worker, SpaceId, Token, Limit, Result) ->
-    case query(Worker, SpaceId, Token, Limit) of
-        {Ctxs, _NewToken} when length(Ctxs) < Limit ->
+iterate(Worker, SpaceId, IndexToken, Limit, Result) ->
+    case query(Worker, SpaceId, IndexToken, Limit) of
+        {Ctxs, _NewIndexToken} when length(Ctxs) < Limit ->
             Result ++ Ctxs;
-        {Ctxs, NewToken} ->
-            iterate(Worker, SpaceId, NewToken, Limit, Result ++ Ctxs)
+        {Ctxs, NewIndexToken} ->
+            iterate(Worker, SpaceId, NewIndexToken, Limit, Result ++ Ctxs)
     end.
