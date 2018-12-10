@@ -13,11 +13,13 @@
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_random_connection/1, get_random_connection/2]).
 -export([get_connections/1, get_connections/2]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
+-export([ensure_connected/1]).
 
 %%%===================================================================
 %%% API
@@ -70,7 +72,7 @@ get_connections(SessId, HideOverloaded) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
-            communicator:ensure_connected(ProxyViaSession),
+            ensure_connected(ProxyViaSession),
             get_connections(ProxyViaSession, HideOverloaded);
         {ok, #document{value = #session{connections = Cons, watcher = SessionWatcher}}} ->
             case HideOverloaded of
@@ -143,4 +145,63 @@ remove_connection(SessId, Con) ->
     case session:update(SessId, Diff) of
         {ok, _} -> ok;
         Other -> Other
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Ensures that there is at least one outgoing connection for given session.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_connected(session:id() | pid()) ->
+    ok | no_return().
+ensure_connected(Conn) when is_pid(Conn) ->
+    ok;
+ensure_connected(SessId) ->
+    case session_connections:get_random_connection(SessId, true) of
+        {error, _} ->
+            ProviderId = case session:get(SessId) of
+                {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(
+                    ProxyVia) ->
+                    ProxyVia;
+                _ ->
+                    session_utils:session_id_to_provider_id(SessId)
+            end,
+
+            case oneprovider:get_id() of
+                ProviderId ->
+                    ?warning("Provider attempted to connect to itself, skipping connection."),
+                    erlang:error(connection_loop_detected);
+                _ ->
+                    ok
+            end,
+
+            {ok, Domain} = provider_logic:get_domain(ProviderId),
+            Hosts = case provider_logic:resolve_ips(ProviderId) of
+                {ok, IPs} -> [list_to_binary(inet:ntoa(IP)) || IP <- IPs];
+                _ -> [Domain]
+            end,
+            lists:foreach(
+                fun(Host) ->
+                    Port = https_listener:port(),
+                    critical_section:run([?MODULE, ProviderId, SessId], fun() ->
+                        % check once more to prevent races
+                        case session_connections:get_random_connection(SessId, true) of
+                            {error, _} ->
+                                outgoing_connection:start(ProviderId, SessId,
+                                    Domain, Host, Port, ranch_ssl, timer:seconds(5));
+                            _ ->
+                                ensure_connected(SessId)
+                        end
+                    end)
+                end, Hosts),
+            ok;
+        {ok, Pid} ->
+            case utils:process_info(Pid, initial_call) of
+                undefined ->
+                    ok = session_connections:remove_connection(SessId, Pid),
+                    ensure_connected(SessId);
+                _ ->
+                    ok
+            end
     end.

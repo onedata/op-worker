@@ -77,7 +77,7 @@ route_message(#client_message{session_id = From, proxy_session_id = ProxySession
         {true, true} ->
             ProviderId = session_utils:session_id_to_provider_id(From),
             SequencerSessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
-            communicator:ensure_connected(SequencerSessionId),
+            session_connections:ensure_connected(SequencerSessionId),
             sequencer:communicate_with_sequencer_manager(Msg, SequencerSessionId);
         {true, false} ->
             ok;

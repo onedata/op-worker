@@ -16,7 +16,6 @@
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
 
 %%% API - convenience functions
@@ -25,7 +24,6 @@
     communicate_with_provider/3]).
 %%% API - generic function
 -export([communicate/3]).
--export([ensure_connected/1]).
 
 -type message() :: #client_message{} | #server_message{}.
 -type generic_message() :: tuple().
@@ -145,6 +143,7 @@ communicate_with_provider(Msg, Ref, Async) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(message(), ref(), options()) -> answer().
+% TODO - dac mozliwosc exclude
 communicate(Msg, Ref, Options) ->
     Options2 = case maps:get(wait_for_ans, Options, false) of
         true -> Options#{use_msg_id => {true, self()}};
@@ -207,7 +206,7 @@ send(Msg, Ref, Options) ->
     {Msg2, ReturnMsgID} = complete_msg(Msg, Options),
 
     case maps:get(ensure_connected, Options, false) of
-        true -> ensure_connected(Ref);
+        true -> session_connections:ensure_connected(Ref);
         _ -> ok
     end,
 
@@ -317,63 +316,4 @@ receive_message(#server_message{message_id = MsgId}) ->
     % TODO VFS-4025 - how long should we wait for client answer?
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures that there is at least one outgoing connection for given session.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_connected(session:id() | pid()) ->
-    ok | no_return().
-ensure_connected(Conn) when is_pid(Conn) ->
-    ok;
-ensure_connected(SessId) ->
-    case session_connections:get_random_connection(SessId, true) of
-        {error, _} ->
-            ProviderId = case session:get(SessId) of
-                {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(
-                    ProxyVia) ->
-                    ProxyVia;
-                _ ->
-                    session_utils:session_id_to_provider_id(SessId)
-            end,
-
-            case oneprovider:get_id() of
-                ProviderId ->
-                    ?warning("Provider attempted to connect to itself, skipping connection."),
-                    erlang:error(connection_loop_detected);
-                _ ->
-                    ok
-            end,
-
-            {ok, Domain} = provider_logic:get_domain(ProviderId),
-            Hosts = case provider_logic:resolve_ips(ProviderId) of
-                {ok, IPs} -> [list_to_binary(inet:ntoa(IP)) || IP <- IPs];
-                _ -> [Domain]
-            end,
-            lists:foreach(
-                fun(Host) ->
-                    Port = https_listener:port(),
-                    critical_section:run([?MODULE, ProviderId, SessId], fun() ->
-                        % check once more to prevent races
-                        case session_connections:get_random_connection(SessId, true) of
-                            {error, _} ->
-                                outgoing_connection:start(ProviderId, SessId,
-                                    Domain, Host, Port, ranch_ssl, timer:seconds(5));
-                            _ ->
-                                ensure_connected(SessId)
-                        end
-                    end)
-                end, Hosts),
-            ok;
-        {ok, Pid} ->
-            case utils:process_info(Pid, initial_call) of
-                undefined ->
-                    ok = session_connections:remove_connection(SessId, Pid),
-                    ensure_connected(SessId);
-                _ ->
-                    ok
-            end
     end.
