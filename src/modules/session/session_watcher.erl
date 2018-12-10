@@ -51,6 +51,12 @@
 start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to session_watcher.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
 send(SessionWatcher, Msg) ->
     SessionWatcher ! Msg.
 

@@ -247,7 +247,7 @@ send_to_event_managers({aggregated, Messages}, Managers) ->
     end, Messages);
 send_to_event_managers(Message, Managers) ->
     lists:foreach(fun(Manager) ->
-        % TODO - zwrocic blad
+        % TODO VFS-4131 - return error
         event_manager:send(Manager, Message)
     end, Managers).
 

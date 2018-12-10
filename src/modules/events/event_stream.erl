@@ -92,6 +92,12 @@
 start_link(Mgr, Sub, SessId) ->
     gen_server2:start_link(?MODULE, [Mgr, Sub, SessId], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to event_stream.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
 send(Stream, Message) ->
     gen_server2:call(Stream, Message).
 
@@ -175,7 +181,6 @@ handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_cast(Request, State).
 
-% TODO - przeniesc calkowicie do handle_call
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -308,7 +313,8 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
         Error:Reason ->
-            % TODO - wyslac odpowiedz ze nawalilo jesli jest notify w kontekscie? a moze handler nie ma prawa sie wywalic?
+            % TODO VFS-4131 - react on error (send error if notify is in
+            % context? can handler crash?)
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
                 [?MODULE, State, Error, Reason])
     end;
@@ -367,9 +373,10 @@ remove_subscription(SessId, SubId, Subs) ->
 -spec remove_subscriptions(State :: #state{}) -> ok.
 remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
     maps:fold(fun
-        (session_only, _, _) -> ok;
+        (session_only, _, _) ->
+            ok;
         (Key, _, _) ->
-            % TODO - log jak sie nie uda?
+            % TODO VFS-4131 - react on error
             subscription_manager:remove_subscriber(Key, SessId)
     end, ok, Subs).
 

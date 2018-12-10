@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([route_message/1, route_message/2]).
+-export([route_message/1]).
 
 %%%===================================================================
 %%% API
@@ -30,15 +30,20 @@
 %% @equiv route_message(Msg, router:effective_session_id(Msg))
 %% @end
 %%--------------------------------------------------------------------
+-spec route_message(#client_message{}) -> ok.
 route_message(Msg) ->
     route_message(Msg, router:effective_session_id(Msg)).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Route message to adequate worker and return ok
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(#client_message{}) -> ok.
+-spec route_message(#client_message{}, session:id()) -> ok.
 route_message(#client_message{message_body = #event{} = Evt}, SessionID) ->
     event:emit(Evt, SessionID),
     ok;

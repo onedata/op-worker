@@ -233,7 +233,7 @@ remove_pending_messages(Timeout) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes all records from models.
+%% Removes all subscriptions.
 %% @end
 %%--------------------------------------------------------------------
 -spec clear_subscriptions(Worker :: node()) -> ok.

@@ -11,6 +11,7 @@
 %%%-------------------------------------------------------------------
 -module(auth_manager).
 -author("Tomasz Lichon").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").

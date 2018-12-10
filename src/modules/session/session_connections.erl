@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Modules that handles session connections management.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_connections).
@@ -98,13 +98,22 @@ get_connections(SessId, HideOverloaded) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns new record with update function.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_new_record_and_update_fun(NewCons :: list(),
+    ProxyVia :: session:id() | undefined, SessType :: session:type(),
+    Auth :: session:auth() | undefined, Iden :: session:identity()) ->
+    {session:record(), UpdateFun :: datastore_doc:diff(session:record())}.
 get_new_record_and_update_fun(NewCons, ProxyVia, SessType, Auth, Iden) ->
     Sess = #session{status = active, identity = Iden, auth = Auth,
         connections = NewCons, type = SessType, proxy_via = ProxyVia},
     Diff = fun
         (#session{status = inactive}) ->
-            % TODO - tu chyba jest potencjalny race z zamykaniem
-            % (pozwalamy tworzyc a jeszcze nie posprzatalismy)
+            % TODO VFS-5126 - possible race with closing (creation when cleanup
+            % is not finished)
             {error, not_found};
         (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
             case Iden of

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Module for storing of information about open files in session.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_open_files).
@@ -57,6 +57,12 @@ unregister_open_file(SessId, FileGuid) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all entries connected with session open files.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_entries(session:id()) -> ok | {error, term()}.
 invalidate_entries(SessId) ->
     case session:get(SessId) of
         {ok, #document{key = SessId, value = #session{open_files = OpenFiles}}} ->

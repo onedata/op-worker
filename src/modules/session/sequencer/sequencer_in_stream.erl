@@ -76,6 +76,12 @@
 start_link(SeqMan, StmId, SessId) ->
     gen_fsm:start_link(?MODULE, [SeqMan, StmId, SessId], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to sequencer.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
 send(Manager, Message) ->
     gen_fsm:send_event(Manager, Message).
 
@@ -435,10 +441,11 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns communicator module based on whether sequencer is working in provider or client's context.
+%% Communicates with client or provider.
 %% @end
 %%--------------------------------------------------------------------
-%%-spec communicate(IsProxy :: boolean()) -> communicator | provider_communicator.
+-spec communicate(IsProxy :: boolean(), Message :: term(), session:id(),
+    Async :: boolean()) -> ok | {error, Reason :: term()}.
 communicate(false, Msg, SessionID, true) ->
     communicator:send_to_client(Msg, SessionID, #{repeats => infinity});
 communicate(false, Msg, SessionID, _) ->

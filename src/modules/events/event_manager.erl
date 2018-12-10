@@ -25,8 +25,6 @@
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% TODO - dodac API na wysylanie eventow do stream'u - w sequencerze tez
-
 %% API
 -export([start_link/2, send/2]).
 
@@ -69,6 +67,12 @@
 start_link(MgrSup, SessId) ->
     gen_server2:start_link(?MODULE, [MgrSup, SessId], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to event_manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
 send(Manager, Message) ->
     gen_server2:call(Manager, Message).
 
@@ -114,7 +118,8 @@ init([MgrSup, SessId]) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
-    % TODO - testy czy dostaniemy error jak sie cos wywali w tym w srodowisku multiprovider (flush!!!)
+    % TODO VFS-4131 - test if error will appear in case of crash in
+    % multiprovider environment (e.g., flush)
     handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
@@ -431,8 +436,7 @@ get_context(_) ->
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------
-%%-spec start_event_streams(StmsSup :: pid(), SessId :: session:id()) ->
-%%    {Stms :: streams(), Subs :: subscriptions()}.
+-spec start_event_streams(#state{}) -> #state{}.
 start_event_streams(#state{streams_sup = undefined, manager_sup = MgrSup} = State) ->
     {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
     start_event_streams(State#state{streams_sup = StmsSup});
@@ -470,5 +474,13 @@ send_retry_message(Request, RetryCounter) ->
     RetryAfter = application:get_env(?APP_NAME, event_manager_retry_after, 1000),
     erlang:send_after(RetryAfter, self(), {retry_request, RetryCounter, Request}).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles retry request.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_retry_info(Request :: term(), RetryCounter :: non_neg_integer()) ->
+    ok.
 handle_retry_info(Request, RetryCounter) ->
     gen_server2:cast(self(), {internal, RetryCounter - 1, Request}).

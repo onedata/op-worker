@@ -69,7 +69,7 @@ generate_id(Seed) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates subscription.
+%% Creates durable subscription (active for all clients).
 %% @end
 %%--------------------------------------------------------------------
 -spec create_durable_subscription(doc() | base()) -> {ok, id()} | {error, term()}.
@@ -82,7 +82,7 @@ create_durable_subscription(Sub = #subscription{id = Id}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
+%% Returns list of durable subscriptions (active for all clients).
 %% @end
 %%--------------------------------------------------------------------
 -spec list_durable_subscriptions() -> {ok, [doc()]} | {error, term()}.

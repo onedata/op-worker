@@ -11,6 +11,7 @@
 %%%-------------------------------------------------------------------
 -module(session_manager).
 -author("Krzysztof Trzepla").
+-author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -218,6 +219,14 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates session doc and starts supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_session(session:doc(), session:type()) ->
+    {ok, session:id()} | {error, term()}.
 start_session(Doc, SessType) ->
     case session:create(Doc) of
         {ok, SessId} ->

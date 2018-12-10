@@ -6,12 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session management model, frequently invoked by incoming tcp
-%%% connections in connection
+%%% Session management model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session).
 -author("Tomasz Lichon").
+-author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -139,32 +139,88 @@ delete(SessId) ->
 %%% API - link functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds link to a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_links(id(), datastore:tree_id(), datastore:link_name(),
+    datastore:link_target()) -> ok | {error, term()}.
 add_links(SessId, TreeID, HandleId, Key) ->
     ?extract_ok(datastore_model:add_links(?CTX, SessId,
         TreeID, {HandleId, Key}
     )).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets link from a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_links(id(), datastore:tree_id(), datastore:link_name()) ->
+    ok | {error, term()}.
 get_links(SessId, TreeID, HandleId) ->
     datastore_model:get_links(?CTX, SessId, TreeID, HandleId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists links from a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec fold_links(id(), datastore:tree_id(),
+    datastore:fold_fun(datastore:link())) -> ok | {error, term()}.
 fold_links(SessId, TreeID, Fun) ->
     datastore_model:fold_links(?CTX, SessId, TreeID, Fun, [], #{}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes link from a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_links(id(), datastore:tree_id(), datastore:link_name()) ->
+    ok | {error, term()}.
 delete_links(SessId, TreeID, HandleId) ->
     datastore_model:delete_links(?CTX, SessId, TreeID, HandleId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds local link to a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_local_links(id(), datastore:tree_id(), datastore:link_name(),
+    datastore:link_target()) -> ok | {error, term()}.
 add_local_links(SessId, TreeID, HandleId, Key) ->
     ?extract_ok(datastore_model:add_links(?CTX#{routing => local}, SessId,
         TreeID, {HandleId, Key}
     )).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets local link from a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_links(id(), datastore:tree_id(), datastore:link_name()) ->
+    ok | {error, term()}.
 get_local_links(SessId, TreeID, HandleId) ->
     datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, HandleId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists local links from a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec fold_local_links(id(), datastore:tree_id(),
+    datastore:fold_fun(datastore:link())) -> ok | {error, term()}.
 fold_local_links(SessId, TreeID, Fun) ->
     datastore_model:fold_links(?CTX#{routing => local},
         SessId, TreeID, Fun, [], #{}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes local link from a tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_local_links(id(), datastore:tree_id(), datastore:link_name()) ->
+    ok | {error, term()}.
 delete_local_links(SessId, TreeID, HandleId) ->
     datastore_model:delete_links(?CTX#{routing => local},
         SessId, TreeID, HandleId).

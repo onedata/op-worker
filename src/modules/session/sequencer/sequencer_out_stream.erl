@@ -66,6 +66,12 @@
 start_link(SeqMan, StmId, SessId) ->
     gen_server2:start_link(?MODULE, [SeqMan, StmId, SessId], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to sequencer.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
 send(Manager, Message) ->
     gen_server2:cast(Manager, Message).
 

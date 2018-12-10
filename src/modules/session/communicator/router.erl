@@ -57,8 +57,7 @@ route_message(Msg) ->
 %% Returns session's ID that shall be used for given message.
 %% @end
 %%--------------------------------------------------------------------
--spec effective_session_id(#client_message{}) ->
-  session:id().
+-spec effective_session_id(#client_message{}) -> session:id().
 effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
   SessionId;
 effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
@@ -108,7 +107,13 @@ route_direct_message(Msg = #server_message{message_id = #message_id{
             ok
     end.
 
-% TODO - spec, doc
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Route message to adequate handler and ignores answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec route_and_ignore_answer(Msg :: #client_message{}) -> ok.
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
     ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest});
 route_and_ignore_answer(ClientMsg = #client_message{

@@ -87,5 +87,11 @@ route_message(#client_message{session_id = From, proxy_session_id = ProxySession
 route_message(#server_message{proxy_session_id = Ref} = Msg) ->
     sequencer:communicate_with_sequencer_manager(Msg, Ref).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks that message has been processed by sequencer.
+%% @end
+%%--------------------------------------------------------------------
+-spec make_message_direct(Msg :: term()) -> DirectMsg :: term().
 make_message_direct(Msg) ->
     Msg#client_message{message_stream = undefined}.

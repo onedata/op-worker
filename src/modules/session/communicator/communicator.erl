@@ -1,16 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides communication API between remote client and server.
+%%% This module provides communication API between remote client/provider
+%%% and server.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(communicator).
--author("Krzysztof Trzepla").
+-author("Michal Wrzeszcz").
 
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
