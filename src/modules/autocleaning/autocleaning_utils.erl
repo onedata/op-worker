@@ -59,7 +59,13 @@ assert_not_greater_then(Value1, Value2, _Name1, _Name2) when Value1 =< Value2 ->
 assert_not_greater_then(_Value1, _Value2, Name1, Name2) ->
     throw_greater_than(Name1, Name2).
 
-
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function ensures that undefined value won't be returned,
+%% even if there is an entry key => undefined in the map.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_defined(term(), term(), term()) -> term().
 get_defined(Key, Map, DefaultValue) ->
     case maps:get(Key, Map, DefaultValue) of

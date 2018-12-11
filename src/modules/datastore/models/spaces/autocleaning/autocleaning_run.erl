@@ -87,6 +87,7 @@ start(SpaceId, Config, CurrentSize) ->
                      {ok, ARDoc};
                  OtherARId ->
                      % other auto-cleaning run is in progress
+                     delete(ARId, StartTime),
                      {error, {already_started, OtherARId}}
             end;
         _ ->

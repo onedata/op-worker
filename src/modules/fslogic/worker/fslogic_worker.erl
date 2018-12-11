@@ -620,7 +620,7 @@ periodical_spaces_cleanup() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) ->
-                space_quota:maybe_check_and_start_autocleaning(SpaceId)
+                autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
             end, SpaceIds);
         Error = {error, _} ->
             ?error("Unable to trigger spaces cleanup due to: ~p", [Error])

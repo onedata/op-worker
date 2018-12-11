@@ -23,7 +23,7 @@
 -export([create/1, get/1, delete/1, update/2]).
 -export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
     get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1,
-    create_or_update/2, maybe_check_and_start_autocleaning/1, update_last_check_timestamp/2]).
+    create_or_update/2, update_last_check_timestamp/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
@@ -208,33 +208,20 @@ get_disabled_spaces() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Posthook responsible for starting autocleaning if it has been
-%% turned on.
+%% Posthook responsible for checking whether auto-cleaning run
+%% should be triggered. If true, the function also starts
+%% auto-cleaning run.
 %% @end
 %%-------------------------------------------------------------------
--spec run_after(atom(), term(), term()) -> term().
-run_after(create, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
-    maybe_check_and_start_autocleaning(SpaceId, SQ),
+-spec autocleaning_check_posthook(atom(), term(), term()) -> term().
+autocleaning_check_posthook(create, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
+    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
     Result;
-run_after(update, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
-    maybe_check_and_start_autocleaning(SpaceId, SQ),
+autocleaning_check_posthook(update, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
+    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
     Result;
-run_after(_, _, Result) ->
+autocleaning_check_posthook(_, _, Result) ->
     Result.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Calls autocleaning_api:maybe_start/2 if last autocleaning check has
-%% been performed longer than ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_check_and_start_autocleaning(id()) -> ok.
-maybe_check_and_start_autocleaning(SpaceId) ->
-    case space_quota:get(SpaceId) of
-        {ok, #document{value = SQ}} ->
-            maybe_check_and_start_autocleaning(SpaceId, SQ);
-        _ -> ok
-    end.
 
 -spec update_last_check_timestamp(id(), non_neg_integer()) -> ok | {error, term()}.
 update_last_check_timestamp(SpaceId, NewLastCheckTimestamp) ->
@@ -257,40 +244,6 @@ default_doc(SpaceId, DefaultValue) ->
         value = DefaultValue,
         scope = SpaceId
     }.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Calls autocleaning_api:maybe_start/2 if last autocleaning check has
-%% been performed longer than ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_check_and_start_autocleaning(id(), record()) -> ok.
-maybe_check_and_start_autocleaning(_SpaceId, #space_quota{
-    current_size = 0
-}) ->
-    ok;
-maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
-    last_autocleaning_check = LastCheckTimestamp
-}) ->
-    CurrentTimestamp = time_utils:system_time_millis(),
-    case should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) of
-        false ->
-            ok;
-        true ->
-            update_last_check_timestamp(SpaceId, CurrentTimestamp),
-            autocleaning_api:maybe_start(SpaceId, SQ),
-            ok
-    end.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Checks whether last autocleaning check has been performed longer than
-%% ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
-%% @end
-%%-------------------------------------------------------------------
--spec should_check_autocleaning(non_neg_integer(), non_neg_integer()) -> boolean().
-should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
-    CurrentTimestamp - LastCheckTimestamp >= ?AUTOCLEANING_CHECK_INTERVAL.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -349,4 +302,4 @@ upgrade_record(1, {?MODULE, CurrentSize}) ->
 %%--------------------------------------------------------------------
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
-    [fun run_after/3].
+    [fun autocleaning_check_posthook/3].

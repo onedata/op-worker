@@ -11,7 +11,8 @@
 
 -define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
 
-% this record may be used to query file-popularity view using batches
+% this record is used to define the starting row for a query on the
+% file-popularity view
 -record(index_token, {
     % doc_id of the last returned row
     % if defined it will be used with start_key to start the query

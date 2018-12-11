@@ -27,7 +27,10 @@
     configure/2, disable/1,
     get_configuration/1, status/1,
     list_reports_since/2, list_reports/1, list_reports/4,
-    restart_autocleaning_run/1, delete_config/1]).
+    restart_autocleaning_run/1, delete_config/1, maybe_check_and_start_autocleaning/1, maybe_check_and_start_autocleaning/2]).
+
+-define(AUTOCLEANING_CHECK_INTERVAL,
+    application:get_env(?APP_NAME, autocleaning_check_interval, 1000)). % 1s
 
 %%%===================================================================
 %%% API
@@ -55,6 +58,43 @@ force_start(SpaceId) ->
             {error, file_popularity_disabled}
     end .
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Calls autocleaning_api:maybe_start/2 if last autocleaning check has
+%% been performed longer than ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_check_and_start_autocleaning(od_space:id()) -> ok.
+maybe_check_and_start_autocleaning(SpaceId) ->
+    case space_quota:get(SpaceId) of
+        {ok, #document{value = SQ}} ->
+            maybe_check_and_start_autocleaning(SpaceId, SQ);
+        _ -> ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Calls autocleaning_api:maybe_start/2 if last autocleaning check has
+%% been performed longer than ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_check_and_start_autocleaning(od_space:id(), space_quota:record()) -> ok.
+maybe_check_and_start_autocleaning(_SpaceId, #space_quota{
+    current_size = 0
+}) ->
+    ok;
+maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
+    last_autocleaning_check = LastCheckTimestamp
+}) ->
+    CurrentTimestamp = time_utils:system_time_millis(),
+    case should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) of
+        false ->
+            ok;
+        true ->
+            space_quota:update_last_check_timestamp(SpaceId, CurrentTimestamp),
+            autocleaning_api:maybe_start(SpaceId, SQ),
+            ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -211,3 +251,13 @@ exists_and_is_enabled(SpaceId) ->
         _ ->
             false
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks whether last autocleaning check has been performed longer than
+%% ?AUTOCLEANING_CHECK_INTERVAL seconds ago.
+%% @end
+%%-------------------------------------------------------------------
+-spec should_check_autocleaning(non_neg_integer(), non_neg_integer()) -> boolean().
+should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
+    CurrentTimestamp - LastCheckTimestamp >= ?AUTOCLEANING_CHECK_INTERVAL.

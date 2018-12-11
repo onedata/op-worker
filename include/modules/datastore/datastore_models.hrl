@@ -289,6 +289,9 @@
 
 %% Helper record for autocleaning model.
 %% Record contains setting of one autocleaning selective rule.
+%% A rule is a filter which can be used to limit the set of file replicas
+%% which can be deleted by auto-cleaning mechanism.
+%% If a rule is disabled, its constraint is ignored.
 -record(autocleaning_rule_setting, {
     %% The rule can be enabled/disabled by setting enabled field.
     enabled = false :: boolean(),
@@ -299,6 +302,11 @@
 
 %% Helper record for autocleaning model.
 %% Record contains settings for all autocleaning selective rules.
+%% Rules are filters which can be used to limit the set of file replicas
+%% which can be deleted by auto-cleaning mechanism.
+%% File replica must satisfy all enabled rules to be deleted.
+%% Satisfying all enabled rules is necessary but not sufficient.
+%% Files will be deleted in order determined by the file_popularity_view.
 %% Each rule is defined by one #autocleaning_rule_setting record.
 -record(autocleaning_rules, {
     % informs whether selective rules should be used by auto-cleaning mechanism
