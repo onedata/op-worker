@@ -27,7 +27,8 @@
     configure/2, disable/1,
     get_configuration/1, status/1,
     list_reports_since/2, list_reports/1, list_reports/4,
-    restart_autocleaning_run/1, delete_config/1, maybe_check_and_start_autocleaning/1, maybe_check_and_start_autocleaning/2]).
+    restart_autocleaning_run/1, delete_config/1, maybe_check_and_start_autocleaning/1,
+    maybe_check_and_start_autocleaning/2, get_run_report/1, get_run_report/2]).
 
 -define(AUTOCLEANING_CHECK_INTERVAL,
     application:get_env(?APP_NAME, autocleaning_check_interval, 1000)). % 1s
@@ -136,6 +137,22 @@ get_configuration(SpaceId) ->
             #{};
         Config ->
             autocleaning_config:to_map(Config)
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns info about given auto-cleaning run in the form
+%% understandable by onepanel.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_run_report(autocleanint_run:id() | autocleanint_run:doc()) ->
+    maps:map() | {error, term()}.
+get_run_report(#document{key = ARId, value = AR}) ->
+    get_run_report(ARId, AR);
+get_run_report(ARId) ->
+    case autocleaning_run:get(ARId) of
+        {ok, ARDoc} -> get_run_report(ARDoc);
+        Error -> Error
     end.
 
 %%-------------------------------------------------------------------
@@ -261,3 +278,32 @@ exists_and_is_enabled(SpaceId) ->
 -spec should_check_autocleaning(non_neg_integer(), non_neg_integer()) -> boolean().
 should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
     CurrentTimestamp - LastCheckTimestamp >= ?AUTOCLEANING_CHECK_INTERVAL.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns info about given auto-cleaning run in the form
+%% understandable by onepanel.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_run_report(autocleaning_run:id(), autocleaning_run:record()) -> maps:maps().
+get_run_report(ARId, #autocleaning_run{
+    started_at = StartedAt,
+    stopped_at = StoppedAt,
+    released_bytes = ReleasedBytes,
+    bytes_to_release = BytesToRelease,
+    released_files = ReleasedFiles
+}) ->
+    StoppedAt2 = case StoppedAt of
+        undefined -> null;
+        StoppedAt ->
+            time_utils:epoch_to_iso8601(StoppedAt)
+    end,
+    #{
+        id => ARId,
+        index => autocleaning_run_links:link_key(ARId, StartedAt),
+        started_at => time_utils:epoch_to_iso8601(StartedAt),
+        stopped_at => StoppedAt2,
+        released_bytes => ReleasedBytes,
+        bytes_to_release => BytesToRelease,
+        files_number => ReleasedFiles
+    }.

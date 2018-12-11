@@ -20,15 +20,14 @@
 -type record() :: #autocleaning_run{}.
 -type diff() :: datastore:diff(record()).
 -type doc() :: #document{value :: record()}.
--type error() :: error().
+-type error() :: {error, term()}.
 
 -export_type([id/0, status/0]).
 
 %% API
 -export([get/1, update/2, delete/2, start/3, list_reports_since/2,
     mark_completed/1, mark_failed/1, mark_released_file/2, set_index_token/2,
-    get_token/1, get_bytes_to_release/1, get_released_bytes/1, restart/1,
-    get_info/1, get_index_token/1]).
+    get_index_token/1, get_bytes_to_release/1, get_released_bytes/1, restart/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -53,7 +52,11 @@ update(ARId, UpdateFun) ->
 
 -spec delete(id(), od_space:id()) -> ok.
 delete(ARId, SpaceId) ->
-    autocleaning_run_links:delete_link(ARId, SpaceId, get_started_at(ARId)),
+    delete(ARId, SpaceId, get_started_at(ARId)).
+
+-spec delete(id(), od_space:id(), non_neg_integer()) -> ok.
+delete(ARId, SpaceId, StartedAtTimestamp) ->
+    autocleaning_run_links:delete_link(ARId, SpaceId, StartedAtTimestamp),
     ok = datastore_model:delete(?CTX, ARId).
 
 %%-------------------------------------------------------------------
@@ -87,7 +90,7 @@ start(SpaceId, Config, CurrentSize) ->
                      {ok, ARDoc};
                  OtherARId ->
                      % other auto-cleaning run is in progress
-                     delete(ARId, StartTime),
+                     delete(ARId, SpaceId, StartTime),
                      {error, {already_started, OtherARId}}
             end;
         _ ->
@@ -105,8 +108,8 @@ list_reports_since(SpaceId, Since) ->
     {ok, ARIds} = autocleaning_run_links:list_since(SpaceId, Since),
     lists:filtermap(fun(ARId) ->
         case datastore_model:get(?CTX, ARId) of
-            {ok, #document{value = AutocleaningRun}} ->
-                {true, get_info(AutocleaningRun)};
+            {ok, ARDoc} ->
+                {true, autocleaning_api:get_run_report(ARDoc)};
             {error, not_found} ->
                 ?error("Auto-cleaning run document ~p not found", [ARId]),
                 false
@@ -170,9 +173,6 @@ set_index_token(ARId, IndexToken) ->
 get_index_token(#autocleaning_run{index_token = IndexToken}) ->
     IndexToken.
 
--spec get_token(record()) -> file_popularity_view:index_token().
-get_token(#autocleaning_run{index_token = Token}) -> Token.
-
 -spec get_bytes_to_release(record()) -> non_neg_integer().
 get_bytes_to_release(#autocleaning_run{bytes_to_release = BytesToRelease}) ->
     BytesToRelease.
@@ -207,37 +207,6 @@ restart(ARId) ->
             Error
     end.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns info about given auto-cleaning run in the form
-%% understandable by onepanel.
-%% @end
-%%-------------------------------------------------------------------
--spec get_info(record()) -> maps:maps().
-get_info(#autocleaning_run{
-    started_at = StartedAt,
-    stopped_at = StoppedAt,
-    released_bytes = ReleasedBytes,
-    bytes_to_release = BytesToRelease,
-    released_files = ReleasedFiles
-}) ->
-    StoppedAt2 = case StoppedAt of
-        undefined -> null;
-        StoppedAt ->
-            time_utils:epoch_to_iso8601(StoppedAt)
-    end,
-    #{
-        started_at => time_utils:epoch_to_iso8601(StartedAt),
-        stopped_at => StoppedAt2,
-        released_bytes => ReleasedBytes,
-        bytes_to_release => BytesToRelease,
-        files_number => ReleasedFiles
-    };
-get_info(ARId) ->
-    case autocleaning_run:get(ARId) of
-        {ok, #document{value = AR}} -> get_info(AR);
-        Error -> Error
-    end.
 
 -spec is_finished(record()) -> boolean().
 is_finished(#autocleaning_run{status = active}) -> false;

@@ -21,7 +21,7 @@
 -export_type([offset/0, list_limit/0]).
 
 %% API
--export([add_link/3, delete_link/3, list/4, list_since/2]).
+-export([add_link/3, delete_link/3, list/4, list_since/2, link_key/2]).
 
 
 -define(LINK_PREFIX, <<"autocleaning_">>).
@@ -107,6 +107,17 @@ list(SpaceId, StartId, Offset, Limit) ->
     end, [], SpaceId, Opts3),
     {ok, lists:reverse(AutocleaningRunIds)}.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns link key for given autocleaning_run id and its Timestamp.
+%% @end
+%%-------------------------------------------------------------------
+-spec link_key(autocleaning_run:id(), non_neg_integer()) -> link_key().
+link_key(ARId, Timestamp) ->
+    TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
+    IdPart = binary:part(ARId, 0, ?LINK_NAME_ID_PART_LENGTH),
+    <<TimestampPart/binary, IdPart/binary>>.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -120,18 +131,6 @@ list(SpaceId, StartId, Offset, Limit) ->
 -spec space_link_root(od_space:id()) -> binary().
 space_link_root(SpaceId) ->
     <<?LINK_PREFIX/binary, SpaceId/binary>>.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns link key for given autocleaning_run id and its Timestamp.
-%% @end
-%%-------------------------------------------------------------------
--spec link_key(autocleaning_run:id(), non_neg_integer()) -> link_key().
-link_key(ARId, Timestamp) ->
-    TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
-    IdPart = binary:part(ARId, 0, ?LINK_NAME_ID_PART_LENGTH),
-    <<TimestampPart/binary, IdPart/binary>>.
 
 -spec key_to_timestamp(link_key()) -> non_neg_integer().
 key_to_timestamp(LinkKey) ->

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("cluster_worker/include/global_definitions.hrl").
+%%-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -117,9 +117,9 @@ end, __Distributions))).
         ExpectedGuids -- __Guids
     end, ?ATTEMPTS)).
 
--define(assertRunFinished(Worker, ARId),
+-define(assertRunFinished(Worker, __ARId),
     ?assertEqual(true, begin
-        Info = get_info(Worker, ARId),
+        Info = get_run_report(Worker, __ARId),
         maps:get(stopped_at, Info) =/= null
     end, ?ATTEMPTS)).
 
@@ -181,7 +181,7 @@ autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0
-    }, get_info(W1, ARId)).
+    }, get_run_report(W1, ARId)).
 
 autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -212,7 +212,7 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1
-    }, get_info(W1, ARId)).
+    }, get_run_report(W1, ARId)).
 
 autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -245,7 +245,7 @@ autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) -
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0
-    }, get_info(W1, ARId)).
+    }, get_run_report(W1, ARId)).
 
 autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -343,7 +343,7 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1
-    }, get_info(W1, ARId)).
+    }, get_run_report(W1, ARId)).
 
 autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_open_count_rule(Config) ->
     Size = 10,
@@ -513,7 +513,7 @@ restart_autocleaning_run_test(Config) ->
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1
-    }, get_info(W1, ARId)).
+    }, get_run_report(W1, ARId)).
 
 
 %%%===================================================================
@@ -535,8 +535,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     clean_autocleaning_run_model(W, ?SPACE_ID),
-    disable_file_popularity(W, ?SPACE_ID),
-    disable_autocleaning(W, ?SPACE_ID),
+    delete_file_popularity_config(W, ?SPACE_ID),
+    delete_auto_cleaning_config(W, ?SPACE_ID),
     clean_space(?SPACE_ID, Config),
     ensure_space_empty(?SPACE_ID, Config),
     reset_autocleaning_check_timestamp(W, ?SPACE_ID),
@@ -577,7 +577,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0
-    }, get_info(W1, ARId)).
+    }, get_run_report(W1, ARId)).
 
 %%%===================================================================
 %%% Internal functions
@@ -617,8 +617,8 @@ schedule_file_replication(Worker, SessId, Guid, ProviderId) ->
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
 
-disable_file_popularity(Worker, SpaceId) ->
-    rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
+delete_file_popularity_config(Worker, SpaceId) ->
+    rpc:call(Worker, file_popularity_api, delete_config, [SpaceId]).
 
 clean_space(SpaceId, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -673,8 +673,8 @@ delete_autocleaning_runs(Worker, ARIds, SpaceId) ->
 configure_autocleaning(Worker, SpaceId, Configuration) ->
     rpc:call(Worker, autocleaning_api, configure, [SpaceId, Configuration]).
 
-disable_autocleaning(Worker, SpaceId) ->
-    rpc:call(Worker, autocleaning_api, disable, [SpaceId]).
+delete_auto_cleaning_config(Worker, SpaceId) ->
+    rpc:call(Worker, autocleaning_api, delete_config, [SpaceId]).
 
 force_start(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, force_start, [SpaceId]).
@@ -688,9 +688,8 @@ list(Worker, SpaceId) ->
 list(Worker, SpaceId, LinkId, Offset, Limit) ->
     rpc:call(Worker, autocleaning_api, list_reports, [SpaceId, LinkId, Offset, Limit]).
 
-%% autocleaning_run module rpc calls
-get_info(Worker, ARId) ->
-    rpc:call(Worker, autocleaning_run, get_info, [ARId]).
+get_run_report(Worker, ARId) ->
+    rpc:call(Worker, autocleaning_api, get_run_report, [ARId]).
 
 delete(Worker, SpaceId, ARId) ->
     rpc:call(Worker, autocleaning_run, delete, [ARId, SpaceId]).
