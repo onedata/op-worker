@@ -144,7 +144,6 @@ communicate_with_provider(Msg, Ref, Async) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(message(), ref(), options()) -> answer().
-% TODO - dac mozliwosc exclude
 communicate(Msg, Ref, Options) ->
     Options2 = case maps:get(wait_for_ans, Options, false) of
         true -> Options#{use_msg_id => {true, self()}};
