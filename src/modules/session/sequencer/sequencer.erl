@@ -90,13 +90,19 @@ term_to_stream_id(Term) ->
 %%--------------------------------------------------------------------
 -spec communicate_with_sequencer_manager(Msg :: term(),
     Ref :: sequencer_manager_ref()) -> Reply :: term().
-communicate_with_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
+communicate_with_sequencer_manager(Msg, Ref) ->
+    communicate_with_sequencer_manager(Msg, Ref, true).
+
+communicate_with_sequencer_manager(Msg, Ref, _) when is_pid(Ref) ->
     sequencer_manager:send(Ref, Msg);
 
-communicate_with_sequencer_manager(Msg, Ref) ->
-    case session:get_sequencer_manager(Ref) of
-        {ok, ManPid} -> communicate_with_sequencer_manager(Msg, ManPid);
-        {error, Reason} -> {error, Reason}
+communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
+    case {session:get_sequencer_manager(Ref), EnsureConnected} of
+        {{ok, ManPid}, _} -> communicate_with_sequencer_manager(Msg, ManPid);
+        {{error, not_found}, true} ->
+            session_connections:ensure_connected(Ref),
+            communicate_with_sequencer_manager(Msg, Ref);
+        {{error, Reason}, _} -> {error, Reason}
     end.
 
 %%%===================================================================
