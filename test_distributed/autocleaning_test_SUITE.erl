@@ -99,11 +99,13 @@ end, lists:zip(ProviderIds, Sizes))).
 end, __Distributions))).
 
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid),
-    ?assertEqual(?normalizeDistribution(ExpectedDistribution), begin
+    ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
         {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
         lists:sort(__FileBlocks)
-    end, ?ATTEMPTS)
-).
+    catch
+        _:_ ->
+            error
+    end, ?ATTEMPTS)).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
     ?assertMatch([], begin
@@ -476,8 +478,9 @@ restart_autocleaning_run_test(Config) ->
     enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
 
-    % read file on W2 to replicate it
-    read_file(W2, SessId2, Guid, Size),
+    % replicate file to W2
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
+    schedule_file_replication(W2, SessId2, Guid, DomainP2),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
@@ -558,8 +561,8 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
     enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
 
-    % read file on W2 to replicate it
-    read_file(W2, SessId2, Guid, Size),
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
+    schedule_file_replication(W2, SessId2, Guid, DomainP2),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
