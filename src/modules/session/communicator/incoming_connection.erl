@@ -441,7 +441,6 @@ fulfill_pending_promises(#state{wait_map = WaitMap, wait_pids = Pids} = State) -
 %%--------------------------------------------------------------------
 -spec send_via_other_connection(state(), #server_message{}) -> ok | {error, term()}.
 send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
-    {ok, Connections} = session_connections:get_connections(SessionId),
     % Try to send the message via another connection of this session. This must
     % be delegated to an asynchronous process so the connection process can
     % still receive messages in the meantime. Otherwise, a deadlock is possible
@@ -449,23 +448,18 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
     Parent = self(),
     Ref = make_ref(),
     spawn(fun() ->
-        Result = lists:foldl(fun(Pid, ResultAcc) ->
-            case ResultAcc of
-                ok ->
-                    ok;
-                _ ->
-                    try
-                        case session_utils:is_provider_session_id(SessionId) of
-                            true ->
-                                communicator:send_to_provider(ServerMsg, Pid);
-                            false ->
-                                communicator:send_to_client(ServerMsg, Pid)
-                        end
-                    catch _:_ ->
-                        {error, closed}
-                    end
+        Result = try
+            case session_utils:is_provider_session_id(SessionId) of
+                true ->
+                    communicator:send_to_provider(ServerMsg, SessionId,
+                        #{repeats => check_all_connections, exclude => self()});
+                false ->
+                    communicator:send_to_client(ServerMsg, SessionId,
+                        #{repeats => check_all_connections, exclude => self()})
             end
-        end, {error, closed}, Connections -- [self()]),
+        catch _:_ ->
+            {error, closed}
+        end,
         Parent ! {Ref, Result}
     end),
     WaitForResult = fun Fun() ->

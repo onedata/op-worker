@@ -16,8 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_random_connection/1, get_random_connection/2]).
--export([get_connections/1, get_connections/2]).
+-export([get_random_connection/1, get_connections/1]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
 -export([ensure_connected/1]).
 
@@ -37,6 +36,16 @@ get_random_connection(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns connections associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connections(session:id()) ->
+    {ok, [Comm :: pid()]} | {error, term()}.
+get_connections(SessId) ->
+    get_connections(SessId, false).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns random connection associated with session.
 %% @end
 %%--------------------------------------------------------------------
@@ -48,16 +57,6 @@ get_random_connection(SessId, HideOverloaded) ->
         {ok, Cons} -> {ok, utils:random_element(Cons)};
         {error, Reason} -> {error, Reason}
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns connections associated with session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_connections(session:id()) ->
-    {ok, [Comm :: pid()]} | {error, term()}.
-get_connections(SessId) ->
-    get_connections(SessId, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -205,3 +204,7 @@ ensure_connected(SessId) ->
                     ok
             end
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

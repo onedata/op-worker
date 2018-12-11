@@ -29,9 +29,10 @@
 -type generic_message() :: tuple().
 %%-type options() :: map().
 -type options() ::  #{wait_for_ans => boolean(), % default: false
-                    repeats => non_neg_integer() | infinity, % default: 2
+                    repeats => non_neg_integer() | infinity | check_all_connections, % default: 2
                     error_on_empty_pool => boolean(), % default: true
                     ensure_connected => boolean(), % default: false
+                    exclude => [pid()], % default: []
                     stream => {true, sequencer:stream_id()} | false, % default: false
                     ignore_send_errors => boolean(), % default: false
                     use_msg_id => boolean() | {true, pid()}}. % default: false
@@ -71,7 +72,7 @@ send_to_client(Msg, Ref, Options) ->
 %%--------------------------------------------------------------------
 -spec send_to_provider(generic_message(), ref()) -> asyn_ans().
 send_to_provider(Msg, Ref) ->
-    send_to_provider(Msg, Ref, #{ignore_send_errors => false}).
+    send_to_provider(Msg, Ref, #{}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -149,7 +150,15 @@ communicate(Msg, Ref, Options) ->
         true -> Options#{use_msg_id => {true, self()}};
         _ -> Options
     end,
-    communicate_loop(Msg, Ref, Options2, maps:get(repeats, Options2, 2)).
+
+    case maps:get(repeats, Options2, 2) of
+        check_all_connections ->
+            {ok, Connections} = session_connections:get_connections(Ref),
+            Connections2 = Connections -- maps:get(exclude, Options2, []),
+            communicate_loop(Msg, Ref, Options2, Connections2);
+        Repeats ->
+            communicate_loop(Msg, Ref, Options2, Repeats)
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -162,11 +171,19 @@ communicate(Msg, Ref, Options) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate_loop(message(), ref(), options(),
-    non_neg_integer() | infinity) -> answer().
+    non_neg_integer() | infinity | [pid()]) -> answer().
 communicate_loop(Msg, Ref, Options, 1) ->
     send(Msg, Ref, Options);
-% TODO - w przypadku bledu leciec po kolejnych polaczeniach
+communicate_loop(Msg, _Ref, Options, [Con]) ->
+    send(Msg, Con, Options);
+communicate_loop(Msg, _Ref, Options, [Con | Cons]) ->
+    send_in_loop(Msg, Con, Options, Cons);
 communicate_loop(Msg, Ref, Options, Retry) ->
+    send_in_loop(Msg, Ref, Options, Retry).
+
+-spec send_in_loop(message(), ref(), options(),
+    non_neg_integer() | infinity | [pid()]) -> answer().
+send_in_loop(Msg, Ref, Options, Retry) ->
     case send(Msg, Ref, Options) of
         ok -> ok;
         {ok, Ans} -> {ok, Ans};
@@ -187,13 +204,13 @@ communicate_loop(Msg, Ref, Options, Retry) ->
 %% Retry to send message.
 %% @end
 %%--------------------------------------------------------------------
--spec retry(message(), ref(), options(), non_neg_integer() | infinity) ->
+-spec retry(message(), ref(), options(), non_neg_integer() | infinity | [pid()]) ->
     answer().
 retry(Msg, Ref, Options, Retry) ->
     timer:sleep(?SEND_RETRY_DELAY),
     case Retry of
-        infinity -> communicate_loop(Msg, Ref, Options, Retry);
-        _ -> communicate_loop(Msg, Ref, Options, Retry - 1)
+        Int when is_integer(Int) -> communicate_loop(Msg, Ref, Options, Int - 1);
+        _ -> communicate_loop(Msg, Ref, Options, Retry)
     end.
 
 %%--------------------------------------------------------------------
@@ -214,7 +231,7 @@ send(Msg, Ref, Options) ->
     SendAns = case maps:get(stream, Options, false) of
         {true, StmId} -> sequencer:send_message(Msg2, StmId, Ref);
         _ -> forward_to_connection_proc(Msg2, Ref,
-            maps:get(ignore_send_errors, Options, false))
+            maps:get(ignore_send_errors, Options, false)) % TODO - zawsze ignorujemy?
     end,
 
     case {SendAns, maps:get(wait_for_ans, Options, false)} of
