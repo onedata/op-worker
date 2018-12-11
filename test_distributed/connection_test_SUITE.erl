@@ -151,7 +151,7 @@ socket_timeout_test(Config) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
 
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
     % receive & validate
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
@@ -164,7 +164,7 @@ socket_timeout_test(Config) ->
         lists:foreach(fun(Num) ->
             NumBin = integer_to_binary(Num),
             % send
-            ok = ssl:send(Sock2, fuse_utils:generate_create_message(RootGuid, NumBin, NumBin))
+            ok = ssl:send(Sock2, fuse_utils:generate_create_file_message(RootGuid, NumBin, NumBin))
         end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
 
         AnsNums = lists:foldl(fun(_Num, Acc) ->
@@ -218,7 +218,7 @@ client_keepalive_test(Config) ->
 
 create_timeouts_test(Config, Sock, RootGuid) ->
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
     % receive & validate
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
@@ -226,7 +226,7 @@ create_timeouts_test(Config, Sock, RootGuid) ->
 
     configure_cp(Config, helper_timeout),
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"2">>, <<"f2">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"2">>, <<"f2">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -240,7 +240,7 @@ create_timeouts_test(Config, Sock, RootGuid) ->
     ),
 
     configure_cp(Config, helper_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"3">>, <<"f3">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -409,7 +409,7 @@ compatible_client_connection_test(Config) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
@@ -435,7 +435,7 @@ incompatible_client_connection_test(Config) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
@@ -1035,7 +1035,7 @@ broken_connection_test(Config) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
     % when
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"1">>}, fuse_utils:receive_server_message()),
@@ -1067,37 +1067,37 @@ broken_connection_test(Config) ->
 
     ok = test_utils:mock_unload(Workers, [Mod]).
 
-
 memory_pools_cleared_after_disconnection_test(Config) ->
-    lists:foldl(
-        fun({Write, Read, Release}, SubId) -> 
-            memory_pools_cleared_after_disconnection_test_base(Config, SubId, Write, Read, Release),
-            SubId+8
-        end, 1, [{X,Y,Z} || Z <- [true, false], Y <- [true, false], X <- [true, false]]
-    ),
-    ok.
-
-
-memory_pools_cleared_after_disconnection_test_base(Config, SubId, Write, Read, Release) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     RootGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
 
+    L = [false, true],
+    Sub = lists:foldl(
+        fun({Write, Read, Release, Unsub}, SubId) -> 
+            memory_pools_cleared_after_disconnection_test_base_file(Worker1, SessionId, RootGuid, SubId, 
+                Write, Read, Release, Unsub),
+            SubId+10
+        end, 1, [{X,Y,Z,U} || Z <- L, Y <- L, X <- L, U <- L]
+    ),
+    lists:foldl(
+        fun(Unsub, SubId) -> 
+            memory_pools_cleared_after_disconnection_test_base_dir(Worker1, SessionId, RootGuid, SubId, Unsub),
+            SubId+10
+        end, Sub, [X || X<-L]
+    ),
+    ok.
+
+memory_pools_cleared_after_disconnection_test_base_file(Worker1, SessionId, RootGuid, SubId, Write, Read, Release, Unsub) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
-    MemoryPools = rpc:call(Worker1, datastore_multiplier, get_names, [memory]), 
-    GetEntries = fun(Pool) -> 
-        PoolName = list_to_atom("datastore_cache_active_pool_" ++ atom_to_list(Pool)),
-        rpc:call(Worker1, ets, foldl, [fun(Entry, Acc) -> Acc ++ [Entry] end, [], PoolName])
-    end,
-    
-    Before = lists:map(GetEntries, MemoryPools),
+    {Before, SizesBefore} = get_memory_pools_entries_and_sizes(Worker1),
     
     Filename = generator:gen_name(),
     Data = <<"test_data">>,
     
     % create file
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, Filename)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, Filename)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_created, #'FileCreated'{
             handle_id = HandleId, 
@@ -1106,19 +1106,15 @@ memory_pools_cleared_after_disconnection_test_base(Config, SubId, Write, Read, R
     }} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}}, 
         message_id = <<"1">>
-    }, 
-    fuse_utils:receive_server_message()),
-    
+    }, fuse_utils:receive_server_message()),
+
     % subscriptions
     ok = ssl:send(Sock, fuse_utils:generate_file_removed_subscription_message(
         SubId,SubId,-SubId, FileGuid)),
-    fuse_utils:receive_server_message([]),
     ok = ssl:send(Sock, fuse_utils:generate_file_renamed_subscription_message(
         SubId,SubId+1,-SubId-1, FileGuid)),
-    fuse_utils:receive_server_message([]),
     ok = ssl:send(Sock, fuse_utils:generate_file_attr_changed_subscription_message(
         SubId,SubId+2,-SubId-2, FileGuid, 500)),
-    fuse_utils:receive_server_message([]),
 
     fuse_utils:fsync(Sock, FileGuid, HandleId, false),
 
@@ -1150,7 +1146,6 @@ memory_pools_cleared_after_disconnection_test_base(Config, SubId, Write, Read, R
         true ->
             ok = ssl:send(Sock, fuse_utils:generate_file_location_changed_subscription_message(
                 SubId,SubId+5,-SubId-4, FileGuid, 500)),
-            fuse_utils:receive_server_message([]),
             
             % read
             ok = ssl:send(Sock, fuse_utils:generate_read_message(<<"3">>, 
@@ -1164,8 +1159,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, SubId, Write, Read, R
             }, fuse_utils:receive_server_message()),
 
             fuse_utils:fsync(Sock, FileGuid, HandleId, false),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+6,-SubId-4)),
-            fuse_utils:receive_server_message([]);
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+6,-SubId-4));
         _ ->
             ok
     end,
@@ -1180,22 +1174,74 @@ memory_pools_cleared_after_disconnection_test_base(Config, SubId, Write, Read, R
         _ ->
             ok
     end,
-    ct:print("release"),
+    case Unsub of
+        true ->
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+7,-SubId)),
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+8,-SubId-1)),
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+9,-SubId-2));
+        _ ->
+            ok
+    end,
     ok = ssl:close(Sock),
     
-    After = lists:map(GetEntries, MemoryPools),
+    timer:sleep(timer:seconds(60)),
     
-    Res = lists:flatten(lists:zipwith(fun(A,B) -> 
-        Diff = A--B, 
-        lists:map(fun({Key, Driver, DriverCtx}) ->
-            rpc:call(Worker1, Driver, get, [DriverCtx, Key])
-        end, [{Key, Driver, DriverCtx} || {_,Key,_,_,Driver, DriverCtx} <- Diff])
-    end, After, Before)),
+    {After, SizesAfter} = get_memory_pools_entries_and_sizes(Worker1),
+%    lists:zipwith(fun(A,B) -> ?assertEqual(B,A) end, SizesAfter, SizesBefore),
+    Res = get_documents_diff(Worker1, After, Before),
 
-    ct:print("Write: ~p; Read: ~p; Release: ~p\n\n"
-             "Diff: ~p", [Write, Read, Release, Res]).
+    ct:print("Write: ~p; Read: ~p; Release: ~p; Unsubscribe: ~p\n\n"
+             "~p", [Write, Read, Release, Unsub, Res]).
 
+memory_pools_cleared_after_disconnection_test_base_dir(Worker, SessionId, RootGuid, SubId, Unsub) ->
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker, [{active, true}], SessionId),
 
+    {Before, SizesBefore} = get_memory_pools_entries_and_sizes(Worker),
+    Dirname = generator:gen_name(),
+
+    % create directory
+    ok = ssl:send(Sock, fuse_utils:generate_create_dir_message(RootGuid, <<"1">>, Dirname)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {dir, #'Dir'{uuid = DirId}}
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
+        message_id = <<"1">>
+    }, fuse_utils:receive_server_message()),
+
+    % subscriptions
+    ok = ssl:send(Sock, fuse_utils:generate_file_removed_subscription_message(
+        SubId,SubId,-SubId, DirId)),
+    ok = ssl:send(Sock, fuse_utils:generate_file_renamed_subscription_message(
+        SubId,SubId+1,-SubId-1, DirId)),
+    ok = ssl:send(Sock, fuse_utils:generate_file_attr_changed_subscription_message(
+        SubId,SubId+2,-SubId-2, DirId, 500)),
+    
+    % ls
+    ok = ssl:send(Sock, fuse_utils:generate_get_children_message(DirId, <<"2">>)),
+    ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}}, 
+        message_id = <<"2">>
+    }, fuse_utils:receive_server_message()),
+    
+    case Unsub of
+        true ->
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+3,-SubId)),
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+4,-SubId-1)),
+            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+5,-SubId-2));
+        _ ->
+            ok
+    end,
+    ok = ssl:close(Sock),
+    
+    timer:sleep(timer:minutes(1)),
+
+    {After, SizesAfter} = get_memory_pools_entries_and_sizes(Worker),
+%    lists:zipwith(fun(A,B) -> ?assertEqual(B,A) end, SizesAfter, SizesBefore),
+    Res = get_documents_diff(Worker, After, Before),
+    
+    ct:print("Directory, Unsubscribe: ~p\n\n~p", [Unsub, Res]).
+    
+        
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1427,7 +1473,7 @@ connect_as_provider(Node, ProviderId, Nonce) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
@@ -1441,21 +1487,6 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
     {ok, HandshakeResp, Sock} = connect_as_provider(Node, ProviderId, Nonce),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
-
-
-connect_and_upgrade_proto(Hostname, Port) ->
-    {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
-        {active, once}, {reuse_sessions, false}
-    ], timer:minutes(1))),
-    ssl:send(Sock, protocol_utils:protocol_upgrade_request(list_to_binary(Hostname))),
-    receive {ssl, Sock, Data} ->
-        ?assert(protocol_utils:verify_protocol_upgrade_response(Data)),
-        ssl:setopts(Sock, [{active, once}, {packet, 4}]),
-        {ok, Sock}
-    after timer:minutes(1) ->
-        exit(timeout)
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1503,7 +1534,7 @@ mock_identity(Workers) ->
     ).
 
 %%%===================================================================
-%%% Timeouts test helper functions
+%%% Test helper functions
 %%%===================================================================
 
 check_answer(AsertFun) ->
@@ -1618,3 +1649,20 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
+
+get_memory_pools_entries_and_sizes(Worker) ->
+    MemoryPools = rpc:call(Worker, datastore_multiplier, get_names, [memory]),
+    Entries = lists:map(fun(Pool) ->
+        PoolName = list_to_atom("datastore_cache_active_pool_" ++ atom_to_list(Pool)),
+        rpc:call(Worker, ets, foldl, [fun(Entry, Acc) -> Acc ++ [Entry] end, [], PoolName])
+    end, MemoryPools),
+    Sizes = lists:map(fun(Slot) -> rpc:call(Worker, datastore_cache_manager, get_size, [Slot]) end, MemoryPools),
+    {Entries, Sizes}.
+
+get_documents_diff(Worker, After, Before) ->
+    lists:flatten(lists:zipwith(fun(A,B) ->
+        Diff = A--B,
+        lists:map(fun({Key, Driver, DriverCtx}) ->
+            rpc:call(Worker, Driver, get, [DriverCtx, Key])
+            end, [{Key, Driver, DriverCtx} || {_,Key,_,_,Driver, DriverCtx} <- Diff])
+    end, After, Before)).

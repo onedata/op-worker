@@ -34,10 +34,11 @@
     connect_via_macaroon/1, connect_via_macaroon/2,
     connect_via_macaroon/3, connect_via_macaroon/4
 ]).
+-export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1]).
 
 %% Fuse request messages
--export([generate_create_message/3, generate_delete_file_message/2, 
+-export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2, 
     generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3, 
     generate_get_children_message/2, generate_fsync_message/2]).
 
@@ -184,7 +185,7 @@ receive_server_message(IgnoredMsgList, Timeout) ->
 
 
 %% Fuse request messages
-generate_create_message(RootGuid, MsgId, File) ->
+generate_create_file_message(RootGuid, MsgId, File) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = RootGuid,
         file_request = {create_file, #'CreateFile'{
@@ -193,6 +194,13 @@ generate_create_message(RootGuid, MsgId, File) ->
             flag = 'READ_WRITE'}
         }}
     },
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_create_dir_message(RootGuid, MsgId, Name) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {create_dir, #'CreateDir'{name = Name, mode = 8#755}}
+    }},
     generate_fuse_request_message(MsgId, FuseRequest).
 
 generate_get_children_message(RootGuid, MsgId) ->
