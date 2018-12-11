@@ -19,7 +19,8 @@
 
 %% API
 -export([open_stream/1, close_stream/2, send_message/3]).
--export([communicate_with_sequencer_manager/2, term_to_stream_id/1]).
+-export([communicate_with_sequencer_manager/2,
+    communicate_with_sequencer_manager/3, term_to_stream_id/1]).
 
 -export_type([stream_id/0, sequence_number/0]).
 
@@ -83,16 +84,23 @@ term_to_stream_id(Term) ->
     PHash1 + PHash2.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Communicates with the sequencer manager referenced by pid or session ID.
+%% @equiv communicate_with_sequencer_manager(Msg, Ref, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate_with_sequencer_manager(Msg :: term(),
     Ref :: sequencer_manager_ref()) -> Reply :: term().
 communicate_with_sequencer_manager(Msg, Ref) ->
-    communicate_with_sequencer_manager(Msg, Ref, true).
+    communicate_with_sequencer_manager(Msg, Ref, false).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Communicates with the sequencer manager referenced by pid or session ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate_with_sequencer_manager(Msg :: term(),
+    Ref :: sequencer_manager_ref(), EnsureConnected :: boolean()) ->
+    Reply :: term().
 communicate_with_sequencer_manager(Msg, Ref, _) when is_pid(Ref) ->
     sequencer_manager:send(Ref, Msg);
 
