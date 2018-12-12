@@ -237,9 +237,11 @@ assert_aggregate_read_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
     Mod = event_utils,
     Fun = aggregate_file_read_events,
 
-    ExpBlocks = lists:sort([ExpBlock1, ExpBlock2]),
     ?assertMatch([{
-        _, {Mod, Fun, _}, #file_read_event{file_guid = FileGuid, blocks = ExpBlocks}
+        _, {Mod, Fun, [
+            #file_read_event{file_guid = FileGuid, blocks = [ExpBlock1]},
+            #file_read_event{file_guid = FileGuid, blocks = [ExpBlock2]}
+        ]}, #file_read_event{file_guid = FileGuid, blocks = [ExpBlock1, ExpBlock2]}
     }], rpc:call(Worker, meck, history, [Mod]), ?MEDIUM_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL),
 
     ok.
