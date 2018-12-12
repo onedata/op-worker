@@ -34,7 +34,9 @@
     remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
     remote_replica_should_be_truncated_on_storage_after_truncate/1,
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file/1,
-    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1
+    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
+    
+    file_with_same_path_on_two_providers/1
 ]).
 
 -define(ATTEMPTS, 60).
@@ -351,6 +353,72 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
 
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath1)).
+
+
+file_with_same_path_on_two_providers(Config) ->
+    [Worker2, Worker1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+
+    SpacePath = <<"/space1">>,
+    FileName = generator:gen_name(),
+    FilePath = <<SpacePath/binary, "/",  FileName/binary>>,
+    StorageSpacePath = storage_file_path(Worker1, SpaceId, <<>>),
+    
+    LsFun = fun(Worker, Session, Path) ->
+        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        List
+    end,
+    LsFun1 = fun(Worker, Path) ->
+        {ok, List} = list_dir(Worker, Path),
+        List
+            end,
+
+    % create files
+    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId, FilePath, 8#664),
+    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
+
+    StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
+    Uuid = fslogic_uuid:guid_to_uuid(Guid2),
+    StorageFilePath2 = storage_file_path(Worker1, SpaceId, <<FileName/binary, "<<!!>>", Uuid/binary>>),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId, {guid, Guid1}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId, {guid, Guid2}), ?ATTEMPTS),
+    
+    ?assertEqual(2, length(LsFun(Worker1, SessionId, SpacePath)), ?ATTEMPTS),
+    
+    % open, write and read
+    Content1 = <<"data_file1">>,
+    Content2 = <<"data_file2">>,
+    
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId, {guid, Guid1}, rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId, {guid, Guid2}, rdwr),
+    
+    {ok, _} = lfm_proxy:write(Worker1, Handle1, 0, Content1),
+    {ok, _} = lfm_proxy:write(Worker1, Handle2, 0, Content2),
+    
+    ?assertMatch({ok, Content1}, lfm_proxy:read(Worker1, Handle1, 0, byte_size(Content1)), ?ATTEMPTS),
+    ?assertMatch({ok, Content2}, lfm_proxy:read(Worker1, Handle2, 0, byte_size(Content2)), ?ATTEMPTS),
+    
+    ?assertEqual(2, length(LsFun1(Worker1, StorageSpacePath)), ?ATTEMPTS),
+
+    % check data on storage
+    ?assertMatch({ok, Content1}, read_file(Worker1, StorageFilePath1)),
+    ?assertMatch({ok, Content2}, read_file(Worker1, StorageFilePath2)),
+
+    Release = true,
+    case Release of
+        true ->
+            ok = lfm_proxy:close_all(Worker1);
+        _ ->
+            ok
+    end,
+    ok = lfm_proxy:unlink(Worker1, SessionId, {path, FilePath}),
+
+    ?assertEqual(1, length(LsFun(Worker1, SessionId, SpacePath)), ?ATTEMPTS),
+    ?assertEqual(1, length(LsFun1(Worker1, StorageSpacePath)), ?ATTEMPTS).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
