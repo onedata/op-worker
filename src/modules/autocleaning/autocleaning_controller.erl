@@ -293,7 +293,8 @@ handle_cast(check, State = #state{
     files_processed = FP,
     queue_len = QLen
 }) ->
-    % todo remove this debug log after resolving VFS-5128
+    % todo remove this test log after resolving VFS-5128
+    % todo this log will not appear on production as it can be triggered only from console
     ?critical(
     "~nFiles to process: ~p~n"
     "Files processed: ~p~n"
