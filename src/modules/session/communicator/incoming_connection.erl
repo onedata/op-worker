@@ -452,10 +452,10 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
             case session_utils:is_provider_session_id(SessionId) of
                 true ->
                     communicator:send_to_provider(ServerMsg, SessionId,
-                        #{repeats => check_all_connections, exclude => self()});
+                        #{repeats => check_all_connections, exclude => [self()]});
                 false ->
                     communicator:send_to_client(ServerMsg, SessionId,
-                        #{repeats => check_all_connections, exclude => self()})
+                        #{repeats => check_all_connections, exclude => [self()]})
             end
         catch _:_ ->
             {error, closed}
