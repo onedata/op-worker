@@ -50,12 +50,6 @@
     list_file/1,
     list_dir/1,
     list_dir_range/1,
-    changes_stream_file_meta_test/1,
-    changes_stream_xattr_test/1,
-    changes_stream_json_metadata_test/1,
-    changes_stream_times_test/1,
-    changes_stream_file_location_test/1,
-    changes_stream_on_multi_provider_test/1,
     list_spaces/1,
     get_space/1,
     set_get_json_metadata/1,
@@ -94,12 +88,6 @@ all() ->
         list_file,
         list_dir,
         list_dir_range,
-        changes_stream_file_meta_test,
-        changes_stream_xattr_test,
-        changes_stream_json_metadata_test,
-        changes_stream_times_test,
-        changes_stream_file_location_test,
-        changes_stream_on_multi_provider_test,
         list_spaces,
         get_space,
         set_get_json_metadata,
@@ -706,184 +694,6 @@ list_dir_range(Config) ->
         DecodedBody
     ).
 
-changes_stream_file_meta_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file3_csfmt"])),
-    File2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file3_csfmt"])),
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, rdwr),
-
-    % when
-    spawn(fun() ->
-        timer:sleep(500),
-        lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
-        lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
-        lfm_proxy:fsync(WorkerP1, Handle),
-        lfm_proxy:create(WorkerP1, SessionId, File2, Mode)
-    end),
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
-        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}]),
-
-    ?assertNotEqual(<<>>, Body),
-    ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
-
-changes_stream_xattr_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csxt"])),
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    spawn(fun() ->
-        timer:sleep(500),
-        lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"name">>, value = <<"value">>})
-    end),
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, str_utils:format_bin("changes/metadata/~s?timeout=10000", [SpaceId]),
-        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}]),
-
-    ?assertNotEqual(<<>>, Body),
-    Changes = binary:split(Body, <<"\r\n">>, [global]),
-    ?assert(length(Changes) >= 1),
-
-    [_ | Changes2] = lists:reverse(Changes),
-    [LastChange | _] = lists:filtermap(fun(Change) ->
-        DecodedChange = json_utils:decode(Change),
-        case maps:get(<<"name">>, DecodedChange) of
-            <<"file4_csxt">> -> {true, DecodedChange};
-            _ -> false
-        end
-    end, Changes2),
-
-    Metadata = maps:get(<<"changes">>, LastChange),
-    ?assertEqual(#{<<"name">> => <<"value">>}, maps:get(<<"xattrs">>, Metadata)).
-
-changes_stream_json_metadata_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csjmt"])),
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-    Json = #{<<"k1">> => <<"v1">>, <<"k2">> => [<<"v2">>, <<"v3">>], <<"k3">> => #{<<"k31">> => <<"v31">>}},
-    % when
-    spawn(fun() ->
-        timer:sleep(500),
-        lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, json, Json, [])
-    end),
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, str_utils:format_bin("changes/metadata/~s?timeout=10000", [SpaceId]),
-        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}]),
-
-    ?assertNotEqual(<<>>, Body),
-    Changes = binary:split(Body, <<"\r\n">>, [global]),
-    ?assert(length(Changes) >= 1),
-    [_ | AllChanges] = lists:reverse(Changes),
-    DecodedChanges =
-        lists:map(fun(Change) ->
-            json_utils:decode(Change)
-        end, AllChanges),
-
-    ?assert(lists:any(fun(Change) ->
-        Json == maps:get(<<"onedata_json">>, maps:get(<<"xattrs">>, maps:get(<<"changes">>, Change)), undefined)
-    end, DecodedChanges)).
-
-changes_stream_times_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_cstt"])),
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-    % when
-    spawn(fun() ->
-        timer:sleep(500),
-        lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, 1000, 1000, 1000)
-    end),
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, str_utils:format_bin("changes/metadata/~s?timeout=10000", [SpaceId]),
-        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}]),
-
-    ?assertNotEqual(<<>>, Body),
-    Changes = binary:split(Body, <<"\r\n">>, [global]),
-    ?assert(length(Changes) >= 1),
-    [_ | AllChanges] = lists:reverse(Changes),
-    DecodedChanges =
-        lists:map(fun(Change) ->
-            json_utils:decode(Change)
-        end, AllChanges),
-    ?assert(lists:any(fun(Change) ->
-        1000 == maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
-            1000 == maps:get(<<"mtime">>, maps:get(<<"changes">>, Change)) andalso
-            1000 == maps:get(<<"ctime">>, maps:get(<<"changes">>, Change))
-    end, DecodedChanges)).
-
-changes_stream_file_location_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csflt"])),
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-    % when
-    spawn(fun() ->
-        timer:sleep(500),
-        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-        {ok, 5} = lfm_proxy:write(WorkerP1, Handle, 0, <<"01234">>)
-    end),
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, str_utils:format_bin("changes/metadata/~s?timeout=10000", [SpaceId]),
-        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 40000}]),
-
-    ?assertNotEqual(<<>>, Body),
-    Changes = binary:split(Body, <<"\r\n">>, [global]),
-    ?assert(length(Changes) >= 1),
-    [_ | AllChanges] = lists:reverse(Changes),
-    DecodedChanges =
-        lists:map(fun(Change) ->
-            json_utils:decode(Change)
-        end, AllChanges),
-    ?assert(lists:any(fun(Change) ->
-        5 == maps:get(<<"size">>, maps:get(<<"changes">>, Change))
-    end, DecodedChanges)).
-
-changes_stream_on_multi_provider_test(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    SessionIdP2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    [_, _, {SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4_csompt"])),
-    Mode = 8#700,
-    % when
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-    spawn(fun() ->
-        timer:sleep(500),
-        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-        lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>)
-    end),
-    ?assertMatch({ok, _}, lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write), 20),
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP2, str_utils:format_bin("changes/metadata/~s?timeout=20000", [SpaceId]),
-        get, ?USER_1_AUTH_HEADERS(Config), [], [{recv_timeout, 60000}]),
-
-    ?assertNotEqual(<<>>, Body),
-    Changes = binary:split(Body, <<"\r\n">>, [global]),
-    ?assert(length(Changes) >= 1),
-    [_ | AllChanges] = lists:reverse(Changes),
-    DecodedChanges =
-        lists:map(fun(Change) ->
-            json_utils:decode(Change)
-        end, AllChanges),
-
-    ?assert(lists:any(fun(Change) ->
-        <<"file4_csompt">> == maps:get(<<"name">>, Change) andalso
-            4 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
-            0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
-            0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)) andalso
-            0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))
-    end, DecodedChanges)).
-
 list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -1344,13 +1154,7 @@ end_per_suite(Config) ->
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
-init_per_testcase(Case, Config) when
-    Case =:= transfers_should_be_ordered_by_timestamps;
-    Case =:= rerun_file_replication;
-    Case =:= rerun_file_replication_by_other_user;
-    Case =:= rerun_dir_replication;
-    Case =:= rerun_eviction_of_file_replica_with_migration
-    ->
+init_per_testcase(transfers_should_be_ordered_by_timestamps, Config) ->
     init_per_testcase(all, [{space_id, <<"space2">>} | Config]);
 
 init_per_testcase(metric_get, Config) ->
@@ -1413,15 +1217,6 @@ end_per_testcase(Case = automatic_cleanup_should_evict_unpopular_files, Config) 
     check_if_space_empty(WorkerP1, SpaceId),
     check_if_space_empty(WorkerP2, SpaceId),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= transfers_should_be_ordered_by_timestamps;
-    Case =:= rerun_file_replication;
-    Case =:= rerun_file_replication_by_other_user;
-    Case =:= rerun_dir_replication;
-    Case =:= rerun_eviction_of_file_replica_with_migration
-    ->
-    end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
