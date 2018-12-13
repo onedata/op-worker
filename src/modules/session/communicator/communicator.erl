@@ -117,7 +117,7 @@ communicate_with_provider(Msg, Ref, Recipent) ->
     Options = case Msg of
         #client_message{message_stream = #message_stream{stream_id = StmId}}
             when is_integer(StmId) ->
-            #{#{use_msg_id => {true, Recipent}}, stream => {true, StmId}};
+            #{use_msg_id => {true, Recipent}, stream => {true, StmId}};
         _ ->
             #{use_msg_id => {true, Recipent}}
     end,
