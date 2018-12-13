@@ -51,7 +51,12 @@ force_start(SpaceId) ->
                 {true, AC} ->
                     Config = autocleaning:get_config(AC),
                     CurrentSize = space_quota:current_size(SpaceId),
-                    autocleaning_controller:start(SpaceId, Config, CurrentSize);
+                    case autocleaning_config:is_target_reached(CurrentSize, Config) of
+                        false ->
+                            autocleaning_controller:start(SpaceId, Config, CurrentSize);
+                        true ->
+                            {error, nothing_to_clean}
+                    end;
                 false ->
                     {error, autocleaning_disabled}
             end;
@@ -114,9 +119,12 @@ maybe_start(SpaceId, SpaceQuota) ->
                 {true, AC} ->
                     Config = autocleaning:get_config(AC),
                     CurrentSize = space_quota:current_size(SpaceQuota),
-                    case autocleaning_config:is_threshold_exceeded(CurrentSize, Config) of
-                        true -> autocleaning_controller:start(SpaceId, Config, CurrentSize);
-                        _ -> ok
+                    case {autocleaning_config:is_threshold_exceeded(CurrentSize, Config),
+                        autocleaning_config:is_target_reached(CurrentSize, Config)} of
+                        {true, false} ->
+                            autocleaning_controller:start(SpaceId, Config, CurrentSize);
+                        _ ->
+                            ok
                     end;
                 _ -> ok
             end;

@@ -149,17 +149,30 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Starts process responsible for performing autocleaning
+%% Tries to start process responsible for performing auto-cleaning.
+%% Returns error if other auto-cleaning run is in progress.
 %% @end
 %%-------------------------------------------------------------------
 -spec start(od_space:id(), autocleaning:config(), non_neg_integer()) ->
     {ok, autocleaning_run:id()} | {error, term()}.
 start(SpaceId, Config, CurrentSize) ->
-    case autocleaning_run:start(SpaceId, Config, CurrentSize) of
+    Target = autocleaning_config:get_target(Config),
+    BytesToRelease = CurrentSize - Target,
+    case autocleaning_run:create(SpaceId, BytesToRelease) of
         {ok, #document{key = ARId, value = AR}} ->
-            {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
-                [ARId, SpaceId, AR, Config], []),
-            {ok, ARId};
+            {ok, ACDoc} = autocleaning:maybe_mark_current_run(SpaceId, ARId),
+            case autocleaning:get_current_run(ACDoc) of
+                ARId ->
+                    StartTime = autocleaning_run:get_started_at(AR),
+                    ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
+                    {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
+                        [ARId, SpaceId, AR, Config], []),
+                    {ok, ARId};
+                OtherARId ->
+                    % other auto-cleaning run is in progress
+                    autocleaning_run:delete(ARId),
+                    {error, {already_started, OtherARId}}
+            end;
         Other ->
             Other
     end.
@@ -167,21 +180,29 @@ start(SpaceId, Config, CurrentSize) ->
 -spec restart(autocleaning_run:id(), od_space:id(), autocleaning:config()) ->
     {ok, autocleaning:run_id()} | ok.
 restart(ARId, SpaceId, Config) ->
-    case autocleaning_run:restart(ARId) of
-        {ok, AR} ->
-            {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
-                [ARId, SpaceId, AR, Config], []),
-            ?debug("Restarted auto-cleaning run ~p in space ~p", [ARId, SpaceId]),
-            {ok, ARId};
-        {error, Reason} ->
+    case autocleaning_run:get(ARId) of
+        {ok, #document{value = AR = #autocleaning_run{
+            space_id = SpaceId,
+            started_at = StartTime
+        }}} ->
+            case autocleaning_run:is_finished(AR) of
+                false ->
+                    % ensure that there is a link for given autocleaning_run
+                    ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
+                    {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
+                        [ARId, SpaceId, AR, Config], []),
+                    ?debug("Restarted auto-cleaning run ~p in space ~p", [ARId, SpaceId]),
+                    {ok, ARId};
+                true ->
+                    ?error("Could not restart auto-cleaning run ~p in space ~p beceause it is already finished",
+                        [ARId, SpaceId]),
+                    autocleaning:mark_run_finished(SpaceId)
+            end;
+        Error ->
             ?error("Could not restart auto-cleaning run ~p in space ~p due to ~p",
-                [ARId, SpaceId, Reason]),
+                [ARId, SpaceId, Error]),
             autocleaning:mark_run_finished(SpaceId)
     end.
-
--spec start_cleaning(od_space:id()) -> ok.
-start_cleaning(SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?START_CLEANING).
 
 -spec stop_cleaning(od_space:id()) -> ok.
 stop_cleaning(SpaceId) ->
@@ -191,6 +212,14 @@ stop_cleaning(SpaceId) ->
 notify_processed_file(SpaceId, BatchId) ->
     {_ARId, BatchNum} = from_batch_id(BatchId),
     gen_server2:cast(?SERVER(SpaceId), ?FILE_PROCESSED(BatchNum)).
+
+%%%===================================================================
+%%% Internal API
+%%%===================================================================
+
+-spec start_cleaning(od_space:id()) -> ok.
+start_cleaning(SpaceId) ->
+    gen_server2:cast(?SERVER(SpaceId), ?START_CLEANING).
 
 -spec notify_released_file(od_space:id(), non_neg_integer(), batch_num()) -> ok.
 notify_released_file(SpaceId, ReleasedBytes, BatchNum) ->

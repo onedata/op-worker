@@ -78,7 +78,7 @@ is_threshold_exceeded(CurrentSize, #autocleaning_config{threshold = Threshold}) 
     CurrentSize >= Threshold.
 
 -spec is_target_reached(non_neg_integer(), config()) -> boolean().
-is_target_reached(CurrentSize, #autocleaning_config{threshold = Target}) ->
+is_target_reached(CurrentSize, #autocleaning_config{target = Target}) ->
     CurrentSize =< Target.
 
 -spec get_target(config()) -> non_neg_integer().

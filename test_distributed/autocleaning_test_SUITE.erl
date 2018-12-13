@@ -254,15 +254,15 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     DomainP1 = ?GET_DOMAIN_BIN(W1),
     DomainP2 = ?GET_DOMAIN_BIN(W2),
 
+    FilesNum = 100,
+    FileSize = 100,
     Target = 1000,
-    Threshold = 10001,
+    Threshold = FilesNum * FileSize + 1,
 
     DirName = <<"dir">>,
     DirPath = ?FILE_PATH(DirName),
     {ok, _} = lfm_proxy:mkdir(W2, SessId2, DirPath),
 
-    FilesNum = 100,
-    FileSize = 100,
     FilePrefix = <<"file_">>,
     Guids = write_files(W2, SessId2, DirPath, FilePrefix, FileSize, FilesNum),
 
@@ -293,7 +293,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
         read_file(W1, SessId, G, FileSize)
     end, Guids),
     ?assertFilesInView(W1, ?SPACE_ID, Guids),
-
+    ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % this sleep is necessary to ensure that autocleaning_check will be
     % started after replication of an ExtraFile
     timer:sleep(timer:seconds(1)),
