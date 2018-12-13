@@ -47,7 +47,7 @@ add(SessId, HandleId, Handle) ->
 -spec remove(SessId :: session:id(), HandleId :: storage_file_manager:handle_id()) ->
     ok | {error, term()}.
 remove(SessId, HandleId) ->
-    case session:get_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
+    case session:get_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
         {ok, [#link{target = HandleKey}]} ->
             case sfm_handle:delete(HandleKey) of
                 ok ->
@@ -67,7 +67,7 @@ remove(SessId, HandleId) ->
 -spec get(SessId :: session:id(), HandleId :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | {error, term()}.
 get(SessId, HandleId) ->
-    case session:get_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
+    case session:get_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
         {ok, [#link{target = HandleKey}]} ->
             case sfm_handle:get(HandleKey) of
                 {ok, #document{value = Handle}} ->

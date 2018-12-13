@@ -87,7 +87,7 @@ delete_helpers_on_node(SessId) ->
     {ok, helpers:helper_handle()} | {error, term()}.
 get_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
-    FetchResult = case session:get_local_links(SessId,
+    FetchResult = case session:get_local_link(SessId,
         ?HELPER_HANDLES_TREE_ID, link_key(StorageId, SpaceId)) of
         {ok, [#link{target = Key}]} ->
             helper_handle:get(Key);

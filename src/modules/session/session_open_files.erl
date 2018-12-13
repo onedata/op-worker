@@ -6,13 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module for storing of information about open files in session.
+%%% Module for storing information about open files in session.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_open_files).
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 
 %% API
 -export([register_open_file/2, unregister_open_file/2, invalidate_entries/1]).
@@ -34,11 +35,7 @@ register_open_file(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
         {ok, Sess#session{open_files = sets:add_element(FileGuid, OpenFiles)}}
     end,
-
-    case session:update(SessId, Diff) of
-        {ok, _} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
+    ?extract_ok(session:update(SessId, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,11 +48,7 @@ unregister_open_file(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
         {ok, Sess#session{open_files = sets:del_element(FileGuid, OpenFiles)}}
     end,
-
-    case session:update(SessId, Diff) of
-        {ok, _} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
+    ?extract_ok(session:update(SessId, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc

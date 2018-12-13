@@ -82,7 +82,8 @@ create_durable_subscription(Sub = #subscription{id = Id}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of durable subscriptions (active for all clients).
+%% Returns list of durable subscriptions (subscriptions that are always active,
+%% created for each client when it connects to op_worker).
 %% @end
 %%--------------------------------------------------------------------
 -spec list_durable_subscriptions() -> {ok, [doc()]} | {error, term()}.

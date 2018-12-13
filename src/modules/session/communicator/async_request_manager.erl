@@ -22,7 +22,7 @@
     check_processes/4, get_processes_check_interval/0,
     get_heartbeat_msg/1, get_error_msg/1]).
 
--define(TIMEOUT, timer:seconds(10)).
+-define(DEFAULT_PROCESSES_CHECK_INTERVAL, timer:seconds(10)).
 
 -type delegation() :: {message_id:id(), pid(), reference()}.
 -type delegate_ans() :: {wait, delegation()}.
@@ -62,7 +62,7 @@ route_and_supervise(Fun, Id) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes function that handles message returns information needed for
+%% Executes function that handles message and returns information needed for
 %% asynchronous waiting for answer.
 %% @end
 %%--------------------------------------------------------------------
@@ -153,7 +153,8 @@ check_processes(Pids, WaitMap, TimeoutFun, ErrorFun) ->
 %%--------------------------------------------------------------------
 -spec get_processes_check_interval() -> non_neg_integer().
 get_processes_check_interval() ->
-    application:get_env(?APP_NAME, router_processes_check_interval, ?TIMEOUT).
+    application:get_env(?APP_NAME, router_processes_check_interval,
+        ?DEFAULT_PROCESSES_CHECK_INTERVAL).
 
 %%--------------------------------------------------------------------
 %% @doc

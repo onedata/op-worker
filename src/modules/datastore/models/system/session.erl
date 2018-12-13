@@ -23,10 +23,10 @@
 %% API - basic model function
 -export([create/1, save/1, get/1, exists/1, update/2, delete/1]).
 %% API - link functions
--export([add_links/4, get_links/3, fold_links/3, delete_links/3]).
--export([add_local_links/4, get_local_links/3, fold_local_links/3,
+-export([add_links/4, get_link/3, fold_links/3, delete_links/3]).
+-export([add_local_links/4, get_local_link/3, fold_local_links/3,
     delete_local_links/3]).
-%% API - other functions
+%% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_auth/1, get_user_id/1]).
@@ -156,9 +156,9 @@ add_links(SessId, TreeID, HandleId, Key) ->
 %% Gets link from a tree.
 %% @end
 %%--------------------------------------------------------------------
--spec get_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
-get_links(SessId, TreeID, HandleId) ->
+-spec get_link(id(), datastore:tree_id(), datastore:link_name()) ->
+    {ok, [datastore:link()]} | {error, term()}.
+get_link(SessId, TreeID, HandleId) ->
     datastore_model:get_links(?CTX, SessId, TreeID, HandleId).
 
 %%--------------------------------------------------------------------
@@ -167,7 +167,8 @@ get_links(SessId, TreeID, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fold_links(id(), datastore:tree_id(),
-    datastore:fold_fun(datastore:link())) -> ok | {error, term()}.
+    datastore:fold_fun(datastore:link())) ->
+    {ok, datastore:fold_acc()} | {error, term()}.
 fold_links(SessId, TreeID, Fun) ->
     datastore_model:fold_links(?CTX, SessId, TreeID, Fun, [], #{}).
 
@@ -198,9 +199,9 @@ add_local_links(SessId, TreeID, HandleId, Key) ->
 %% Gets local link from a tree.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
-get_local_links(SessId, TreeID, HandleId) ->
+-spec get_local_link(id(), datastore:tree_id(), datastore:link_name()) ->
+    {ok, [datastore:link()]} | {error, term()}.
+get_local_link(SessId, TreeID, HandleId) ->
     datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, HandleId).
 
 %%--------------------------------------------------------------------
@@ -209,7 +210,8 @@ get_local_links(SessId, TreeID, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fold_local_links(id(), datastore:tree_id(),
-    datastore:fold_fun(datastore:link())) -> ok | {error, term()}.
+    datastore:fold_fun(datastore:link())) ->
+    {ok, datastore:fold_acc()} | {error, term()}.
 fold_local_links(SessId, TreeID, Fun) ->
     datastore_model:fold_links(?CTX#{routing => local},
         SessId, TreeID, Fun, [], #{}).
@@ -226,7 +228,7 @@ delete_local_links(SessId, TreeID, HandleId) ->
         SessId, TreeID, HandleId).
 
 %%%===================================================================
-%%% API - other functions
+%%% API - field access functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
