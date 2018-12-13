@@ -93,11 +93,8 @@ send_to_provider(Msg, Ref, Options) ->
 %%--------------------------------------------------------------------
 -spec stream_to_provider(generic_message(), ref(), sequencer:stream_id()) ->
     asyn_ans().
-stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
-    communicate(Msg, Ref, #{error_on_empty_pool => false,
-        ensure_connected => true, stream => {true, StmId}, repeats => 1});
 stream_to_provider(Msg, Ref, StmId) ->
-    send_to_provider(#client_message{message_body = Msg}, Ref, StmId).
+    send_to_provider(Msg, Ref, #{stream => {true, StmId}, repeats => 1}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,11 +104,7 @@ stream_to_provider(Msg, Ref, StmId) ->
 -spec communicate_with_provider(generic_message(), ref()) ->
     sync_answer().
 communicate_with_provider(Msg, Ref) ->
-    Options = #{error_on_empty_pool => false, ensure_connected => true,
-        wait_for_ans => true},
-    communicate(Msg, Ref, Options);
-communicate_with_provider(Msg, Ref) ->
-    communicate_with_provider(#client_message{message_body = Msg}, Ref).
+    send_to_provider(Msg, Ref, #{wait_for_ans => true}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -120,17 +113,15 @@ communicate_with_provider(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec communicate_with_provider(generic_message(), ref(), pid()) ->
     sync_answer().
-communicate_with_provider(#client_message{} = Msg, Ref, Recipent) ->
-    Options = #{error_on_empty_pool => false, ensure_connected => true,
-        use_msg_id => {true, Recipent}},
-    Options2 = case Msg of
-        #client_message{message_stream = #message_stream{stream_id = StmId}}
-            when is_integer(StmId) -> Options#{stream => {true, StmId}};
-        _ -> Options
-    end,
-    communicate(Msg, Ref, Options2);
 communicate_with_provider(Msg, Ref, Recipent) ->
-    communicate_with_provider(#client_message{message_body = Msg}, Ref, Recipent).
+    Options = case Msg of
+        #client_message{message_stream = #message_stream{stream_id = StmId}}
+            when is_integer(StmId) ->
+            #{#{use_msg_id => {true, Recipent}}, stream => {true, StmId}};
+        _ ->
+            #{use_msg_id => {true, Recipent}}
+    end,
+    send_to_provider(Msg, Ref, Options).
 
 %%%===================================================================
 %%% API - generic function
