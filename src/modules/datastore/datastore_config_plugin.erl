@@ -66,7 +66,9 @@ get_models() -> [
     storage_sync_info,
     replica_deletion,
     replica_deletion_lock,
-    index
+    index,
+    autocleaning_run,
+    file_popularity_config
 ].
 
 %%--------------------------------------------------------------------

@@ -51,15 +51,23 @@
 -export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
     posix_permissions/0, file_guid/0, file_guid_or_path/0]).
 
--define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL, application:get_env(?APP_NAME,
-    invalidate_permissions_cache_interval, timer:seconds(30))).
+% requests
+-define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
+-define(PERIODICAL_SPACES_CLEANUP, periodical_spaces_cleanup).
+-define(RERUN_TRANSFERS, rerun_transfers).
+-define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 
--define(SPACES_CLEANUP_INTERVAL, application:get_env(?APP_NAME,
-    spaces_cleanup_interval, timer:hours(1))).
+% delays and intervals
+-define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
+    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
+-define(PERIODICAL_SPACES_CLEANUP_INTERVAL,
+    application:get_env(?APP_NAME, periodical_spaces_cleanup_interval, timer:minutes(15))).
+-define(RERUN_TRANSFERS_DELAY,
+    application:get_env(?APP_NAME, rerun_transfers_delay, 0)).
+-define(RESTART_AUTOCLEANING_RUNS_DELAY,
+    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 0)).
 
--define(TRANSFERS_RESTART_DELAY, application:get_env(?APP_NAME,
-    transfers_restart_delay, 0)).
-
+% exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
     list_to_atom(atom_to_list(Param) ++ "_time"))).
@@ -87,11 +95,10 @@
 init(_Args) ->
     transfer:init(),
 
-    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
-        {sync_timer, invalidate_permissions_cache}
-    ),
-
-    schedule_restart_transfers(),
+    schedule_invalidate_permissions_cache(),
+    schedule_rerun_transfers(),
+    schedule_restart_autocleaning_runs(),
+    schedule_periodical_spaces_cleanup(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -125,35 +132,22 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(invalidate_permissions_cache) ->
-    try
-        permissions_cache:invalidate()
-    catch
-        _:Reason ->
-            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
-    end,
-    erlang:send_after(?INVALIDATE_PERMISSIONS_CACHE_INTERVAL, self(),
-        {sync_timer, invalidate_permissions_cache}
-    ),
-    ok;
-handle(restart_transfers) ->
+handle(?INVALIDATE_PERMISSIONS_CACHE) ->
+    ?debug("Invalidating permissions cache"),
+    invalidate_permissions_cache(),
+    schedule_invalidate_permissions_cache();
+handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
-                ?debug("Restarted following transfers: ~p", [Restarted])
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
-            schedule_restart_transfers();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            schedule_restart_transfers();
-        Error = {error, _} ->
-            ?error("Unable to rerun transfers due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
-    end;
+    rerun_transfers(),
+    ok;
+handle(?RESTART_AUTOCLEANING_RUNS) ->
+    ?debug("Restarting unfinished auto-cleaning runs"),
+    restart_autocleaning_runs(),
+    ok;
+handle(?PERIODICAL_SPACES_CLEANUP) ->
+    ?debug("Triggering periodical spaces cleanup"),
+    periodical_spaces_cleanup(),
+    schedule_periodical_spaces_cleanup();
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -197,7 +191,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    Size = application:get_env(?CLUSTER_WORKER_APP_NAME, 
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
         exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
     Counters = lists:map(fun(Name) ->
         {?EXOMETER_NAME(Name), counter}
@@ -298,7 +292,7 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     Time = timer:now_diff(os:timestamp(), Now),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
     Ans;
-handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx)  ->
+handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
     handle_provider_request(UserCtx, Req, FileCtx);
@@ -457,7 +451,7 @@ handle_provider_request(UserCtx, #schedule_file_replication{
     );
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
-    index_name = IndexName,  query_view_params = QueryViewParams
+    index_name = IndexName, query_view_params = QueryViewParams
 }, FileCtx) ->
     replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
         SourceProviderId, TargetProviderId, IndexName, QueryViewParams
@@ -547,7 +541,13 @@ process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
                     {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
                     case Tokens1 of
                         [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
+                            Data = #{
+                                response => Response,
+                                path => Path,
+                                ctx => UserCtx,
+                                space_id => SpaceId,
+                                request => Request
+                            },
                             Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
                             space_sync_worker:run(Init);
                         _ -> Response
@@ -585,14 +585,83 @@ process_response(UserCtx,
 process_response(_, _, Response, _) ->
     Response.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Maps space strategy name to worker pool name.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_restart_transfers() -> reference().
-schedule_restart_transfers() ->
-    erlang:send_after(?TRANSFERS_RESTART_DELAY, self(),
-        {sync_timer, restart_transfers}
-    ).
+-spec schedule_invalidate_permissions_cache() -> ok.
+schedule_invalidate_permissions_cache() ->
+    schedule(?INVALIDATE_PERMISSIONS_CACHE, ?INVALIDATE_PERMISSIONS_CACHE_INTERVAL).
+
+-spec schedule_rerun_transfers() -> ok.
+schedule_rerun_transfers() ->
+    schedule(?RERUN_TRANSFERS, ?RERUN_TRANSFERS_DELAY).
+
+-spec schedule_restart_autocleaning_runs() -> ok.
+schedule_restart_autocleaning_runs() ->
+    schedule(?RESTART_AUTOCLEANING_RUNS, ?RESTART_AUTOCLEANING_RUNS_DELAY).
+
+-spec schedule_periodical_spaces_cleanup() -> ok.
+schedule_periodical_spaces_cleanup() ->
+    schedule(?PERIODICAL_SPACES_CLEANUP, ?PERIODICAL_SPACES_CLEANUP_INTERVAL).
+
+-spec schedule(term(), non_neg_integer()) -> ok.
+schedule(Request, Timeout) ->
+    erlang:send_after(Timeout, self(), {sync_timer, Request}),
+    ok.
+
+-spec invalidate_permissions_cache() -> ok.
+invalidate_permissions_cache() ->
+    try
+        permissions_cache:invalidate()
+    catch
+        _:Reason ->
+            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
+    end.
+
+-spec periodical_spaces_cleanup() -> ok.
+periodical_spaces_cleanup() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
+            end, SpaceIds);
+        Error = {error, _} ->
+            ?error("Unable to trigger spaces cleanup due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to trigger spaces cleanup due to: ~p", [{Error2, Reason}])
+    end.
+
+-spec rerun_transfers() -> ok.
+rerun_transfers() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
+                ?debug("Restarted following transfers: ~p", [Restarted])
+            end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_rerun_transfers();
+        ?ERROR_NO_CONNECTION_TO_OZ ->
+            schedule_rerun_transfers();
+        Error = {error, _} ->
+            ?error("Unable to rerun transfers due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+    end.
+
+-spec restart_autocleaning_runs() -> ok.
+restart_autocleaning_runs() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                autocleaning_api:restart_autocleaning_run(SpaceId)
+            end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_restart_autocleaning_runs();
+        ?ERROR_NO_CONNECTION_TO_OZ ->
+            schedule_restart_autocleaning_runs();
+        Error = {error, _} ->
+            ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+    end.

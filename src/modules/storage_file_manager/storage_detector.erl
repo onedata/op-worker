@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 -spec generate_file_id() -> binary().
 generate_file_id() ->
-    random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN).
+    file_meta:hidden_file_name(random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,13 +89,11 @@ update_test_file(Helper, UserCtx, FileId) ->
 -spec remove_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
     Size :: non_neg_integer()) -> ok.
 remove_test_file(Helper, UserCtx, FileId, Size) ->
-    Noop = fun(_) -> ok end,
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     case helpers:unlink(Handle, FileId, Size) of
         ok -> ok;
         {error, enoent} -> ok
     end,
-    Noop(Handle),
     ok.
 
 %%%===================================================================

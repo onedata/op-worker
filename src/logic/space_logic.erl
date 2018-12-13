@@ -26,7 +26,8 @@
 -export([get/2, get_protected_data/2]).
 -export([get_name/2]).
 -export([get_eff_users/2, get_shares/2]).
--export([get_provider_ids/2, get_providers_supports/2]).
+-export([get_provider_ids/2, get_providers_supports/2,
+    get_provider_support/2, get_provider_support/3]).
 -export([has_eff_user/2, has_eff_user/3]).
 -export([has_eff_group/2, has_eff_group/3]).
 -export([is_supported/2, is_supported/3]).
@@ -124,6 +125,21 @@ get_providers_supports(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{providers = Providers}}} ->
             {ok, Providers};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec get_provider_support(gs_client_worker:client(), od_space:id()) ->
+    integer() | gs_protocol:error().
+get_provider_support(SessionId, SpaceId) ->
+    get_provider_support(SessionId, SpaceId, oneprovider:get_id()).
+
+-spec get_provider_support(gs_client_worker:client(), od_space:id(),
+    od_provider:id()) -> integer() | gs_protocol:error().
+get_provider_support(SessionId, SpaceId, ProviderId) ->
+    case space_logic:get_providers_supports(SessionId, SpaceId) of
+        {ok, SupportsMap} ->
+            maps:get(ProviderId, SupportsMap);
         {error, _} = Error ->
             Error
     end.

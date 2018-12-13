@@ -631,7 +631,7 @@ query_file_popularity_index(Config) ->
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     IndexName = <<"file-popularity">>,
     Options = #{
-        spatial => true,
+        spatial => false,
         stale => false
     },
     ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, Options)).
@@ -639,7 +639,13 @@ query_file_popularity_index(Config) ->
 spatial_flag_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"file-popularity">>,
+    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+
+    ?assertMatch(ok, create_index_via_rest(
+        Config, WorkerP1, SpaceId, IndexName,
+        ?GEOSPATIAL_MAP_FUNCTION, true,
+        [?PROVIDER_ID(WorkerP1)], #{}
+    )),
 
     ?assertMatch({404, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [])),
     ?assertMatch({400, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
@@ -709,27 +715,21 @@ end_per_suite(Config) ->
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
-init_per_testcase(Case, Config) when
-    Case =:= query_file_popularity_index;
-    Case =:= spatial_flag_test
-->
+init_per_testcase(query_file_popularity_index, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    {ok, _} = rpc:call(WorkerP1, space_storage, enable_file_popularity, [?SPACE_ID]),
-    {ok, _} = rpc:call(WorkerP2, space_storage, enable_file_popularity, [?SPACE_ID]),
+    ok = rpc:call(WorkerP1, file_popularity_api, enable, [?SPACE_ID]),
+    ok = rpc:call(WorkerP2, file_popularity_api, enable, [?SPACE_ID]),
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
-end_per_testcase(Case, Config) when
-    Case =:= query_file_popularity_index;
-    Case =:= spatial_flag_test
-->
+end_per_testcase(query_file_popularity_index, Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    rpc:call(WorkerP1, space_storage, disable_file_popularity, [?SPACE_ID]),
-    rpc:call(WorkerP2, space_storage, disable_file_popularity, [?SPACE_ID]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
+    rpc:call(WorkerP1, file_popularity_api, disable, [?SPACE_ID]),
+    rpc:call(WorkerP2, file_popularity_api, disable, [?SPACE_ID]),
+    end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

@@ -24,11 +24,10 @@
 %% API
 -export([start_link/1,
     enqueue_task/7, enqueue_task_internal/7,
-    enqueue_notification/3, enqueue_notification_internal/3,
     cancel/2, cancel_internal/2,
     cancelling_finished/2, cancelling_finished_internal/2,
     notify_finished_task/1, notify_finished_task_internal/1,
-    process_result/4, get_setting_for_deletion_task/1]).
+    process_result/5, get_setting_for_deletion_task/1]).
 
 %% function exported for monitoring performance
 -export([check/1 , check_internal/1]).
@@ -53,9 +52,10 @@
     version = Version,
     type = Type
 }).
--define(NOTIFY(NotifyFun), #notification_task{notify_fun = NotifyFun}).
--define(CANCEL(ReportId), {cancel, ReportId}).
--define(CANCEL_DONE(ReportId), {cancel_done, ReportId}).
+-define(CANCEL, cancel).
+-define(CANCEL(ReportId), {?CANCEL, ReportId}).
+-define(CANCEL_DONE, cancel_done).
+-define(CANCEL_DONE(ReportId), {?CANCEL_DONE, ReportId}).
 -define(FINISHED, finished).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
@@ -80,20 +80,14 @@
     type :: replica_deletion:type()
 }).
 
--record(notification_task, {
-   notify_fun :: notify_fun()
-}).
-
 -record(task, {
-    task :: deletion_task() | notification_task(),
+    task :: deletion_task(),
     id :: replica_deletion:report_id()
 }).
 
 
 -type task() :: #task{}.
 -type deletion_task() :: #deletion_task{}.
--type notification_task() :: #notification_task{}.
--type notify_fun() :: fun(() -> term()).
 
 %%TODO VFS-4625 handle too long queue of tasks and return error
 
@@ -127,30 +121,6 @@ enqueue_task(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
 enqueue_task_internal(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
     call(SpaceId, ?TASK(?DELETE(FileUuid, ProviderId,
         Blocks, Version, Type), ReportId)).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv notify_internal(NotifyFun, ReportId, SpaceId) on chosen node.
-%% @end
-%%-------------------------------------------------------------------
--spec enqueue_notification(function(), replica_deletion:report_id(),
-    od_space:id()) -> ok.
-enqueue_notification(NotifyFun, ReportId, SpaceId) ->
-    Node = consistent_hasing:get_node(SpaceId),
-    rpc:call(Node, ?MODULE, enqueue_notification_internal,
-        [?TASK(?NOTIFY(NotifyFun), ReportId)]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Casts notification task.
-%% NotifyFun can be literally any function.
-%% It will be called by replica_deletion_master to notify requester.
-%% @end
-%%-------------------------------------------------------------------
--spec enqueue_notification_internal(function(), replica_deletion:report_id(),
-    od_space:id()) -> ok.
-enqueue_notification_internal(NotifyFun, ReportId, SpaceId) ->
-    call(SpaceId, ?TASK(?NOTIFY(NotifyFun), ReportId)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -238,12 +208,12 @@ check_internal(SpaceId) ->
 %% Delegates processing of deletion results to appropriate model
 %% @end
 %%-------------------------------------------------------------------
--spec process_result(replica_deletion:type(), file_meta:uuid(),
+-spec process_result(replica_deletion:type(), od_space:id(), file_meta:uuid(),
     replica_deletion:result(), replica_deletion:report_id()) -> ok.
-process_result(autocleaning, FileUuid, Result, ReportId) ->
-    autocleaning_controller:process_replica_deletion_result(Result, FileUuid, ReportId);
-process_result(eviction, FileUuid, Result, ReportId) ->
-    replica_eviction_worker:process_replica_deletion_result(Result, FileUuid, ReportId).
+process_result(autocleaning, SpaceId, FileUuid, Result, ARId) ->
+    autocleaning_controller:process_replica_deletion_result(Result, SpaceId, FileUuid, ARId);
+process_result(eviction, _SpaceId, FileUuid, Result, TransferId) ->
+    replica_eviction_worker:process_replica_deletion_result(Result, FileUuid, TransferId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -334,7 +304,7 @@ handle_call(Request, From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast(check, State = #state{ids_queue = IdsQueue, active_tasks = Active}) ->
-    ?critical("Queue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
+    ?critical("~nQueue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
     {noreply, State, ?DIE_AFTER};
 handle_cast(Task = #task{id = ReportId}, State = #state{
     active_tasks = ActiveTasks,
@@ -478,10 +448,7 @@ handle_task(#task{
 }, SpaceId) ->
     {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
         Type, SpaceId),
-    ok;
-handle_task(#task{task = #notification_task{notify_fun = NotifyFun}}, SpaceId) ->
-    NotifyFun(),
-    notify_finished_task(SpaceId).
+    ok.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -508,10 +475,8 @@ request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
 %% @end
 %%-------------------------------------------------------------------
 -spec cancel_task(task(), od_space:id()) -> ok.
-cancel_task(#task{task = #notification_task{}}, SpaceId) ->
-    notify_finished_task(SpaceId);
 cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) ->
-    mark_processed_file(Type, ReportId),
+    mark_processed_file(Type, ReportId, SpaceId),
     notify_finished_task(SpaceId).
 
 %%-------------------------------------------------------------------
@@ -520,10 +485,10 @@ cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) -
 %% Delegates increasing processed_files counter to appropriate module
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_file(replica_deletion:type(), replica_deletion:report_id()) -> ok.
-mark_processed_file(autocleaning, AutocleaningId) ->
-    {ok, _} = autocleaning:mark_processed_file(AutocleaningId),
-    ok;
-mark_processed_file(eviction, TransferId) ->
+-spec mark_processed_file(replica_deletion:type(), replica_deletion:report_id(),
+    od_space:id()) -> ok.
+mark_processed_file(autocleaning, ReportId, SpaceId) ->
+    autocleaning_controller:notify_processed_file(SpaceId, ReportId);
+mark_processed_file(eviction, TransferId, _) ->
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok.
