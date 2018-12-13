@@ -93,11 +93,8 @@ send_to_provider(Msg, Ref, Options) ->
 %%--------------------------------------------------------------------
 -spec stream_to_provider(generic_message(), ref(), sequencer:stream_id()) ->
     asyn_ans().
-stream_to_provider(#client_message{} = Msg, Ref, StmId) ->
-    communicate(Msg, Ref, #{error_on_empty_pool => false,
-        ensure_connected => true, stream => {true, StmId}});
 stream_to_provider(Msg, Ref, StmId) ->
-    send_to_provider(#client_message{message_body = Msg}, Ref, StmId).
+    send_to_provider(Msg, Ref, #{stream => {true, StmId}, repeats => 1}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,31 +104,24 @@ stream_to_provider(Msg, Ref, StmId) ->
 -spec communicate_with_provider(generic_message(), ref()) ->
     sync_answer().
 communicate_with_provider(Msg, Ref) ->
-    communicate_with_provider(Msg, Ref, wait_for_ans).
+    send_to_provider(Msg, Ref, #{wait_for_ans => true}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Communicates with provider and waits for answer.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_with_provider(generic_message(), ref(), wait_for_ans | pid()) ->
+-spec communicate_with_provider(generic_message(), ref(), pid()) ->
     sync_answer().
-communicate_with_provider(#client_message{} = Msg, Ref, Recipent) ->
-    Options = case Recipent of
-        wait_for_ans -> #{error_on_empty_pool => false, ensure_connected => true,
-            wait_for_ans => true};
-        _ ->
-            #{error_on_empty_pool => false, ensure_connected => true,
-                use_msg_id => {true, Recipent}}
-    end,
-    Options2 = case Msg of
+communicate_with_provider(Msg, Ref, Recipent) ->
+    Options = case Msg of
         #client_message{message_stream = #message_stream{stream_id = StmId}}
-            when is_integer(StmId) -> Options#{stream => {true, StmId}};
-        _ -> Options
+            when is_integer(StmId) ->
+            #{use_msg_id => {true, Recipent}, stream => {true, StmId}};
+        _ ->
+            #{use_msg_id => {true, Recipent}}
     end,
-    communicate(Msg, Ref, Options2);
-communicate_with_provider(Msg, Ref, Async) ->
-    communicate_with_provider(#client_message{message_body = Msg}, Ref, Async).
+    send_to_provider(Msg, Ref, Options).
 
 %%%===================================================================
 %%% API - generic function
@@ -230,7 +220,7 @@ send(Msg, Ref, Options) ->
     SendAns = case maps:get(stream, Options, false) of
         {true, StmId} -> sequencer:send_message(Msg2, StmId, Ref);
         _ -> forward_to_connection_proc(Msg2, Ref,
-            maps:get(ignore_send_errors, Options, false)) % TODO - zawsze ignorujemy?
+            maps:get(ignore_send_errors, Options, false))
     end,
 
     case {SendAns, maps:get(wait_for_ans, Options, false)} of
