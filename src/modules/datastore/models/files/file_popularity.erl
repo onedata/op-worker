@@ -17,14 +17,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get_or_default/1, initialize/1, update_size/2, delete/1, update/2, get/1]).
+-export([increment_open/1, get_or_default/1, update_size/2, delete/1, update/2,
+    get/1]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1, get_ctx/0, get_record_version/0]).
 
 -type id() :: file_meta:uuid().
--type file_popularity() :: #file_popularity{}.
--type doc() :: datastore_doc:doc(file_popularity()).
+-type record() :: #file_popularity{}.
+-type doc() :: datastore_doc:doc(record()).
 -export_type([id/0]).
 
 -define(CTX, #{model => ?MODULE}).
@@ -42,20 +43,6 @@
 %%%===================================================================
 
 %%-------------------------------------------------------------------
-%% @doc
-%% Creates file popularity view if it is enabled.
-%% @end
-%%-------------------------------------------------------------------
--spec initialize(od_space:id()) -> ok | {error, term()}.
-initialize(SpaceId) ->
-    case space_storage:is_file_popularity_enabled(SpaceId) of
-        true ->
-            file_popularity_view:create(SpaceId);
-        false ->
-            ok
-    end.
-
-%%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Updated file's size
@@ -64,7 +51,7 @@ initialize(SpaceId) ->
 -spec update_size(file_ctx:ctx(), non_neg_integer()) -> ok | {error, term()}.
 update_size(FileCtx, NewSize) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case space_storage:is_file_popularity_enabled(SpaceId) of
+    case file_popularity_api:is_enabled(SpaceId) of
         true ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             DefaultFilePopularity = empty_file_popularity(FileCtx),
@@ -94,7 +81,7 @@ update_size(FileCtx, NewSize) ->
 -spec increment_open(FileCtx :: file_ctx:ctx()) -> ok | {error, term()}.
 increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case space_storage:is_file_popularity_enabled(SpaceId) of
+    case file_popularity_api:is_enabled(SpaceId) of
         true ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             Diff = fun(FilePopularity) ->
@@ -137,7 +124,7 @@ delete(FileUuid) ->
 %% Returns file_popularity doc.
 %% @end
 %%--------------------------------------------------------------------
--spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, file_popularity()} | {error, term()}.
+-spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, record()} | {error, term()}.
 update(FileUuid, Diff) ->
     datastore_model:update(?CTX, FileUuid, Diff).
 
@@ -170,7 +157,7 @@ get_or_default(FileCtx) ->
 %% Returns file_popularity record with zero popularity.
 %% @end
 %%--------------------------------------------------------------------
--spec empty_file_popularity(file_ctx:ctx()) -> file_popularity().
+-spec empty_file_popularity(file_ctx:ctx()) -> record().
 empty_file_popularity(FileCtx) ->
     HourlyHistogram = time_slot_histogram:new(?HOUR_TIME_WINDOW, ?HOUR_HISTOGRAM_SIZE),
     DailyHistogram = time_slot_histogram:new(?DAY_TIME_WINDOW, ?DAY_HISTOGRAM_SIZE),
@@ -182,7 +169,7 @@ empty_file_popularity(FileCtx) ->
 %% Returns file_popularity record with popularity increased by one open
 %% @end
 %%--------------------------------------------------------------------
--spec increase_popularity(file_ctx:ctx(), file_popularity()) -> file_popularity().
+-spec increase_popularity(file_ctx:ctx(), record()) -> record().
 increase_popularity(FileCtx, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
@@ -203,7 +190,7 @@ increase_popularity(FileCtx, FilePopularity) ->
     HourlyHistogram :: time_slot_histogram:histogram(),
     DailyHistogram :: time_slot_histogram:histogram(),
     MonthlyHistogram :: time_slot_histogram:histogram(),
-    file_ctx:ctx()) -> file_popularity().
+    file_ctx:ctx()) -> record().
 histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileCtx) ->
     {LocalSize, _FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     #file_popularity{
@@ -225,7 +212,7 @@ histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram,
 %% Converts file_popularity record into histograms
 %% @end
 %%--------------------------------------------------------------------
--spec file_popularity_to_histograms(file_popularity()) ->
+-spec file_popularity_to_histograms(record()) ->
     {
         HourlyHistogram :: time_slot_histogram:histogram(),
         DailyHistogram :: time_slot_histogram:histogram(),

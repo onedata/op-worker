@@ -48,7 +48,7 @@ truncate(UserCtx, FileCtx, Size) ->
 truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     FileCtx2 = update_quota(FileCtx, Size),
 
-    FileCtx5 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
+    FileCtx4 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
         true ->
             FileCtx2;
         _ ->
@@ -61,12 +61,13 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
                         ok ->
                             ok;
                         Error = {error, ?EBUSY} ->
-                            {Path, FileCtx4} = file_ctx:get_canonical_path(FileCtx3),
-                            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx4),
-                            ?warning_stacktrace("truncate of file ~p with file_id ~p returned ~p",
-                                [Path, StorageFileId, Error])
+                            log_warning(storage_file_manager, truncate, Error, FileCtx3)
                     end,
-                    ok = storage_file_manager:release(Handle),
+                    case storage_file_manager:release(Handle) of
+                        ok -> ok;
+                        Error2 = {error, ?EDOM} ->
+                            log_warning(storage_file_manager, release, Error2, FileCtx3)
+                    end,
                     ok = file_popularity:update_size(FileCtx3, Size);
                 {error, ?ENOENT} ->
                     ok
@@ -76,7 +77,7 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
 
     case UpdateTimes of
         true ->
-            fslogic_times:update_mtime_ctime(FileCtx5);
+            fslogic_times:update_mtime_ctime(FileCtx4);
         false ->
             ok
     end,
@@ -98,3 +99,11 @@ update_quota(FileCtx, Size) ->
     {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
     FileCtx2.
+
+-spec log_warning(atom(), atom(), {error, term()}, file_ctx:ctx()) -> ok.
+log_warning(Module, Function, Error, FileCtx) ->
+    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    Guid = file_ctx:get_guid_const(FileCtx3),
+    ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p",
+        [Module, Function, Path, Guid, StorageFileId, Error]).

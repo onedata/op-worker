@@ -1824,8 +1824,7 @@ init_per_suite(Config) ->
 
         application:start(ssl),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        NewConfig3
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
