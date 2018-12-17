@@ -33,7 +33,7 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    routing => global
+    disc_driver => undefined
 }).
 
 -define(LUMA_USER_ROOT_PREFIX, <<"luma_user_">>).

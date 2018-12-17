@@ -20,18 +20,25 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/1, get/1, delete/1]).
+-export([create/1, get/1, delete/1, update/2]).
 -export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
-    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1]).
+    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1,
+    create_or_update/2, update_last_check_timestamp/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_posthooks/0]).
+-export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
+    upgrade_record/2]).
 
 -type id() :: binary().
--type doc() :: datastore:doc().
--export_type([id/0]).
+-type diff() :: datastore_doc:diff(record()).
+-type record() :: #space_quota{}.
+-type doc() :: datastore_doc:doc(record()).
+-export_type([id/0, record/0, doc/0]).
 
 -define(CTX, #{model => ?MODULE}).
+
+-define(AUTOCLEANING_CHECK_INTERVAL,
+    application:get_env(?APP_NAME, autocleaning_check_interval, 1000)). % 1s
 
 %%%===================================================================
 %%% API
@@ -57,11 +64,7 @@ get(SpaceId) ->
         {ok, Doc} ->
             {ok, Doc};
         {error, not_found} ->
-            Doc = #document{
-                key = SpaceId,
-                value = #space_quota{current_size = 0}
-            },
-            case datastore_model:create(?CTX, Doc) of
+            case space_quota:create(default_doc(SpaceId)) of
                 {ok, _} -> space_quota:get(SpaceId);
                 {error, already_exists} -> space_quota:get(SpaceId);
                 {error, Reason} -> {error, Reason}
@@ -69,6 +72,15 @@ get(SpaceId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+-spec update(id(), diff()) -> {ok, doc()}.
+update(SpaceId, UpdateFun) ->
+    datastore_model:update(?CTX, SpaceId, UpdateFun).
+
+-spec create_or_update(id(), diff()) -> {ok, doc()}.
+create_or_update(SpaceId, UpdateFun) ->
+    {ok, DefaultValue} = UpdateFun(#space_quota{}),
+    datastore_model:update(?CTX, SpaceId, UpdateFun, default_doc(SpaceId, DefaultValue)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -84,16 +96,12 @@ delete(Key) ->
 %% Records total space size change.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_size_change(od_space:id(), integer()) ->
-    {ok, doc()} | {error, term()}.
+-spec apply_size_change(id(), integer()) -> {ok, doc()} | {error, term()}.
 apply_size_change(SpaceId, SizeDiff) ->
     Diff = fun(Quota = #space_quota{current_size = Size}) ->
         {ok, Quota#space_quota{current_size = Size + SizeDiff}}
     end,
-    Default = #document{key = SpaceId, value = #space_quota{
-        current_size = SizeDiff
-    }},
-    datastore_model:update(?CTX, SpaceId, Diff, Default).
+    create_or_update(SpaceId, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -102,8 +110,7 @@ apply_size_change(SpaceId, SizeDiff) ->
 %% is getting disabled because of this change, QuotaExceeded event is sent.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_size_change_and_maybe_emit(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
-    ok | {error, Reason :: any()}.
+-spec apply_size_change_and_maybe_emit(id(), integer()) -> ok | {error, any()}.
 apply_size_change_and_maybe_emit(_SpaceId, 0) ->
     ok;
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
@@ -120,10 +127,18 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
 %% Returns current storage occupancy.
 %% @end
 %%-------------------------------------------------------------------
--spec current_size(od_space:id()) -> non_neg_integer().
+-spec current_size(id()) -> non_neg_integer().
+current_size(#document{value = SQ}) ->
+    current_size(SQ);
+current_size(#space_quota{current_size = CurrentSize}) ->
+    CurrentSize;
 current_size(SpaceId) ->
-    {ok, #document{value = #space_quota{current_size = CSize}}} = ?MODULE:get(SpaceId),
-    CSize.
+    case space_quota:get(SpaceId) of
+        {ok, #document{value = SQ}} ->
+            current_size(SQ);
+        {error, not_found} ->
+            0
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -132,13 +147,11 @@ current_size(SpaceId) ->
 %% then quota allows.
 %% @end
 %%--------------------------------------------------------------------
--spec available_size(SpaceId :: od_space:id()) ->
-    AvailableSize :: integer().
+-spec available_size(id()) -> integer().
 available_size(SpaceId) ->
     try
         CSize = ?MODULE:current_size(SpaceId),
-        {ok, Supports} = space_logic:get_providers_supports(?ROOT_SESS_ID, SpaceId),
-        SupSize = maps:get(oneprovider:get_id(), Supports, 0),
+        SupSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
         SupSize - CSize
     catch
         _:Reason ->
@@ -153,8 +166,7 @@ available_size(SpaceId) ->
 %% @equiv assert_write(SpaceId, 1)
 %% @end
 %%--------------------------------------------------------------------
--spec assert_write(SpaceId :: od_space:id()) ->
-    ok | no_return().
+-spec assert_write(SpaceId :: id()) -> ok | no_return().
 assert_write(SpaceId) ->
     space_quota:assert_write(SpaceId, 1).
 
@@ -164,8 +176,7 @@ assert_write(SpaceId) ->
 %% Checks if write operation with given size is permitted for given space.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_write(SpaceId :: od_space:id(), WriteSize :: integer()) ->
-    ok | no_return().
+-spec assert_write(SpaceId :: id(), WriteSize :: integer()) -> ok | no_return().
 assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
 assert_write(SpaceId, WriteSize) ->
@@ -174,13 +185,12 @@ assert_write(SpaceId, WriteSize) ->
         false -> throw(?ENOSPC)
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of spaces that are currently over quota limit.
 %% @end
 %%--------------------------------------------------------------------
--spec get_disabled_spaces() -> [od_space:id()] | {error, term()}.
+-spec get_disabled_spaces() -> [id()] | {error, term()}.
 get_disabled_spaces() ->
     case provider_logic:get_spaces() of
         {ok, SpaceIds} ->
@@ -198,19 +208,42 @@ get_disabled_spaces() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Posthook responsible for starting autocleaning if it has been
-%% turned on.
+%% Posthook responsible for checking whether auto-cleaning run
+%% should be triggered. If true, the function also starts
+%% auto-cleaning run.
 %% @end
 %%-------------------------------------------------------------------
--spec run_after(atom(), term(), term()) -> term().
-run_after(create, _, Result = {ok, #document{key = SpaceId}}) ->
-    space_cleanup_api:maybe_start(SpaceId),
+-spec autocleaning_check_posthook(atom(), term(), term()) -> term().
+autocleaning_check_posthook(create, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
+    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
     Result;
-run_after(update, _, Result = {ok, #document{key = SpaceId}}) ->
-    space_cleanup_api:maybe_start(SpaceId),
+autocleaning_check_posthook(update, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
+    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
     Result;
-run_after(_, _, Result) ->
+autocleaning_check_posthook(_, _, Result) ->
     Result.
+
+-spec update_last_check_timestamp(id(), non_neg_integer()) -> ok | {error, term()}.
+update_last_check_timestamp(SpaceId, NewLastCheckTimestamp) ->
+    ok = ?extract_ok(update(SpaceId, fun(SQ) ->
+        {ok, SQ#space_quota{last_autocleaning_check = NewLastCheckTimestamp}}
+    end)).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec default_doc(id()) -> doc().
+default_doc(SpaceId) ->
+    default_doc(SpaceId, #space_quota{}).
+
+-spec default_doc(id(), record()) -> doc().
+default_doc(SpaceId, DefaultValue) ->
+    #document{
+        key = SpaceId,
+        value = DefaultValue,
+        scope = SpaceId
+    }.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -227,6 +260,15 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns model's record structure in provided version.
 %% @end
 %%--------------------------------------------------------------------
@@ -235,7 +277,22 @@ get_ctx() ->
 get_record_struct(1) ->
     {record, [
         {current_size, integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {current_size, integer},
+        {last_autocleaning_check, integer}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, CurrentSize}) ->
+    {2, {?MODULE, CurrentSize, 0}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -245,4 +302,4 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
-    [fun run_after/3].
+    [fun autocleaning_check_posthook/3].

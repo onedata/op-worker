@@ -61,7 +61,7 @@
 -type action() :: request | confirm | refuse | release_lock.
 -type diff() :: datastore_doc:diff(record()).
 -type type() :: autocleaning | eviction.
--type report_id() :: autocleaning:id() | transfer:id().
+-type report_id() :: autocleaning_controller:batch_id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 
 -export_type([id/0, type/0, report_id/0, result/0]).
@@ -95,13 +95,12 @@ request(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 %%-------------------------------------------------------------------
 -spec confirm(id(), fslogic_blocks:blocks()) -> ok.
 confirm(Id, Blocks) ->
-    {ok, _} = update(Id, fun(ReplicaDeletion) ->
+    ok = ?extract_ok(update(Id, fun(ReplicaDeletion) ->
         {ok, ReplicaDeletion#replica_deletion{
             action = confirm,
             supported_blocks = Blocks
         }}
-    end),
-    ok.
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -110,10 +109,9 @@ confirm(Id, Blocks) ->
 %%-------------------------------------------------------------------
 -spec refuse(id()) -> ok.
 refuse(Id) ->
-    {ok, _} = update(Id, fun(ReplicaDeletion) ->
+    ok = ?extract_ok(update(Id, fun(ReplicaDeletion) ->
         {ok, update_action(ReplicaDeletion, refuse)}
-    end),
-    ok.
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -122,10 +120,9 @@ refuse(Id) ->
 %%-------------------------------------------------------------------
 -spec release_supporting_lock(id()) -> ok.
 release_supporting_lock(Id) ->
-    {ok, _} = update(Id, fun(ReplicaDeletion) ->
+    ok = ?extract_ok(update(Id, fun(ReplicaDeletion) ->
         {ok, update_action(ReplicaDeletion, release_lock)}
-    end),
-    ok.
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc

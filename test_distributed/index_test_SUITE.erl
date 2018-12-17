@@ -228,7 +228,7 @@ query_index_using_file_popularity(Config) ->
     TestData = <<"test_data">>,
     TestDataSize = byte_size(TestData),
 
-    {ok, _} = rpc:call(Worker, space_storage, enable_file_popularity, [?SPACE_ID]),
+    {ok, _} = rpc:call(Worker, file_popularity_config, enable, [?SPACE_ID]),
     FilePath = ?TEST_FILE(?SPACE_NAME),
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath, 8#664),
     Uuid = fslogic_uuid:guid_to_uuid(Guid),

@@ -135,7 +135,7 @@ handle_refusal(#document{
         type = Type
 }}) ->
     replica_deletion_master:notify_finished_task(SpaceId),
-    replica_deletion_master:process_result(Type, FileUuid, {error, replica_deletion_refused}, ReportId).
+    replica_deletion_master:process_result(Type, SpaceId, FileUuid, {error, replica_deletion_refused}, ReportId).
 
 %%-------------------------------------------------------------------
 %% @private

@@ -264,41 +264,94 @@
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()],
-    file_popularity_enabled = false :: boolean(),
-    cleanup_enabled = false :: boolean(),
-    cleanup_in_progress :: undefined | autocleaning:id(),
-    autocleaning_config :: undefined | autocleaning_config:config()
+    mounted_in_root = [] :: [storage:id()]
 }).
 
-%% Record containing autocleaning configuration
+%% Model that stores config of file-popularity mechanism per given space.
+-record(file_popularity_config, {
+    enabled = false :: boolean()
+}).
+
+%% Helper record for autocleaning model.
+%% Record contains setting of one autocleaning selective rule.
+%% A rule is a filter which can be used to limit the set of file replicas
+%% which can be deleted by auto-cleaning mechanism.
+%% If a rule is disabled, its constraint is ignored.
+-record(autocleaning_rule_setting, {
+    %% The rule can be enabled/disabled by setting enabled field.
+    enabled = false :: boolean(),
+    %% The value is a numerical value, which defines the limit value for given rule.
+    %% Depending on the rule's name, the value can be lower/upper limit.
+    value = 0 :: non_neg_integer()
+}).
+
+%% Helper record for autocleaning model.
+%% Record contains settings for all autocleaning selective rules.
+%% Rules are filters which can be used to limit the set of file replicas
+%% which can be deleted by auto-cleaning mechanism.
+%% File replica must satisfy all enabled rules to be deleted.
+%% Satisfying all enabled rules is necessary but not sufficient.
+%% Files will be deleted in order determined by the file_popularity_view.
+%% Each rule is defined by one #autocleaning_rule_setting record.
+-record(autocleaning_rules, {
+    % informs whether selective rules should be used by auto-cleaning mechanism
+    % this field has higher priority than enabled field in each #autocleaning_rule_setting
+    % which means that setting this field to false results in ignoring all rules,
+    % because it overrides specific rules' settings
+    enabled = false :: boolean(),
+    % min size of file that can be evicted during autocleaning
+    min_file_size = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % max size of file that can be evicted during autocleaning
+    max_file_size = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files which were opened for the last time more than given number of
+    % hours ago may be cleaned
+    min_hours_since_last_open = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have been opened less than max_open_count times may be cleaned.
+    max_open_count = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have moving average of open operations count per hour less
+    % than given value may be cleaned. The average is calculated in 24 hours window.
+    max_hourly_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have moving average of open operations count per day less than
+    % given value may be cleaned. The average is calculated in 31 days window.
+    max_daily_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting(),
+    % files that have moving average of open operations count per month less
+    % than given value may be cleaned. The average is calculated in 12 months window.
+    max_monthly_moving_average = #autocleaning_rule_setting{} :: autocleaning_config:rule_setting()
+}).
+
+%% Helper record for autocleaning model.
+%% Record contains configuration of auto-cleaning mechanism for given space.
 -record(autocleaning_config, {
-    % lowest size of file that can be invalidated during autocleaning
-    lower_file_size_limit :: undefined | non_neg_integer(),
-    % highest size of file that can be invalidated during autocleaning
-    upper_file_size_limit :: undefined |  non_neg_integer(),
-    % if file hasn't been opened for this number of hours or longer it will be deleted
-    max_file_not_opened_hours :: undefined |  non_neg_integer(),
-    % storage occupancy at which autocleaning will stop
-    target :: non_neg_integer(),
-    % autocleaning will start after exceeding threshold level of occupancy
-    threshold :: non_neg_integer()
+    % this field enables/disables auto-cleaning mechanism in given space
+    enabled = false :: boolean(),
+    % storage occupancy at which auto-cleaning will stop
+    target = 0 :: non_neg_integer(),
+    % auto-cleaning will start after exceeding threshold level of occupancy
+    threshold = 0 :: non_neg_integer(),
+    rules = #autocleaning_rules{} :: autocleaning_config:rules()
 }).
 
-%% Model for holding information about autocleaning procedures
--record(autocleaning, {
+%% Model for holding information about auto-cleaning runs.
+%% Each record stores information about one specific run.
+-record(autocleaning_run, {
     space_id :: undefined | od_space:id(),
     started_at = 0 :: non_neg_integer(),
     stopped_at :: undefined | non_neg_integer(),
-
-    files_to_process = 0 :: non_neg_integer(),
-    files_processed = 0 :: non_neg_integer(),
+    status :: undefined | autocleaning_run:status(),
 
     released_bytes = 0 :: non_neg_integer(),
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
-    status :: undefined | autocleaning:status(),
-    config :: undefined | autocleaning_config:config()
+
+    index_token :: undefined | file_popularity_view:index_token()
+}).
+
+%% Model which stores information about auto-cleaning per given space.
+-record(autocleaning, {
+    % id of current auto-cleaning run
+    current_run :: undefined | autocleaning:run_id(),
+    % record describing configuration of auto-cleaning per given space
+    config :: undefined | autocleaning:config()
 }).
 
 -record(helper_handle, {
@@ -419,7 +472,8 @@
 
 %% Model for holding current quota state for spaces
 -record(space_quota, {
-    current_size = 0 :: non_neg_integer()
+    current_size = 0 :: non_neg_integer(),
+    last_autocleaning_check = 0 :: non_neg_integer()
 }).
 
 %% Record that holds monitoring id
