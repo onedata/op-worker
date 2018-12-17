@@ -569,14 +569,6 @@ maybe_schedule_cleaning(State) ->
 
 -spec refill_queue_with_one_batch(state()) -> state().
 refill_queue_with_one_batch(State = #state{
-    config = #autocleaning_config{rules = ACRules},
-    next_batch_token = undefined
-}) ->
-    StartKey = autocleaning_rules:to_file_popularity_start_key(ACRules),
-    EndKey = autocleaning_rules:to_file_popularity_end_key(ACRules),
-    IndexToken = file_popularity_api:initial_index_token(StartKey, EndKey),
-    refill_queue_with_one_batch(State#state{next_batch_token = IndexToken});
-refill_queue_with_one_batch(State = #state{
     space_id = SpaceId,
     config = #autocleaning_config{rules = ACRules},
     next_batch_token = NextBatchToken,
@@ -592,8 +584,8 @@ refill_queue_with_one_batch(State = #state{
             State#state{
                 end_of_view_reached = true
             };
-        {PreselectedFiles, NewNextBatchToken} ->
-            FilteredFiles = filter(PreselectedFiles, ACRules),
+        {PreselectedFileIds, NewNextBatchToken} ->
+            FilteredFiles = filter(PreselectedFileIds, ACRules),
             NewFilesToProcess = length(FilteredFiles),
             FilesWithBatchNum = [{F, BatchesCounter2} || F <- FilteredFiles],
             State#state{
@@ -613,15 +605,20 @@ refill_queue_with_one_batch(State = #state{
 %% Files that do not satisfy auto-cleaning rules are removed from the list.
 %% @end
 %%-------------------------------------------------------------------
--spec filter([file_ctx:ctx()], autocleaning_config:rules()) -> [file_ctx:ctx()].
+-spec filter([cdmi_id:objectid()], autocleaning_config:rules()) -> [file_ctx:ctx()].
 filter(PreselectedFiles, ACRules) ->
-    lists:filter(fun(FileCtx) ->
-        Uuid = file_ctx:get_uuid_const(FileCtx),
-        SpaceId = file_ctx:get_space_id_const(FileCtx),
+    lists:filtermap(fun(FileId) ->
+        Guid = cdmi_id:objectid_to_guid(FileId),
+        FileCtx = file_ctx:new_by_guid(Guid),
         try
-            autocleaning_rules:are_all_rules_satisfied(FileCtx, ACRules)
+            case autocleaning_rules:are_all_rules_satisfied(FileCtx, ACRules) of
+                true -> {true, FileCtx};
+                false -> false
+            end
         catch
             Error:Reason ->
+                Uuid = file_ctx:get_uuid_const(FileCtx),
+                SpaceId = file_ctx:get_space_id_const(FileCtx),
                 ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
                     [Uuid, SpaceId, Error, Reason]),
                 false
@@ -708,6 +705,6 @@ new_batch_counters(FilesToProcess) ->
 
 
 -spec query(od_space:id(), non_neg_integer(), file_popularity_view:index_token()) ->
-    {[file_ctx:ctx()], file_popularity_view:index_token()}.
+    {[cdmi_id:objectid()], file_popularity_view:index_token() | undefined}.
 query(SpaceId, BatchSize, IndexToken) ->
     file_popularity_api:query(SpaceId, IndexToken, BatchSize).

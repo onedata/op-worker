@@ -21,6 +21,5 @@
     % start_key, it is updated with the key of the last returned row
     % it is used (with last_doc_id) to start the query
     % from the previously finished row
-    start_key :: undefined | [non_neg_integer()],
-    end_key :: undefined | [non_neg_integer()]
+    start_key :: undefined | [non_neg_integer()]
 }).

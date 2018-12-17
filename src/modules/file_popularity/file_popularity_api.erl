@@ -13,8 +13,8 @@
 
 
 %% API
--export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/2, query/3,
-    initial_index_token/2, delete_config/1]).
+-export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/2,
+    query/3, delete_config/1]).
 
 %%%===================================================================
 %%% API
@@ -23,7 +23,11 @@
 -spec enable(file_popularity_config:id()) -> ok | {error, term()}.
 enable(SpaceId) ->
     % ensure that view is created
-    file_popularity_view:create(SpaceId),
+    % todo get weight from app.config or from file_popularity_config
+    % todo ensure that weights are numbers
+    TimestampWeight = 1,
+    AvgOpenCountPerDayWeight = 0.75,
+    file_popularity_view:create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight),
     file_popularity_config:enable(SpaceId).
 
 -spec disable(file_popularity_config:id()) -> ok | {error, term()}.
@@ -47,16 +51,11 @@ get_configuration(SpaceId) -> #{
 }.
 
 -spec query(od_space:id(), non_neg_integer()) ->
-    {[file_ctx:ctx()], file_popularity_view:index_token() | undefined} | {error, term()}.
+    {[cdmi_id:objectid()], file_popularity_view:index_token() | undefined} | {error, term()}.
 query(SpaceId, Limit) ->
     file_popularity_view:query(SpaceId, undefined, Limit).
 
--spec query(od_space:id(), file_popularity_view:index_token(), non_neg_integer()) ->
-    {[file_ctx:ctx()], file_popularity_view:index_token()} | {error, term()}.
+-spec query(od_space:id(), file_popularity_view:index_token() | undefined, non_neg_integer()) ->
+    {[cdmi_id:objectid()], file_popularity_view:index_token()} | {error, term()}.
 query(SpaceId, IndexToken, Limit) ->
     file_popularity_view:query(SpaceId, IndexToken, Limit).
-
--spec initial_index_token(undefined | [non_neg_integer()], undefined | [non_neg_integer()]) ->
-    file_popularity_view:index_token().
-initial_index_token(StartKey, EndKey) ->
-    file_popularity_view:initial_index_token(StartKey, EndKey).
