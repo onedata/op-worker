@@ -46,4 +46,8 @@
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
 
+-define(SUFFIX_SEPARATOR, <<"%%%%">>).
+-define(FILE_WITH_SUFFIX(Filename,Uuid), <<Filename/binary, 
+    (?SUFFIX_SEPARATOR)/binary, Uuid/binary>>).
+
 -endif.

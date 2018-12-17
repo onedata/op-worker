@@ -39,7 +39,9 @@
     file_open_should_return_enoent_after_deletion/1,
     file_handle_should_work_after_deletion/1,
     remove_file_on_ceph_using_client/1,
-    remove_opened_file_test/1
+    remove_opened_file_posix_test/1,
+    remove_opened_file_ceph_test/1,
+    correct_file_on_storage_is_deleted_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -56,7 +58,9 @@
     file_open_should_return_enoent_after_deletion,
     file_handle_should_work_after_deletion,
     remove_file_on_ceph_using_client,
-    remove_opened_file_test
+    remove_opened_file_posix_test,
+    remove_opened_file_ceph_test,
+    correct_file_on_storage_is_deleted_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -335,10 +339,15 @@ remove_file_on_ceph_using_client(Config0) ->
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 
-remove_opened_file_test(Config) ->
+remove_opened_file_posix_test(Config) ->
+    remove_opened_file_test_base(Config, <<"space1">>).
+
+remove_opened_file_ceph_test(Config) ->
+    remove_opened_file_test_base(Config, <<"space2">>).
+
+remove_opened_file_test_base(Config, SpaceName) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
-    SpaceName = <<"space2">>,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     
     User1 = <<"user1">>,
@@ -352,7 +361,7 @@ remove_opened_file_test(Config) ->
     {ok, Guid1} = lfm_proxy:create(Worker, SessId(User1), FilePath, 8#777),
     {ok, Handle1} = lfm_proxy:open(Worker, SessId(User1), {path, FilePath}, rdwr),
     {ok, _} = lfm_proxy:write(Worker, Handle1, 0, Content1),
-
+    
     % File2
     ok = lfm_proxy:unlink(Worker, SessId(User2), {path, FilePath}),
     {ok, _} = lfm_proxy:create(Worker, SessId(User2), FilePath, 8#777),
@@ -369,6 +378,40 @@ remove_opened_file_test(Config) ->
     ?assertEqual({ok, <<Content1/binary, Content1/binary>>}, lfm_proxy:read(Worker, Handle1, 0, 2*Size)),
     
     ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)).
+
+
+correct_file_on_storage_is_deleted_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    SpaceId = <<"space1">>,
+    ParentGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    FileName = generator:gen_name(),
+    FilePath = fslogic_path:join([<<"/">>, SpaceId, FileName]),
+    
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, 8#665),
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, G1}),
+    {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath, 8#665),
+    {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
+
+    FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
+    {SfmHandle1, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx1]),
+    FileCtx2 = rpc:call(Worker, file_ctx, new_by_guid, [G2]),
+    {SfmHandle2, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx2]),
+
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
+    ok = lfm_proxy:close(Worker, H2),
+
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+    
+    ok = lfm_proxy:close(Worker, H1),
+
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60).
+    
 
 %===================================================================
 % SetUp and TearDown functions
@@ -434,7 +477,10 @@ init_per_testcase(Case, Config) when
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
-init_per_testcase(remove_opened_file_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= remove_opened_file_posix_test;
+    Case =:= remove_opened_file_ceph_test;
+    Case =:= correct_file_on_storage_is_deleted_test ->
     initializer:remove_pending_messages(),
     ssl:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(

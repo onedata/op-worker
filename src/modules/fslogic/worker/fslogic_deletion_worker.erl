@@ -131,49 +131,18 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     end,
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
-    {#document{key = Uuid, value = #file_meta{name = Name}} = FileDoc,
-        FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    try
-        UserCtx = user_ctx:new(?ROOT_SESS_ID),
-
-        try
-            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-            {ParentDoc, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
-            ok = case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
-                {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
-                    ok;
-                _ ->
-                    sfm_utils:recursive_delete(FileCtx3, UserCtx)
-            end
-        catch
-            E1:E2 ->
-                % Debug - parent could be deleted before
-                ?debug_stacktrace("Cannot check parent during delete ~p: ~p:~p",
-                    [FileCtx, E1, E2]),
-                sfm_utils:delete_storage_file_without_location(FileCtx2, UserCtx)
-        end
-    catch
-        _:{badmatch, {error, not_found}} ->
-            ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
-            ok;
-        _:{badmatch, {error, enoent}} ->
-            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
-            ok;
-        _:{badmatch, {error, erofs}} ->
-            ?warning_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
-            ok
-    end,
-
-    file_meta:delete_without_link(FileDoc);
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    encapsulate_deletion(FileCtx, UserCtx, fun sfm_utils:recursive_delete/2);
 handle({dbsync_deletion_request, FileCtx}) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         fslogic_event_emitter:emit_file_removed(FileCtx, []),
+        UserCtx = user_ctx:new(?ROOT_SESS_ID),
         case file_handles:exists(FileUuid) of
             true ->
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
-                handle({open_file_deletion_request, FileCtx})
+                encapsulate_deletion(FileCtx, UserCtx, fun check_and_maybe_delete/2)
         end
     catch
         _:{badmatch, {error, not_found}} ->
@@ -196,3 +165,59 @@ cleanup() ->
     ok.
 
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% If file to remove and existing file are not the same file then does nothing. 
+%% Otherwise removes storage file.
+%% @end
+%%-------------------------------------------------------------------
+-spec check_and_maybe_delete(file_ctx:ctx(), user_ctx:ctx()) ->  
+    ok | {error, term()}.
+check_and_maybe_delete(FileCtx, UserCtx) ->
+    {#document{key = Uuid, value = #file_meta{name = Name}},
+        FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    try
+        {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+        {ParentDoc, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
+        case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
+            {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
+                ok;
+            _ ->
+                sfm_utils:recursive_delete(FileCtx3, UserCtx)
+        end
+    catch
+        E1:E2 ->
+            % Debug - parent could be deleted before
+            ?debug_stacktrace("Cannot check parent during delete ~p: ~p:~p",
+                [FileCtx, E1, E2]),
+            sfm_utils:delete_storage_file_without_location(FileCtx, UserCtx)
+    end.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tries to delete storage file using given function, logs expected errors 
+%% and removes file document from metadata
+%% @end
+%%-------------------------------------------------------------------
+-spec encapsulate_deletion(file_ctx:ctx(), user_ctx:ctx(), 
+    fun((file_ctx:ctx(), user_ctx:ctx()) -> ok)) -> ok | {error, term()}.
+encapsulate_deletion(FileCtx, UserCtx, DeleteStorageFile) ->
+    try
+        ok = DeleteStorageFile(FileCtx, UserCtx)
+    catch
+        _:{badmatch, {error, not_found}} ->
+            ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, enoent}} ->
+            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, erofs}} ->
+            ?warning_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok
+    end,
+    {FileDoc, _FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    file_meta:delete_without_link(FileDoc).
+    
