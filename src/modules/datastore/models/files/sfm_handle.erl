@@ -26,6 +26,8 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
+-export_type([key/0]).
+
 -define(CTX, #{
     model => ?MODULE,
     routing => local,

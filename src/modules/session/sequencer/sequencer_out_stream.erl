@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/3, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -65,6 +65,15 @@
     {ok, SeqStm :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqMan, StmId, SessId) ->
     gen_server2:start_link(?MODULE, [SeqMan, StmId, SessId], []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to sequencer.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
+send(Manager, Message) ->
+    gen_server2:cast(Manager, Message).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -272,8 +281,7 @@ process_request(#message_request{lower_sequence_number = LowerSeqNum,
     stream_id = StmId, sequence_number = SeqNum, session_id = SessId} = State) ->
     case LowerSeqNum < SeqNum of
         true ->
-            {ok, Con} = session:get_random_connection(SessId),
-            ok = resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con),
+            ok = resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId),
             State;
         false ->
             State
@@ -288,7 +296,7 @@ process_request(#server_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = communicator:send(NewMsg, SessId),
+    ok = communicator:send_to_client(NewMsg, SessId),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)};
 
 process_request(#client_message{message_stream = MsgStm} = Msg, #state{
@@ -296,7 +304,7 @@ process_request(#client_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#client_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = provider_communicator:send(NewMsg, SessId),
+    ok = communicator:send_to_provider(NewMsg, SessId),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -328,8 +336,7 @@ remove_messages(SeqNum, Msgs) ->
 -spec resend_all_messages(Msgs :: messages(), SessId :: session:id()) ->
     {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
 resend_all_messages(Msgs, SessId) ->
-    {ok, Con} = session:get_random_connection(SessId),
-    resend_all_messages(Msgs, Con, 0, queue:new()).
+    resend_all_messages(Msgs, SessId, 0, queue:new()).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -339,23 +346,23 @@ resend_all_messages(Msgs, SessId) ->
 %% sequence number.
 %% @end
 %%--------------------------------------------------------------------
--spec resend_all_messages(Msgs :: messages(), Con :: pid(),
+-spec resend_all_messages(Msgs :: messages(), SessId :: session:id(),
     SeqNum :: sequence_number(), MsgsAcc :: messages()) ->
     {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
-resend_all_messages(Msgs, Con, SeqNum, MsgsAcc) ->
+resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
     case queue:peek(Msgs) of
         {value, #server_message{message_stream = MsgStm} = Msg} ->
             NewMsg = Msg#server_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = communicator:send(NewMsg, Con),
-            resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
+            ok = communicator:send_to_client(NewMsg, SessId),
+            resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         {value, #client_message{message_stream = MsgStm} = Msg} ->
             NewMsg = Msg#client_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = provider_communicator:send(NewMsg, Con),
-            resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
+            ok = communicator:send_to_provider(NewMsg, SessId),
+            resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         empty ->
             {SeqNum, MsgsAcc}
     end.
@@ -366,22 +373,23 @@ resend_all_messages(Msgs, Con, SeqNum, MsgsAcc) ->
 %% Resends stored messages in inclusive range [LowerSeqNum, UpperSeqNum].
 %% @end
 %%--------------------------------------------------------------------
--spec resend_messages(LowerSeqNum :: sequence_number(), UpperSeqNum :: sequence_number(),
-    Msgs :: messages(), StmId :: stream_id(), Con :: pid()) -> ok | {error, Reason :: term()}.
+-spec resend_messages(LowerSeqNum :: sequence_number(), UpperSeqNum ::
+    sequence_number(), Msgs :: messages(), StmId :: stream_id(),
+    SessId :: session:id()) -> ok | {error, Reason :: term()}.
 resend_messages(LowerSeqNum, UpperSeqNum, _, _, _) when LowerSeqNum > UpperSeqNum ->
     ok;
 
-resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con) ->
+resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
     case queue:peek(Msgs) of
         {value, #server_message{message_stream = #message_stream{
             sequence_number = LowerSeqNum
         }} = Msg} ->
-            ok = communicator:send(Msg, Con),
-            resend_messages(LowerSeqNum + 1, UpperSeqNum, queue:drop(Msgs), StmId, Con);
+            ok = communicator:send_to_client(Msg, SessId),
+            resend_messages(LowerSeqNum + 1, UpperSeqNum, queue:drop(Msgs), StmId, SessId);
         {value, #server_message{message_stream = #message_stream{
             sequence_number = SeqNum
         }}} when SeqNum < LowerSeqNum ->
-            resend_messages(LowerSeqNum, UpperSeqNum, queue:drop(Msgs), StmId, Con);
+            resend_messages(LowerSeqNum, UpperSeqNum, queue:drop(Msgs), StmId, SessId);
         _ ->
             ?warning("Received request for messages unavailable in sequencer stream "
             "queue. Stream ID: ~p, range: [~p,~p].", [StmId, LowerSeqNum, UpperSeqNum])

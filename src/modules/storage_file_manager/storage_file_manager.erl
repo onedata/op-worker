@@ -168,7 +168,7 @@ mkdir(#sfm_handle{
 } = SFMHandle, Mode, Recursive) ->
     Noop = fun(_) -> ok end,
 
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
 
     case helpers:mkdir(HelperHandle, FileId, Mode) of
         ok ->
@@ -215,7 +215,7 @@ mv(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, FileTo) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:rename(HelperHandle, FileFrom, FileTo).
 
 
@@ -232,7 +232,7 @@ chmod(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, Mode) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:chmod(HelperHandle, FileId, Mode).
 
 
@@ -249,7 +249,7 @@ chown(#sfm_handle{
     session_id = ?ROOT_SESS_ID,
     space_id = SpaceId
 }, UserId, GroupId, SpaceId) ->
-    {ok, HelperHandle} = session:get_helper(?ROOT_SESS_ID, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(?ROOT_SESS_ID, SpaceId, Storage),
     {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, UserId, GroupId, SpaceId),
     helpers:chown(HelperHandle, FileId, Uid, Gid);
 chown(_, _, _, _) ->
@@ -268,7 +268,7 @@ link(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, FileTo) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:link(HelperHandle, FileFrom, FileTo).
 
 %%--------------------------------------------------------------------
@@ -283,7 +283,7 @@ stat(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:getattr(HelperHandle, FileId).
 
 
@@ -301,7 +301,7 @@ readdir(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, Offset, Count) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:readdir(HelperHandle, FileId, Offset, Count).
 
 
@@ -379,7 +379,7 @@ create(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 } = SFMHandle, Mode, Recursive) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     case helpers:mknod(HelperHandle, FileId, Mode, reg) of
         ok ->
             ok;
@@ -417,7 +417,7 @@ truncate(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, Size, CurrentSize) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:truncate(HelperHandle, FileId, Size, CurrentSize).
 
 %%--------------------------------------------------------------------
@@ -433,7 +433,7 @@ setxattr(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, Name, Value, Create, Replace) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:setxattr(HelperHandle, FileId, Name, Value, Create, Replace).
 
 %%--------------------------------------------------------------------
@@ -448,7 +448,7 @@ getxattr(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, Name) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:getxattr(HelperHandle, FileId, Name).
 
 %%--------------------------------------------------------------------
@@ -463,7 +463,7 @@ removexattr(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, Name) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:removexattr(HelperHandle, FileId, Name).
 
 %%--------------------------------------------------------------------
@@ -478,7 +478,7 @@ listxattr(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:listxattr(HelperHandle, FileId).
 
 %%--------------------------------------------------------------------
@@ -494,7 +494,7 @@ unlink(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, CurrentSize) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     case storage_sync_info:delete(FileId, SpaceId) of
         ok -> ok;
         {error, not_found} -> ok
@@ -516,7 +516,7 @@ rmdir(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     helpers:rmdir(HelperHandle, FileId).
 
 %%--------------------------------------------------------------------
@@ -588,7 +588,7 @@ open_insecure(#sfm_handle{
     space_id = SpaceId
 } = SFMHandle, OpenFlag
 ) ->
-    {ok, HelperHandle} = session:get_helper(SessionId, SpaceId, Storage),
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     case helpers:open(HelperHandle, FileId, OpenFlag) of
         {ok, FileHandle} ->
             {ok, SFMHandle#sfm_handle{

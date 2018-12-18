@@ -112,7 +112,7 @@ custom_error_when_handler_throws_error(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-        initializer:clear_models(Worker, [subscription]),
+        initializer:clear_subscriptions(Worker),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].

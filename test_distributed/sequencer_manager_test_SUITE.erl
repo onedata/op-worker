@@ -309,6 +309,6 @@ mock_sequencer_stream_sup(Worker) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send, fun
+    test_utils:mock_expect(Worker, communicator, send_to_client, fun
         (Msg, _, _) -> Self ! Msg, ok
     end).

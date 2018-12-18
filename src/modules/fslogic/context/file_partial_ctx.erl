@@ -55,7 +55,7 @@ new_by_guid(Guid)->
 -spec new_by_logical_path(user_ctx:ctx(), file_meta:path()) -> ctx().
 new_by_logical_path(UserCtx, Path) ->
     {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-    case session:is_special(user_ctx:get_session_id(UserCtx)) of
+    case session_utils:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             throw({invalid_request, <<"Path resolution requested in the context"
             " of special session. You may only operate on guids in this context.">>});

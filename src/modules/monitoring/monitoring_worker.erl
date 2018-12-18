@@ -69,12 +69,8 @@ supervisor_children_spec() ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    event:subscribe(#subscription{
-        id = ?MONITORING_SUB_ID,
-        type = #monitoring_subscription{
-            time_threshold = timer:seconds(?STEP_IN_SECONDS)
-        }
-    }, ?ROOT_SESS_ID),
+    event:subscribe(monitoring_event_subscriptions:monitoring_subscription(),
+        ?ROOT_SESS_ID),
 
     {ok, #{}}.
 

@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/3, send/2]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3,
@@ -75,6 +75,15 @@
     {ok, SeqStm :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqMan, StmId, SessId) ->
     gen_fsm:start_link(?MODULE, [SeqMan, StmId, SessId], []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to sequencer.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
+send(Manager, Message) ->
+    gen_fsm:send_event(Manager, Message).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -181,8 +190,7 @@ terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
     session_id = SessId, sequencer_manager = SeqMan, is_proxy = IsProxy} = State) ->
     ?log_terminate(Reason, {StateName, State}),
     Msg = #message_acknowledgement{stream_id = StmId, sequence_number = SeqNum - 1},
-    CommunicatorModule = communicator_module(IsProxy),
-    case CommunicatorModule:send(Msg, SessId) of
+    case communicate(IsProxy, Msg, SessId, false) of
         ok -> ok;
         {error, _Reason2} -> SeqMan ! {send, Msg, SessId}
     end,
@@ -326,8 +334,7 @@ unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
 -spec send_message_stream_reset(StmId :: stream_id(),
     SessId :: session:id(), IsProxy :: boolean()) -> ok.
 send_message_stream_reset(StmId, SessId, IsProxy) ->
-    CommunicatorModule = communicator_module(IsProxy),
-    CommunicatorModule:send(#message_stream_reset{stream_id = StmId}, SessId, infinity).
+    communicate(IsProxy, #message_stream_reset{stream_id = StmId}, SessId, true).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -345,10 +352,9 @@ send_message_acknowledgement(#state{sequence_number = SeqNum} = State) when SeqN
 
 send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum,
     session_id = SessId, is_proxy = IsProxy} = State) ->
-    CommunicatorModule = communicator_module(IsProxy),
-    CommunicatorModule:send(#message_acknowledgement{
+    communicate(IsProxy, #message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum - 1
-    }, SessId, infinity),
+    }, SessId, true),
     State#state{sequence_number_ack = SeqNum - 1}.
 
 %%--------------------------------------------------------------------
@@ -378,12 +384,11 @@ maybe_send_message_acknowledgement(#state{sequence_number = SeqNum,
     State :: #state{}) -> ok.
 send_message_request(UpperSeqNum, #state{stream_id = StmId,
     sequence_number = LowerSeqNum, session_id = SessId, is_proxy = IsProxy}) ->
-    CommunicatorModule = communicator_module(IsProxy),
-    CommunicatorModule:send(#message_request{
+    communicate(IsProxy, #message_request{
         stream_id = StmId,
         lower_sequence_number = LowerSeqNum,
         upper_sequence_number = UpperSeqNum
-    }, SessId, infinity).
+    }, SessId, true).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -429,18 +434,23 @@ forward_message(#client_message{message_body = #end_of_message_stream{}},
     State#state{sequence_number = SeqNum + 1};
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
-    router:route_message(Msg),
+    router:route_message(stream_router:make_message_direct(Msg)),
     State#state{sequence_number = SeqNum + 1}.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns communicator module based on whether sequencer is working in provider or client's context.
+%% Communicates with client or provider.
 %% @end
 %%--------------------------------------------------------------------
--spec communicator_module(IsProxy :: boolean()) -> communicator | provider_communicator.
-communicator_module(false) ->
-    communicator;
-communicator_module(true) ->
-    provider_communicator.
+-spec communicate(IsProxy :: boolean(), Message :: term(), session:id(),
+    InfinityRetry :: boolean()) -> ok | {error, Reason :: term()}.
+communicate(false, Msg, SessionID, true) ->
+    communicator:send_to_client(Msg, SessionID, #{repeats => infinity});
+communicate(false, Msg, SessionID, _) ->
+    communicator:send_to_client(Msg, SessionID);
+communicate(true, Msg, SessionID, true) ->
+    communicator:send_to_provider(Msg, SessionID, #{repeats => infinity});
+communicate(true, Msg, SessionID, _) ->
+    communicator:send_to_provider(Msg, SessionID).

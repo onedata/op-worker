@@ -78,12 +78,12 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
 get_handle(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    case session:get_handle(SessId, HandleId) of
+    case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
             ?warning("Hanlde not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
             create_handle(UserCtx, FileCtx, HandleId),
-            session:get_handle(SessId, HandleId);
+            session_handles:get(SessId, HandleId);
         Other ->
             Other
     end.

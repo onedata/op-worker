@@ -18,8 +18,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([open_stream/1, close_stream/2, send_message/3, route_message/2]).
--export([term_to_stream_id/1]).
+-export([open_stream/1, close_stream/2, send_message/3]).
+-export([communicate_with_sequencer_manager/2,
+    communicate_with_sequencer_manager/3, term_to_stream_id/1]).
 
 -export_type([stream_id/0, sequence_number/0]).
 
@@ -49,7 +50,7 @@ open_stream(Ref) ->
 -spec close_stream(StmId :: stream_id(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
 close_stream(StmId, Ref) ->
-    send_to_sequencer_manager({close_stream, StmId}, Ref).
+    communicate_with_sequencer_manager({close_stream, StmId}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,39 +60,16 @@ close_stream(StmId, Ref) ->
 -spec send_message(Msg :: term(), StmId :: stream_id(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
 send_message(#server_message{} = Msg, StmId, Ref) ->
-    send_to_sequencer_manager(Msg#server_message{
+    communicate_with_sequencer_manager(Msg#server_message{
         message_stream = #message_stream{stream_id = StmId}
     }, Ref);
 send_message(#client_message{} = Msg, StmId, Ref) ->
-    send_to_sequencer_manager(Msg#client_message{
+    communicate_with_sequencer_manager(Msg#client_message{
         message_stream = #message_stream{stream_id = StmId}
     }, Ref);
 
 send_message(Msg, StmId, Ref) ->
     send_message(#server_message{message_body = Msg}, StmId, Ref).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Forwards message to the sequencer stream for incoming messages.
-%% @end
-%%--------------------------------------------------------------------
--spec route_message(Msg :: term(), Ref :: sequencer_manager_ref()) ->
-    ok | {error, Reason :: term()}.
-route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId} = Msg, _Ref) ->
-    case {session_manager:is_provider_session_id(From), is_binary(ProxySessionId)} of
-        {true, true} ->
-            ProviderId = session_manager:session_id_to_provider_id(From),
-            SequencerSessionId = session_manager:get_provider_session_id(outgoing, ProviderId),
-            provider_communicator:ensure_connected(SequencerSessionId),
-            send_to_sequencer_manager(Msg, SequencerSessionId);
-        {true, false} ->
-            ok;
-        {false, _} ->
-            send_to_sequencer_manager(Msg, From)
-    end;
-route_message(Msg, Ref) ->
-    send_to_sequencer_manager(Msg, Ref).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,42 +83,36 @@ term_to_stream_id(Term) ->
     PHash2 = erlang:phash2(Binary, 4294967296),
     PHash1 + PHash2.
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Sends a message to the sequencer manager referenced by pid or session ID.
+%% @equiv communicate_with_sequencer_manager(Msg, Ref, false)
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_sequencer_manager(Msg :: term(), Ref :: sequencer_manager_ref()) ->
-    ok | {error, Reason :: term()}.
-send_to_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
-    gen_server2:cast(Ref, Msg);
-
-send_to_sequencer_manager(Msg, Ref) ->
-
-    case session:get_sequencer_manager(Ref) of
-        {ok, ManPid} -> send_to_sequencer_manager(Msg, ManPid);
-        {error, Reason} -> {error, Reason}
-    end.
+-spec communicate_with_sequencer_manager(Msg :: term(),
+    Ref :: sequencer_manager_ref()) -> Reply :: term().
+communicate_with_sequencer_manager(Msg, Ref) ->
+    communicate_with_sequencer_manager(Msg, Ref, false).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Communicates with the sequencer manager referenced by pid or session ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate_with_sequencer_manager(Msg :: term(),
-    Ref :: sequencer_manager_ref()) -> Reply :: term().
-communicate_with_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
-    gen_server2:call(Ref, Msg);
+    Ref :: sequencer_manager_ref(), EnsureConnected :: boolean()) ->
+    Reply :: term().
+communicate_with_sequencer_manager(Msg, Ref, _) when is_pid(Ref) ->
+    sequencer_manager:send(Ref, Msg);
 
-communicate_with_sequencer_manager(Msg, Ref) ->
-    case session:get_sequencer_manager(Ref) of
-        {ok, ManPid} -> communicate_with_sequencer_manager(Msg, ManPid);
-        {error, Reason} -> {error, Reason}
+communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
+    case {session:get_sequencer_manager(Ref), EnsureConnected} of
+        {{ok, ManPid}, _} -> communicate_with_sequencer_manager(Msg, ManPid);
+        {{error, not_found}, true} ->
+            session_connections:ensure_connected(Ref),
+            communicate_with_sequencer_manager(Msg, Ref);
+        {{error, Reason}, _} -> {error, Reason}
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
