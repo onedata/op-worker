@@ -45,6 +45,7 @@
     proxy_write/5, proxy_write/6,
     fsync/4, fsync/5,
     emit_file_read_event/5,
+    emit_file_written_event/5,
     get_configuration/1, get_configuration/2,
     get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
     flush_events/3
@@ -53,6 +54,8 @@
 -define(ID, erlang:unique_integer([positive, monotonic])).
 -define(MSG_ID, integer_to_binary(?ID)).
 -define(IRRELEVANT_FIELD_VALUE, <<"needless">>).
+
+-define(ATTEMPTS, 8).
 
 %% ====================================================================
 %% API
@@ -152,6 +155,9 @@ receive_server_message() ->
     receive_server_message([message_stream_reset, subscription]).
 
 receive_server_message(IgnoredMsgList) ->
+    receive_server_message(IgnoredMsgList, ?TIMEOUT).
+
+receive_server_message(IgnoredMsgList, Timeout) ->
     receive
         {_, _, Data} ->
             % ignore listed messages
@@ -161,7 +167,7 @@ receive_server_message(IgnoredMsgList) ->
                 true -> receive_server_message(IgnoredMsgList);
                 false -> Msg
             end
-    after ?TIMEOUT ->
+    after Timeout ->
         {error, timeout}
     end.
 
@@ -381,6 +387,31 @@ emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
     ok = ssl:send(Conn, RawMsg).
 
 
+emit_file_written_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
+    {BlocksRead, BlocksSize} = lists:foldr(
+        fun(#file_block{offset = O, size = S}, {AccBlocks, AccSize}) ->
+            {[#'FileBlock'{offset = O, size = S} | AccBlocks], AccSize + S}
+        end,
+    {[], 0}, Blocks),
+
+    Msg = #'ClientMessage'{
+        message_stream = #'MessageStream'{
+            stream_id = StreamId,
+            sequence_number = Seq
+        },
+        message_body = {events, #'Events'{events = [#'Event'{
+            type = {file_written, #'FileWrittenEvent'{
+                counter = length(BlocksRead),
+                file_uuid = FileGuid,
+                size = BlocksSize,
+                blocks = BlocksRead
+            }}
+        }]}}
+    },
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg).
+
+
 get_configuration(Conn) ->
     get_configuration(Conn, ?MSG_ID).
 
@@ -433,4 +464,8 @@ flush_events(Conn, ProviderId, SubscriptionId, MsgId) ->
         }}
     },
     RawMsg = messages:encode_msg(Msg),
-    ok = ssl:send(Conn, RawMsg).
+    ok = ssl:send(Conn, RawMsg),
+
+    ?assertMatch(#'ServerMessage'{message_body = {status, #'Status'{
+        code = ok
+    }}, message_id = MsgId}, receive_server_message([], 10), ?ATTEMPTS).

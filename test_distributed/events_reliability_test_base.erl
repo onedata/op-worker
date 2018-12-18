@@ -109,32 +109,32 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
 
     % Mock function calls to check
     mock_events_utils(AssertionWorker),
-    mock_aggregate_read_events(AssertionWorker),
+    mock_aggregate_written_events(AssertionWorker),
 
     mock_event_handler(AssertionWorker),
-    mock_handle_file_read_events(AssertionWorker),
+    mock_handle_file_written_events(AssertionWorker),
 
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(
         ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), MacaroonAuth
     ),
 
-    [#'Subscription'{id = SubscriptionId}] = fuse_utils:get_subscriptions(Sock, [file_read]),
+    [#'Subscription'{id = SubscriptionId}] = fuse_utils:get_subscriptions(Sock, [file_written]),
 
     % Send 2 event with some delay
     Block1 = #file_block{offset = 0, size = 4},
     Block2 = #file_block{offset = 10, size = 4},
-    fuse_utils:emit_file_read_event(Sock, 0, 1, FileGuid, [Block1]),
+    fuse_utils:emit_file_written_event(Sock, 0, 1, FileGuid, [Block1]),
     timer:sleep(100),
-    fuse_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block2]),
-    assert_aggregate_read_events_called(AssertionWorker, FileGuid, Block1, Block2),
+    fuse_utils:emit_file_written_event(Sock, 0, 0, FileGuid, [Block2]),
+    assert_aggregate_written_events_called(AssertionWorker, FileGuid, Block1, Block2),
 
     % Assert that file read events handler was not called before aggregation time expires
     timer:sleep(100),
-    assert_handle_file_read_events_not_called(AssertionWorker),
+    assert_handle_file_written_events_not_called(AssertionWorker),
 
     % Assert that after forcing flush handler is called before aggregation time expires
     fuse_utils:flush_events(Sock, ?PROVIDER_ID(AssertionWorker), SubscriptionId),
-    assert_handle_file_read_events_called(AssertionWorker, [#file_read_event{
+    assert_handle_file_written_events_called(AssertionWorker, [#file_written_event{
         counter = 2,
         file_guid = FileGuid,
         size = 8,
@@ -225,6 +225,32 @@ assert_handle_file_read_events_called(Worker, ExpEvents) ->
     ok.
 
 
+mock_handle_file_written_events(Workers) ->
+    test_utils:mock_expect(Workers, fslogic_event_handler, handle_file_written_events,
+        fun(Evts, UserCtxMap) ->
+            meck:passthrough([Evts, UserCtxMap])
+        end
+    ).
+
+
+assert_handle_file_written_events_not_called(Worker) ->
+    ?assertMatch({badrpc, {'EXIT', {not_found, _}}},
+        rpc:call(Worker, meck, capture, [
+            1, fslogic_event_handler, handle_file_written_events, '_', 1
+        ])
+    ),
+    ok.
+
+
+assert_handle_file_written_events_called(Worker, ExpEvents) ->
+    ?assertMatch(ExpEvents,
+        rpc:call(Worker, meck, capture, [
+            1, fslogic_event_handler, handle_file_written_events, '_', 1
+        ]), ?SMALL_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL
+    ),
+    ok.
+
+
 mock_aggregate_read_events(Workers) ->
     test_utils:mock_expect(Workers, event_utils, aggregate_file_read_events,
         fun(OldEvt, NewEvt) ->
@@ -242,6 +268,24 @@ assert_aggregate_read_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
             #file_read_event{file_guid = FileGuid, blocks = [ExpBlock1]},
             #file_read_event{file_guid = FileGuid, blocks = [ExpBlock2]}
         ]}, #file_read_event{file_guid = FileGuid, blocks = [ExpBlock1, ExpBlock2]}
-    }], rpc:call(Worker, meck, history, [Mod]), ?MEDIUM_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL),
+    }], rpc:call(Worker, meck, history, [Mod]), ?MEDIUM_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL).
 
-    ok.
+
+mock_aggregate_written_events(Workers) ->
+    test_utils:mock_expect(Workers, event_utils, aggregate_file_written_events,
+        fun(OldEvt, NewEvt) ->
+            meck:passthrough([OldEvt, NewEvt])
+        end
+    ).
+
+
+assert_aggregate_written_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
+    Mod = event_utils,
+    Fun = aggregate_file_written_events,
+
+    ?assertMatch([{
+        _, {Mod, Fun, [
+            #file_written_event{file_guid = FileGuid, blocks = [ExpBlock1]},
+            #file_written_event{file_guid = FileGuid, blocks = [ExpBlock2]}
+        ]}, #file_written_event{file_guid = FileGuid, blocks = [ExpBlock1, ExpBlock2]}
+    }], rpc:call(Worker, meck, history, [Mod]), ?MEDIUM_NUM_OF_ATTEMPTS, ?ATTEMPTS_INTERVAL).

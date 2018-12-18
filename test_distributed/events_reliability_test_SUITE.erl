@@ -29,8 +29,8 @@
 ]).
 
 all() -> ?ALL([
-    events_aggregation_test,
-    events_flush_test
+%%    events_aggregation_test,
+%%    events_flush_test
 ]).
 
 %%%===================================================================
