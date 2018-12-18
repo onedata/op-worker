@@ -71,7 +71,6 @@ get_connections(SessId, HideOverloaded) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
-%%            ensure_connected(ProxyViaSession),
             get_connections(ProxyViaSession, HideOverloaded);
         {ok, #document{value = #session{connections = Cons, watcher = SessionWatcher}}} ->
             case HideOverloaded of

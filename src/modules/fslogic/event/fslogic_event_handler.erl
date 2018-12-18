@@ -135,7 +135,7 @@ handle_file_written_event(#file_written_event{
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {ok, UserId} = session:get_user_id(SessId),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    monitoring_event_emmiter:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
+    monitoring_event_emitter:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
 
     replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
@@ -164,5 +164,5 @@ handle_file_read_event(#file_read_event{
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, UserId} = session:get_user_id(SessId),
-    monitoring_event_emmiter:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
+    monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
     fslogic_times:update_atime(FileCtx).

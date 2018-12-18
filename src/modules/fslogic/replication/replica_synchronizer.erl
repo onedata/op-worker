@@ -1385,7 +1385,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     end, maps:to_list(State#state.cached_stats)),
 
     % TODO VFS-4412 emit rtransfer statistics
-%%    monitoring_event_emmiter:emit_rtransfer_statistics(
+%%    monitoring_event_emitter:emit_rtransfer_statistics(
 %%        SpaceId, UserId, get_summarized_blocks_size(AllBlocks)
 %%    ),
 

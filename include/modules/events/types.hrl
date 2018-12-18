@@ -102,7 +102,7 @@
 
 %% definition of a monitoring event
 -record(monitoring_event, {
-    type :: monitoring_event_emmiter:type()
+    type :: monitoring_event_emitter:type()
 }).
 
 -endif.

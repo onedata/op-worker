@@ -155,7 +155,7 @@ remove_session(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
             session:delete(SessId),
-            % Czy polaczenia nie powinny sie zamknac najpierw i potem dopiero sesja zniknac?
+            % VFS-5155 Should connections be closed before session document is deleted?
             close_connections(Cons);
         {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
             try

@@ -490,7 +490,7 @@ truncate(SessId, FileKey, Size) ->
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
-            ok = lfm_event_emmiter:emit_file_truncated(FileGuid, Size, SessId)
+            ok = lfm_event_emitter:emit_file_truncated(FileGuid, Size, SessId)
         end).
 
 %%--------------------------------------------------------------------
@@ -583,7 +583,7 @@ write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
     remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_write_result{wrote = Wrote}) ->
             WrittenBlocks = [#file_block{offset = Offset, size = Wrote}],
-            ok = lfm_event_emmiter:maybe_emit_file_written(FileGuid, WrittenBlocks,
+            ok = lfm_event_emitter:maybe_emit_file_written(FileGuid, WrittenBlocks,
                 SessId, GenerateEvents),
             {ok, Wrote}
         end
@@ -665,7 +665,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
     remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
         fun(#remote_data{data = Data}) ->
             ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
-            ok = lfm_event_emmiter:maybe_emit_file_read(
+            ok = lfm_event_emitter:maybe_emit_file_read(
                 FileGuid, ReadBlocks, SessId, GenerateEvents),
             {ok, Data}
         end

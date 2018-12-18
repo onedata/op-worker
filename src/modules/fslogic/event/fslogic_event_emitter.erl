@@ -112,8 +112,9 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends many file location changes to all subscribers except for the ones
-%% present in 'ExcludedSessions' list.
+%% Sends file location changes to all subscribers except for the ones
+%% present in 'ExcludedSessions' list. It is faster than execution of
+%% emit_file_location_changed on each change.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_locations_changed([{file_ctx:ctx(), non_neg_integer() | undefined,

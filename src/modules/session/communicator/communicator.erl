@@ -27,7 +27,6 @@
 
 -type message() :: #client_message{} | #server_message{}.
 -type generic_message() :: tuple().
-%%-type options() :: map().
 -type options() ::  #{wait_for_ans => boolean(), % default: false
                     repeats => non_neg_integer() | infinity | check_all_connections, % default: 2
                     error_on_empty_pool => boolean(), % default: true

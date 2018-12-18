@@ -163,7 +163,7 @@ get_link(SessId, TreeID, HandleId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists links from a tree.
+%% Iterates over tree and executes Fun on each link.
 %% @end
 %%--------------------------------------------------------------------
 -spec fold_links(id(), datastore:tree_id(),
@@ -206,7 +206,7 @@ get_local_link(SessId, TreeID, HandleId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists local links from a tree.
+%% Iterates over local tree and executes Fun on each link.
 %% @end
 %%--------------------------------------------------------------------
 -spec fold_local_links(id(), datastore:tree_id(),

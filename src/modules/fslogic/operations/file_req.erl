@@ -182,9 +182,9 @@ fsync(UserCtx, FileCtx, DataOnly, HandleId) ->
     fslogic_worker:fuse_response().
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = case session_handlers:get(SessId, HandleId) of
+    ok = case session_handles:get(SessId, HandleId) of
         {ok, SfmHandle} ->
-            ok = session_handlers:remove(SessId, HandleId),
+            ok = session_handles:remove(SessId, HandleId),
             ok = file_handles:register_release(FileCtx, SessId, 1),
             ok = storage_file_manager:release(SfmHandle);
         {error, link_not_found} ->
@@ -410,7 +410,7 @@ save_handle(SessId, Handle, HandleId0) ->
         _ ->
             HandleId0
     end,
-    session_handlers:add(SessId, HandleId, Handle),
+    session_handles:add(SessId, HandleId, Handle),
     {ok, HandleId}.
 
 %%--------------------------------------------------------------------
@@ -512,7 +512,7 @@ fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
     end;
 fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = case session_handlers:get(SessId, HandleId) of
+    ok = case session_handles:get(SessId, HandleId) of
         {ok, Handle} ->
             storage_file_manager:fsync(Handle, DataOnly);
         {error, link_not_found} ->

@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([register_open_file/2, unregister_open_file/2, invalidate_entries/1]).
+-export([register/2, deregister/2, invalidate_entries/1]).
 
 -define(HELPER_HANDLES_TREE_ID, <<"helper_handles">>).
 
@@ -29,9 +29,9 @@
 %% Adds open file UUId to session.
 %% @end
 %%--------------------------------------------------------------------
--spec register_open_file(session:id(), fslogic_worker:file_guid()) ->
+-spec register(session:id(), fslogic_worker:file_guid()) ->
     ok | {error, term()}.
-register_open_file(SessId, FileGuid) ->
+register(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
         {ok, Sess#session{open_files = sets:add_element(FileGuid, OpenFiles)}}
     end,
@@ -42,9 +42,9 @@ register_open_file(SessId, FileGuid) ->
 %% Removes open file UUId from session.
 %% @end
 %%--------------------------------------------------------------------
--spec unregister_open_file(session:id(), fslogic_worker:file_guid()) ->
+-spec deregister(session:id(), fslogic_worker:file_guid()) ->
     ok | {error, term()}.
-unregister_open_file(SessId, FileGuid) ->
+deregister(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
         {ok, Sess#session{open_files = sets:del_element(FileGuid, OpenFiles)}}
     end,

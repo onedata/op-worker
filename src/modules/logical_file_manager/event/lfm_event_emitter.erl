@@ -9,7 +9,7 @@
 %%% Auxiliary functions for sending events.
 %%% @end
 %%%--------------------------------------------------------------------
--module(lfm_event_emmiter).
+-module(lfm_event_emitter).
 -author("Tomasz Lichon").
 
 -include("modules/events/definitions.hrl").

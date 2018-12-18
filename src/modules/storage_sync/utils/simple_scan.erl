@@ -707,7 +707,7 @@ update_file_location(FileCtx, StorageSize) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     NewFileBlocks = create_file_blocks(StorageSize),
     replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
-    ok = lfm_event_emmiter:emit_file_written(
+    ok = lfm_event_emitter:emit_file_written(
         FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
 
 %%--------------------------------------------------------------------

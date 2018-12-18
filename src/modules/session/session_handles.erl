@@ -9,7 +9,7 @@
 %%% Module for storing of file handles in session.
 %%% @end
 %%%-------------------------------------------------------------------
--module(session_handlers).
+-module(session_handles).
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").

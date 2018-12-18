@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements {@link worker_plugin_behaviour}
 %%% It is created only to allow creation of module supervision tree
-%%% TODO - remove after refactor of worker_host
+%%% TODO VFS-5156 - remove after refactor of worker_host
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_manager_worker).
