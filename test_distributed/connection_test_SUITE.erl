@@ -56,8 +56,7 @@
     timeouts_test/1,
     client_keepalive_test/1,
     socket_timeout_test/1,
-    broken_connection_test/1,
-    memory_pools_cleared_after_disconnection_test/1
+    broken_connection_test/1
 ]).
 
 %%test_bases
@@ -93,8 +92,7 @@
     bandwidth_test,
     python_client_test,
     proto_version_test,
-    broken_connection_test,
-    memory_pools_cleared_after_disconnection_test
+    broken_connection_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -184,7 +182,7 @@ socket_timeout_test(Config) ->
 
         lists:foreach(fun(Num) ->
             LSBin = list_to_binary(integer_to_list(Num) ++ "ls"),
-            ok = ssl:send(Sock2, fuse_utils:generate_get_children_message(RootGuid, LSBin)),
+            ok = ssl:send(Sock2, fuse_utils:generate_get_children_attrs_message(RootGuid, LSBin)),
             % receive & validate
             ?assertMatch(#'ServerMessage'{message_body = {
                 fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
@@ -256,14 +254,14 @@ create_timeouts_test(Config, Sock, RootGuid) ->
 ls_timeouts_test(Config, Sock, RootGuid) ->
     % send
     configure_cp(Config, ok),
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_message(RootGuid, <<"ls1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls1">>)),
     % receive & validate
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"ls1">>}, fuse_utils:receive_server_message()),
 
     configure_cp(Config, attr_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_message(RootGuid, <<"ls2">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls2">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -556,10 +554,10 @@ fulfill_promises_after_connection_close_test(Config) ->
 protobuf_msg_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, router, route_message, fun
+    test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
-        }]}}) -> ok
+        }]}}, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
@@ -655,8 +653,7 @@ client_send_test(Config) ->
     },
 
     % when
-    ?assertEqual(ok, rpc:call(Worker1, communicator, send_to_client,
-        [ServerMsgInternal, SessionId])),
+    ?assertEqual(ok, rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId])),
 
     % then
     ?assertEqual(ServerMessageProtobuf, fuse_utils:receive_server_message()),
@@ -671,7 +668,7 @@ client_communicate_test(Config) ->
     % when
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
     CommunicateResult = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId, #{wait_for_ans => true}]),
+        [ServerMsgInternal, SessionId]),
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
@@ -689,8 +686,8 @@ client_communicate_async_test(Config) ->
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, MsgId} = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId, #{use_msg_id => {true, Self}}]),
+    {ok, MsgId} = rpc:call(Worker1, communicator, communicate_async,
+        [ServerMsgInternal, SessionId, Self]),
 
     % then
     ?assertReceivedMatch(#client_message{
@@ -707,8 +704,8 @@ client_communicate_async_test(Config) ->
     end),
 
     % when
-    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId, #{use_msg_id => true}]),
+    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate_async,
+        [ServerMsgInternal, SessionId]),
 
     % then
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
@@ -1067,181 +1064,6 @@ broken_connection_test(Config) ->
 
     ok = test_utils:mock_unload(Workers, [Mod]).
 
-memory_pools_cleared_after_disconnection_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    RootGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
-
-    L = [false, true],
-    Sub = lists:foldl(
-        fun({Write, Read, Release, Unsub}, SubId) -> 
-            memory_pools_cleared_after_disconnection_test_base_file(Worker1, SessionId, RootGuid, SubId, 
-                Write, Read, Release, Unsub),
-            SubId+10
-        end, 1, [{X,Y,Z,U} || Z <- L, Y <- L, X <- L, U <- L]
-    ),
-    lists:foldl(
-        fun(Unsub, SubId) -> 
-            memory_pools_cleared_after_disconnection_test_base_dir(Worker1, SessionId, RootGuid, SubId, Unsub),
-            SubId+10
-        end, Sub, [X || X<-L]
-    ),
-    ok.
-
-memory_pools_cleared_after_disconnection_test_base_file(Worker1, SessionId, RootGuid, SubId, Write, Read, Release, Unsub) ->
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-
-    {Before, SizesBefore} = get_memory_pools_entries_and_sizes(Worker1),
-    
-    Filename = generator:gen_name(),
-    Data = <<"test_data">>,
-    
-    % create file
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, Filename)),
-    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
-        fuse_response = {file_created, #'FileCreated'{
-            handle_id = HandleId, 
-            file_attr = #'FileAttr'{uuid = FileGuid}}
-        }}
-    }} = ?assertMatch(#'ServerMessage'{
-        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}}, 
-        message_id = <<"1">>
-    }, fuse_utils:receive_server_message()),
-
-    % subscriptions
-    ok = ssl:send(Sock, fuse_utils:generate_file_removed_subscription_message(
-        SubId,SubId,-SubId, FileGuid)),
-    ok = ssl:send(Sock, fuse_utils:generate_file_renamed_subscription_message(
-        SubId,SubId+1,-SubId-1, FileGuid)),
-    ok = ssl:send(Sock, fuse_utils:generate_file_attr_changed_subscription_message(
-        SubId,SubId+2,-SubId-2, FileGuid, 500)),
-
-    fuse_utils:fsync(Sock, FileGuid, HandleId, false),
-
-    ExpectedData = case Write of
-        true ->
-            ok = ssl:send(Sock, fuse_utils:generate_file_location_changed_subscription_message(
-                SubId,SubId+3,-SubId-3, FileGuid, 500)),
-            fuse_utils:receive_server_message([]),
-
-            ct:print("write1"),
-            % write
-            ok = ssl:send(Sock, fuse_utils:generate_write_message(<<"2">>, 
-                HandleId, FileGuid, 0, Data)),
-            ?assertMatch(#'ServerMessage'{
-                message_body = {proxyio_response, #'ProxyIOResponse'{status = #'Status'{code = ok}}},
-                message_id = <<"2">>
-            }, fuse_utils:receive_server_message()),
-
-            ct:print("write2"),
-            fuse_utils:fsync(Sock, FileGuid, HandleId, false),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+4,-SubId-3)),
-            ct:print("write3"),
-            fuse_utils:receive_server_message([]),
-            Data;
-        _ ->
-            <<>>
-    end,
-    case Read of
-        true ->
-            ok = ssl:send(Sock, fuse_utils:generate_file_location_changed_subscription_message(
-                SubId,SubId+5,-SubId-4, FileGuid, 500)),
-            
-            % read
-            ok = ssl:send(Sock, fuse_utils:generate_read_message(<<"3">>, 
-                HandleId, FileGuid, 0, byte_size(Data))),
-            ?assertMatch(#'ServerMessage'{message_body = {
-                proxyio_response, #'ProxyIOResponse'{
-                    status = #'Status'{code = ok},
-                    proxyio_response = {remote_data, #'RemoteData'{data = ExpectedData}}
-                }},
-                message_id = <<"3">>
-            }, fuse_utils:receive_server_message()),
-
-            fuse_utils:fsync(Sock, FileGuid, HandleId, false),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+6,-SubId-4));
-        _ ->
-            ok
-    end,
-    ct:print("read"),
-    case Release of
-        true ->
-            ok = ssl:send(Sock, fuse_utils:generate_release_message(HandleId, FileGuid, <<"4">>)),
-            ?assertMatch(#'ServerMessage'{
-                message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
-                message_id = <<"4">>
-            }, fuse_utils:receive_server_message());
-        _ ->
-            ok
-    end,
-    case Unsub of
-        true ->
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+7,-SubId)),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+8,-SubId-1)),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+9,-SubId-2));
-        _ ->
-            ok
-    end,
-    ok = ssl:close(Sock),
-    
-    timer:sleep(timer:seconds(60)),
-    
-    {After, SizesAfter} = get_memory_pools_entries_and_sizes(Worker1),
-%    lists:zipwith(fun(A,B) -> ?assertEqual(B,A) end, SizesAfter, SizesBefore),
-    Res = get_documents_diff(Worker1, After, Before),
-
-    ct:print("Write: ~p; Read: ~p; Release: ~p; Unsubscribe: ~p\n\n"
-             "~p", [Write, Read, Release, Unsub, Res]).
-
-memory_pools_cleared_after_disconnection_test_base_dir(Worker, SessionId, RootGuid, SubId, Unsub) ->
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker, [{active, true}], SessionId),
-
-    {Before, SizesBefore} = get_memory_pools_entries_and_sizes(Worker),
-    Dirname = generator:gen_name(),
-
-    % create directory
-    ok = ssl:send(Sock, fuse_utils:generate_create_dir_message(RootGuid, <<"1">>, Dirname)),
-    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
-        fuse_response = {dir, #'Dir'{uuid = DirId}}
-    }}} = ?assertMatch(#'ServerMessage'{
-        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
-        message_id = <<"1">>
-    }, fuse_utils:receive_server_message()),
-
-    % subscriptions
-    ok = ssl:send(Sock, fuse_utils:generate_file_removed_subscription_message(
-        SubId,SubId,-SubId, DirId)),
-    ok = ssl:send(Sock, fuse_utils:generate_file_renamed_subscription_message(
-        SubId,SubId+1,-SubId-1, DirId)),
-    ok = ssl:send(Sock, fuse_utils:generate_file_attr_changed_subscription_message(
-        SubId,SubId+2,-SubId-2, DirId, 500)),
-    
-    % ls
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_message(DirId, <<"2">>)),
-    ?assertMatch(#'ServerMessage'{
-        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}}, 
-        message_id = <<"2">>
-    }, fuse_utils:receive_server_message()),
-    
-    case Unsub of
-        true ->
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+3,-SubId)),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+4,-SubId-1)),
-            ok = ssl:send(Sock, fuse_utils:generate_subscription_cancellation_message(SubId,SubId+5,-SubId-2));
-        _ ->
-            ok
-    end,
-    ok = ssl:close(Sock),
-    
-    timer:sleep(timer:minutes(1)),
-
-    {After, SizesAfter} = get_memory_pools_entries_and_sizes(Worker),
-%    lists:zipwith(fun(A,B) -> ?assertEqual(B,A) end, SizesAfter, SizesBefore),
-    Res = get_documents_diff(Worker, After, Before),
-    
-    ct:print("Directory, Unsubscribe: ~p\n\n~p", [Unsub, Res]).
-    
-        
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1304,10 +1126,10 @@ init_per_testcase(Case, Config) when
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     test_utils:mock_new(Workers, router),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(Msg) ->
+    test_utils:mock_expect(Workers, router, preroute_message,
+        fun(Msg, SessionId) ->
             timer:sleep(2000),
-            meck:passthrough([Msg])
+            meck:passthrough([Msg, SessionId])
         end
     ),
 
@@ -1366,8 +1188,7 @@ init_per_testcase(client_keepalive_test, Config) ->
     init_per_testcase(timeouts_test, Config);
 
 init_per_testcase(Case, Config) when
-    Case =:= broken_connection_test;
-    Case =:= memory_pools_cleared_after_disconnection_test ->
+    Case =:= broken_connection_test ->
     % Shorten ttl to force quicker client session removal
     init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
 
@@ -1392,7 +1213,6 @@ init_per_testcase(default, Config) ->
 
 init_per_testcase(_Case, Config) ->
     init_per_testcase(default, Config).
-
 
 end_per_testcase(provider_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -1444,8 +1264,7 @@ end_per_testcase(socket_timeout_test, Config) ->
     end_per_testcase(timeouts_test, Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= broken_connection_test;
-    Case =:= memory_pools_cleared_after_disconnection_test ->
+    Case =:= broken_connection_test ->
     end_per_testcase(timeouts_test, Config);
     
 end_per_testcase(default, Config) ->
@@ -1487,6 +1306,7 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
     {ok, HandshakeResp, Sock} = connect_as_provider(Node, ProviderId, Nonce),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1650,19 +1470,3 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
 
-get_memory_pools_entries_and_sizes(Worker) ->
-    MemoryPools = rpc:call(Worker, datastore_multiplier, get_names, [memory]),
-    Entries = lists:map(fun(Pool) ->
-        PoolName = list_to_atom("datastore_cache_active_pool_" ++ atom_to_list(Pool)),
-        rpc:call(Worker, ets, foldl, [fun(Entry, Acc) -> Acc ++ [Entry] end, [], PoolName])
-    end, MemoryPools),
-    Sizes = lists:map(fun(Slot) -> rpc:call(Worker, datastore_cache_manager, get_size, [Slot]) end, MemoryPools),
-    {Entries, Sizes}.
-
-get_documents_diff(Worker, After, Before) ->
-    lists:flatten(lists:zipwith(fun(A,B) ->
-        Diff = A--B,
-        lists:map(fun({Key, Driver, DriverCtx}) ->
-            rpc:call(Worker, Driver, get, [DriverCtx, Key])
-            end, [{Key, Driver, DriverCtx} || {_,Key,_,_,Driver, DriverCtx} <- Diff])
-    end, After, Before)).

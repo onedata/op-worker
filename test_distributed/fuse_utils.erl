@@ -40,7 +40,7 @@
 %% Fuse request messages
 -export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2, 
     generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3, 
-    generate_get_children_message/2, generate_fsync_message/2]).
+    generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
 
 %% Subscription messages
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4, 
@@ -51,11 +51,14 @@
 -export([generate_write_message/5, generate_read_message/5]).
 
 -export([
+    create_file/3, create_file/4, 
+    create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
     proxy_read/5, proxy_read/6,
     proxy_write/5, proxy_write/6,
     fsync/4, fsync/5,
+    ls/2, ls/3,
     emit_file_read_event/5,
     emit_file_written_event/5,
     get_configuration/1, get_configuration/2,
@@ -203,11 +206,19 @@ generate_create_dir_message(RootGuid, MsgId, Name) ->
     }},
     generate_fuse_request_message(MsgId, FuseRequest).
 
-generate_get_children_message(RootGuid, MsgId) ->
+generate_get_children_attrs_message(RootGuid, MsgId) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = RootGuid,
         file_request = {get_file_children_attrs, 
             #'GetFileChildrenAttrs'{offset = 0, size = 100}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_get_children_message(RootGuid, MsgId) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {get_file_children,
+            #'GetFileChildren'{offset = 0, size = 100}}
     }},
     generate_fuse_request_message(MsgId, FuseRequest).
 
@@ -261,7 +272,9 @@ generate_file_removed_subscription_message(StreamId, SequenceNumber, SubId, File
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
 generate_file_attr_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
-    Type = {file_attr_changed, #'FileAttrChangedSubscription'{file_uuid = FileId, time_threshold = TimeThreshold}},
+    Type = {file_attr_changed, #'FileAttrChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
 generate_file_renamed_subscription_message(StreamId, SequenceNumber, SubId, FileId) ->
@@ -269,7 +282,9 @@ generate_file_renamed_subscription_message(StreamId, SequenceNumber, SubId, File
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
 generate_file_location_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
-    Type = {file_location_changed, #'FileLocationChangedSubscription'{file_uuid = FileId, time_threshold = TimeThreshold}},
+    Type = {file_location_changed, #'FileLocationChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
 generate_subscription_message(StreamId, SequenceNumber, SubId, Type) ->
@@ -318,6 +333,35 @@ generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
     messages:encode_msg(Message).
 
 
+create_file(Sock, RootGuid, Filename) ->
+    create_file(Sock, RootGuid, Filename, ?MSG_ID).
+
+create_file(Sock, RootGuid, Filename, MsgId) ->
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {file_created, #'FileCreated'{
+            handle_id = HandleId,
+            file_attr = #'FileAttr'{uuid = FileGuid}}
+        }}
+    }} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
+        message_id = MsgId
+    }, fuse_utils:receive_server_message()),
+    {FileGuid, HandleId}.
+
+create_directory(Sock, RootGuid, Dirname) ->
+    create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
+
+create_directory(Sock, RootGuid, Dirname, MsgId) ->
+    ok = ssl:send(Sock, fuse_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {dir, #'Dir'{uuid = DirId}}
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
+        message_id = MsgId
+    }, fuse_utils:receive_server_message()),
+    DirId.
+
 open(Conn, FileGuid) ->
     open(Conn, FileGuid, 'READ_WRITE').
 
@@ -343,17 +387,7 @@ close(Conn, FileGuid, HandleId) ->
     close(Conn, FileGuid, HandleId, ?MSG_ID).
 
 close(Conn, FileGuid, HandleId, MsgId) ->
-    Msg = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {fuse_request, #'FuseRequest'{
-            fuse_request = {file_request, #'FileRequest'{
-                context_guid = FileGuid,
-                file_request = {release, #'Release'{handle_id = HandleId}}
-            }}
-        }}
-    },
-
-    RawMsg = messages:encode_msg(Msg),
+    RawMsg = generate_release_message(HandleId, FileGuid, MsgId),
     ok = ssl:send(Conn, RawMsg),
 
     ?assertMatch(#'ServerMessage'{message_body = {
@@ -408,6 +442,23 @@ fsync(Conn, FileGuid, HandleId, DataOnly, MsgId) ->
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = MsgId}, receive_server_message()).
 
+ls(Conn, DirId) ->
+    ls(Conn, DirId, ?MSG_ID).
+
+ls(Conn, DirId, MsgId) ->
+    ok = ssl:send(Conn, fuse_utils:generate_get_children_message(DirId, MsgId)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {file_children, #'FileChildren'{
+            child_links = ChildLinks
+        }}
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{
+            status = #'Status'{code = ok}}
+        },
+        message_id = MsgId
+    }, fuse_utils:receive_server_message()),
+    ChildLinks.
+    
 
 emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
     {BlocksRead, BlocksSize} = lists:foldr(
