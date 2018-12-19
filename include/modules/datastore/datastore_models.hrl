@@ -284,7 +284,10 @@
 
 %% Model that stores config of file-popularity mechanism per given space.
 -record(file_popularity_config, {
-    enabled = false :: boolean()
+    enabled = false :: boolean(),
+    last_open_hour_weight = 1.0 :: number(),
+    avg_open_count_per_day_weight = 1.0 :: number(),
+    max_avg_open_count_per_day = 1.0 :: number()
 }).
 
 %% Helper record for autocleaning model.
@@ -561,9 +564,9 @@
     hr_hist = [] :: list(),
     dy_hist = [] :: list(),
     mth_hist = [] :: list(),
-    hr_mov_avg = 0 :: non_neg_integer(),
-    dy_mov_avg = 0 :: non_neg_integer(),
-    mth_mov_avg = 0 :: non_neg_integer()
+    hr_mov_avg = 0 :: number(),
+    dy_mov_avg = 0 :: number(),
+    mth_mov_avg = 0 :: number()
 }).
 
 %% Model that holds information about an ongoing (or completed) transfer

@@ -21,8 +21,8 @@
 -export([
     save/7, update/6, update/7, get/1, get/2,
     delete/2, list/1, list/4, save_db_view/6, delete_db_view/2,
-    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3
-    , build_cdmi_object_id_in_js/0]).
+    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3,
+    build_cdmi_object_id_in_js/0]).
 
 %% datastore_model callbacks
 -export([

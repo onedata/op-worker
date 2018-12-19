@@ -608,7 +608,7 @@ refill_queue_with_one_batch(State = #state{
 -spec filter([cdmi_id:objectid()], autocleaning_config:rules()) -> [file_ctx:ctx()].
 filter(PreselectedFiles, ACRules) ->
     lists:filtermap(fun(FileId) ->
-        Guid = cdmi_id:objectid_to_guid(FileId),
+        {ok, Guid} = cdmi_id:objectid_to_guid(FileId),
         FileCtx = file_ctx:new_by_guid(Guid),
         try
             case autocleaning_rules:are_all_rules_satisfied(FileCtx, ACRules) of

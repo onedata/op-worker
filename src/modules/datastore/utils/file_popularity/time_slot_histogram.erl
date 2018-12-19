@@ -219,9 +219,9 @@ get_sum(TimeSlotHistogram) ->
 %% Returns average of all histogram values
 %% @end
 %%--------------------------------------------------------------------
--spec get_average(histogram()) -> non_neg_integer().
+-spec get_average(histogram()) -> number().
 get_average(TimeSlotHistogram) ->
-    utils:ceil(get_sum(TimeSlotHistogram)/ get_size(TimeSlotHistogram)).
+    get_sum(TimeSlotHistogram)/ get_size(TimeSlotHistogram).
 
 %%%===================================================================
 %%% Internal functions

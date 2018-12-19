@@ -28,12 +28,16 @@
     query_should_return_empty_list_when_file_popularity_is_enabled/1,
     query_should_return_empty_list_when_file_has_not_been_opened/1,
     query_should_return_file_when_file_has_been_opened/1,
-    query_should_return_files_sorted_by_increasing_popularity_function_value/1,
+    query_should_return_files_sorted_by_increasing_last_open_timestamp/1,
+    query_should_return_files_sorted_by_increasing_avg_open_count_per_day/1,
     query_with_option_limit_should_return_limited_number_of_files/1,
     iterate_over_100_results_using_limit_1_and_startkey_docid/1,
     iterate_over_100_results_using_limit_10_and_startkey_docid/1,
     iterate_over_100_results_using_limit_100_and_startkey_docid/1,
-    iterate_over_100_results_using_limit_1000_and_startkey_docid/1
+    iterate_over_100_results_using_limit_1000_and_startkey_docid/1,
+    file_should_have_correct_popularity_value/1,
+    file_should_have_correct_popularity_value2/1,
+    file_should_have_correct_popularity_value3/1
 ]).
 
 
@@ -42,12 +46,16 @@ all() -> [
     query_should_return_empty_list_when_file_popularity_is_enabled,
     query_should_return_empty_list_when_file_has_not_been_opened,
     query_should_return_file_when_file_has_been_opened,
-    query_should_return_files_sorted_by_increasing_popularity_function_value,
+    query_should_return_files_sorted_by_increasing_avg_open_count_per_day,
+    query_should_return_files_sorted_by_increasing_last_open_timestamp,
     query_with_option_limit_should_return_limited_number_of_files,
     iterate_over_100_results_using_limit_1_and_startkey_docid,
     iterate_over_100_results_using_limit_10_and_startkey_docid,
     iterate_over_100_results_using_limit_100_and_startkey_docid,
-    iterate_over_100_results_using_limit_1000_and_startkey_docid
+    iterate_over_100_results_using_limit_1000_and_startkey_docid,
+    file_should_have_correct_popularity_value,
+    file_should_have_correct_popularity_value2,
+    file_should_have_correct_popularity_value3
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -98,8 +106,16 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     ?assertMatch({[FileId], #index_token{}},
         query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
 
+file_should_have_correct_popularity_value(Config) ->
+    file_should_have_correct_popularity_value_base(Config, 1.123, 0).
 
-query_should_return_files_sorted_by_increasing_popularity_function_value(Config) ->
+file_should_have_correct_popularity_value2(Config) ->
+    file_should_have_correct_popularity_value_base(Config, 0, 9.987).
+
+file_should_have_correct_popularity_value3(Config) ->
+    file_should_have_correct_popularity_value_base(Config, 1.123, 9.987).
+
+query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName1 = <<"file1">>,
@@ -128,6 +144,43 @@ query_should_return_files_sorted_by_increasing_popularity_function_value(Config)
     ok = lfm_proxy:close(W, H33),
     
     
+    {ok, FileId1} = cdmi_id:guid_to_objectid(G1),
+    {ok, FileId2} = cdmi_id:guid_to_objectid(G2),
+    {ok, FileId3} = cdmi_id:guid_to_objectid(G3),
+
+    ?assertMatch({[FileId1, FileId2, FileId3], #index_token{}},
+        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
+
+query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = enable_file_popularity(W, ?SPACE_ID),
+    FileName1 = <<"file1">>,
+    FileName2 = <<"file2">>,
+    FileName3 = <<"file3">>,
+    FilePath1 = ?FILE_PATH(FileName1),
+    FilePath2 = ?FILE_PATH(FileName2),
+    FilePath3 = ?FILE_PATH(FileName3),
+
+    Timestamp = current_timestamp_hours(W),
+
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
+    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
+    ok = lfm_proxy:close(W, H),
+    % pretend that G1 was opened for the last time 3 hours ago
+    change_last_open(W, G1, Timestamp - 3),
+
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
+    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
+    ok = lfm_proxy:close(W, H2),
+    % pretend that G2 was opened for the last time 2 hours ago
+    change_last_open(W, G2, Timestamp - 2),
+
+    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
+    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
+    ok = lfm_proxy:close(W, H3),
+    % pretend that G3 was opened for the last time 1 hours ago
+    change_last_open(W, G3, Timestamp - 1),
+
     {ok, FileId1} = cdmi_id:guid_to_objectid(G1),
     {ok, FileId2} = cdmi_id:guid_to_objectid(G2),
     {ok, FileId3} = cdmi_id:guid_to_objectid(G3),
@@ -198,6 +251,22 @@ end_per_suite(Config) ->
 %%% Internal functions
 %%%===================================================================
 
+file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenW, AvgOpenW),
+    FileName = <<"file">>,
+    FilePath = ?FILE_PATH(FileName),
+    Timestamp = current_timestamp_hours(W),
+    AvgOpen = 1/30,
+    Popularity = popularity(Timestamp, LastOpenW, AvgOpen, AvgOpenW),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
+    ok = lfm_proxy:close(W, H),
+    {ok, FileId} = cdmi_id:guid_to_objectid(G),
+    ?assertMatch({[FileId], #index_token{start_key = Popularity}},
+        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
+
+
 iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_file_popularity(W, ?SPACE_ID),
@@ -219,6 +288,13 @@ iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
 
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
+
+configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCountPerDayWeight) ->
+    rpc:call(Worker, file_popularity_api, configure, [SpaceId, #{
+        enabled => Enabled,
+        last_open_hour_weight => LastOpenWeight,
+        avg_open_count_per_day_weight => AvgOpenCountPerDayWeight
+    }]).
 
 disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
@@ -274,3 +350,12 @@ iterate(Worker, SpaceId, IndexToken, Limit, Result) ->
         {Ids, NewIndexToken} ->
             iterate(Worker, SpaceId, NewIndexToken, Limit, Result ++ Ids)
     end.
+
+popularity(LastOpen, LastOpenW, AvgOpen, AvgOpenW) ->
+    LastOpen * LastOpenW + AvgOpen * AvgOpenW.
+
+change_last_open(Worker, FileGuid, NewLastOpen) ->
+    Uuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
+        {ok, FP#file_popularity{last_open=NewLastOpen}}
+    end]).

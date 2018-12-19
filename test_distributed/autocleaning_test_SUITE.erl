@@ -109,19 +109,22 @@ end, __Distributions))).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
     ?assertMatch([], begin
-        StartKey = lists:duplicate(6, 0),
-        EndKey = lists:duplicate(6, ?MAX_VAL),
-        Token = rpc:call(Worker, file_popularity_api, initial_index_token, [StartKey, EndKey]),
-        {FileCtxs, _} = rpc:call(Worker, file_popularity_api, query, [SpaceId, Token, ?MAX_LIMIT]),
-        __Guids = [file_ctx:get_guid_const(F) || F <- FileCtxs],
+        {FileIds, _} = rpc:call(Worker, file_popularity_api, query, [SpaceId, ?MAX_LIMIT]),
+        __Guids = [?id_to_guid(F) || F <- FileIds],
         ExpectedGuids -- __Guids
     end, ?ATTEMPTS)).
 
 -define(assertRunFinished(Worker, __ARId),
     ?assertEqual(true, begin
-        Info = get_run_report(Worker, __ARId),
+        {ok, Info} = get_run_report(Worker, __ARId),
         maps:get(stopped_at, Info) =/= null
     end, ?ATTEMPTS)).
+
+-define(id_to_guid(CdmiId),
+    begin
+        {ok, Guid} = cdmi_id:objectid_to_guid(CdmiId),
+        Guid
+    end).
 
 %%%===================================================================
 %%% API
@@ -177,11 +180,11 @@ autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DIST(DomainP1, Size), Guid),
-    ?assertMatch(#{
+    ?assertMatch({ok, #{
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0
-    }, get_run_report(W1, ARId)).
+    }}, get_run_report(W1, ARId)).
 
 autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -208,11 +211,11 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
     ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
-    ?assertMatch(#{
+    ?assertMatch({ok, #{
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1
-    }, get_run_report(W1, ARId)).
+    }}, get_run_report(W1, ARId)).
 
 autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -241,11 +244,11 @@ autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) -
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
 
-    ?assertMatch(#{
+    ?assertMatch({ok, #{
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0
-    }, get_run_report(W1, ARId)).
+    }}, get_run_report(W1, ARId)).
 
 autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -339,11 +342,11 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
     ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
-    ?assertMatch(#{
+    ?assertMatch({ok, #{
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1
-    }, get_run_report(W1, ARId)).
+    }}, get_run_report(W1, ARId)).
 
 autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_open_count_rule(Config) ->
     Size = 10,
@@ -509,11 +512,11 @@ restart_autocleaning_run_test(Config) ->
     ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
-    ?assertMatch(#{
+    ?assertMatch({ok, #{
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1
-    }, get_run_report(W1, ARId)).
+    }}, get_run_report(W1, ARId)).
 
 
 %%%===================================================================
@@ -573,11 +576,11 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
     ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
-    ?assertMatch(#{
+    ?assertMatch({ok, #{
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0
-    }, get_run_report(W1, ARId)).
+    }}, get_run_report(W1, ARId)).
 
 %%%===================================================================
 %%% Internal functions

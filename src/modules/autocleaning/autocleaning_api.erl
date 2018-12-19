@@ -23,11 +23,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([force_start/1, maybe_start/2,
-    configure/2, disable/1,
-    get_configuration/1, status/1
-    , list_reports/1, list_reports/4,
-    restart_autocleaning_run/1, delete_config/1, maybe_check_and_start_autocleaning/1,
+-export([force_start/1, maybe_start/2, configure/2, disable/1, get_configuration/1,
+    status/1, list_reports/1, list_reports/4, restart_autocleaning_run/1,
+    delete_config/1, maybe_check_and_start_autocleaning/1,
     maybe_check_and_start_autocleaning/2, get_run_report/1, get_run_report/2]).
 
 -define(AUTOCLEANING_CHECK_INTERVAL,

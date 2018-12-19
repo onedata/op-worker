@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/3, rest_url/1, query/3, delete/1]).
+-export([create/4, example_query/1, query/3, delete/1, modify/4]).
 
 -type  index_token() :: #index_token{}.
 
@@ -32,13 +32,13 @@
 %% Creates view on space files capable of ordering files by their popularity
 %% @end
 %%--------------------------------------------------------------------
--spec create(od_space:id(), number(), number()) -> ok | {error, term()}.
-create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight) ->
+-spec create(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
+create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
     ViewFunction =
         <<"function (doc, meta) {
             'use strict';
             // function used to calculate the popularity of a file
-            ", (popularity_function(TimestampWeight, AvgOpenCountPerDayWeight))/binary,"
+            ", (popularity_function(TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay))/binary,"
 
             // code for building cdmi_id
             ", (index:build_cdmi_object_id_in_js())/binary,"
@@ -65,6 +65,10 @@ delete(SpaceId) ->
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
     couchbase_driver:delete_design_doc(DiscCtx, ?VIEW_NAME(SpaceId)).
 
+-spec modify(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
+modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
+    delete(SpaceId),
+    create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay).
 
 -spec query(od_space:id(), undefined | index_token(), non_neg_integer()) ->
     {[cdmi_id:objectid()], undefined | index_token()} | {error, term()}.
@@ -98,10 +102,12 @@ query(SpaceId, IndexToken, Limit) ->
 %% Returns rest url endpoint for querying file popularity in given space.
 %% @end
 %%-------------------------------------------------------------------
--spec rest_url(od_space:id()) -> binary().
-rest_url(SpaceId) ->
-    Endpoint = oneprovider:get_rest_endpoint(str_utils:format("spaces/~s/indexes/file-popularity/query", [SpaceId])),
-    list_to_binary(Endpoint).
+-spec example_query(od_space:id()) -> binary().
+example_query(SpaceId) ->
+    str_utils:format_bin(
+        "curl -sS -k -H \"X-Auth-Token:$TOKEN\" -X GET https://~s/api/v3/oneprovider/spaces/~s/indexes/file-popularity/query?limit=10",
+        [oneprovider:get_node_hostname(), SpaceId]
+    ).
 
 
 %%%===================================================================
@@ -143,9 +149,29 @@ token_to_opts(#index_token{
 query(Args) ->
     apply(fun couchbase_driver:query_view/4, Args).
 
-popularity_function(LastOpenWeight, AvgOpenCountPerMonthWeight) ->
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% JS code of the popularity function.
+%% The function is defined as:
+%% P(lastOpenHour, avgOpenCountPerDay) =
+%%  = w1 * lastOpenHour + w2 * min(avgOpenCountPerDay, MAX_AVG_OPEN_COUNT_PER_DAY)
+%%
+%% where:
+%%  * lastOpenHour - parameter which is equal to timestamp (in hours since 01.01.1970)
+%%    of last open operation on given file
+%%  * w1 - weight of lastOpenHour parameter
+%%  * avgOpenCountPerDay - parameter equal to moving average of number of open
+%%    operations on given file per day. Value is calculated over last 30 days.
+%%  * w2 - weight of avgOpenCountPerDay parameter
+%%  * MAX_AVG_OPEN_COUNT_PER_DAY - upper boundary for avgOpenCountPerDay parameter
+%% @end
+%%-------------------------------------------------------------------
+-spec popularity_function(number(), number(), number()) -> binary().
+popularity_function(LastOpenWeight, AvgOpenCountPerMonthWeight, MaxAvgOpenCountPerDay) ->
     TW = str_utils:to_binary(LastOpenWeight),
     OW = str_utils:to_binary(AvgOpenCountPerMonthWeight),
+    MA = str_utils:to_binary(MaxAvgOpenCountPerDay),
     <<"function popularity(last_open, dy_mov_avg) {
-        return ", TW/binary, " * last_open + ", OW/binary," * dy_mov_avg;
+        return ", TW/binary, " * last_open + ", OW/binary," * Math.min(dy_mov_avg, ", MA/binary,");
     }">>.
