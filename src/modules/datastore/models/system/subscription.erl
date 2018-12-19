@@ -17,7 +17,9 @@
 
 %% API
 -export([generate_id/0, generate_id/1]).
--export([create/1, save/1, get/1, delete/1, list/0]).
+-export([create_durable_subscription/1, list_durable_subscriptions/0]).
+%% Model Test API
+-export([save/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -67,16 +69,30 @@ generate_id(Seed) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates subscription.
+%% Creates durable subscription (active for all clients).
 %% @end
 %%--------------------------------------------------------------------
--spec create(doc() | base() | type()) -> {ok, id()} | {error, term()}.
-create(Doc = #document{}) ->
+-spec create_durable_subscription(doc() | base()) -> {ok, id()} | {error, term()}.
+create_durable_subscription(Doc = #document{}) ->
     ?extract_key(datastore_model:create(?CTX, Doc));
-create(Sub = #subscription{id = undefined}) ->
-    create(Sub#subscription{id = generate_id()});
-create(Sub = #subscription{id = Id}) ->
-    create(#document{key = Id, value = Sub}).
+create_durable_subscription(Sub = #subscription{id = undefined}) ->
+    create_durable_subscription(Sub#subscription{id = generate_id()});
+create_durable_subscription(Sub = #subscription{id = Id}) ->
+    create_durable_subscription(#document{key = Id, value = Sub}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of durable subscriptions (subscriptions that are always active,
+%% created for each client when it connects to op_worker).
+%% @end
+%%--------------------------------------------------------------------
+-spec list_durable_subscriptions() -> {ok, [doc()]} | {error, term()}.
+list_durable_subscriptions() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+%%%===================================================================
+%%% Model Test API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,30 +105,12 @@ save(Doc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns subscription.
-%% @end
-%%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Id) ->
-    datastore_model:get(?CTX, Id).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Deletes subscription.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
     datastore_model:delete(?CTX, Id).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [doc()]} | {error, term()}.
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% datastore_model callbacks

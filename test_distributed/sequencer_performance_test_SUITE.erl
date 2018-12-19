@@ -92,7 +92,7 @@ route_message_should_forward_messages_in_right_order_base(Config) ->
   % Send 'MsgNum' messages in 'MsgOrd' order.
   {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
     lists:foreach(fun(SeqNum) ->
-      route_message(Worker, SessId, client_message(SessId, StmId, SeqNum))
+      route_message(Worker, client_message(SessId, StmId, SeqNum))
     end, SeqNums)
   end),
 
@@ -150,7 +150,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
       utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
           [Wrk | _] = utils:random_shuffle(Workers),
-          route_message(Wrk, SessId, #client_message{session_id = SessId,
+          route_message(Wrk, #client_message{session_id = SessId,
             message_stream = Msg#message_stream{stream_id = StmId}
           })
         end, utils:random_shuffle(Msgs))
@@ -197,7 +197,8 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, router]).
+    test_utils:mock_validate_and_unload(Workers, [communicator, router,
+        stream_router]).
 
 %%%===================================================================
 %%% Internal functions
@@ -246,9 +247,9 @@ session_teardown(Worker, SessId) ->
 %% Sends message to sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Worker :: node(), SessId :: session:id(), Msg :: term()) -> ok.
-route_message(Worker, SessId, Msg) ->
-    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg, SessId])).
+-spec route_message(Worker :: node(), Msg :: term()) -> ok.
+route_message(Worker, Msg) ->
+    ?assertEqual(ok, rpc:call(Worker, stream_router, route_message, [Msg])).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -273,7 +274,7 @@ client_message(SessId, StmId, SeqNum) ->
 mock_communicator(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, [communicator]),
-    test_utils:mock_expect(Workers, communicator, send, fun
+    test_utils:mock_expect(Workers, communicator, send_to_client, fun
         (Msg, _, _) -> Self ! Msg, ok
     end).
 
@@ -289,6 +290,10 @@ mock_router(Workers) ->
     test_utils:mock_new(Workers, [router]),
     test_utils:mock_expect(Workers, router, route_message, fun
         (Msg) -> Self ! Msg
+    end),
+    test_utils:mock_new(Workers, [stream_router]),
+    test_utils:mock_expect(Workers, stream_router, make_message_direct, fun
+        (Msg) -> Msg
     end).
 
 %%--------------------------------------------------------------------

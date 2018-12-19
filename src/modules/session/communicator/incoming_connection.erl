@@ -30,8 +30,7 @@
     error :: atom(),
     % connection state
     session_id :: undefined | session:id(),
-    peer_type = unknown :: unknown | fuse_client | provider,
-    peer_id = undefined :: undefined | od_user:id() | od_provider:id(),
+    peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
     continue = true,
     wait_map = #{} :: map(),
     wait_pids = #{} :: map(),
@@ -112,13 +111,12 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         ok = Ok,
         closed = Closed,
         error = Error,
-        peer_type = unknown,
         last_message_timestamp = os:timestamp()
     },
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
     activate_socket_once(State),
 
-    Interval = router:get_processes_check_interval(),
+    Interval = async_request_manager:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
 
     handler_loop(State),
@@ -179,7 +177,7 @@ handler_loop(State) ->
         false ->
             case NewState#state.session_id of
                 undefined -> ok;
-                SessId -> session:remove_connection(SessId, self())
+                SessId -> session_connections:remove_connection(SessId, self())
             end,
             % Fulfill remaining promises before shutdown
             fulfill_pending_promises(NewState#state{continue = true})
@@ -218,14 +216,14 @@ handle_info(disconnect, State) ->
 handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
     last_message_timestamp = LMT} = State) ->
     TimeoutFun = fun(Id) ->
-        send_server_message(State, router:get_heartbeat_msg(Id))
+        send_server_message(State, async_request_manager:get_heartbeat_msg(Id))
     end,
     ErrorFun = fun(Id) ->
-        send_server_message(State, router:get_error_msg(Id))
+        send_server_message(State, async_request_manager:get_error_msg(Id))
     end,
-    {Pids2, WaitMap2} = router:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
+    {Pids2, WaitMap2} = async_request_manager:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
 
-    Interval = router:get_processes_check_interval(),
+    Interval = async_request_manager:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
 
     Continue = case maps:size(WaitMap2) of
@@ -244,7 +242,7 @@ handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids,
     State#state{continue = Continue, wait_map = WaitMap2, wait_pids = Pids2};
 
 handle_info(Info, State = #state{wait_map = WaitMap, wait_pids = Pids}) ->
-    case router:process_ans(Info, WaitMap, Pids) of
+    case async_request_manager:process_ans(Info, WaitMap, Pids) of
         wrong_message ->
             ?log_bad_request(Info),
             State#state{continue = false};
@@ -271,7 +269,7 @@ send_server_message(State = #state{session_id = SessionId, transport = Transport
                 ok ->
                     {ok, State};
                 {error, _} ->
-                    session:remove_connection(SessionId, self()),
+                    session_connections:remove_connection(SessionId, self()),
                     Result = send_via_other_connection(State, ServerMsg),
                     % Terminate as the connection was closed
                     {Result, State#state{continue = false}}
@@ -321,20 +319,10 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
     try
         #client_message{message_body = HandshakeMsg} = ClientMsg,
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
-        NewState = case HandshakeMsg of
-            #client_handshake_request{} ->
-                {UserId, SessionId} = fuse_auth_manager:handle_handshake(
-                    HandshakeMsg, IpAddress
-                ),
-                put(session_id, SessionId),
-                State#state{peer_type = fuse_client, peer_id = UserId, session_id = SessionId};
-            #provider_handshake_request{} ->
-                {ProviderId, SessionId} = provider_auth_manager:handle_handshake(
-                    HandshakeMsg, IpAddress
-                ),
-                put(session_id, SessionId),
-                State#state{peer_type = provider, peer_id = ProviderId, session_id = SessionId}
-        end,
+        {PeerId, SessionId} = auth_manager:handle_handshake(
+            HandshakeMsg, IpAddress
+        ),
+        NewState = State#state{peer_id = PeerId, session_id = SessionId},
         % Result is ignored as there is no possible fallback if
         % send_server_message fails (the connection will close then).
         {_, EndState} = send_server_message(NewState, #server_message{
@@ -345,57 +333,10 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
         ?debug_stacktrace("Invalid handshake request - ~p:~p", [
             Type, Reason
         ]),
-        report_handshake_error(State, Reason),
+        send_server_message(State,
+            auth_manager:get_handshake_error(Reason)),
         State#state{continue = false}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends a server message with the handshake error details.
-%% @end
-%%--------------------------------------------------------------------
--spec report_handshake_error(state(), Error :: term()) -> {Result :: ok | {error, term()}, state()}.
-report_handshake_error(State, incompatible_client_version) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INCOMPATIBLE_VERSION'
-        }
-    });
-report_handshake_error(State, invalid_token) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_MACAROON'
-        }
-    });
-report_handshake_error(State, invalid_provider) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_PROVIDER'
-        }
-    });
-report_handshake_error(State, invalid_nonce) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_NONCE'
-        }
-    });
-report_handshake_error(State, {badmatch, {error, Error}}) ->
-    report_handshake_error(State, Error);
-report_handshake_error(State, {Code, Error, _Description}) when is_integer(Code) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = translator:translate_handshake_error(Error)
-        }
-    });
-report_handshake_error(State, _) ->
-    send_server_message(State, #server_message{
-        message_body = #handshake_response{
-            status = 'INTERNAL_SERVER_ERROR'
-        }
-    }).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -403,41 +344,33 @@ report_handshake_error(State, _) ->
 %% Handle normal incoming message.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(state(), #client_message{} | #server_message{}) -> state().
-handle_normal_message(State = #state{session_id = SessId, peer_type = PeerType,
-    peer_id = ProviderId, wait_map = WaitMap, wait_pids = Pids}, Msg0) ->
-    {Msg, EffectiveSessionId} = case {PeerType, Msg0} of
+-spec handle_normal_message(state(), #client_message{}) -> state().
+handle_normal_message(State = #state{peer_id = ProviderId,
+    wait_map = WaitMap, wait_pids = Pids}, Msg) ->
+    case Msg of
         %% If message comes from provider and proxy session is requested - proceed
         %% with authorization and switch context to the proxy session.
-        {provider, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}}
-            when ProxySessionId =/= undefined, Auth =/= undefined ->
-            {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
-            {Msg0, ProxySessionId};
+        #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}
+            when ProxySessionId =/= undefined ->
+            {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse);
         _ ->
-            {Msg0, SessId}
+            ok
     end,
 
-    case Msg of
-        %% Remote proxy session has received message which is now to be routed as proxy message.
-        #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->
-            router:route_proxy_message(Msg, TargetSessionId),
+    case router:route_message(Msg) of
+        ok ->
             State;
-        _ -> %% Non-proxy case
-            case router:preroute_message(Msg, EffectiveSessionId) of
-                ok ->
-                    State;
-                {ok, ServerMsg} ->
-                    % Result is ignored as there is no possible fallback if
-                    % send_server_message fails (the connection will close then).
-                    {_, NewState} = send_server_message(State, ServerMsg),
-                    NewState;
-                {wait, Delegation} ->
-                    {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
-                    State#state{wait_map = WaitMap2, wait_pids = Pids2};
-                {error, Reason} ->
-                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-                    State#state{continue = false}
-            end
+        {ok, ServerMsg} ->
+            % Result is ignored as there is no possible fallback if
+            % send_server_message fails (the connection will close then).
+            {_, NewState} = send_server_message(State, ServerMsg),
+            NewState;
+        {wait, Delegation} ->
+            {WaitMap2, Pids2} = async_request_manager:save_delegation(Delegation, WaitMap, Pids),
+            State#state{wait_map = WaitMap2, wait_pids = Pids2};
+        {error, Reason} ->
+            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+            State#state{continue = false}
     end.
 
 
@@ -472,7 +405,7 @@ fulfill_pending_promises(#state{wait_map = WaitMap, wait_pids = Pids} = State) -
             heartbeat ->
                 handle_info(heartbeat, State);
             Info ->
-                case router:process_ans(Info, WaitMap, Pids) of
+                case async_request_manager:process_ans(Info, WaitMap, Pids) of
                     wrong_message ->
                         ?warning("Discarding message received on connection shutdown: ~p", [Info]),
                         State;
@@ -508,7 +441,6 @@ fulfill_pending_promises(#state{wait_map = WaitMap, wait_pids = Pids} = State) -
 %%--------------------------------------------------------------------
 -spec send_via_other_connection(state(), #server_message{}) -> ok | {error, term()}.
 send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
-    {ok, Connections} = session:get_connections(SessionId),
     % Try to send the message via another connection of this session. This must
     % be delegated to an asynchronous process so the connection process can
     % still receive messages in the meantime. Otherwise, a deadlock is possible
@@ -516,23 +448,18 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
     Parent = self(),
     Ref = make_ref(),
     spawn(fun() ->
-        Result = lists:foldl(fun(Pid, ResultAcc) ->
-            case ResultAcc of
-                ok ->
-                    ok;
-                _ ->
-                    try
-                        case session_manager:is_provider_session_id(SessionId) of
-                            true ->
-                                provider_communicator:send(ServerMsg, Pid);
-                            false ->
-                                communicator:send(ServerMsg, Pid)
-                        end
-                    catch _:_ ->
-                        {error, closed}
-                    end
+        Result = try
+            case session_utils:is_provider_session_id(SessionId) of
+                true ->
+                    communicator:send_to_provider(ServerMsg, SessionId,
+                        #{repeats => check_all_connections, exclude => [self()]});
+                false ->
+                    communicator:send_to_client(ServerMsg, SessionId,
+                        #{repeats => check_all_connections, exclude => [self()]})
             end
-        end, {error, closed}, Connections -- [self()]),
+        catch _:_ ->
+            {error, closed}
+        end,
         Parent ! {Ref, Result}
     end),
     WaitForResult = fun Fun() ->

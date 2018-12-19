@@ -67,7 +67,8 @@ all() ->
 subscribe_should_create_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_subscription(default, Worker),
-    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])),
+    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription,
+        list_durable_subscriptions, [])),
     unsubscribe(Worker, SubId).
 
 unsubscribe_should_remove_subscription(Config) ->
@@ -75,7 +76,8 @@ unsubscribe_should_remove_subscription(Config) ->
     SessId = ?config(session_id, Config),
     SubId = subscribe(Worker, SessId),
     unsubscribe(Worker, SubId),
-    ?assertMatch({ok, []}, rpc:call(Worker, subscription, list, [])).
+    ?assertMatch({ok, []}, rpc:call(Worker, subscription,
+        list_durable_subscriptions, [])).
 
 subscribe_should_notify_event_manager(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -130,7 +132,7 @@ flush_should_notify_awaiting_process(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-        initializer:clear_models(Worker, [subscription]),
+        initializer:clear_subscriptions(Worker),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -302,7 +304,7 @@ subscribe(Worker, SessId, Sub, Handler, EmRule, EmTime) ->
     {ok, SubId :: subscription:id()}.
 create_subscription(Case, Worker) ->
     Sub = subscription_type_for_testcase_name(Case),
-    rpc:call(Worker, subscription, create, [subscription(
+    rpc:call(Worker, subscription, create_durable_subscription, [subscription(
         Sub,
         forward_events_event_handler(),
         fun(_) -> true end,

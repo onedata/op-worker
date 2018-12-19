@@ -34,7 +34,7 @@
 log_in(Identity, Auth, Req) ->
     {ok, SessionId} = session_manager:create_gui_session(Identity, Auth),
     put_value(SessionId, gui_session_user_id, Identity#user_identity.user_id),
-    set_session_cookie(SessionId, session:session_ttl(), Req).
+    set_session_cookie(SessionId, session_utils:session_ttl(), Req).
 
 
 %%--------------------------------------------------------------------

@@ -565,7 +565,7 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
     case is_space_dir_const(FileCtx)
         andalso UserCtx =/= undefined
-        andalso (not session:is_special(user_ctx:get_session_id(UserCtx))) of
+        andalso (not session_utils:is_special(user_ctx:get_session_id(UserCtx))) of
         false ->
             get_name_of_nonspace_file(FileCtx);
         true ->

@@ -86,7 +86,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     Intervals = application:get_env(
         ?APP_NAME, providers_reconnect_intervals, #{}
     ),
-    ProviderId = session_manager:session_id_to_provider_id(SessionId),
+    ProviderId = session_utils:session_id_to_provider_id(SessionId),
     {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
         {time_utils:cluster_time_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
     ),
@@ -208,11 +208,11 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(upgrade_protocol, State = #state{ip = Hostname}) ->
-    socket_send(State, connection:protocol_upgrade_request(Hostname)),
+    socket_send(State, protocol_utils:protocol_upgrade_request(Hostname)),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
 
 handle_info({Ok, Socket, Data}, State = #state{status = upgrading_protocol, ok = Ok}) ->
-    case connection:verify_protocol_upgrade_response(Data) of
+    case protocol_utils:verify_protocol_upgrade_response(Data) of
         false ->
             ?error("Received invalid protocol upgrade response: ~p", [Data]),
             {stop, normal, State};
@@ -278,20 +278,20 @@ handle_info({send_async, ClientMsg = #client_message{}}, State) ->
 
 handle_info(heartbeat, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
     TimeoutFun = fun(Id) ->
-        send_server_message(State, router:get_heartbeat_msg(Id))
+        send_server_message(State, async_request_manager:get_heartbeat_msg(Id))
     end,
     ErrorFun = fun(Id) ->
-        send_server_message(State, router:get_error_msg(Id))
+        send_server_message(State, async_request_manager:get_error_msg(Id))
     end,
-    {Pids2, WaitMap2} = router:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
+    {Pids2, WaitMap2} = async_request_manager:check_processes(Pids, WaitMap, TimeoutFun, ErrorFun),
 
-    Interval = router:get_processes_check_interval(),
+    Interval = async_request_manager:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
     {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2},
         ?PROTO_CONNECTION_TIMEOUT};
 
 handle_info(Info, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
-    case router:process_ans(Info, WaitMap, Pids) of
+    case async_request_manager:process_ans(Info, WaitMap, Pids) of
         wrong_message ->
             ?log_bad_request(Info),
             {stop, normal, State};
@@ -317,7 +317,7 @@ terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     case SessId of
         undefined -> ok;
-        _ -> session:remove_connection(SessId, self())
+        _ -> session_connections:remove_connection(SessId, self())
     end,
     ssl:close(Socket),
     State.
@@ -395,19 +395,22 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
 %% Handle incoming message data.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_server_message_unsafe(#state{}, #client_message{} | #server_message{}) ->
+-spec handle_server_message_unsafe(#state{}, #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message_unsafe(State = #state{session_id = SessId,
+handle_server_message_unsafe(State = #state{session_id = SessId},
+    #server_message{proxy_session_id = undefined} = Msg) ->
+    handle_server_message_unsafe(State, Msg#server_message{proxy_session_id = SessId});
+handle_server_message_unsafe(State = #state{
     wait_map = WaitMap, wait_pids = Pids}, Msg) ->
-    case router:preroute_message(Msg, SessId) of
+    case router:route_message(Msg) of
         ok ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {ok, ServerMsg} ->
             send_server_message(State, ServerMsg),
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {wait, Delegation} ->
-            {WaitMap2, Pids2} = router:save_delegation(Delegation, WaitMap, Pids),
+            {WaitMap2, Pids2} = async_request_manager:save_delegation(Delegation, WaitMap, Pids),
             {noreply, State#state{wait_map = WaitMap2, wait_pids = Pids2}, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
@@ -518,7 +521,7 @@ init_provider_conn(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout
     {Ok, Closed, Error} = Transport:messages(),
 
     session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
-        provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
+        provider_id = session_utils:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),
     self() ! upgrade_protocol,

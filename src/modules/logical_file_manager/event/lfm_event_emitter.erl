@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Auxiliary functions for sending and flushing events.
+%%% Auxiliary functions for sending events.
 %%% @end
 %%%--------------------------------------------------------------------
--module(lfm_event_utils).
+-module(lfm_event_emitter).
 -author("Tomasz Lichon").
 
 -include("modules/events/definitions.hrl").
@@ -17,7 +17,7 @@
 
 %% API
 -export([maybe_emit_file_written/4, maybe_emit_file_read/4,
-    emit_file_truncated/3, flush_event_queue/3, emit_file_written/4]).
+    emit_file_truncated/3, emit_file_written/4]).
 
 %%%===================================================================
 %%% API
@@ -86,51 +86,9 @@ emit_file_truncated(FileGuid, Size, SessionId) ->
         file_size = Size
     }, SessionId).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Flushes event streams associated with the file written subscription
-%% for a given session, uuid and provider_id.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_event_queue(session:id(), od_provider:id(), file_meta:uuid()) ->
-    ok | {error, term()}.
-flush_event_queue(SessionId, ProviderId, FileUuid) ->
-    case session:is_special(SessionId) of
-        true ->
-            ok;
-        false ->
-            [Manager] = event:get_event_managers(SessionId),
-            RecvRef = event:flush(ProviderId, FileUuid, ?FILE_WRITTEN_SUB_ID,
-                self(), Manager),
-            receive_loop(RecvRef, Manager)
-    end.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Waits for worker asynchronous process answer.
-%% @end
-%%--------------------------------------------------------------------
--spec receive_loop(reference(), pid()) -> ok | {error, term()}.
-receive_loop(RecvRef, Manager) ->
-    receive
-        {RecvRef, Response} ->
-            Response
-    after
-        ?DEFAULT_REQUEST_TIMEOUT ->
-            case rpc:call(node(Manager), erlang, is_process_alive, [Manager]) of
-                true ->
-                    % TODO - VFS-4131
-%%                    receive_loop(RecvRef, Manager);
-                    {error, timeout};
-                _ ->
-                    {error, timeout}
-            end
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -22,7 +22,6 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
-
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 % for tests
@@ -106,8 +105,10 @@ init(_Args) ->
             {error, already_exists} -> ok
         end
     end, [
-        {fun subscription:create/1, [fslogic_event_subscriptions:file_read_subscription()]},
-        {fun subscription:create/1, [fslogic_event_subscriptions:file_written_subscription()]},
+        {fun subscription:create_durable_subscription/1,
+            [fslogic_event_durable_subscriptions:file_read_subscription()]},
+        {fun subscription:create_durable_subscription/1,
+            [fslogic_event_durable_subscriptions:file_written_subscription()]},
         {fun session_manager:create_root_session/0, []},
         {fun session_manager:create_guest_session/0, []}
     ]),

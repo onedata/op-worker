@@ -22,7 +22,9 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([start_link/3, execute_event_handler/2]).
+-export([start_link/3, send/2]).
+%% export for spawning
+-export([execute_event_handler/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -45,7 +47,7 @@
 -type transition_rule() :: fun((metadata(), Evt :: event:object()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
--type subscriptions() :: #{subscription:id() => event_router:key() | local}.
+-type subscriptions() :: #{subscription:id() => subscription_manager:key() | local}.
 -type events() :: #{event:key() => event:type()}.
 
 %% event stream state:
@@ -92,44 +94,12 @@ start_link(Mgr, Sub, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes event handler. If another event handler is being executed, waits
-%% until it is finished.
+%% Sends message to event_stream.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
-execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
-    ctx = Ctx, stream = #event_stream{event_handler = Handler},
-    session_id = SessId, key = StmKey} = State) ->
-    try
-        Start = erlang:monotonic_time(milli_seconds),
-        EvtsList = maps:values(Evts),
-
-        ?update_counter(?EXOMETER_NAME(events_handler_execution)),
-        ?update_counter(?EXOMETER_NAME(events_handler_map_size), length(EvtsList)),
-
-        case {Force, EvtsList} of
-            {true, _} -> Handler(EvtsList, Ctx);
-            {false, []} -> ok;
-            {_, _} -> Handler(EvtsList, Ctx)
-        end,
-
-        Duration = erlang:monotonic_time(milli_seconds) - Start,
-        ?update_counter(?EXOMETER_NAME(events_handler_execution_time_ms),
-            Duration),
-        ?debug("Execution of handler on events ~p in event stream ~p and session
-        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
-    catch
-        Error:Reason ->
-            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                [?MODULE, State, Error, Reason])
-    end;
-
-execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
-    MonitorRef = monitor(process, Pid),
-    receive
-        {'DOWN', MonitorRef, _, _, _} -> ok
-    end,
-    execute_event_handler(Force, State#state{handler_ref = undefined}).
+-spec send(pid(), term()) -> ok.
+send(Stream, Message) ->
+    gen_server2:call(Stream, Message).
 
 %%%===================================================================
 %%% Exometer API
@@ -142,7 +112,7 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %%--------------------------------------------------------------------
 -spec init_counters() -> ok.
 init_counters() ->
-    Size = application:get_env(?CLUSTER_WORKER_APP_NAME, 
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
         exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
     Counters = lists:map(fun(Name) ->
         {?EXOMETER_NAME(Name), counter}
@@ -310,6 +280,53 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%%===================================================================
+%%% Internal functions exported for spawning
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes event handler. If another event handler is being executed, waits
+%% until it is finished.
+%% @end
+%%--------------------------------------------------------------------
+-spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
+execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
+    ctx = Ctx, stream = #event_stream{event_handler = Handler},
+    session_id = SessId, key = StmKey} = State) ->
+    try
+        Start = erlang:monotonic_time(milli_seconds),
+        EvtsList = maps:values(Evts),
+
+        ?update_counter(?EXOMETER_NAME(events_handler_execution)),
+        ?update_counter(?EXOMETER_NAME(events_handler_map_size), length(EvtsList)),
+
+        case {Force, EvtsList} of
+            {true, _} -> Handler(EvtsList, Ctx);
+            {false, []} -> ok;
+            {_, _} -> Handler(EvtsList, Ctx)
+        end,
+
+        Duration = erlang:monotonic_time(milli_seconds) - Start,
+        ?update_counter(?EXOMETER_NAME(events_handler_execution_time_ms),
+            Duration),
+        ?debug("Execution of handler on events ~p in event stream ~p and session
+        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
+    catch
+        Error:Reason ->
+            % TODO VFS-4131 - react on error (send error if notify is in
+            % context? can handler crash?)
+            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+                [?MODULE, State, Error, Reason])
+    end;
+
+execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
+    MonitorRef = monitor(process, Pid),
+    receive
+        {'DOWN', MonitorRef, _, _, _} -> ok
+    end,
+    execute_event_handler(Force, State#state{handler_ref = undefined}).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -322,7 +339,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
     Subs :: subscriptions()) -> NewSubs :: subscriptions().
 add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
-    case event_router:add_subscriber(Sub, SessId) of
+    case subscription_manager:add_subscriber(Sub, SessId) of
         {ok, Key} -> maps:put(SubId, Key, Subs);
         {error, session_only} -> maps:put(SubId, session_only, Subs)
     end.
@@ -340,7 +357,7 @@ remove_subscription(SessId, SubId, Subs) ->
         {ok, session_only} ->
             maps:remove(SubId, Subs);
         {ok, Key} ->
-            event_router:remove_subscriber(Key, SessId),
+            subscription_manager:remove_subscriber(Key, SessId),
             maps:remove(SubId, Subs);
         error ->
             Subs
@@ -356,8 +373,11 @@ remove_subscription(SessId, SubId, Subs) ->
 -spec remove_subscriptions(State :: #state{}) -> ok.
 remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
     maps:fold(fun
-        (session_only, _, _) -> ok;
-        (Key, _, _) -> event_router:remove_subscriber(Key, SessId)
+        (session_only, _, _) ->
+            ok;
+        (Key, _, _) ->
+            % TODO VFS-4131 - react on error
+            subscription_manager:remove_subscriber(Key, SessId)
     end, ok, Subs).
 
 %%--------------------------------------------------------------------

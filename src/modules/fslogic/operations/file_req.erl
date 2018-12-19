@@ -182,9 +182,9 @@ fsync(UserCtx, FileCtx, DataOnly, HandleId) ->
     fslogic_worker:fuse_response().
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = case session:get_handle(SessId, HandleId) of
+    ok = case session_handles:get(SessId, HandleId) of
         {ok, SfmHandle} ->
-            ok = session:remove_handle(SessId, HandleId),
+            ok = session_handles:remove(SessId, HandleId),
             ok = file_handles:register_release(FileCtx, SessId, 1),
             ok = storage_file_manager:release(SfmHandle);
         {error, link_not_found} ->
@@ -264,6 +264,8 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         }
     catch
         Error:Reason ->
+            ?error_stacktrace("create_file_insecure error: ~p:~p",
+                [Error, Reason]),
             sfm_utils:delete_storage_file(FileCtx, UserCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
@@ -408,7 +410,7 @@ save_handle(SessId, Handle, HandleId0) ->
         _ ->
             HandleId0
     end,
-    session:add_handle(SessId, HandleId, Handle),
+    session_handles:add(SessId, HandleId, Handle),
     {ok, HandleId}.
 
 %%--------------------------------------------------------------------
@@ -510,7 +512,7 @@ fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
     end;
 fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = case session:get_handle(SessId, HandleId) of
+    ok = case session_handles:get(SessId, HandleId) of
         {ok, Handle} ->
             storage_file_manager:fsync(Handle, DataOnly);
         {error, link_not_found} ->
@@ -541,7 +543,8 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
 flush_event_queue(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case lfm_event_utils:flush_event_queue(SessId, oneprovider:get_id(), FileUuid) of
+    case lfm_event_controller:flush_event_queue(SessId, oneprovider:get_id(),
+        FileUuid) of
         ok ->
             #fuse_response{
                 status = #status{code = ?OK}

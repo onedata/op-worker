@@ -15,7 +15,6 @@
 -author("Michal Wrona").
 
 -include("global_definitions.hrl").
--include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").

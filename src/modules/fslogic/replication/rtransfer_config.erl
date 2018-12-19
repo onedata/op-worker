@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/events/definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -196,11 +195,11 @@ auth_request(TransferData, ProviderId) ->
                             rtransfer_link:address()) ->
                                    {MySecret :: binary(), PeerSecret :: binary()}.
 get_connection_secret(ProviderId, {_Host, _Port}) ->
-    SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
+    SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
     MySecret = do_generate_secret(),
     Request = #generate_rtransfer_conn_secret{secret = MySecret},
     {ok, #server_message{message_body = #rtransfer_conn_secret{secret = PeerSecret}}} =
-        provider_communicator:communicate(Request, SessId),
+        communicator:communicate_with_provider(Request, SessId),
     {MySecret, PeerSecret}.
 
 %%--------------------------------------------------------------------

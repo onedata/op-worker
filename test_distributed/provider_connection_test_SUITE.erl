@@ -113,7 +113,7 @@ connection_exists(Provider, PeerProvider) ->
 
 
 get_provider_session_id(Worker, Type, ProviderId) ->
-    rpc:call(Worker, session_manager, get_provider_session_id,
+    rpc:call(Worker, session_utils, get_provider_session_id,
         [Type, ProviderId]
     ).
 

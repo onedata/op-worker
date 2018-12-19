@@ -113,9 +113,7 @@ update_outdated_local_location_replica(FileCtx,
             {ok, FileCtx3} = maybe_truncate_file_on_storage(FileCtx2, OldSize, NewSize),
             {Location, FileCtx4} = file_ctx:get_file_location_with_filled_gaps(FileCtx3, ChangedBlocks),
             {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
-            ok = fslogic_cache:cache_event([],
-                fslogic_event_emitter:create_file_location_changed(Location,
-                    Offset, Size)), % to use notify_block_change_if_necessary when ready
+            ok = fslogic_cache:cache_event([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
             notify_size_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc)
     end.
 
@@ -263,9 +261,7 @@ reconcile_replicas(FileCtx,
 notify_block_change_if_necessary(FileCtx, _, _) ->
     {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx),
     {Offset, Size} = fslogic_location_cache:get_blocks_range(Location),
-    ok = fslogic_cache:cache_event([],
-        fslogic_event_emitter:create_file_location_changed(Location,
-            Offset, Size)).
+    ok = fslogic_cache:cache_event([], {Location, Offset, Size}).
 
 %%--------------------------------------------------------------------
 %% @private
