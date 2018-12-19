@@ -236,7 +236,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_session_ttl(SessType :: session:type()) ->
-    Milliseconds :: non_neg_integer().
+    Seconds :: non_neg_integer().
 get_session_ttl(gui) ->
     {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
     Period;
