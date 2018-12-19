@@ -149,7 +149,7 @@ socket_timeout_test(Config) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
 
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
     % receive & validate
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
@@ -162,7 +162,7 @@ socket_timeout_test(Config) ->
         lists:foreach(fun(Num) ->
             NumBin = integer_to_binary(Num),
             % send
-            ok = ssl:send(Sock2, fuse_utils:generate_create_message(RootGuid, NumBin, NumBin))
+            ok = ssl:send(Sock2, fuse_utils:generate_create_file_message(RootGuid, NumBin, NumBin))
         end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
 
         AnsNums = lists:foldl(fun(_Num, Acc) ->
@@ -182,7 +182,7 @@ socket_timeout_test(Config) ->
 
         lists:foreach(fun(Num) ->
             LSBin = list_to_binary(integer_to_list(Num) ++ "ls"),
-            ok = ssl:send(Sock2, fuse_utils:generate_get_children_message(RootGuid, LSBin)),
+            ok = ssl:send(Sock2, fuse_utils:generate_get_children_attrs_message(RootGuid, LSBin)),
             % receive & validate
             ?assertMatch(#'ServerMessage'{message_body = {
                 fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
@@ -216,7 +216,7 @@ client_keepalive_test(Config) ->
 
 create_timeouts_test(Config, Sock, RootGuid) ->
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
     % receive & validate
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
@@ -224,7 +224,7 @@ create_timeouts_test(Config, Sock, RootGuid) ->
 
     configure_cp(Config, helper_timeout),
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"2">>, <<"f2">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"2">>, <<"f2">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -238,7 +238,7 @@ create_timeouts_test(Config, Sock, RootGuid) ->
     ),
 
     configure_cp(Config, helper_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"3">>, <<"f3">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"3">>, <<"f3">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -254,14 +254,14 @@ create_timeouts_test(Config, Sock, RootGuid) ->
 ls_timeouts_test(Config, Sock, RootGuid) ->
     % send
     configure_cp(Config, ok),
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_message(RootGuid, <<"ls1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls1">>)),
     % receive & validate
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"ls1">>}, fuse_utils:receive_server_message()),
 
     configure_cp(Config, attr_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_message(RootGuid, <<"ls2">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls2">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -407,7 +407,7 @@ compatible_client_connection_test(Config) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
@@ -433,7 +433,7 @@ incompatible_client_connection_test(Config) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
@@ -554,10 +554,10 @@ fulfill_promises_after_connection_close_test(Config) ->
 protobuf_msg_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, router, route_message, fun
+    test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
-        }]}}) -> ok
+        }]}}, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
@@ -653,8 +653,7 @@ client_send_test(Config) ->
     },
 
     % when
-    ?assertEqual(ok, rpc:call(Worker1, communicator, send_to_client,
-        [ServerMsgInternal, SessionId])),
+    ?assertEqual(ok, rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId])),
 
     % then
     ?assertEqual(ServerMessageProtobuf, fuse_utils:receive_server_message()),
@@ -669,7 +668,7 @@ client_communicate_test(Config) ->
     % when
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
     CommunicateResult = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId, #{wait_for_ans => true}]),
+        [ServerMsgInternal, SessionId]),
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
@@ -687,8 +686,8 @@ client_communicate_async_test(Config) ->
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, MsgId} = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId, #{use_msg_id => {true, Self}}]),
+    {ok, MsgId} = rpc:call(Worker1, communicator, communicate_async,
+        [ServerMsgInternal, SessionId, Self]),
 
     % then
     ?assertReceivedMatch(#client_message{
@@ -705,8 +704,8 @@ client_communicate_async_test(Config) ->
     end),
 
     % when
-    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId, #{use_msg_id => true}]),
+    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate_async,
+        [ServerMsgInternal, SessionId]),
 
     % then
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
@@ -1033,7 +1032,7 @@ broken_connection_test(Config) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
     % when
-    ok = ssl:send(Sock, fuse_utils:generate_create_message(RootGuid, <<"1">>, <<"f1">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"1">>}, fuse_utils:receive_server_message()),
@@ -1063,8 +1062,7 @@ broken_connection_test(Config) ->
         )
     end, lists:seq(1, CallsNum)),
 
-    ok = test_utils:mock_unload(Workers, [Mod]),
-    ok.
+    ok = test_utils:mock_unload(Workers, [Mod]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1128,10 +1126,10 @@ init_per_testcase(Case, Config) when
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     test_utils:mock_new(Workers, router),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(Msg) ->
+    test_utils:mock_expect(Workers, router, preroute_message,
+        fun(Msg, SessionId) ->
             timer:sleep(2000),
-            meck:passthrough([Msg])
+            meck:passthrough([Msg, SessionId])
         end
     ),
 
@@ -1189,7 +1187,8 @@ init_per_testcase(timeouts_test, Config) ->
 init_per_testcase(client_keepalive_test, Config) ->
     init_per_testcase(timeouts_test, Config);
 
-init_per_testcase(broken_connection_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= broken_connection_test ->
     % Shorten ttl to force quicker client session removal
     init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
 
@@ -1214,7 +1213,6 @@ init_per_testcase(default, Config) ->
 
 init_per_testcase(_Case, Config) ->
     init_per_testcase(default, Config).
-
 
 end_per_testcase(provider_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -1265,6 +1263,10 @@ end_per_testcase(socket_timeout_test, Config) ->
     end, Workers),
     end_per_testcase(timeouts_test, Config);
 
+end_per_testcase(Case, Config) when
+    Case =:= broken_connection_test ->
+    end_per_testcase(timeouts_test, Config);
+    
 end_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
@@ -1290,7 +1292,7 @@ connect_as_provider(Node, ProviderId, Nonce) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
@@ -1304,20 +1306,6 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
     {ok, HandshakeResp, Sock} = connect_as_provider(Node, ProviderId, Nonce),
     ok = ssl:close(Sock),
     {ok, HandshakeResp}.
-
-
-connect_and_upgrade_proto(Hostname, Port) ->
-    {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
-        {active, once}, {reuse_sessions, false}
-    ], timer:minutes(1))),
-    ssl:send(Sock, protocol_utils:protocol_upgrade_request(list_to_binary(Hostname))),
-    receive {ssl, Sock, Data} ->
-        ?assert(protocol_utils:verify_protocol_upgrade_response(Data)),
-        ssl:setopts(Sock, [{active, once}, {packet, 4}]),
-        {ok, Sock}
-    after timer:minutes(1) ->
-        exit(timeout)
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -1366,7 +1354,7 @@ mock_identity(Workers) ->
     ).
 
 %%%===================================================================
-%%% Timeouts test helper functions
+%%% Test helper functions
 %%%===================================================================
 
 check_answer(AsertFun) ->
@@ -1481,3 +1469,4 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
+
