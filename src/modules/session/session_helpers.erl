@@ -40,7 +40,7 @@ get_helper(SessId, SpaceId, StorageDoc) ->
     get_helper(SessId, SpaceId, StorageDoc, false).
 
 delete_helpers(SessId) ->
-    Nodes = consistent_hasing:get_all_nodes(),
+    Nodes = consistent_hashing:get_all_nodes(),
     lists:foreach(fun(Node) ->
         spawn(Node, ?MODULE, delete_helpers_on_node, [SessId])
     end, Nodes).
