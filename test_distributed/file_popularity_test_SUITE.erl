@@ -37,8 +37,14 @@
     iterate_over_100_results_using_limit_1000_and_startkey_docid/1,
     file_should_have_correct_popularity_value/1,
     file_should_have_correct_popularity_value2/1,
-    file_should_have_correct_popularity_value3/1
+    file_should_have_correct_popularity_value3/1,
+    avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default/1,
+    avg_open_count_per_day_parameter_should_be_bounded_by_custom_value/1,
+    changing_max_avg_open_count_per_day_limit_should_reindex_the_file/1,
+    changing_last_open_weight_should_reindex_the_file/1,
+    changing_avg_open_count_weight_should_reindex_the_file/1
 ]).
+
 
 
 all() -> [
@@ -46,16 +52,21 @@ all() -> [
     query_should_return_empty_list_when_file_popularity_is_enabled,
     query_should_return_empty_list_when_file_has_not_been_opened,
     query_should_return_file_when_file_has_been_opened,
+    file_should_have_correct_popularity_value,
+    file_should_have_correct_popularity_value2,
+    file_should_have_correct_popularity_value3,
+    avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default,
+    avg_open_count_per_day_parameter_should_be_bounded_by_custom_value,
+    changing_max_avg_open_count_per_day_limit_should_reindex_the_file,
+    changing_last_open_weight_should_reindex_the_file,
+    changing_avg_open_count_weight_should_reindex_the_file,
     query_should_return_files_sorted_by_increasing_avg_open_count_per_day,
     query_should_return_files_sorted_by_increasing_last_open_timestamp,
     query_with_option_limit_should_return_limited_number_of_files,
     iterate_over_100_results_using_limit_1_and_startkey_docid,
     iterate_over_100_results_using_limit_10_and_startkey_docid,
     iterate_over_100_results_using_limit_100_and_startkey_docid,
-    iterate_over_100_results_using_limit_1000_and_startkey_docid,
-    file_should_have_correct_popularity_value,
-    file_should_have_correct_popularity_value2,
-    file_should_have_correct_popularity_value3
+    iterate_over_100_results_using_limit_1000_and_startkey_docid
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -115,6 +126,134 @@ file_should_have_correct_popularity_value2(Config) ->
 file_should_have_correct_popularity_value3(Config) ->
     file_should_have_correct_popularity_value_base(Config, 1.123, 9.987).
 
+avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = enable_file_popularity(W, ?SPACE_ID),
+    % 2 files should have the same probability value, despite having different avg_open_count
+    FileName1 = <<"file1">>,
+    FileName2 = <<"file2">>,
+    FilePath1 = ?FILE_PATH(FileName1),
+    FilePath2 = ?FILE_PATH(FileName2),
+    DefaultMaxOpenCount = 100,
+    OpenCountPerMonth1 = DefaultMaxOpenCount * 30, % avg_open_count = 100
+    OpenCountPerMonth2 = (DefaultMaxOpenCount + 1) * 30, % avg_open_count = 101
+
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
+
+    open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
+    open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
+
+    ?assertEqual(true, begin
+        {_, T1 = #index_token{start_key = Key1}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+        {_, #index_token{start_key = Key2}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, T1, 1), ?ATTEMPTS),
+        Key1 == Key2
+    end, ?ATTEMPTS).
+
+avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    % 2 files should have the same probability value, despite having different avg_open_count
+    FileName1 = <<"file1">>,
+    FileName2 = <<"file2">>,
+    FilePath1 = ?FILE_PATH(FileName1),
+    FilePath2 = ?FILE_PATH(FileName2),
+    LastOpenWeight = 1.0,
+    AvgOpenCountPerDayWeight = 25.0,
+    MaxOpenCount = 10,
+
+    OpenCountPerMonth1 = MaxOpenCount * 30, % avg_open_count = 100
+    OpenCountPerMonth2 = (MaxOpenCount + 1) * 30, % avg_open_count = 200
+
+    ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
+
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
+
+    open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
+    open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
+
+    ?assertEqual(true, begin
+        {_, T1 = #index_token{start_key = Key1}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+        {_, #index_token{start_key = Key2}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, T1, 1), ?ATTEMPTS),
+        Key1 == Key2
+    end, ?ATTEMPTS).
+
+changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    FileName = <<"file">>,
+    FilePath = ?FILE_PATH(FileName),
+    LastOpenWeight = 1.0,
+    AvgOpenCountPerDayWeight = 25.0,
+    MaxOpenCount = 10,
+    MaxOpenCount2 = 20,
+    OpenCountPerMonth = 15 * 30, % avg_open_count = 15
+    ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    open_and_close_file(W, ?SESSION(W, Config), G, OpenCountPerMonth),
+
+    {_, #index_token{start_key = Key1}} =
+        ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+
+    ok = configure_file_popularity(W, ?SPACE_ID, undefined, undefined, undefined, MaxOpenCount2),
+
+    ?assertEqual(true, begin
+        {_, #index_token{start_key = Key2}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+        Key1 =/= Key2
+    end, ?ATTEMPTS).
+
+changing_last_open_weight_should_reindex_the_file(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    FileName = <<"file">>,
+    FilePath = ?FILE_PATH(FileName),
+    LastOpenWeight = 1.0,
+    LastOpenWeight2 = 2.0,
+    AvgOpenCountPerDayWeight = 25.0,
+    MaxOpenCount = 10,
+
+    ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    open_and_close_file(W, ?SESSION(W, Config), G, 1),
+
+    {_, #index_token{start_key = Key1}} =
+        ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+
+    ok = configure_file_popularity(W, ?SPACE_ID, undefined, LastOpenWeight2, undefined, undefined),
+
+    ?assertEqual(true, begin
+        {_, #index_token{start_key = Key2}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+        Key1 =/= Key2
+    end, ?ATTEMPTS).
+
+changing_avg_open_count_weight_should_reindex_the_file(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    FileName = <<"file">>,
+    FilePath = ?FILE_PATH(FileName),
+    LastOpenWeight = 1.0,
+    AvgOpenCountPerDayWeight = 25.0,
+    AvgOpenCountPerDayWeight2 = 50.0,
+    MaxOpenCount = 10,
+
+    ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    open_and_close_file(W, ?SESSION(W, Config), G, 1),
+
+    {_, #index_token{start_key = Key1}} =
+        ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+
+    ok = configure_file_popularity(W, ?SPACE_ID, undefined, undefined, AvgOpenCountPerDayWeight2, undefined),
+
+    ?assertEqual(true, begin
+        {_, #index_token{start_key = Key2}} =
+            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
+        Key1 =/= Key2
+    end, ?ATTEMPTS).
+
 query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_file_popularity(W, ?SPACE_ID),
@@ -124,7 +263,7 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     FilePath1 = ?FILE_PATH(FileName1),
     FilePath2 = ?FILE_PATH(FileName2),
     FilePath3 = ?FILE_PATH(FileName3),
-    
+
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
     ok = lfm_proxy:close(W, H),
@@ -142,8 +281,7 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     ok = lfm_proxy:close(W, H32),
     {ok, H33} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
     ok = lfm_proxy:close(W, H33),
-    
-    
+
     {ok, FileId1} = cdmi_id:guid_to_objectid(G1),
     {ok, FileId2} = cdmi_id:guid_to_objectid(G2),
     {ok, FileId3} = cdmi_id:guid_to_objectid(G3),
@@ -203,7 +341,7 @@ query_with_option_limit_should_return_limited_number_of_files(Config) ->
         open_and_close_file(W, SessId, G, N),
         {ok, FileId} = cdmi_id:guid_to_objectid(G),
         {FileId, N}
-    end, lists:seq(1, NumberOfFiles)),  % the resulting list will bo sorted ascending by number of opens
+    end, lists:seq(1, NumberOfFiles)), % the resulting list will bo sorted ascending by number of opens
     Ids = [C || {C, _} <- IdsAndOpensNum],
     ExpectedResult = lists:sublist(Ids, Limit),
 
@@ -219,7 +357,7 @@ iterate_over_100_results_using_limit_100_and_startkey_docid(Config) ->
     iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 100).
 
 iterate_over_100_results_using_limit_1000_and_startkey_docid(Config) ->
-   iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1000).
+    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1000).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -257,7 +395,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     Timestamp = current_timestamp_hours(W),
-    AvgOpen = 1/30,
+    AvgOpen = 1 / 30,
     Popularity = popularity(Timestamp, LastOpenW, AvgOpen, AvgOpenW),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
@@ -290,11 +428,19 @@ enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
 
 configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCountPerDayWeight) ->
-    rpc:call(Worker, file_popularity_api, configure, [SpaceId, #{
+    rpc:call(Worker, file_popularity_api, configure, [SpaceId, filter_undefined_values(#{
         enabled => Enabled,
         last_open_hour_weight => LastOpenWeight,
         avg_open_count_per_day_weight => AvgOpenCountPerDayWeight
-    }]).
+    })]).
+
+configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
+    rpc:call(Worker, file_popularity_api, configure, [SpaceId, filter_undefined_values(#{
+        enabled => Enabled,
+        last_open_hour_weight => LastOpenWeight,
+        avg_open_count_per_day_weight => AvgOpenCountPerDayWeight,
+        max_avg_open_count_per_day => MaxAvgOpenCountPerDay
+    })]).
 
 disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
@@ -357,5 +503,11 @@ popularity(LastOpen, LastOpenW, AvgOpen, AvgOpenW) ->
 change_last_open(Worker, FileGuid, NewLastOpen) ->
     Uuid = fslogic_uuid:guid_to_uuid(FileGuid),
     rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
-        {ok, FP#file_popularity{last_open=NewLastOpen}}
+        {ok, FP#file_popularity{last_open = NewLastOpen}}
     end]).
+
+filter_undefined_values(Map) ->
+    maps:filter(fun
+        (_, undefined) -> false;
+        (_, _) -> true
+    end, Map).

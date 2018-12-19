@@ -54,7 +54,6 @@ create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay
            }
         }">>,
 
-    ?critical("ViewFunction: ~p", [ViewFunction]),
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
     ok = couchbase_driver:save_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).

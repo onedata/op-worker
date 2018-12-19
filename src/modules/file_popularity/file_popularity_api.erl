@@ -32,7 +32,7 @@ enable(SpaceId) ->
 
 configure(SpaceId, #{enabled := false}) ->
     disable(SpaceId);
-configure(SpaceId, NewConfiguration = #{enabled := true}) ->
+configure(SpaceId, NewConfiguration) ->
     case assert_types_and_values(NewConfiguration) of
         ok ->
             case file_popularity_config:maybe_create_or_update(SpaceId, NewConfiguration) of
