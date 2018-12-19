@@ -101,7 +101,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -149,6 +149,13 @@ get_record_struct(2) ->
         {eff_spaces, [string]},
 
         {cache_state, #{atom => term}}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {name, string},
+        {type, atom},
+
+        {cache_state, #{atom => term}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -183,17 +190,37 @@ upgrade_record(1, Group) ->
 
         _RevisionHistory
     } = Group,
-    {2, #od_group{
+    {2, {od_group,
+        Name,
+        Type,
+
+        [],
+        #{},
+        #{},
+
+        #{},
+        #{},
+
+        [],
+        #{}
+    }};
+upgrade_record(2, Group) ->
+    {2, {od_group,
+        Name,
+        Type,
+
+        [],
+        #{},
+        #{},
+
+        #{},
+        #{},
+
+        [],
+        #{}
+    }} = Group,
+    {3, #od_group{
         name = Name,
         type = Type,
-
-        direct_parents = [],
-        direct_children = #{},
-        eff_children = #{},
-
-        direct_users = #{},
-        eff_users = #{},
-
-        eff_spaces = [],
         cache_state = #{}
     }}.
