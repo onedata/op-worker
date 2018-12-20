@@ -65,7 +65,7 @@ get_configuration(SpaceId) ->
     case file_popularity_config:get(SpaceId) of
         {ok, FPCDoc} ->
             {ok, #{
-                enabled => is_enabled(FPCDoc),
+                enabled => file_popularity_config:is_enabled(FPCDoc),
                 last_open_hour_weight => file_popularity_config:get_last_open_hour_weight(FPCDoc),
                 avg_open_count_per_day_weight => file_popularity_config:get_avg_open_count_per_day_weight(FPCDoc),
                 max_avg_open_count_per_day => file_popularity_config:get_max_avg_open_count_per_day(FPCDoc),

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This modules contains macros used in files-popularity modules.
+%%% This modules contains macros used in file-popularity modules.
 %%% @end
 %%%-------------------------------------------------------------------
 
