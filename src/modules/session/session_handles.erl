@@ -16,7 +16,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([add/3, remove/2, get/2]).
+-export([add/3, remove/2, get/2, remove_handles/1]).
 
 -define(FILE_HANDLES_TREE_ID, <<"storage_file_handles">>).
 
@@ -78,3 +78,14 @@ get(SessId, HandleId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+remove_handles(SessId) ->
+    {ok, Links} = session:fold_links(SessId, ?FILE_HANDLES_TREE_ID,
+        fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
+    ),
+    Names = lists:map(fun(#link{name = Name, target = HandleKey}) ->
+        sfm_handle:delete(HandleKey),
+        Name
+    end, Links),
+    session:delete_links(SessId, ?FILE_HANDLES_TREE_ID, Names),
+    ok.

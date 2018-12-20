@@ -18,6 +18,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, init_per_testcase/2,
@@ -124,7 +125,7 @@ connection_closed_after_dir_create_ls_unsub(Config) ->
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, erlang:unique_integer([positive, monotonic])).
+-define(SeqID, erlang:unique_integer([positive, monotonic]) - 2).
 
 %%%===================================================================
 %%% Test base
@@ -137,9 +138,13 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     SpaceGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
 
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
+        generator:gen_name(), 8#755)),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
+
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
-    {Before, SizesBefore} = get_memory_pools_entries_and_sizes(Worker1),
+    {Before, _SizesBefore} = get_memory_pools_entries_and_sizes(Worker1),
 
     Filename = generator:gen_name(),
     {ParentGuid, DirSubs} = maybe_create_directory(Sock, SpaceGuid, Directory),
@@ -156,12 +161,11 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args) ->
     maybe_unsub(Sock, Subs++DirSubs, Unsub),
     ok = ssl:close(Sock),
 
-%    timer:sleep(timer:seconds(60)),
+    timer:sleep(timer:seconds(30)),
 
-    {After, SizesAfter} = get_memory_pools_entries_and_sizes(Worker1),
-%    lists:zipwith(fun(A,B) -> ?assertEqual(B,A) end, SizesAfter, SizesBefore),
+    {After, _SizesAfter} = get_memory_pools_entries_and_sizes(Worker1),
     Res = get_documents_diff(Worker1, After, Before),
-    ct:print("~p", [Res]).
+    ?assertEqual([], Res).
 
 %%%===================================================================
 %%% Internal functions
@@ -186,7 +190,7 @@ maybe_write(Sock, FileGuid, HandleId, Write) ->
                 0, SubId, -SubId, FileGuid, 500)),
             fuse_utils:proxy_write(Sock, FileGuid, HandleId, 0, Data),
             fuse_utils:fsync(Sock, FileGuid, HandleId, false),
-            cancel_subscriptions(Sock, 0, [-SubId]), 
+            cancel_subscriptions(Sock, 0, [-SubId]),
             Data;
         _ ->
             <<>>
@@ -263,12 +267,23 @@ get_memory_pools_entries_and_sizes(Worker) ->
     {Entries, Sizes}.
 
 get_documents_diff(Worker, After, Before) ->
-    lists:flatten(lists:zipwith(fun(A,B) ->
+    Ans = lists:flatten(lists:zipwith(fun(A,B) ->
         Diff = A--B,
         lists:map(fun({Key, Driver, DriverCtx}) ->
             rpc:call(Worker, Driver, get, [DriverCtx, Key])
         end, [{Key, Driver, DriverCtx} || {_,Key,_,_,Driver, DriverCtx} <- Diff]) 
-    end, After, Before)).
+    end, After, Before)),
+    lists:filter(fun
+        ({ok, #document{value = #links_node{model = luma_cache}}}) -> false;
+        ({ok, #document{value = #links_forest{model = luma_cache}}}) -> false;
+        ({ok, #document{value = #links_node{model = task_pool}}}) -> false;
+        ({ok, #document{value = #links_forest{model = task_pool}}}) -> false;
+        ({ok, #document{value = #task_pool{}}}) -> false;
+        ({ok, #document{value = #permissions_cache{}}}) -> false;
+        ({ok, #document{value = #permissions_cache_helper{}}}) -> false;
+        ({ok, #document{value = #permissions_cache_helper2{}}}) -> false;
+        (_) -> true
+    end, Ans).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -282,6 +297,7 @@ init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     ssl:start(),
+    Config2 = lfm_proxy:init(Config),
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
@@ -289,12 +305,13 @@ init_per_testcase(_Case, Config) ->
             {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
         end
     ),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"),
         % Shorten ttl to force quicker client session removal
-        [{fuse_session_ttl_seconds, 10} | Config]).
+        [{fuse_session_ttl_seconds, 10} | Config2]).
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    lfm_proxy:teardown(Config),
     ssl:stop(),
     test_utils:mock_validate_and_unload(Workers, [user_identity]),
     initializer:clean_test_users_and_spaces_no_validate(Config).
