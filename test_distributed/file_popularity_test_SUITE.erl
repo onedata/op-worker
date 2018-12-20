@@ -160,7 +160,7 @@ avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
     FilePath1 = ?FILE_PATH(FileName1),
     FilePath2 = ?FILE_PATH(FileName2),
     LastOpenWeight = 1.0,
-    AvgOpenCountPerDayWeight = 25.0,
+    AvgOpenCountPerDayWeight = 20.0,
     MaxOpenCount = 10,
 
     OpenCountPerMonth1 = MaxOpenCount * 30, % avg_open_count = 100
@@ -187,7 +187,7 @@ changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     LastOpenWeight = 1.0,
-    AvgOpenCountPerDayWeight = 25.0,
+    AvgOpenCountPerDayWeight = 20.0,
     MaxOpenCount = 10,
     MaxOpenCount2 = 20,
     OpenCountPerMonth = 15 * 30, % avg_open_count = 15
@@ -212,7 +212,7 @@ changing_last_open_weight_should_reindex_the_file(Config) ->
     FilePath = ?FILE_PATH(FileName),
     LastOpenWeight = 1.0,
     LastOpenWeight2 = 2.0,
-    AvgOpenCountPerDayWeight = 25.0,
+    AvgOpenCountPerDayWeight = 20.0,
     MaxOpenCount = 10,
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
@@ -235,8 +235,8 @@ changing_avg_open_count_weight_should_reindex_the_file(Config) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     LastOpenWeight = 1.0,
-    AvgOpenCountPerDayWeight = 25.0,
-    AvgOpenCountPerDayWeight2 = 50.0,
+    AvgOpenCountPerDayWeight = 20.0,
+    AvgOpenCountPerDayWeight2 = 40.0,
     MaxOpenCount = 10,
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
