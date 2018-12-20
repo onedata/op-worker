@@ -12,6 +12,7 @@
 -module(quota_test_SUITE).
 -author("Rafal Slota").
 
+-include("fuse_utils.hrl").
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -21,6 +22,8 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("clproto/include/messages.hrl").
+-include_lib("proto/common/credentials.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -46,7 +49,11 @@
     
     % gui upload tests
     quota_updated_on_gui_upload/1,
-    failed_gui_upload_test/1
+    failed_gui_upload_test/1,
+
+    % events tests
+    events_sent_to_client_directio/1,
+    events_sent_to_client_proxyio/1
 ]).
 
 all() ->
@@ -63,10 +70,14 @@ all() ->
         multiprovider_test,
         remove_file_on_remote_provider_should_unlock_space,
         replicate_file_smaller_than_quota_should_not_fail,
+        % TODO uncomment after fixing rtransfer not respecting quota
 %        replicate_file_bigger_than_quota_should_fail,
-        quota_updated_on_gui_upload
-        % TODO Uncomment after resolving VFS-5101
+        quota_updated_on_gui_upload,
+        % TODO uncomment after resolving VFS-5101
 %        failed_gui_upload_test
+        % TODO uncomment after resolving VFS-5248
+        % events_sent_to_client_proxyio,
+        events_sent_to_client_directio
     ]).
 
 -define(ATTEMPTS, 60).
@@ -411,7 +422,7 @@ multiprovider_test(Config) ->
     {ok, _} = create_file(P2, SessId(P2), f(<<"space3">>, File2)),
 
     ?assertMatch({ok, _}, write_to_file(P1, User1, f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(10))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, SessId(P2), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(40))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, SessId(P2), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(30))),
     ?assertMatch({ok, _}, write_to_file(P1, User1, f(<<"space3">>, File1), 10, crypto:strong_rand_bytes(10))),
 
     ?assertMatch(0, current_size(P2, <<"space_id3">>)),
@@ -432,9 +443,9 @@ remove_file_on_remote_provider_should_unlock_space(Config) ->
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(20))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, SessId(P1), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(20))),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), {path, f(<<"space3">>, File1)}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), f(<<"space3">>, File1)), ?ATTEMPTS),
     ?assertMatch(ok, unlink(P2, SessId(P2), f(<<"space3">>, File1))),
-    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, SessId(P1), {path, f(<<"space3">>, File1)}), ?ATTEMPTS),
+    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)), ?ATTEMPTS),
     ?assertMatch(0, current_size(P2, <<"space_id3">>)),
     ?assertMatch(0, current_size(P1, <<"space_id3">>)),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(20))).
@@ -506,8 +517,8 @@ quota_updated_on_gui_upload(Config) ->
     
     do_multipart(P1, SessId(P1), 1, 20, 1, Guid, File1),
     
-    {ok, _} = lfm_proxy:stat(P1, SessId(P1), {path, f(<<"space3">>, File1)}),
-    {ok, FileHandle} = lfm_proxy:open(P1, SessId(P1), {path, f(<<"space3">>, File1)}, rdwr),
+    {ok, _} = lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)),
+    {ok, FileHandle} = lfm_proxy:open(P1, SessId(P1), f(<<"space3">>, File1), rdwr),
     ok = lfm_proxy:fsync(P1, FileHandle),
 
     ?assertEqual(20, current_size(P1, <<"space_id3">>)),
@@ -529,19 +540,56 @@ failed_gui_upload_test(Config) ->
     % Upload File1 500MB to space4
     do_multipart(P1, User1, 100, 1048576, 5, Guid, File1),
     
-    {ok, FileHandle} = lfm_proxy:open(P1, User1, {path, f(<<"space4">>, File1)}, rdwr),
+    {ok, FileHandle} = lfm_proxy:open(P1, User1, f(<<"space4">>, File1), rdwr),
     ok = lfm_proxy:fsync(P1, FileHandle),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),
     
     % Upload File2 800MB to space4
     do_multipart(P1, User1, 160, 1048576, 5, Guid, File2),
-    ok = lfm_proxy:fsync(P1, User1, {path, f(<<"space4">>, File2)}, ProviderId),
+    ok = lfm_proxy:fsync(P1, User1, f(<<"space4">>, File2), ProviderId),
 
     StorageFilePath1 = storage_file_path(P1, <<"space_id4">>, File2),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),
-    ?assertMatch({error, enoent}, open_file(P1, StorageFilePath1), ?ATTEMPTS),
-    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, User1, {path, f(<<"space4">>, File2)}), ?ATTEMPTS).
+    ?assertMatch({error, enoent}, open_storage_file(P1, StorageFilePath1), ?ATTEMPTS),
+    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, User1, f(<<"space4">>, File2)), ?ATTEMPTS).
+
+
+events_sent_to_client_directio(Config) ->
+    #env{p1 = P1} = gen_test_env(Config),
+    events_sent_test_base(Config, <<"space_id1">>, P1).
+
+events_sent_to_client_proxyio(Config) ->
+    #env{p2 = P2} = gen_test_env(Config),
+    events_sent_test_base(Config, <<"space_id2">>, P2).
+
+events_sent_test_base(Config, SpaceId, SupportingProvider) ->
+    #env{p1 = P1, file1 = Filename} = gen_test_env(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+
+    SpaceSize = available_size(SupportingProvider, SpaceId),
+    RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     
+    {ok, {Conn, _}} = fuse_utils:connect_via_macaroon(P1, [{active, true}], SessId(P1)),
+    SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),
+    rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId(P1)]),
+
+    {FileGuid, _FileHandleId} = fuse_utils:create_file(Conn, RootGuid, Filename),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId(P1), {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), {guid, FileGuid}, 0, crypto:strong_rand_bytes(SpaceSize))),
+    ?assertMatch(0, available_size(SupportingProvider, SpaceId), ?ATTEMPTS),
+    
+    ExpectedMessage = #'ServerMessage'{
+        message_body = {events, #'Events'{
+            events = [#'Event'{
+                type = {quota_exceeded, #'QuotaExceededEvent'{
+                    spaces = [SpaceId]
+                }}
+            }]
+        }}
+    },
+
+    ?assert(verify_message_received(ExpectedMessage)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -554,6 +602,23 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(Case, Config) when
+    Case =:= events_sent_to_client_directio;
+    Case =:= events_sent_to_client_proxyio ->
+    ct:timetrap(timer:minutes(10)),
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:remove_pending_messages(),
+    ssl:start(),
+
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
+           (Auth) -> meck:passthrough([Auth])
+        end
+    ),
+    init_per_testcase(default, Config);
+    
 init_per_testcase(Case, Config) when 
     Case =:= quota_updated_on_gui_upload;
     Case =:= failed_gui_upload_test ->
@@ -603,45 +668,50 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-
+create_file(Worker, SessionId, {path, Path}) ->
+    create_file(Worker, SessionId, Path);
 create_file(Worker, SessionId, Path) ->
     lfm_proxy:create(Worker, SessionId, Path, ?DEFAULT_FILE_MODE).
 
-open_file(Worker, SessionId, Path, OpenMode) ->
-    lfm_proxy:open(Worker, SessionId, {path, Path}, OpenMode).
+open_file(Worker, SessionId, FileKey, OpenMode)->
+    lfm_proxy:open(Worker, SessionId, FileKey, OpenMode).
 
-write_to_file(Worker, SessionId, Path, Offset, Data) ->
-    {ok, FileHandle} = open_file(Worker, SessionId, Path, write),
+write_to_file(Worker, SessionId, FileKey, Offset, Data) ->
+    {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
     lfm_proxy:fsync(Worker, FileHandle),
     timer:sleep(500), %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
+mkdir(Worker, SessionId, {path, Path}) ->
+    mkdir(Worker, SessionId, Path);
 mkdir(Worker, SessionId, Path) ->
     lfm_proxy:mkdir(Worker, SessionId, Path).
 
-rm_recursive(Worker, SessionId, Path) ->
-    lfm_proxy:rm_recursive(Worker, SessionId, {path, Path}).
+rm_recursive(Worker, SessionId, FileKey) ->
+    lfm_proxy:rm_recursive(Worker, SessionId, FileKey).
 
-unlink(Worker, SessionId, Path) ->
-    lfm_proxy:unlink(Worker, SessionId, {path, Path}).
+unlink(Worker, SessionId, FileKey) ->
+    lfm_proxy:unlink(Worker, SessionId, FileKey).
 
-truncate(Worker, SessionId, Path, Size) ->
-    {ok, FileHandle} = open_file(Worker, SessionId, Path, write),
-    Result = lfm_proxy:truncate(Worker, SessionId, {path, Path}, Size),
+truncate(Worker, SessionId, FileKey, Size) ->
+    {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
+    Result = lfm_proxy:truncate(Worker, SessionId, FileKey, Size),
     lfm_proxy:fsync(Worker, FileHandle),
     timer:sleep(500), %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
-rename(Worker, SessionId, Path, Target) ->
-    Result = lfm_proxy:mv(Worker, SessionId, {path, Path}, Target),
+rename(Worker, SessionId, FileKey, {path, Target}) ->
+    rename(Worker, SessionId, FileKey, Target);
+rename(Worker, SessionId, FileKey, Target) ->
+    Result = lfm_proxy:mv(Worker, SessionId, FileKey, Target),
     fsync(Worker, SessionId, Target),
     Result.
 
-fsync(Worker, SessionId, Path) ->
-    case open_file(Worker, SessionId, Path, write) of
+fsync(Worker, SessionId, FileKey) ->
+    case open_file(Worker, SessionId, FileKey, write) of
         {ok, FileHandle} ->
             Result = lfm_proxy:fsync(Worker, FileHandle),
             lfm_proxy:close(Worker, FileHandle),
@@ -651,7 +721,16 @@ fsync(Worker, SessionId, Path) ->
     end.
 
 gen_test_env(Config) ->
-    [P1, P2] = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    Workers1 = lists:filter(fun(W) -> 
+        case re:run(atom_to_list(W), "p1") of 
+            nomatch -> false; 
+            _ -> true
+        end 
+    end, Workers),
+    Workers2 = Workers -- Workers1,
+    P1 = lists:last(Workers1),
+    P2 = lists:last(Workers2),
     User1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     User2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(P1)}}, Config),
 
@@ -667,10 +746,12 @@ gen_test_env(Config) ->
     }.
 
 f(Space, FileName) ->
-    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]).
+    P = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]),
+    {path, P}.
 
 f(Space, Dirs, FileName) ->
-    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]).
+    P = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]),
+    {path, P}.
 
 current_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, current_size, [SpaceId]).
@@ -688,7 +769,7 @@ do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, ParentGuid,
             [{<<"resumableChunkNumber">>, integer_to_binary(Chunk)} | ParamsProp]])
     end, lists:seq(1,ChunksNumber)).
 
-open_file(Worker, FilePath) ->
+open_storage_file(Worker, FilePath) ->
     rpc:call(Worker, file, open, [FilePath, read]).
 
 storage_file_path(Worker, SpaceId, FilePath) ->
@@ -711,3 +792,10 @@ storage_mount_point(Worker, StorageId) ->
 list_ended_transfers(Worker, SpaceId) ->
     {ok, List} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),
     List.
+
+verify_message_received(Message) ->
+    case fuse_utils:receive_server_message([], timer:seconds(10)) of
+        Message -> true;
+        {error, timeout} -> false;
+        _ -> verify_message_received(Message)
+    end.
