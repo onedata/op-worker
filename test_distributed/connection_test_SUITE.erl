@@ -1188,8 +1188,7 @@ init_per_testcase(timeouts_test, Config) ->
 init_per_testcase(client_keepalive_test, Config) ->
     init_per_testcase(timeouts_test, Config);
 
-init_per_testcase(Case, Config) when
-    Case =:= broken_connection_test ->
+init_per_testcase(broken_connection_test, Config) ->
     % Shorten ttl to force quicker client session removal
     init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
 
@@ -1264,8 +1263,7 @@ end_per_testcase(socket_timeout_test, Config) ->
     end, Workers),
     end_per_testcase(timeouts_test, Config);
 
-end_per_testcase(Case, Config) when
-    Case =:= broken_connection_test ->
+end_per_testcase(broken_connection_test, Config) ->
     end_per_testcase(timeouts_test, Config);
     
 end_per_testcase(default, Config) ->
