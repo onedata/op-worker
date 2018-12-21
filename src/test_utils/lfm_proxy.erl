@@ -17,7 +17,8 @@
 
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5, unlink/3, open/4, close/2, close_all/1,
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5,
+    create_and_open/5, unlink/3, open/4, close/2, close_all/1,
     read/4, silent_read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5,
     ls/6, read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
@@ -100,6 +101,20 @@ create(Worker, SessId, FilePath, Mode) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, logical_file_manager:create(SessId, ParentGuid, Name, Mode)).
+
+-spec create_and_open(node(), session:id(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:posix_permissions()) ->
+    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}} |
+    logical_file_manager:error_reply().
+create_and_open(Worker, SessId, ParentGuid, Name, Mode) ->
+    ?EXEC(Worker,
+        case logical_file_manager:create_and_open(SessId, ParentGuid, Name, Mode, rdwr) of
+            {ok, {Guid, Handle}} ->
+                TestHandle = crypto:strong_rand_bytes(10),
+                ets:insert(lfm_handles, {TestHandle, Handle}),
+                {ok, {Guid, TestHandle}};
+            Other -> Other
+        end).
 
 -spec unlink(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | logical_file_manager:error_reply().
