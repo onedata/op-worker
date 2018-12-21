@@ -554,10 +554,10 @@ fulfill_promises_after_connection_close_test(Config) ->
 protobuf_msg_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, router, preroute_message, fun
+    test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{}
-        }]}}, _) -> ok
+        }]}}) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
@@ -653,7 +653,8 @@ client_send_test(Config) ->
     },
 
     % when
-    ?assertEqual(ok, rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId])),
+    ?assertEqual(ok, rpc:call(Worker1, communicator, send_to_client, 
+        [ServerMsgInternal, SessionId])),
 
     % then
     ?assertEqual(ServerMessageProtobuf, fuse_utils:receive_server_message()),
@@ -668,7 +669,7 @@ client_communicate_test(Config) ->
     % when
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
     CommunicateResult = rpc:call(Worker1, communicator, communicate,
-        [ServerMsgInternal, SessionId]),
+        [ServerMsgInternal, SessionId, #{wait_for_ans => true}]),
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
@@ -686,8 +687,8 @@ client_communicate_async_test(Config) ->
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, MsgId} = rpc:call(Worker1, communicator, communicate_async,
-        [ServerMsgInternal, SessionId, Self]),
+    {ok, MsgId} = rpc:call(Worker1, communicator, communicate,
+        [ServerMsgInternal, SessionId, #{use_msg_id => {true, Self}}]),
 
     % then
     ?assertReceivedMatch(#client_message{
@@ -704,8 +705,8 @@ client_communicate_async_test(Config) ->
     end),
 
     % when
-    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate_async,
-        [ServerMsgInternal, SessionId]),
+    {ok, MsgId2} = rpc:call(Worker1, communicator, communicate,
+        [ServerMsgInternal, SessionId, #{use_msg_id => true}]),
 
     % then
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
@@ -1126,10 +1127,10 @@ init_per_testcase(Case, Config) when
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     test_utils:mock_new(Workers, router),
-    test_utils:mock_expect(Workers, router, preroute_message,
-        fun(Msg, SessionId) ->
+    test_utils:mock_expect(Workers, router, route_message,
+        fun(Msg) ->
             timer:sleep(2000),
-            meck:passthrough([Msg, SessionId])
+            meck:passthrough([Msg])
         end
     ),
 
