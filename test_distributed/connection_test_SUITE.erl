@@ -438,7 +438,7 @@ forward_compatible_client_connection_test(Config) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
     ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
