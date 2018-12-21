@@ -93,6 +93,7 @@ handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
 %%--------------------------------------------------------------------
 %% File manipulation procedures
 %%--------------------------------------------------------------------
+
 handle(<<"createFile">>, Props) ->
     SessionId = gui_session:get_session_id(),
     Name = proplists:get_value(<<"fileName">>, Props),
@@ -108,6 +109,29 @@ handle(<<"createFile">>, Props) ->
 handle(<<"fetchMoreDirChildren">>, Props) ->
     SessionId = gui_session:get_session_id(),
     file_data_backend:fetch_more_dir_children(SessionId, Props);
+
+handle(<<"createFileShare">>, Props) ->
+    SessionId = gui_session:get_session_id(),
+    UserId = gui_session:get_user_id(),
+    FileId = proplists:get_value(<<"fileId">>, Props),
+    Name = proplists:get_value(<<"shareName">>, Props),
+    case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
+        {ok, {ShareId, _}} ->
+            gui_async:push_updated(
+                <<"user">>,
+                user_data_backend:user_record(SessionId, UserId)
+            ),
+            % Push file data so GUI knows that is is shared
+            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+            gui_async:push_created(<<"file">>, FileData),
+            {ok, [{<<"shareId">>, ShareId}]};
+        {error, ?EACCES} ->
+            gui_error:report_warning(<<"You do not have permissions to "
+            "manage shares in this space.">>);
+        _ ->
+            gui_error:report_warning(
+                <<"Cannot create share due to unknown error.">>)
+    end;
 
 %%--------------------------------------------------------------------
 %% Transfer related procedures
@@ -141,255 +165,6 @@ handle(<<"rerunTransfer">>, Props) ->
     SessionId = gui_session:get_session_id(),
     TransferId = proplists:get_value(<<"transferId">>, Props),
     transfer_data_backend:rerun_transfer(SessionId, TransferId);
-
-%%--------------------------------------------------------------------
-%% Space related procedures
-%%--------------------------------------------------------------------
-handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    SessionId = gui_session:get_session_id(),
-    case space_logic:create_user_invite_token(SessionId, SpaceId) of
-        {ok, Token} ->
-            {ok, [{<<"token">>, Token}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite user token due to unknown error.">>)
-    end;
-
-handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case user_logic:join_space(SessionId, UserId, Token) of
-        {ok, SpaceId} ->
-            gui_async:push_updated(
-                <<"user">>,
-                user_data_backend:user_record(SessionId, UserId)
-            ),
-            SpaceRecord = space_data_backend:space_record(SpaceId),
-            SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            {ok, [{<<"spaceName">>, SpaceName}]};
-        ?ERROR_BAD_VALUE_TOKEN(<<"token">>) ->
-            gui_error:report_warning(<<"Invalid token value.">>)
-    end;
-
-handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case user_logic:leave_space(SessionId, UserId, SpaceId) of
-        ok ->
-            {ok, AllGroups} = user_logic:get_eff_groups(SessionId, UserId),
-            StillHasAccess = lists:any(
-                fun(GroupId) ->
-                    {ok, EffSpaces} = group_logic:get_eff_spaces(SessionId, GroupId),
-                    lists:member(SpaceId, EffSpaces)
-                end, AllGroups),
-            case StillHasAccess of
-                true ->
-                    ok;
-                false ->
-                    gui_async:push_updated(
-                        <<"user">>,
-                        user_data_backend:user_record(SessionId, UserId)
-                    )
-            end,
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot leave space due to unknown error.">>)
-    end;
-
-handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    SessionId = gui_session:get_session_id(),
-    case space_logic:create_group_invite_token(SessionId, SpaceId) of
-        {ok, Token} ->
-            {ok, [{<<"token">>, Token}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite group token due to unknown error.">>)
-    end;
-
-handle(<<"groupJoinSpace">>, Props) ->
-    GroupId = proplists:get_value(<<"groupId">>, Props),
-    Token = proplists:get_value(<<"token">>, Props),
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case group_logic:join_space(SessionId, GroupId, Token) of
-        {ok, SpaceId} ->
-            gui_async:push_updated(
-                <<"user">>,
-                user_data_backend:user_record(SessionId, UserId)
-            ),
-            SpaceRecord = space_data_backend:space_record(SpaceId),
-            SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            {ok, [{<<"spaceName">>, SpaceName}]};
-        ?ERROR_BAD_VALUE_TOKEN(<<"token">>) ->
-            gui_error:report_warning(<<"Invalid token value.">>)
-    end;
-
-handle(<<"groupLeaveSpace">>, Props) ->
-    GroupId = proplists:get_value(<<"groupId">>, Props),
-    SpaceId = proplists:get_value(<<"spaceId">>, Props),
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case group_logic:leave_space(SessionId, GroupId, SpaceId) of
-        ok ->
-            {ok, AllGroups} = user_logic:get_eff_groups(SessionId, UserId),
-            StillHasAccess = lists:any(
-                fun(GrId) ->
-                    {ok, EffSpaces} = group_logic:get_eff_spaces(SessionId, GrId),
-                    lists:member(SpaceId, EffSpaces)
-                end, AllGroups -- [GroupId]),
-            case StillHasAccess of
-                true ->
-                    ok;
-                false ->
-                    gui_async:push_updated(
-                        <<"user">>,
-                        user_data_backend:user_record(SessionId, UserId)
-                    )
-            end,
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot leave space due to unknown error.">>)
-    end;
-
-handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    SessionId = gui_session:get_session_id(),
-    case space_logic:create_provider_invite_token(SessionId, SpaceId) of
-        {ok, Token} ->
-            {ok, [{<<"token">>, Token}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite provider token due to unknown error.">>)
-    end;
-
-handle(<<"createFileShare">>, Props) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    FileId = proplists:get_value(<<"fileId">>, Props),
-    Name = proplists:get_value(<<"shareName">>, Props),
-    case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
-        {ok, {ShareId, _}} ->
-            gui_async:push_updated(
-                <<"user">>,
-                user_data_backend:user_record(SessionId, UserId)
-            ),
-            % Push file data so GUI knows that is is shared
-            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-            gui_async:push_created(<<"file">>, FileData),
-            {ok, [{<<"shareId">>, ShareId}]};
-        {error, ?EACCES} ->
-            gui_error:report_warning(<<"You do not have permissions to "
-            "manage shares in this space.">>);
-        _ ->
-            gui_error:report_warning(
-                <<"Cannot create share due to unknown error.">>)
-    end;
-
-
-%%--------------------------------------------------------------------
-%% Group related procedures
-%%--------------------------------------------------------------------
-handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
-    SessionId = gui_session:get_session_id(),
-    case group_logic:create_user_invite_token(SessionId, GroupId) of
-        {ok, Token} ->
-            {ok, [{<<"token">>, Token}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite group token due to unknown error.">>)
-    end;
-
-handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case user_logic:join_group(SessionId, UserId, Token) of
-        {ok, GroupId} ->
-            gui_async:push_updated(
-                <<"user">>,
-                user_data_backend:user_record(SessionId, UserId)
-            ),
-            GroupRecord = group_data_backend:group_record(GroupId),
-            GroupName = proplists:get_value(<<"name">>, GroupRecord),
-            {ok, [{<<"groupName">>, GroupName}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot join group due to unknown error.">>)
-    end;
-
-handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case user_logic:leave_group(SessionId, UserId, GroupId) of
-        ok ->
-            {ok, AllGroups} = user_logic:get_eff_groups(SessionId, UserId),
-            StillHasAccess = lists:any(
-                fun(GrId) ->
-                    {ok, EffChildren} = group_logic:get_eff_children(SessionId, GrId),
-                    maps:is_key(GroupId, EffChildren)
-                end, AllGroups -- [GroupId]),
-            case StillHasAccess of
-                true ->
-                    ok;
-                false ->
-                    gui_async:push_updated(
-                        <<"user">>,
-                        user_data_backend:user_record(SessionId, UserId)
-                    )
-            end,
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot leave group due to unknown error.">>)
-    end;
-
-handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
-    SessionId = gui_session:get_session_id(),
-    case group_logic:create_group_invite_token(SessionId, GroupId) of
-        {ok, Token} ->
-            {ok, [{<<"token">>, Token}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite user token due to unknown error.">>)
-    end;
-
-handle(<<"groupJoinGroup">>, Props) ->
-    ChildGroupId = proplists:get_value(<<"groupId">>, Props),
-    Token = proplists:get_value(<<"token">>, Props),
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    case group_logic:join_group(SessionId, ChildGroupId, Token) of
-        {ok, ParentGroupId} ->
-            gui_async:push_updated(
-                <<"user">>,
-                user_data_backend:user_record(SessionId, UserId)
-            ),
-            ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
-            gui_async:push_updated(<<"group">>, ChildGroupRecord),
-            ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
-            gui_async:push_updated(<<"group">>, ParentGroupRecord),
-            PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
-            {ok, [{<<"groupName">>, PrntGroupName}]};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot join group due to unknown error.">>)
-    end;
-
-handle(<<"groupLeaveGroup">>, Props) ->
-    ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
-    ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
-    SessionId = gui_session:get_session_id(),
-    case group_logic:leave_group(SessionId, ChildGroupId, ParentGroupId) of
-        ok ->
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot leave group due to unknown error.">>)
-    end;
-
-handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, _GroupId}]) ->
-    gui_error:report_error(
-        <<"This feature is no longer supported.">>);
 
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).
