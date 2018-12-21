@@ -167,10 +167,10 @@ handle_sync_event(Event, From, StateName, State) ->
     {next_state, NextStateName :: atom(), NewStateData :: term(),
         timeout() | hibernate} |
     {stop, Reason :: normal | term(), NewStateData :: term()}).
-handle_info(reset_stream, StateName, #state{session_id = SessId,
+handle_info(reset_stream, receiving, #state{session_id = SessId,
     stream_id = StmId, is_proxy = IsProxy} = State) ->
     send_message_stream_reset(StmId, SessId, IsProxy),
-    {next_state, StateName, State};
+    {next_state, receiving, State, ?RECEIVING_TIMEOUT};
 
 handle_info({'EXIT', _, shutdown}, _, State) ->
     {stop, normal, State};

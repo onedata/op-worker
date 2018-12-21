@@ -79,6 +79,12 @@ get(SessId, HandleId) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all associated sfm handles.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_handles(SessId :: session:id()) -> ok.
 remove_handles(SessId) ->
     {ok, Links} = session:fold_links(SessId, ?FILE_HANDLES_TREE_ID,
         fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
