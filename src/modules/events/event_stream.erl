@@ -99,7 +99,7 @@ start_link(Mgr, Sub, SessId) ->
 %%--------------------------------------------------------------------
 -spec send(pid(), term()) -> ok.
 send(Stream, Message) ->
-    gen_server2:call(Stream, Message).
+    gen_server2:call(Stream, Message, timer:minutes(1)).
 
 %%%===================================================================
 %%% Exometer API
@@ -373,9 +373,9 @@ remove_subscription(SessId, SubId, Subs) ->
 -spec remove_subscriptions(State :: #state{}) -> ok.
 remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
     maps:fold(fun
-        (session_only, _, _) ->
+        (_, session_only, _) ->
             ok;
-        (Key, _, _) ->
+        (_, Key, _) ->
             % TODO VFS-4131 - react on error
             subscription_manager:remove_subscriber(Key, SessId)
     end, ok, Subs).

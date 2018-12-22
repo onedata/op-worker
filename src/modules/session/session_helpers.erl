@@ -39,6 +39,12 @@
 get_helper(SessId, SpaceId, StorageDoc) ->
     get_helper(SessId, SpaceId, StorageDoc, false).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all associated helper handles.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_helpers(SessId :: session:id()) -> ok.
 delete_helpers(SessId) ->
     Nodes = consistent_hashing:get_all_nodes(),
     lists:foreach(fun(Node) ->
@@ -54,8 +60,7 @@ delete_helpers(SessId) ->
 %% Removes all associated helper handles present on the node.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_helpers_on_node(SessId :: session:id()) ->
-    ok | {error, term()}.
+-spec delete_helpers_on_node(SessId :: session:id()) -> ok.
 delete_helpers_on_node(SessId) ->
     {ok, Links} = session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
         fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end

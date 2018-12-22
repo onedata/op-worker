@@ -34,16 +34,31 @@
     connect_via_macaroon/1, connect_via_macaroon/2,
     connect_via_macaroon/3, connect_via_macaroon/4
 ]).
+-export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1]).
--export([generate_delete_file_message/2, generate_open_file_message/2, generate_get_children_message/2, 
-    generate_fsync_message/2, generate_create_message/3]).
+
+%% Fuse request messages
+-export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2, 
+    generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3, 
+    generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
+
+%% Subscription messages
+-export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4, 
+    generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
+-export([generate_subscription_cancellation_message/3]).
+
+%% ProxyIO messages
+-export([generate_write_message/5, generate_read_message/5]).
 
 -export([
+    create_file/3, create_file/4, 
+    create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
     proxy_read/5, proxy_read/6,
     proxy_write/5, proxy_write/6,
     fsync/4, fsync/5,
+    ls/2, ls/3,
     emit_file_read_event/5,
     emit_file_written_event/5,
     get_configuration/1, get_configuration/2,
@@ -152,7 +167,7 @@ connect_and_upgrade_proto(Hostname, Port) ->
     end.
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset, subscription]).
+    receive_server_message([message_stream_reset, subscription, message_request]).
 
 receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
@@ -171,68 +186,181 @@ receive_server_message(IgnoredMsgList, Timeout) ->
         {error, timeout}
     end.
 
-generate_create_message(RootGuid, MsgId, File) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = RootGuid,
-            file_request = {create_file, #'CreateFile'{name = File,
-                mode = 8#644, flag = 'READ_WRITE'}}}
-    }}}
+
+%% Fuse request messages
+generate_create_file_message(RootGuid, MsgId, File) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {create_file, #'CreateFile'{
+            name = File,
+            mode = 8#644, 
+            flag = 'READ_WRITE'}
+        }}
     },
-    messages:encode_msg(Message).
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_create_dir_message(RootGuid, MsgId, Name) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {create_dir, #'CreateDir'{name = Name, mode = 8#755}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_get_children_attrs_message(RootGuid, MsgId) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {get_file_children_attrs, 
+            #'GetFileChildrenAttrs'{offset = 0, size = 100}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
 
 generate_get_children_message(RootGuid, MsgId) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = RootGuid,
-            file_request = {get_file_children_attrs,
-                #'GetFileChildrenAttrs'{offset = 0, size = 100}}}
-    }}}
-    },
-    messages:encode_msg(Message).
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {get_file_children,
+            #'GetFileChildren'{offset = 0, size = 100}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
 
 generate_fsync_message(RootGuid, MsgId) ->
     generate_fsync_message(RootGuid, undefined, false, MsgId).
 
 generate_fsync_message(RootGuid, HandleId, DataOnly, MsgId) ->
-    Message = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {fuse_request, #'FuseRequest'{
-            fuse_request = {file_request, #'FileRequest'{
-                context_guid = RootGuid,
-                file_request = {fsync, #'FSync'{
-                    data_only = DataOnly,
-                    handle_id = HandleId
-                }}
-            }}
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = RootGuid,
+        file_request = {fsync, #'FSync'{
+            data_only = DataOnly,
+            handle_id = HandleId
         }}
-    },
-    messages:encode_msg(Message).
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
 
 generate_open_file_message(FileGuid, MsgId) ->
     generate_open_file_message(FileGuid, 'READ_WRITE', MsgId).
 
-generate_open_file_message(FileGuid, Mode, MsgId) ->
+generate_open_file_message(FileGuid, Flag, MsgId) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = FileGuid,
+        file_request = {open_file, #'OpenFile'{flag = Flag}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_release_message(HandleId, FileGuid, MsgId) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = FileGuid,
+        file_request = {release, #'Release'{handle_id = HandleId}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
+    
+generate_delete_file_message(FileGuid, MsgId) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = FileGuid,
+        file_request = {delete_file, #'DeleteFile'{}}
+    }},
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_fuse_request_message(MsgId, FuseRequest) ->
+    Message = #'ClientMessage'{message_id = MsgId, 
+        message_body = {fuse_request, #'FuseRequest'{fuse_request = FuseRequest}}
+    },
+    messages:encode_msg(Message).
+
+
+%% Subscription messages
+generate_file_removed_subscription_message(StreamId, SequenceNumber, SubId, FileId) ->
+    Type = {file_removed, #'FileRemovedSubscription'{file_uuid = FileId}},
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
+generate_file_attr_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
+    Type = {file_attr_changed, #'FileAttrChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
+generate_file_renamed_subscription_message(StreamId, SequenceNumber, SubId, FileId) ->
+    Type = {file_renamed, #'FileRenamedSubscription'{file_uuid = FileId}},
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
+generate_file_location_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
+    Type = {file_location_changed, #'FileLocationChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
+generate_subscription_message(StreamId, SequenceNumber, SubId, Type) ->
     Message = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {fuse_request, #'FuseRequest'{
-            fuse_request = {file_request, #'FileRequest'{
-                context_guid = FileGuid,
-                file_request = {open_file, #'OpenFile'{flag = Mode}}}
-            }
+        message_stream = #'MessageStream'{stream_id = StreamId, sequence_number = SequenceNumber},
+        message_body = {subscription, #'Subscription'{id = SubId, type = Type}}
+    },
+    messages:encode_msg(Message).
+
+generate_subscription_cancellation_message(StreamId, SequenceNumber, SubId) ->
+    Message = #'ClientMessage'{
+        message_stream = #'MessageStream'{stream_id = StreamId, sequence_number = SequenceNumber},
+        message_body = {subscription_cancellation, #'SubscriptionCancellation'{id = SubId}}
+    },
+    messages:encode_msg(Message).
+    
+
+%% ProxyIO messages
+generate_write_message(MsgId, HandleId, FileGuid, Offset, Data) ->
+    Parameters = [
+        #'Parameter'{key = ?PROXYIO_PARAMETER_HANDLE_ID, value = HandleId},
+        #'Parameter'{key = ?PROXYIO_PARAMETER_FILE_GUID, value = FileGuid}
+    ],
+    ProxyIORequest = {remote_write, #'RemoteWrite'{
+        byte_sequence = [#'ByteSequence'{offset = Offset, data = Data}]}
+    },
+    generate_proxyio_message(MsgId, Parameters, ProxyIORequest).
+
+generate_read_message(MsgId, HandleId, FileGuid, Offset, Size) ->
+    Parameters = [
+        #'Parameter'{key = ?PROXYIO_PARAMETER_HANDLE_ID, value = HandleId},
+        #'Parameter'{key = ?PROXYIO_PARAMETER_FILE_GUID, value = FileGuid}
+    ],
+    ProxyIORequest = {remote_read, #'RemoteRead'{offset = Offset, size = Size}},
+    generate_proxyio_message(MsgId, Parameters, ProxyIORequest).
+
+generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
+    Message = #'ClientMessage'{message_id = MsgId, 
+        message_body = {proxyio_request, #'ProxyIORequest'{
+            storage_id = ?IRRELEVANT_FIELD_VALUE,
+            file_id = ?IRRELEVANT_FIELD_VALUE,
+            parameters = Parameters,
+            proxyio_request = ProxyIORequest
         }}
     },
     messages:encode_msg(Message).
 
-generate_delete_file_message(FileGuid, MsgId) ->
-    Message = #'ClientMessage'{message_id = MsgId, message_body =
-    {fuse_request, #'FuseRequest'{fuse_request = {file_request,
-        #'FileRequest'{context_guid = FileGuid,
-            file_request = {delete_file, #'DeleteFile'{}}}
-    }}}
-    },
-    messages:encode_msg(Message).
 
+create_file(Sock, RootGuid, Filename) ->
+    create_file(Sock, RootGuid, Filename, ?MSG_ID).
+
+create_file(Sock, RootGuid, Filename, MsgId) ->
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {file_created, #'FileCreated'{
+            handle_id = HandleId,
+            file_attr = #'FileAttr'{uuid = FileGuid}}
+        }}
+    }} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
+        message_id = MsgId
+    }, fuse_utils:receive_server_message()),
+    {FileGuid, HandleId}.
+
+create_directory(Sock, RootGuid, Dirname) ->
+    create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
+
+create_directory(Sock, RootGuid, Dirname, MsgId) ->
+    ok = ssl:send(Sock, fuse_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {dir, #'Dir'{uuid = DirId}}
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
+        message_id = MsgId
+    }, fuse_utils:receive_server_message()),
+    DirId.
 
 open(Conn, FileGuid) ->
     open(Conn, FileGuid, 'READ_WRITE').
@@ -259,17 +387,7 @@ close(Conn, FileGuid, HandleId) ->
     close(Conn, FileGuid, HandleId, ?MSG_ID).
 
 close(Conn, FileGuid, HandleId, MsgId) ->
-    Msg = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {fuse_request, #'FuseRequest'{
-            fuse_request = {file_request, #'FileRequest'{
-                context_guid = FileGuid,
-                file_request = {release, #'Release'{handle_id = HandleId}}
-            }}
-        }}
-    },
-
-    RawMsg = messages:encode_msg(Msg),
+    RawMsg = generate_release_message(HandleId, FileGuid, MsgId),
     ok = ssl:send(Conn, RawMsg),
 
     ?assertMatch(#'ServerMessage'{message_body = {
@@ -281,25 +399,7 @@ proxy_read(Conn, FileGuid, HandleId, Offset, Size) ->
     proxy_read(Conn, FileGuid, HandleId, Offset, Size, ?MSG_ID).
 
 proxy_read(Conn, FileGuid, HandleId, Offset, Size, MsgId) ->
-    Msg = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {
-            proxyio_request, #'ProxyIORequest'{
-                storage_id = ?IRRELEVANT_FIELD_VALUE,
-                file_id = ?IRRELEVANT_FIELD_VALUE,
-                parameters = [
-                    #'Parameter'{key = ?PROXYIO_PARAMETER_HANDLE_ID, value = HandleId},
-                    #'Parameter'{key = ?PROXYIO_PARAMETER_FILE_GUID, value = FileGuid}
-                ],
-                proxyio_request = {remote_read, #'RemoteRead'{
-                    offset = Offset,
-                    size = Size
-                }}
-            }
-        }
-    },
-
-    RawMsg = messages:encode_msg(Msg),
+    RawMsg = generate_read_message(MsgId, HandleId, FileGuid, Offset, Size),
     ok = ssl:send(Conn, RawMsg),
 
     #'ServerMessage'{message_body = {
@@ -317,26 +417,7 @@ proxy_write(Conn, FileGuid, HandleId, Offset, Data) ->
     proxy_write(Conn, FileGuid, HandleId, Offset, Data, ?MSG_ID).
 
 proxy_write(Conn, FileGuid, HandleId, Offset, Data, MsgId) ->
-    Msg = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {
-            proxyio_request, #'ProxyIORequest'{
-                storage_id = ?IRRELEVANT_FIELD_VALUE,
-                file_id = ?IRRELEVANT_FIELD_VALUE,
-                parameters = [
-                    #'Parameter'{key = ?PROXYIO_PARAMETER_HANDLE_ID, value = HandleId},
-                    #'Parameter'{key = ?PROXYIO_PARAMETER_FILE_GUID, value = FileGuid}
-                ],
-                proxyio_request = {remote_write, #'RemoteWrite'{
-                    byte_sequence = [
-                        #'ByteSequence'{offset = Offset, data = Data}
-                    ]
-                }}
-            }
-        }
-    },
-
-    RawMsg = messages:encode_msg(Msg),
+    RawMsg = generate_write_message(MsgId, HandleId, FileGuid, Offset, Data),
     ok = ssl:send(Conn, RawMsg),
 
     #'ServerMessage'{message_body = {
@@ -361,6 +442,23 @@ fsync(Conn, FileGuid, HandleId, DataOnly, MsgId) ->
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = MsgId}, receive_server_message()).
 
+ls(Conn, DirId) ->
+    ls(Conn, DirId, ?MSG_ID).
+
+ls(Conn, DirId, MsgId) ->
+    ok = ssl:send(Conn, fuse_utils:generate_get_children_message(DirId, MsgId)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {file_children, #'FileChildren'{
+            child_links = ChildLinks
+        }}
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{
+            status = #'Status'{code = ok}}
+        },
+        message_id = MsgId
+    }, fuse_utils:receive_server_message()),
+    ChildLinks.
+    
 
 emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
     {BlocksRead, BlocksSize} = lists:foldr(

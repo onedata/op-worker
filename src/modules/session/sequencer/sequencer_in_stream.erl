@@ -105,7 +105,7 @@ init([SeqMan, StmId, SessId]) ->
     register_stream(SeqMan, StmId),
     {ok, #document{value = #session{type = SessionType, proxy_via = ProxyVia}}} = session:get(SessId),
     IsProxy = SessionType =:= provider_incoming orelse SessionType =:= provider_outgoing orelse ProxyVia =/= undefined,
-    send_message_stream_reset(StmId, SessId, IsProxy),
+    self() ! reset_stream,
     {ok, receiving, #state{
         sequencer_manager = SeqMan,
         session_id = SessId,
@@ -167,6 +167,11 @@ handle_sync_event(Event, From, StateName, State) ->
     {next_state, NextStateName :: atom(), NewStateData :: term(),
         timeout() | hibernate} |
     {stop, Reason :: normal | term(), NewStateData :: term()}).
+handle_info(reset_stream, receiving, #state{session_id = SessId,
+    stream_id = StmId, is_proxy = IsProxy} = State) ->
+    send_message_stream_reset(StmId, SessId, IsProxy),
+    {next_state, receiving, State, ?RECEIVING_TIMEOUT};
+
 handle_info({'EXIT', _, shutdown}, _, State) ->
     {stop, normal, State};
 

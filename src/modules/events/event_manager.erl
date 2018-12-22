@@ -74,7 +74,7 @@ start_link(MgrSup, SessId) ->
 %%--------------------------------------------------------------------
 -spec send(pid(), term()) -> ok.
 send(Manager, Message) ->
-    gen_server2:call(Manager, Message).
+    gen_server2:call(Manager, Message, timer:minutes(1)).
 
 %%%===================================================================
 %%% gen_server callbacks
