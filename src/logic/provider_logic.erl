@@ -805,20 +805,15 @@ assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 fetch_oz_compatibility_config(OzUrl) ->
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
     URL = OzUrl ++ ?ZONE_CONFIGURATION_PATH,
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
-        {ok, 200, _, JsonBody} ->
-            JsonMap = json_utils:decode(JsonBody),
-            OzVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
-            CompatibleOpVersions = maps:get(
-                <<"compatibleOneproviderVersions">>, JsonMap, []
-            ),
-            {ok, OzVersion, CompatibleOpVersions};
-        {ok, Code, _, Body} ->
-            {error, {bad_response, Code, Body}};
+    case http_get_compatibility_config(URL) of
         {error, Error} ->
-            {error, Error}
+            DeprecatedURL = OzUrl ++ ?DEPRECATED_ZONE_CONFIGURATION_PATH,
+            case http_get_compatibility_config(DeprecatedURL) of
+                {error, _} -> {error, Error};
+                Success -> Success
+            end;
+        Success -> Success
     end.
 
 %%%===================================================================
@@ -844,6 +839,33 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
                 <<"compatibleOneproviderVersions">>, JsonMap, []
             ),
             {ok, OpVersion, CompatibleOpVersions};
+        {ok, Code, _, Body} ->
+            {error, {bad_response, Code, Body}};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Performs request fetching compatibility information from Onezone.
+%% @end
+%%--------------------------------------------------------------------
+-spec http_get_compatibility_config(URL :: string()) ->
+    {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}.
+http_get_compatibility_config(URL) ->
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
+    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
+        {ok, 200, _, JsonBody} ->
+            JsonMap = json_utils:decode(JsonBody),
+            OzVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
+            CompatibleOpVersions = maps:get(
+                <<"compatibleOneproviderVersions">>, JsonMap, []
+            ),
+            {ok, OzVersion, CompatibleOpVersions};
         {ok, Code, _, Body} ->
             {error, {bad_response, Code, Body}};
         {error, Error} ->
