@@ -98,7 +98,8 @@ query(SpaceId, IndexToken, Limit) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns rest url endpoint for querying file popularity in given space.
+%% Returns example curl which can be used to query 10 least popular
+%% in the space.
 %% @end
 %%-------------------------------------------------------------------
 -spec example_query(od_space:id()) -> binary().

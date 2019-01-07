@@ -86,7 +86,6 @@ get_max_avg_open_count_per_day(FPC = #file_popularity_config{}) ->
 get_max_avg_open_count_per_day(#document{value = FPC}) ->
     get_max_avg_open_count_per_day(FPC).
 
-
 -spec maybe_create_or_update(od_space:id(), maps:map()) -> {ok, doc()} | error().
 maybe_create_or_update(SpaceId, NewConfiguration) ->
     Diff = fun(FP) ->
