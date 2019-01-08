@@ -19,6 +19,7 @@
 
 -define(HANDLERS, [
     attributes,
+    configuration,
     changes,
     files,
     index_by_name,

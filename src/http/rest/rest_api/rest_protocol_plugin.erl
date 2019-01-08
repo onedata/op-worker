@@ -29,6 +29,7 @@
 -spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
 routes() ->
     [
+        {"/api/v3/oneprovider/configuration", #{handler => configuration}},
         {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
         {"/api/v3/oneprovider/changes/metadata/:sid", #{handler => changes}},
         {"/api/v3/oneprovider/debug/transfers_mock", #{handler => transfers_mock}},
