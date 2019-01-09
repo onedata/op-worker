@@ -512,7 +512,7 @@ fulfill_promises_after_connection_close_test(Config) ->
                     path = Path
                 }
             }
-        }),
+        }, true),
         FuseReq
     end,
 

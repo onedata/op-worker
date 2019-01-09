@@ -38,7 +38,9 @@
     session_id :: undefined | session:id(),
     provider_id = undefined :: undefined | od_provider:id(),
     wait_map = #{} :: map(),
-    wait_pids = #{} :: map()
+    wait_pids = #{} :: map(),
+    socket_mode = active_once :: active_always | active_once,
+    verify_msg = true :: boolean()
 }).
 
 -define(PACKET_VALUE, 4).
@@ -48,9 +50,15 @@
 -define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
+-define(DEFAULT_SOCKET_MODE,
+    application:get_env(?APP_NAME, default_socket_mode, active_once)
+).
+-define(DEFAULT_VERIFY_MSG_FLAG,
+    application:get_env(?APP_NAME, verify_msg_before_encoding, true)
+).
+
 %% API
 -export([start/7, init/7]).
--export([send_server_message/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -135,8 +143,8 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_server_message(#state{}, #server_message{}) -> ok.
-send_server_message(State, #server_message{} = ServerMsg) ->
-    try serializator:serialize_server_message(ServerMsg) of
+send_server_message(#state{verify_msg = VerifyMsg} = State, #server_message{} = ServerMsg) ->
+    try serializator:serialize_server_message(ServerMsg, VerifyMsg) of
         {ok, Data} ->
             socket_send(State, Data)
     catch
@@ -426,28 +434,10 @@ handle_server_message_unsafe(State = #state{
 %% @end
 %%--------------------------------------------------------------------
 -spec activate_socket_once(#state{}) -> ok.
+activate_socket_once(#state{socket_mode = active_always}) ->
+    ok;
 activate_socket_once(#state{transport = Transport, socket = Socket}) ->
     ok = Transport:setopts(Socket, [{active, once}]).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends #server_message via given socket.
-%% @end
-%%--------------------------------------------------------------------
--spec send_server_message(Socket :: ssl:socket(), Transport :: module(),
-    #server_message{}) -> ok.
-send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
-    try serializator:serialize_server_message(ServerMsg) of
-        {ok, Data} ->
-            Transport:send(Socket, Data)
-    catch
-        _:Reason ->
-            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p",
-                [ServerMsg, Reason]),
-            ok
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -457,8 +447,8 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_client_message(#state{}, #client_message{}) -> ok.
-send_client_message(State, #client_message{} = ClientMsg) ->
-    try serializator:serialize_client_message(ClientMsg) of
+send_client_message(#state{verify_msg = VerifyMsg} = State, #client_message{} = ClientMsg) ->
+    try serializator:serialize_client_message(ClientMsg, VerifyMsg) of
         {ok, Data} ->
             socket_send(State, Data)
     catch
@@ -525,6 +515,8 @@ init_provider_conn(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout
 
     ok = proc_lib:init_ack({ok, self()}),
     self() ! upgrade_protocol,
+
+    SocketMode = ?DEFAULT_SOCKET_MODE,
     State = #state{
         socket = Socket,
         transport = Transport,
@@ -533,9 +525,16 @@ init_provider_conn(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout
         closed = Closed,
         error = Error,
         session_id = SessionId,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        socket_mode = SocketMode,
+        verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
-    activate_socket_once(State),
+    case SocketMode of
+        active_always ->
+            Transport:setopts(Socket, [{active, true}]);
+        active_once ->
+            activate_socket_once(State)
+    end,
     State.
 
 
