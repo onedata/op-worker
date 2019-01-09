@@ -207,8 +207,7 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
         target => 0,
         threshold => Size - 1
     }),
-    {ok, ARId} = force_start(W1, ?SPACE_ID),
-    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertMatch({ok, #{
@@ -238,9 +237,7 @@ autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) -
         target => 0,
         threshold => Size - 1
     }),
-    {ok, ARId} = force_start(W1, ?SPACE_ID),
-
-    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
 
@@ -337,9 +334,7 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
             max_daily_moving_average => ?RULE_SETTING(1),
             max_monthly_moving_average => ?RULE_SETTING(1)
         }}),
-    {ok, ARId} = force_start(W1, ?SPACE_ID),
-
-    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertMatch({ok, #{
@@ -571,9 +566,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
-    {ok, ARId} = force_start(W1, ?SPACE_ID),
-
-    ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertMatch({ok, #{
