@@ -286,8 +286,8 @@
 -record(file_popularity_config, {
     enabled = false :: boolean(),
     last_open_hour_weight = 1.0 :: number(),
-    avg_open_count_per_day_weight = 1.0 :: number(),
-    max_avg_open_count_per_day = 1.0 :: number()
+    avg_open_count_per_day_weight = 20.0 :: number(),
+    max_avg_open_count_per_day = 100.0 :: number()
 }).
 
 %% Helper record for autocleaning model.

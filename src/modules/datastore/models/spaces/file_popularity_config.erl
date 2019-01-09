@@ -25,7 +25,7 @@
 -export_type([id/0]).
 
 %% API
--export([disable/1, is_enabled/1, delete/1, get/1,
+-export([is_enabled/1, delete/1, get/1,
     get_last_open_hour_weight/1, get_avg_open_count_per_day_weight/1,
     maybe_create_or_update/2, get_max_avg_open_count_per_day/1]).
 
@@ -44,12 +44,6 @@
 -spec get(id()) -> {ok, doc()} | error().
 get(SpaceId) ->
     datastore_model:get(?CTX, SpaceId).
-
--spec disable(id()) -> ok | error().
-disable(SpaceId) ->
-    ?extract_ok(update(SpaceId, fun(FPC) ->
-        {ok, FPC#file_popularity_config{enabled = false}}
-    end)).
 
 -spec is_enabled(doc() | record() | id()) -> boolean().
 is_enabled(#document{value = FPC}) ->
@@ -94,9 +88,9 @@ maybe_create_or_update(SpaceId, NewConfiguration) ->
             NewFP -> {ok, NewFP}
         end
     end,
-    DefaultRecord = apply_configuration(default_record(), NewConfiguration),
-    DefaultDoc = default_doc(SpaceId, DefaultRecord),
-    create_or_update(SpaceId, Diff, DefaultDoc).
+    InitialRecord = apply_configuration(default_record(), NewConfiguration),
+    InitialDoc = default_doc(SpaceId, InitialRecord),
+    create_or_update(SpaceId, Diff, InitialDoc).
 
 %%%===================================================================
 %%% Internal functions
@@ -117,10 +111,6 @@ default_doc(SpaceId, FPC) ->
         value = FPC,
         scope = SpaceId
     }.
-
--spec update(id(), diff()) -> {ok, doc()} | error().
-update(SpaceId, UpdateFun) ->
-    datastore_model:update(?CTX, SpaceId, UpdateFun).
 
 -spec create_or_update(id(), diff(), doc()) -> {ok, doc()} | error().
 create_or_update(SpaceId, UpdateFun, DefaultDoc) ->

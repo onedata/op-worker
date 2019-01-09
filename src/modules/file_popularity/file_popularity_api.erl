@@ -30,6 +30,7 @@ enable(SpaceId) ->
         max_avg_open_count_per_day => ?DEFAULT_MAX_AVG_OPEN_COUNT_PER_DAY
     }).
 
+-spec configure(file_popularity_config:id(), maps:map()) -> ok | {error, term()}.
 configure(SpaceId, #{enabled := false}) ->
     disable(SpaceId);
 configure(SpaceId, NewConfiguration) ->
@@ -49,7 +50,7 @@ configure(SpaceId, NewConfiguration) ->
 -spec disable(file_popularity_config:id()) -> ok | {error, term()}.
 disable(SpaceId) ->
     autocleaning_api:disable(SpaceId),
-    file_popularity_config:disable(SpaceId),
+    file_popularity_config:maybe_create_or_update(SpaceId, #{enabled => false}),
     file_popularity_view:delete(SpaceId).
 
 -spec delete_config(file_popularity_config:id()) -> ok.
@@ -89,6 +90,7 @@ query(SpaceId, Limit) ->
 query(SpaceId, IndexToken, Limit) ->
     file_popularity_view:query(SpaceId, IndexToken, Limit).
 
+-spec assert_types_and_values(maps:map()) -> ok | {error, term()}.
 assert_types_and_values(Configuration) ->
     maps:fold(fun
         (_Key, _Value, Error = {error, _}) ->

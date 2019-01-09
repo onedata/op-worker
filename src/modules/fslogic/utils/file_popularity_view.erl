@@ -66,8 +66,14 @@ delete(SpaceId) ->
 
 -spec modify(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
 modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
-    delete(SpaceId),
-    create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay).
+    case delete(SpaceId) of
+        ok ->
+            create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay);
+        {error, {<<"not_found">>, _}} ->
+            create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay);
+        Error ->
+            Error
+    end.
 
 -spec query(od_space:id(), undefined | index_token(), non_neg_integer()) ->
     {[cdmi_id:objectid()], undefined | index_token()} | {error, term()}.
