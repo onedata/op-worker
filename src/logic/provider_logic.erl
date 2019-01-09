@@ -805,21 +805,11 @@ assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 fetch_oz_compatibility_config(OzUrl) ->
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
     URL = OzUrl ++ ?ZONE_CONFIGURATION_PATH,
-    case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
-        {ok, 200, _, JsonBody} ->
-            JsonMap = json_utils:decode(JsonBody),
-            OzVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
-            CompatibleOpVersions = maps:get(
-                <<"compatibleOneproviderVersions">>, JsonMap, []
-            ),
-            {ok, OzVersion, CompatibleOpVersions};
-        {ok, Code, _, Body} ->
-            {error, {bad_response, Code, Body}};
-        {error, Error} ->
-            {error, Error}
-    end.
+    DeprecatedURL = OzUrl ++ ?DEPRECATED_ZONE_CONFIGURATION_PATH,
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
+    fetch_compatibility_config(URL, DeprecatedURL, SslOpts).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -827,8 +817,8 @@ fetch_oz_compatibility_config(OzUrl) ->
 
 
 %% @private
--spec fetch_op_compatibility_config(Hostname :: binary(),
-    [http_client:ssl_opt()]) ->
+-spec fetch_op_compatibility_config(
+    Hostname :: binary(), SslOpts :: [http_client:ssl_opt()]) ->
     {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
@@ -836,14 +826,62 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
     URL = str_utils:format_bin("https://~s~s", [
         Hostname, ?PROVIDER_CONFIGURATION_PATH
     ]),
+    DeprecatedURL = str_utils:format_bin("https://~s~s", [
+        Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
+    ]),
+    fetch_compatibility_config(URL, DeprecatedURL, SslOpts).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Attempts to fetch the configuration page providing compatibility
+%% information.
+%% If the resource with default URL is not found, the older path
+%% is attempted.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_compatibility_config(
+    URL, DeprecatedURL :: URL, SslOpts :: [http_client:ssl_opt()]
+) ->
+    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}
+    when URL :: string() | binary().
+fetch_compatibility_config(URL, DeprecatedURL, SslOpts) ->
+    case http_get_compatibility_config(URL, SslOpts) of
+        {error, {bad_response, 404, _}} ->
+            case http_get_compatibility_config(DeprecatedURL, SslOpts) of
+                {error, Error} -> {error, Error};
+                Success -> Success
+            end;
+        {error, Error} -> {error, Error};
+        Success -> Success
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Performs request fetching compatibility information from
+%% Onezone or another Oneprovider.
+%% @end
+%%--------------------------------------------------------------------
+-spec http_get_compatibility_config(
+    URL :: string() | binary(), SslOpts :: [http_client:ssl_opt()]
+) ->
+    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}.
+http_get_compatibility_config(URL, SslOpts) ->
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
             JsonMap = json_utils:decode(JsonBody),
-            OpVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
+            PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
             CompatibleOpVersions = maps:get(
                 <<"compatibleOneproviderVersions">>, JsonMap, []
             ),
-            {ok, OpVersion, CompatibleOpVersions};
+            {ok, PeerVersion, CompatibleOpVersions};
         {ok, Code, _, Body} ->
             {error, {bad_response, Code, Body}};
         {error, Error} ->

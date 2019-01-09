@@ -13,8 +13,10 @@
 -define(GUI_PATHS_HRL, 1).
 
 %% Endpoints used to get current configuration of services
--define(PROVIDER_CONFIGURATION_PATH, "/configuration").
--define(ZONE_CONFIGURATION_PATH, "/configuration").
+-define(DEPRECATED_PROVIDER_CONFIGURATION_PATH, "/configuration").
+-define(PROVIDER_CONFIGURATION_PATH, "/api/v3/oneprovider/configuration").
+-define(DEPRECATED_ZONE_CONFIGURATION_PATH, "/configuration").
+-define(ZONE_CONFIGURATION_PATH, "/api/v3/onezone/configuration").
 
 % Endpoint for logging in
 -define(LOGIN_PATH, "/login.html").
