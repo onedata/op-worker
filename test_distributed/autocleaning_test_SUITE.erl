@@ -559,8 +559,8 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
     }}, get_run_report(W1, ARId)),
 
     % pretend that file has not been opened for an hour
-    CurrentTimestamp = file_popularity_test_SUITE:current_timestamp_hours(W1),
-    {ok, _} = file_popularity_test_SUITE:change_last_open(W1, Guid, CurrentTimestamp - 2),
+    CurrentTimestamp = current_timestamp_hours(W1),
+    {ok, _} = change_last_open(W1, Guid, CurrentTimestamp - 2),
     {ok, [ARId2, ARId]} = ?assertMatch({ok, [_, ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId2),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
@@ -580,7 +580,7 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [file_popularity_test_SUITE, initializer, ?MODULE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
@@ -754,3 +754,12 @@ provider_id(Worker) ->
 
 current_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, current_size, [SpaceId]).
+
+current_timestamp_hours(Worker) ->
+    rpc:call(Worker, time_utils, cluster_time_seconds, []) div 3600.
+
+change_last_open(Worker, FileGuid, NewLastOpen) ->
+    Uuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
+        {ok, FP#file_popularity{last_open = NewLastOpen}}
+    end]).
