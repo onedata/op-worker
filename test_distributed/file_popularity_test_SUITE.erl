@@ -45,6 +45,8 @@
     changing_avg_open_count_weight_should_reindex_the_file/1
 ]).
 
+%% utils
+-export([current_timestamp_hours/1, change_last_open/3]).
 
 
 all() -> [

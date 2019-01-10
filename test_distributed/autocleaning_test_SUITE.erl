@@ -18,7 +18,6 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
-%%-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -39,7 +38,9 @@
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_hourly_moving_average_rule/1,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_daily_moving_average_rule/1,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_moving_average_rule/1,
-    restart_autocleaning_run_test/1]).
+    restart_autocleaning_run_test/1,
+    autocleaning_should_evict_file_when_it_is_old_enough/1
+]).
 
 all() -> [
     autocleaning_run_should_not_start_when_file_popularity_is_disabled,
@@ -58,7 +59,8 @@ all() -> [
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_hourly_moving_average_rule,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_daily_moving_average_rule,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_monthly_moving_average_rule,
-    restart_autocleaning_run_test
+    restart_autocleaning_run_test,
+    autocleaning_should_evict_file_when_it_is_old_enough
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -70,7 +72,7 @@ all() -> [
 -define(SESSION(User, Worker, Config),
     ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 120).
 -define(LIMIT, 10).
 -define(MAX_LIMIT, 10000).
 -define(MAX_VAL, 1000000000).
@@ -513,6 +515,60 @@ restart_autocleaning_run_test(Config) ->
         files_number := 1
     }}, get_run_report(W1, ARId)).
 
+autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESSION(W1, Config),
+    SessId2 = ?SESSION(W2, Config),
+    FileName = <<"file">>,
+    DomainP1 = ?GET_DOMAIN_BIN(W1),
+    DomainP2 = ?GET_DOMAIN_BIN(W2),
+    Size = 10,
+    enable_file_popularity(W1, ?SPACE_ID),
+    Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
+
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
+    schedule_file_replication(W2, SessId2, Guid, DomainP2),
+
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
+
+    ACConfig = #{
+        enabled => true,
+        target => 0,
+        threshold => Size - 1,
+        rules => #{
+            enabled => true,
+            max_open_count => ?RULE_SETTING(1),
+            min_hours_since_last_open => ?RULE_SETTING(1),
+            min_file_size => ?RULE_SETTING(Size - 1),
+            max_file_size => ?RULE_SETTING(Size + 1),
+            max_hourly_moving_average => ?RULE_SETTING(1),
+            max_daily_moving_average => ?RULE_SETTING(1),
+            max_monthly_moving_average => ?RULE_SETTING(1)
+    }},
+
+    ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
+    {ok, [ARId]} = ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertRunFinished(W1, ARId),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    ?assertMatch({ok, #{
+        released_bytes := 0,
+        bytes_to_release := Size,
+        files_number := 0
+    }}, get_run_report(W1, ARId)),
+
+    % pretend that file has not been opened for an hour
+    CurrentTimestamp = file_popularity_test_SUITE:current_timestamp_hours(W1),
+    {ok, _} = file_popularity_test_SUITE:change_last_open(W1, Guid, CurrentTimestamp - 2),
+    {ok, [ARId2, ARId]} = ?assertMatch({ok, [_, ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertRunFinished(W1, ARId2),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
+    ?assertMatch({ok, #{
+        released_bytes := Size,
+        bytes_to_release := Size,
+        files_number := 1
+    }}, get_run_report(W1, ARId2)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -524,7 +580,7 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [file_popularity_test_SUITE, initializer, ?MODULE]} | Config].
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
