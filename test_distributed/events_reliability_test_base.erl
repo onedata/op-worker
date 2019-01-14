@@ -61,7 +61,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
-    mock_events_utils(AssertionWorker),
+    mock_fslogic_event_handler(AssertionWorker),
     mock_aggregate_read_events(AssertionWorker),
 
     mock_event_handler(AssertionWorker),
@@ -92,7 +92,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
-    unmock_events_utils(AssertionWorker),
+    unmock_fslogic_event_handler(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -108,7 +108,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
-    mock_events_utils(AssertionWorker),
+    mock_fslogic_event_handler(AssertionWorker),
     mock_aggregate_written_events(AssertionWorker),
 
     mock_event_handler(AssertionWorker),
@@ -141,7 +141,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
-    unmock_events_utils(AssertionWorker),
+    unmock_fslogic_event_handler(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -183,11 +183,11 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-mock_events_utils(Workers) ->
+mock_fslogic_event_handler(Workers) ->
     test_utils:mock_new(Workers, fslogic_event_handler, [passthrough]).
 
 
-unmock_events_utils(Workers) ->
+unmock_fslogic_event_handler(Workers) ->
     test_utils:mock_unload(Workers, fslogic_event_handler).
 
 
