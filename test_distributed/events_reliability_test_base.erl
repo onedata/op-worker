@@ -57,7 +57,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), ?FUNCTION_NAME])),
+    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
@@ -101,7 +101,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), ?FUNCTION_NAME])),
+    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check

@@ -146,16 +146,13 @@ handle_cast({internal, RetryCounter, Request},
     catch
         exit:{noproc, _} ->
             ?debug("No proc to handle request ~p, retry", [Request]),
-            send_retry_message(Request, RetryCounter),
-            {noreply, State};
+            retry_handle(State, Request, RetryCounter);
         exit:{normal, _} ->
             ?debug("Exit of stream process for request ~p, retry", [Request]),
-            send_retry_message(Request, RetryCounter),
-            {noreply, State};
+            retry_handle(State, Request, RetryCounter);
         exit:{timeout, _} ->
             ?debug("Exit of stream process for request ~p, retry", [Request]),
-            send_retry_message(Request, RetryCounter),
-            {noreply, State};
+            retry_handle(State, Request, RetryCounter);
         Reason1:Reason2 ->
             ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
             {noreply, State}
@@ -180,10 +177,6 @@ handle_info({'EXIT', MgrSup, shutdown}, #state{manager_sup = MgrSup} = State) ->
 handle_info(timeout, State) ->
     State2 = start_event_streams(State),
     {noreply, State2};
-
-handle_info({retry_request, RetryCounter, Request}, State) ->
-    handle_retry_info(Request, RetryCounter),
-    {noreply, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -456,31 +449,12 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
         subscriptions = Subs
     }.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends retry request.
-%% @end
-%%--------------------------------------------------------------------
--spec send_retry_message(Request :: term(), RetryCounter :: non_neg_integer()) ->
-    reference() | max_retries.
-send_retry_message(Request, 0) ->
+retry_handle(State, Request, 0) ->
     case application:get_env(?APP_NAME, log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
         false -> ?debug("Max retries for request: ~p", [Request])
     end,
-    max_retries;
-send_retry_message(Request, RetryCounter) ->
-    RetryAfter = application:get_env(?APP_NAME, event_manager_retry_after, 1000),
-    erlang:send_after(RetryAfter, self(), {retry_request, RetryCounter, Request}).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles retry request.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_retry_info(Request :: term(), RetryCounter :: non_neg_integer()) ->
-    ok.
-handle_retry_info(Request, RetryCounter) ->
-    gen_server2:cast(self(), {internal, RetryCounter - 1, Request}).
+    {noreply, State};
+retry_handle(State, Request, RetryCounter) ->
+    State2 = start_event_streams(State),
+    handle_cast({internal, RetryCounter - 1, Request}, State2).

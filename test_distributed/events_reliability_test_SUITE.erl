@@ -12,6 +12,7 @@
 -module(events_reliability_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -25,18 +26,62 @@
 %%tests
 -export([
     events_aggregation_test/1,
-    events_flush_test/1
+    events_flush_test/1,
+    events_aggregation_stream_error_test/1,
+    events_aggregation_manager_error_test/1
 ]).
 
 all() -> ?ALL([
     events_aggregation_test,
-    events_flush_test
+    events_flush_test,
+    events_aggregation_stream_error_test,
+    events_aggregation_manager_error_test
 ]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
+
+events_aggregation_stream_error_test(Config) ->
+    [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_stream, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_stream, send,
+        fun(Stream, Message) ->
+            case get(first_tested) of
+                undefined ->
+                    put(first_tested, true),
+                    meck:passthrough([undefined, Message]);
+                _ ->
+                    meck:passthrough([Stream, Message])
+
+            end
+        end
+    ),
+
+    events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1),
+    test_utils:mock_unload(Workers, event_stream).
+
+events_aggregation_manager_error_test(Config) ->
+    [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_manager, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_manager, send,
+        fun(Stream, Message) ->
+            case get(first_tested) of
+                undefined ->
+                    put(first_tested, true),
+                    meck:passthrough([undefined, Message]);
+                _ ->
+                    meck:passthrough([Stream, Message])
+
+            end
+        end
+    ),
+
+    events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1),
+    test_utils:mock_unload(Workers, event_manager).
 
 events_aggregation_test(Config) ->
     [WorkerP1] = ?config(op_worker_nodes, Config),

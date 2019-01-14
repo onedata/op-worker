@@ -440,6 +440,7 @@ forward_message(#client_message{message_body = #end_of_message_stream{}},
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
     router:route_message(stream_router:make_message_direct(Msg)),
+    % TODO - podbijamy tylko jesli sie udalo
     State#state{sequence_number = SeqNum + 1}.
 
 
