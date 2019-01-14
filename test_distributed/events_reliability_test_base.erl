@@ -61,10 +61,8 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
-    mock_fslogic_event_handler(AssertionWorker),
-    mock_aggregate_read_events(AssertionWorker),
-
     mock_event_handler(AssertionWorker),
+    mock_aggregate_read_events(AssertionWorker),
     mock_handle_file_read_events(AssertionWorker),
 
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(
@@ -92,7 +90,6 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
-    unmock_fslogic_event_handler(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -108,10 +105,8 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
-    mock_fslogic_event_handler(AssertionWorker),
-    mock_aggregate_written_events(AssertionWorker),
-
     mock_event_handler(AssertionWorker),
+    mock_aggregate_written_events(AssertionWorker),
     mock_handle_file_written_events(AssertionWorker),
 
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(
@@ -141,7 +136,6 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
-    unmock_fslogic_event_handler(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -181,14 +175,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-mock_fslogic_event_handler(Workers) ->
-    test_utils:mock_new(Workers, fslogic_event_handler, [passthrough]).
-
-
-unmock_fslogic_event_handler(Workers) ->
-    test_utils:mock_unload(Workers, fslogic_event_handler).
 
 
 mock_event_handler(Workers) ->
