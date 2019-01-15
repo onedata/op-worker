@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/1, rest_url/1, query/3, initial_index_token/2, delete/1]).
+-export([create/4, example_query/1, query/3, delete/1, modify/4]).
 
 -type  index_token() :: #index_token{}.
 
@@ -32,30 +32,31 @@
 %% Creates view on space files capable of ordering files by their popularity
 %% @end
 %%--------------------------------------------------------------------
--spec create(od_space:id()) -> ok | {error, term()}.
-create(SpaceId) ->
+-spec create(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
+create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
     ViewFunction =
-        <<"function (doc, meta) {"
-        "   if(doc['_record'] == 'file_popularity' "
-        "       && doc['space_id'] == '", SpaceId/binary, "' "
-        "       && doc['_deleted'] == false) "
-        "{ "
-        "      emit("
-        "         ["
-        "             doc['open_count'],",
-        "             doc['last_open'],",
-        "             doc['size'],",
-        "             doc['hr_mov_avg'],",
-        "             doc['dy_mov_avg'],",
-        "             doc['mth_mov_avg']"
-        "         ],"
-        "         doc['_key']"
-        "      );"
-        "   }"
-        "}">>,
+        <<"function (doc, meta) {
+            'use strict';
+            // function used to calculate the popularity of a file
+            ", (popularity_function(TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay))/binary,"
+
+            // code for building cdmi_id
+            ", (index:build_cdmi_object_id_in_js())/binary,"
+
+           if(doc['_record'] == 'file_popularity'
+               && doc['space_id'] == '", SpaceId/binary, "'
+               && doc['_deleted'] == false)
+           {
+               emit(
+                   popularity(doc['last_open'], doc['dy_mov_avg']),
+                   buildObjectId(doc['file_uuid'], doc['space_id'])
+               );
+           }
+        }">>,
+
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    couchbase_driver:save_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).
+    ok = couchbase_driver:save_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).
 
 -spec delete(od_space:id()) -> ok | {error, term()}.
 delete(SpaceId) ->
@@ -63,23 +64,19 @@ delete(SpaceId) ->
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
     couchbase_driver:delete_design_doc(DiscCtx, ?VIEW_NAME(SpaceId)).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Converts StartKey and EndKey to index token that can be used to
-%% query the view.
-%% @end
-%%-------------------------------------------------------------------
--spec initial_index_token(undefined | [non_neg_integer()],
-    undefined | [non_neg_integer()]) -> index_token().
-initial_index_token(StartKey, EndKey) ->
-    #index_token{
-        last_doc_id = undefined,
-        start_key = StartKey,
-        end_key = EndKey
-    }.
+-spec modify(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
+modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
+    case delete(SpaceId) of
+        ok ->
+            create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay);
+        {error, {<<"not_found">>, _}} ->
+            create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay);
+        Error ->
+            Error
+    end.
 
 -spec query(od_space:id(), undefined | index_token(), non_neg_integer()) ->
-    {[file_ctx:ctx()], undefined | index_token()} | {error, term()}.
+    {[cdmi_id:objectid()], undefined | index_token()} | {error, term()}.
 query(SpaceId, IndexToken, Limit) ->
     Options = token_to_opts(IndexToken, Limit),
     Ctx = datastore_model_default:get_ctx(file_popularity),
@@ -90,17 +87,16 @@ query(SpaceId, IndexToken, Limit) ->
             {[], IndexToken};
         {ok, {Rows}} ->
             TokenDefined = utils:ensure_defined(IndexToken, undefined, #index_token{}),
-            {RevertedFileCtxs, NewToken} = lists:foldl(fun(Row, {RevertedFileCtxsIn, TokenIn}) ->
+            {RevertedFileIds, NewToken} = lists:foldl(fun(Row, {RevertedFileIdsIn, TokenIn}) ->
                 {<<"key">>, Key} = lists:keyfind(<<"key">>, 1, Row),
-                {<<"value">>, FileUuid} = lists:keyfind(<<"value">>, 1, Row),
+                {<<"value">>, FileId} = lists:keyfind(<<"value">>, 1, Row),
                 {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
-                FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
-                {[FileCtx | RevertedFileCtxsIn], TokenIn#index_token{
+                {[FileId | RevertedFileIdsIn], TokenIn#index_token{
                     start_key = Key,
                     last_doc_id = DocId
                 }}
             end, {[], TokenDefined}, Rows),
-            {lists:reverse(RevertedFileCtxs), NewToken};
+            {lists:reverse(RevertedFileIds), NewToken};
         Error = {error, Reason} ->
             ?error("Querying file_popularity_view ~p failed due to ~p", [ViewName, Reason]),
             Error
@@ -108,13 +104,16 @@ query(SpaceId, IndexToken, Limit) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns rest url endpoint for querying file popularity in given space.
+%% Returns example curl which can be used to query 10 least popular
+%% in the space.
 %% @end
 %%-------------------------------------------------------------------
--spec rest_url(od_space:id()) -> binary().
-rest_url(SpaceId) ->
-    Endpoint = oneprovider:get_rest_endpoint(str_utils:format("spaces/~s/indexes/file-popularity/query", [SpaceId])),
-    list_to_binary(Endpoint).
+-spec example_query(od_space:id()) -> binary().
+example_query(SpaceId) ->
+    str_utils:format_bin(
+        "curl -sS -k -H \"X-Auth-Token:$TOKEN\" -X GET https://~s/api/v3/oneprovider/spaces/~s/indexes/file-popularity/query?limit=10",
+        [oneprovider:get_node_hostname(), SpaceId]
+    ).
 
 
 %%%===================================================================
@@ -123,38 +122,28 @@ rest_url(SpaceId) ->
 
 -spec token_to_opts(undefined | index_token(), non_neg_integer()) -> [couchbase_driver:view_opt()].
 token_to_opts(undefined, Limit) ->
-    filter_undefined_opt([
+    [
         {stale, false},
         {limit, Limit}
-    ]);
+    ];
 token_to_opts(#index_token{
-    last_doc_id = undefined,
-    start_key = LastKey,
-    end_key = EndKey
-}, Limit) ->
-    filter_undefined_opt([
+last_doc_id = undefined,
+    start_key = undefined
+}, Limit) -> [
         {stale, false},
-        {startkey, LastKey},
-        {endkey, EndKey},
         {limit, Limit}
-    ]);
+    ];
 token_to_opts(#index_token{
     last_doc_id = LastDocId,
-    start_key = LastKey,
-    end_key = EndKey
+    start_key = LastKey
 }, Limit) ->
-    filter_undefined_opt([
+    [
         {stale, false},
         {startkey, LastKey},
         {startkey_docid, LastDocId},
-        {endkey, EndKey},
         {limit, Limit},
         {skip, 1}
-    ]).
-
--spec filter_undefined_opt([couchbase_driver:opt()]) -> [couchbase_driver:opt()].
-filter_undefined_opt(Opts) ->
-    [Opt || Opt = {_OptName, OptValue} <- Opts, OptValue =/= undefined].
+    ].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -165,3 +154,30 @@ filter_undefined_opt(Opts) ->
 -spec query(list()) -> {ok, datastore_json2:ejson()} | {error, term()}.
 query(Args) ->
     apply(fun couchbase_driver:query_view/4, Args).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% JS code of the popularity function.
+%% The function is defined as:
+%% P(lastOpenHour, avgOpenCountPerDay) =
+%%  = w1 * lastOpenHour + w2 * min(avgOpenCountPerDay, MAX_AVG_OPEN_COUNT_PER_DAY)
+%%
+%% where:
+%%  * lastOpenHour - parameter which is equal to timestamp (in hours since 01.01.1970)
+%%    of last open operation on given file
+%%  * w1 - weight of lastOpenHour parameter
+%%  * avgOpenCountPerDay - parameter equal to moving average of number of open
+%%    operations on given file per day. Value is calculated over last 30 days.
+%%  * w2 - weight of avgOpenCountPerDay parameter
+%%  * MAX_AVG_OPEN_COUNT_PER_DAY - upper boundary for avgOpenCountPerDay parameter
+%% @end
+%%-------------------------------------------------------------------
+-spec popularity_function(number(), number(), number()) -> binary().
+popularity_function(LastOpenWeight, AvgOpenCountPerMonthWeight, MaxAvgOpenCountPerDay) ->
+    TW = str_utils:to_binary(LastOpenWeight),
+    OW = str_utils:to_binary(AvgOpenCountPerMonthWeight),
+    MA = str_utils:to_binary(MaxAvgOpenCountPerDay),
+    <<"function popularity(last_open, dy_mov_avg) {
+        return ", TW/binary, " * last_open + ", OW/binary," * Math.min(dy_mov_avg, ", MA/binary,");
+    }">>.

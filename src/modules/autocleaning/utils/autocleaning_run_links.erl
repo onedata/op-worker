@@ -21,7 +21,7 @@
 -export_type([offset/0, list_limit/0]).
 
 %% API
--export([add_link/3, delete_link/3, list/4, list_since/2, link_key/2]).
+-export([add_link/3, delete_link/3, list/4, link_key/2]).
 
 
 -define(LINK_PREFIX, <<"autocleaning_">>).
@@ -66,24 +66,6 @@ delete_link(ARId, SpaceId, Timestamp) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Lists all autocleaning_run document ids, with timestamp newer
-%% than Timestamp
-%% @end
-%%-------------------------------------------------------------------
--spec list_since(od_space:id(), non_neg_integer()) -> {ok, [autocleaning_run:id()]}.
-list_since(SpaceId, Timestamp) ->
-    {ok, ARIds} = for_each_link(fun(LinkName, ARId, AccIn) ->
-        case key_to_timestamp(LinkName) < Timestamp of
-            true ->
-                {stop, AccIn};
-            false ->
-                {ok, [ARId | AccIn]}
-        end
-    end, [], SpaceId, #{}),
-    {ok, lists:reverse(ARIds)}.
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Lists autocleaning document ids.
 %% @end
 %%-------------------------------------------------------------------
@@ -103,7 +85,7 @@ list(SpaceId, StartId, Offset, Limit) ->
     end,
 
     {ok, AutocleaningRunIds} = for_each_link(fun(_LinkName, ARId, Acc) ->
-        {ok, [ARId | Acc]}
+        [ARId | Acc]
     end, [], SpaceId, Opts3),
     {ok, lists:reverse(AutocleaningRunIds)}.
 
@@ -132,11 +114,6 @@ link_key(ARId, Timestamp) ->
 space_link_root(SpaceId) ->
     <<?LINK_PREFIX/binary, SpaceId/binary>>.
 
--spec key_to_timestamp(link_key()) -> non_neg_integer().
-key_to_timestamp(LinkKey) ->
-    TimestampPart = binary:part(LinkKey, 0, ?LINK_TIMESTAMP_PART_LENGTH),
-    ?EPOCH_INFINITY - binary_to_integer(TimestampPart).
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -144,13 +121,11 @@ key_to_timestamp(LinkKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each_link(
-    Callback :: fun((link_key(), autocleaning_run:id(), Acc0 :: term()) ->
-        {ok, Acc :: term()} | {stop, Acc :: term()}
-    ),
+    Callback :: fun((link_key(), autocleaning_run:id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term(), od_space:id(), datastore_model:fold_opts()) ->
     {ok, Acc :: term()} | {error, term()}.
 for_each_link(Callback, Acc0, SpaceId, Options) ->
     datastore_model:fold_links(?CTX, space_link_root(SpaceId), all, fun
         (#link{name = Name, target = Target}, Acc) ->
-            Callback(Name, Target, Acc)
+            {ok, Callback(Name, Target, Acc)}
     end, Acc0, Options).
