@@ -715,11 +715,11 @@ all_space_privileges(_) -> [
     ?SPACE_UPDATE,
     ?SPACE_DELETE,
     ?SPACE_SET_PRIVILEGES,
-    ?SPACE_INVITE_USER,
+    space_add_user,
     ?SPACE_REMOVE_USER,
     space_add_group,
     ?SPACE_REMOVE_GROUP,
-    ?SPACE_INVITE_PROVIDER,
+    space_add_provider,
     ?SPACE_REMOVE_PROVIDER,
     ?SPACE_MANAGE_SHARES,
     ?SPACE_WRITE_DATA
@@ -737,11 +737,11 @@ perm_db_to_gui(?SPACE_VIEW) -> <<"permViewSpace">>;
 perm_db_to_gui(?SPACE_UPDATE) -> <<"permModifySpace">>;
 perm_db_to_gui(?SPACE_DELETE) -> <<"permRemoveSpace">>;
 perm_db_to_gui(?SPACE_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
-perm_db_to_gui(?SPACE_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui(space_add_user) -> <<"permInviteUser">>;
 perm_db_to_gui(?SPACE_REMOVE_USER) -> <<"permRemoveUser">>;
 perm_db_to_gui(space_add_group) -> <<"permInviteGroup">>;
 perm_db_to_gui(?SPACE_REMOVE_GROUP) -> <<"permRemoveGroup">>;
-perm_db_to_gui(?SPACE_INVITE_PROVIDER) -> <<"permInviteProvider">>;
+perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
 perm_db_to_gui(?SPACE_REMOVE_PROVIDER) -> <<"permRemoveProvider">>;
 perm_db_to_gui(?SPACE_MANAGE_SHARES) -> <<"permManageShares">>;
 perm_db_to_gui(?SPACE_WRITE_DATA) -> <<"permWriteFiles">>;
@@ -759,11 +759,11 @@ perm_gui_to_db(<<"permViewSpace">>) -> ?SPACE_VIEW;
 perm_gui_to_db(<<"permModifySpace">>) -> ?SPACE_UPDATE;
 perm_gui_to_db(<<"permRemoveSpace">>) -> ?SPACE_DELETE;
 perm_gui_to_db(<<"permSetPrivileges">>) -> ?SPACE_SET_PRIVILEGES;
-perm_gui_to_db(<<"permInviteUser">>) -> ?SPACE_INVITE_USER;
+perm_gui_to_db(<<"permInviteUser">>) -> space_add_user;
 perm_gui_to_db(<<"permRemoveUser">>) -> ?SPACE_REMOVE_USER;
 perm_gui_to_db(<<"permInviteGroup">>) -> space_add_group;
 perm_gui_to_db(<<"permRemoveGroup">>) -> ?SPACE_REMOVE_GROUP;
-perm_gui_to_db(<<"permInviteProvider">>) -> ?SPACE_INVITE_PROVIDER;
+perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
 perm_gui_to_db(<<"permRemoveProvider">>) -> ?SPACE_REMOVE_PROVIDER;
 perm_gui_to_db(<<"permManageShares">>) -> ?SPACE_MANAGE_SHARES;
 perm_gui_to_db(<<"permWriteFiles">>) -> ?SPACE_WRITE_DATA.

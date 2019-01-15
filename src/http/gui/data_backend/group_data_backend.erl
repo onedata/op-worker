@@ -521,14 +521,13 @@ all_group_privileges(_) -> [
     ?GROUP_UPDATE,
     ?GROUP_SET_PRIVILEGES,
     ?GROUP_DELETE,
-    ?GROUP_INVITE_USER,
+    group_add_user,
     ?GROUP_REMOVE_USER,
-    group_invite_child,
+    group_add_child,
     group_remove_child,
-    group_join_parent,
+    group_add_parent,
     group_leave_parent,
     group_add_space,
-    ?GROUP_JOIN_SPACE,
     ?GROUP_LEAVE_SPACE
 ].
 
@@ -544,7 +543,7 @@ perm_db_to_gui(?GROUP_VIEW) -> <<"permViewGroup">>;
 perm_db_to_gui(?GROUP_UPDATE) -> <<"permModifyGroup">>;
 perm_db_to_gui(?GROUP_SET_PRIVILEGES) -> <<"permSetPrivileges">>;
 perm_db_to_gui(?GROUP_DELETE) -> <<"permRemoveGroup">>;
-perm_db_to_gui(?GROUP_INVITE_USER) -> <<"permInviteUser">>;
+perm_db_to_gui(group_add_user) -> <<"permInviteUser">>;
 perm_db_to_gui(?GROUP_REMOVE_USER) -> <<"permRemoveUser">>;
 perm_db_to_gui(group_add_child) -> <<"permInviteGroup">>;
 perm_db_to_gui(group_remove_child) -> <<"permRemoveSubgroup">>;
@@ -566,7 +565,7 @@ perm_gui_to_db(<<"permViewGroup">>) -> ?GROUP_VIEW;
 perm_gui_to_db(<<"permModifyGroup">>) -> ?GROUP_UPDATE;
 perm_gui_to_db(<<"permSetPrivileges">>) -> ?GROUP_SET_PRIVILEGES;
 perm_gui_to_db(<<"permRemoveGroup">>) -> ?GROUP_DELETE;
-perm_gui_to_db(<<"permInviteUser">>) -> ?GROUP_INVITE_USER;
+perm_gui_to_db(<<"permInviteUser">>) -> group_add_user;
 perm_gui_to_db(<<"permRemoveUser">>) -> ?GROUP_REMOVE_USER;
 perm_gui_to_db(<<"permInviteGroup">>) -> group_add_child;
 perm_gui_to_db(<<"permRemoveSubgroup">>) -> group_remove_child;
