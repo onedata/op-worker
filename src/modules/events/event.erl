@@ -247,8 +247,7 @@ send_to_event_managers({aggregated, Messages}, Managers) ->
     end, Messages);
 send_to_event_managers(Message, Managers) ->
     lists:foreach(fun(Manager) ->
-        % TODO VFS-4131 - return error
-        event_manager:send(Manager, Message)
+        send_to_event_manager(Manager, Message, 1)
     end, Managers).
 
 %%--------------------------------------------------------------------
@@ -263,3 +262,27 @@ subtract_unique(ListA, ListB) ->
     SetA = gb_sets:from_list(ListA),
     SetB = gb_sets:from_list(ListB),
     gb_sets:to_list(gb_sets:subtract(SetA, SetB)).
+
+send_to_event_manager(Manager, Message, 0) ->
+    event_manager:send(Manager, Message);
+send_to_event_manager(Manager, Message, RetryCounter) ->
+    try
+        ok = event_manager:send(Manager, Message)
+    catch
+        exit:{noproc, _} ->
+            ?debug("No event manager for message ~p, retry", [Message]),
+            timer:sleep(20),
+            send_to_event_manager(Manager, Message, RetryCounter - 1);
+        exit:{normal, _} ->
+            ?debug("Exit of event manager for message ~p, retry", [Message]),
+            timer:sleep(20),
+            send_to_event_manager(Manager, Message, RetryCounter - 1);
+        exit:{timeout, _} ->
+            ?debug("Timeout of event manager for message ~p, retry", [Message]),
+            timer:sleep(20),
+            send_to_event_manager(Manager, Message, RetryCounter - 1);
+        Reason1:Reason2 ->
+            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}]),
+            timer:sleep(20),
+            send_to_event_manager(Manager, Message, RetryCounter - 1)
+    end.

@@ -151,7 +151,7 @@ handle_cast({internal, RetryCounter, Request},
             ?debug("Exit of stream process for request ~p, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
         exit:{timeout, _} ->
-            ?debug("Exit of stream process for request ~p, retry", [Request]),
+            ?debug("Timeout of stream process for request ~p, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
         Reason1:Reason2 ->
             ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
