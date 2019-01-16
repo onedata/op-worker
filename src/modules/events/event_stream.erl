@@ -18,6 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
@@ -313,6 +314,11 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
         Error:Reason ->
+            case Ctx of
+                #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?EAGAIN}});
+                _ -> ok
+            end,
+
             % TODO VFS-4131 - react on error (send error if notify is in
             % context? can handler crash?)
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",

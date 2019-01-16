@@ -35,7 +35,7 @@
 -export([
     events_aggregation_test_base/3,
     events_aggregation_failed_test_base/3,
-    events_flush_test_base/3
+    events_flush_test_base/5
 ]).
 
 -define(TEST_DATA, <<"TEST_DATA">>).
@@ -117,7 +117,7 @@ events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker) -
     ?assertEqual({error, closed}, ssl:send(Sock, <<"test">>)),
     ok = ssl:close(Sock).
 
-events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
+events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, FlushCode) ->
     UserId = <<"user1">>,
     MacaroonAuth = ?config({auth, UserId}, Config),
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
@@ -129,7 +129,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     % Mock function calls to check
     mock_event_handler(AssertionWorker),
     mock_aggregate_written_events(AssertionWorker),
-    mock_handle_file_written_events(AssertionWorker),
+    mock_handle_file_written_events(AssertionWorker, MockError),
 
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(
         ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), MacaroonAuth
@@ -150,7 +150,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     assert_handle_file_written_events_not_called(AssertionWorker),
 
     % Assert that after forcing flush handler is called before aggregation time expires
-    fuse_utils:flush_events(Sock, ?PROVIDER_ID(AssertionWorker), SubscriptionId),
+    fuse_utils:flush_events(Sock, ?PROVIDER_ID(AssertionWorker), SubscriptionId, FlushCode),
     assert_handle_file_written_events_called(AssertionWorker, [#file_written_event{
         counter = 2,
         file_guid = FileGuid,
@@ -232,11 +232,26 @@ assert_handle_file_read_events_called(Worker, ExpEvents) ->
     ),
     ok.
 
-
-mock_handle_file_written_events(Workers) ->
+mock_handle_file_written_events(Workers, false = _MockError) ->
     test_utils:mock_expect(Workers, fslogic_event_handler, handle_file_written_events,
         fun(Evts, UserCtxMap) ->
             meck:passthrough([Evts, UserCtxMap])
+        end
+    );
+mock_handle_file_written_events(Workers, _MockError) ->
+    test_utils:mock_expect(Workers, fslogic_event_handler, handle_file_written_events,
+        fun
+            (Evts, #{notify := _NotifyFun} = UserCtxMap) ->
+                case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
+                    {ok, _} ->
+                        meck:passthrough([Evts, UserCtxMap]);
+                    _ ->
+                        application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
+                        throw(test_error)
+
+                end;
+            (Evts, UserCtxMap) ->
+                meck:passthrough([Evts, UserCtxMap])
         end
     ).
 

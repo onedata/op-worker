@@ -31,7 +31,9 @@
     events_aggregation_stream_error_test/1,
     events_aggregation_stream_error_test2/1,
     events_aggregation_manager_error_test/1,
-    events_aggregationmanager_error_test2/1
+    events_aggregation_manager_error_test2/1,
+    events_flush_stream_error_test/1,
+    events_flush_handler_error_test/1
 ]).
 
 all() -> ?ALL([
@@ -40,7 +42,9 @@ all() -> ?ALL([
     events_aggregation_stream_error_test,
     events_aggregation_stream_error_test2,
     events_aggregation_manager_error_test,
-    events_aggregationmanager_error_test2
+    events_aggregation_manager_error_test2,
+    events_flush_stream_error_test,
+    events_flush_handler_error_test
 ]).
 
 %%%===================================================================
@@ -109,7 +113,7 @@ events_aggregation_manager_error_test(Config) ->
     events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1),
     test_utils:mock_unload(Workers, event_manager).
 
-events_aggregationmanager_error_test2(Config) ->
+events_aggregation_manager_error_test2(Config) ->
     [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
     test_utils:set_env(WorkerP1, ?APP_NAME, fuse_session_ttl_seconds, 5),
     test_utils:mock_new(Workers, event_manager, [passthrough]),
@@ -136,9 +140,33 @@ events_aggregation_test(Config) ->
     events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1).
 
 
+events_flush_stream_error_test(Config) ->
+    [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_stream, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_stream, send,
+        fun(Stream, Message) ->
+            case get(first_tested) of
+                undefined ->
+                    put(first_tested, true),
+                    meck:passthrough([undefined, Message]);
+                _ ->
+                    meck:passthrough([Stream, Message])
+
+            end
+        end
+    ),
+
+    events_reliability_test_base:events_flush_test_base(Config, WorkerP1, WorkerP1, false, ok),
+    test_utils:mock_unload(Workers, event_stream).
+
+events_flush_handler_error_test(Config) ->
+    [WorkerP1] = ?config(op_worker_nodes, Config),
+    events_reliability_test_base:events_flush_test_base(Config, WorkerP1, WorkerP1, true, eagain).
+
 events_flush_test(Config) ->
     [WorkerP1] = ?config(op_worker_nodes, Config),
-    events_reliability_test_base:events_flush_test_base(Config, WorkerP1, WorkerP1).
+    events_reliability_test_base:events_flush_test_base(Config, WorkerP1, WorkerP1, false, ok).
 
 
 %%%===================================================================
