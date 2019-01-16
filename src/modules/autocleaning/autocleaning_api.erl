@@ -23,11 +23,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([force_start/1, maybe_start/2,
-    configure/2, disable/1,
-    get_configuration/1, status/1,
-    list_reports_since/2, list_reports/1, list_reports/4,
-    restart_autocleaning_run/1, delete_config/1, maybe_check_and_start_autocleaning/1,
+-export([force_start/1, maybe_start/2, configure/2, disable/1, get_configuration/1,
+    status/1, list_reports/1, list_reports/4, restart_autocleaning_run/1,
+    delete_config/1, maybe_check_and_start_autocleaning/1,
     maybe_check_and_start_autocleaning/2, get_run_report/1, get_run_report/2]).
 
 -define(AUTOCLEANING_CHECK_INTERVAL,
@@ -141,7 +139,6 @@ maybe_start(SpaceId, SpaceQuota) ->
 get_configuration(SpaceId) ->
     case autocleaning:get_config(SpaceId) of
         undefined ->
-            ?warning("undefined configuration for auto-cleaning in space ~p", [SpaceId]),
             #{};
         Config ->
             autocleaning_config:to_map(Config)
@@ -154,7 +151,7 @@ get_configuration(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_run_report(autocleanint_run:id() | autocleanint_run:doc()) ->
-    maps:map() | {error, term()}.
+    {ok, maps:map()} | {error, term()}.
 get_run_report(#document{key = ARId, value = AR}) ->
     get_run_report(ARId, AR);
 get_run_report(ARId) ->
@@ -223,17 +220,6 @@ list_reports(SpaceId) ->
 list_reports(SpaceId, StartId, Offset, Limit) ->
     autocleaning_run_links:list(SpaceId, StartId, Offset, Limit).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns list of autocleaning reports, that has been scheduled later
-%% than Since.
-%% @end
-%%-------------------------------------------------------------------
--spec list_reports_since(od_space:id(), binary()) -> [maps:map()].
-list_reports_since(SpaceId, Since) ->
-    SinceEpoch = time_utils:iso8601_to_epoch(Since),
-    autocleaning_run:list_reports_since(SpaceId, SinceEpoch).
-
 
 -spec restart_autocleaning_run(autocleaning:id()) ->
     ok | {ok, autocleaning_run:id()} | {error, term()}.
@@ -293,7 +279,7 @@ should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec get_run_report(autocleaning_run:id(), autocleaning_run:record()) -> maps:maps().
+-spec get_run_report(autocleaning_run:id(), autocleaning_run:record()) -> {ok, maps:maps()}.
 get_run_report(ARId, #autocleaning_run{
     started_at = StartedAt,
     stopped_at = StoppedAt,
@@ -306,7 +292,7 @@ get_run_report(ARId, #autocleaning_run{
         StoppedAt ->
             time_utils:epoch_to_iso8601(StoppedAt)
     end,
-    #{
+    {ok, #{
         id => ARId,
         index => autocleaning_run_links:link_key(ARId, StartedAt),
         started_at => time_utils:epoch_to_iso8601(StartedAt),
@@ -314,4 +300,4 @@ get_run_report(ARId, #autocleaning_run{
         released_bytes => ReleasedBytes,
         bytes_to_release => BytesToRelease,
         files_number => ReleasedFiles
-    }.
+    }}.

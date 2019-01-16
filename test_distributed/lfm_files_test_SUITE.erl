@@ -62,7 +62,6 @@
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
-    file_popularity_view_should_return_unpopular_files/1,
     file_popularity_should_have_correct_file_size/1,
     readdir_plus_should_return_empty_result_for_empty_dir/1,
     readdir_plus_should_return_empty_result_zero_size/1,
@@ -108,7 +107,6 @@
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
-    file_popularity_view_should_return_unpopular_files,
     file_popularity_should_have_correct_file_size,
     delayed_creation_should_not_prevent_truncate,
     readdir_plus_should_return_empty_result_for_empty_dir,
@@ -142,6 +140,11 @@ all() ->
     #file_request{context_guid = ContextGuid, file_request = FileRequest})).
 
 -define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
+
+-define(cdmi_id(Guid), begin
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    FileId
+end).
 
 %%%====================================================================
 %%% Test function
@@ -1106,9 +1109,9 @@ new_file_should_have_zero_popularity(Config) ->
                 space_id = SpaceId,
                 last_open = 0,
                 open_count = 0,
-                hr_mov_avg = 0,
-                dy_mov_avg = 0,
-                mth_mov_avg = 0
+                hr_mov_avg = 0.0,
+                dy_mov_avg = 0.0,
+                mth_mov_avg = 0.0
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
@@ -1156,9 +1159,9 @@ opening_file_should_increase_file_popularity(Config) ->
         {ok, #document{
             value = #file_popularity{
                 open_count = 24,
-                hr_mov_avg = 1,
-                dy_mov_avg = 1,
-                mth_mov_avg = 2
+                hr_mov_avg = 1.0,
+                dy_mov_avg = 0.8,
+                mth_mov_avg = 2.0
             }
         }},
         rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
@@ -1170,39 +1173,6 @@ opening_file_should_increase_file_popularity(Config) ->
     ?assertEqual(24, FirstHour + SecondHour),
     ?assertEqual(24, FirstDay + SecondDay),
     ?assertEqual(24, FirstMonth + SecondMonth).
-
-file_popularity_view_should_return_unpopular_files(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, PopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/popular_file">>, 8#755),
-    {ok, UnpopularFileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/unpopular_file">>, 8#755),
-    SpaceId = fslogic_uuid:guid_to_space_id(PopularFileGuid),
-    ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
-
-    {ok, PopularHandle} = lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read),
-    ok = lfm_proxy:close(W, PopularHandle),
-    {ok, UnpopularHandle} = lfm_proxy:open(W, SessId1, {guid, UnpopularFileGuid}, read),
-    ok = lfm_proxy:close(W, UnpopularHandle),
-
-    timer:sleep(timer:seconds(10)),
-
-    {UnpopularFiles1, _}  = ?assertMatch({[_ | _], _}, begin
-        IndexToken = rpc:call(W, file_popularity_api, initial_index_token, [undefined, [10, 0, 0, 0, 0, 0, 0]]),
-        rpc:call(W, file_popularity_api, query, [SpaceId, IndexToken, 100])
-    end),
-    ?assert(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles1)),
-    ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles1)),
-
-    Handles = [lfm_proxy:open(W, SessId1, {guid, PopularFileGuid}, read) || _ <- lists:seq(0,10)],
-    [lfm_proxy:close(W, Handle) || {ok, Handle} <- Handles],
-
-    timer:sleep(timer:seconds(10)),
-    {UnpopularFiles2, _} = ?assertMatch({[_ | _], _}, begin
-        IndexToken2 = rpc:call(W, file_popularity_api, initial_index_token, [undefined, [10, 0, 0, 0, 0, 0, 0]]),
-        rpc:call(W, file_popularity_api, query, [SpaceId, IndexToken2, 100])
-    end),
-    ?assertNot(lists:member(file_ctx:new_by_guid(PopularFileGuid), UnpopularFiles2)),
-    ?assert(lists:member(file_ctx:new_by_guid(UnpopularFileGuid), UnpopularFiles2)).
 
 file_popularity_should_have_correct_file_size(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1287,7 +1257,6 @@ end_per_testcase(ShareTest, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= opening_file_should_increase_file_popularity;
-    Case =:= file_popularity_view_should_return_unpopular_files;
     Case =:= file_popularity_should_have_correct_file_size
 ->
     [W | _] = ?config(op_worker_nodes, Config),

@@ -21,7 +21,7 @@
     get/1]).
 
 %% datastore_model callbacks
--export([get_record_struct/1, get_ctx/0, get_record_version/0]).
+-export([get_record_struct/1, get_ctx/0, get_record_version/0, upgrade_record/2]).
 
 -type id() :: file_meta:uuid().
 -type record() :: #file_popularity{}.
@@ -255,6 +255,20 @@ get_record_struct(1) ->
         {hr_mov_avg, integer},
         {dy_mov_avg, integer},
         {mth_mov_avg, integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {size, integer},
+        {open_count, integer},
+        {last_open, integer},
+        {hr_hist, [integer]},
+        {dy_hist, [integer]},
+        {mth_hist, [integer]},
+        {hr_mov_avg, float},
+        {dy_mov_avg, float},
+        {mth_mov_avg, float}
     ]}.
 
 %--------------------------------------------------------------------
@@ -274,4 +288,14 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, FilePopularity) ->
+    {2, FilePopularity}.

@@ -14,20 +14,13 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
--type rule_name() :: min_file_size | max_file_size |
-                     min_hours_since_last_open | max_open_count |
-                     max_hourly_moving_average | max_daily_moving_average |
-                     max_monthly_moving_average.
 -type rule_setting() :: autocleaning_rule_setting:rule_setting().
--type rule_setting_value() :: autocleaning_rule_setting:value().
 -type rules() :: #autocleaning_rules{}.
 
 -export_type([rule_setting/0, rules/0]).
 
 %% API
--export([to_map/1, update/2, default/0, are_all_rules_satisfied/2,
-    to_file_popularity_start_key/1, to_file_popularity_end_key/1]).
+-export([to_map/1, update/2, default/0, are_all_rules_satisfied/2]).
 
 %%defaults
 -define(DEFAULT_LOWER_SIZE_LIMIT, 1).
@@ -143,50 +136,6 @@ are_all_rules_satisfied(FileCtx, #autocleaning_rules{
     andalso is_max_daily_moving_average_rule_satisfied(FilePopularity, MaxDailyMovingAvgSetting)
     andalso is_max_monthly_moving_average_rule_satisfied(FilePopularity, MaxMonthlyMovingAvgSetting).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns JSON encoded start_key understandable by the
-%% file_popularity_view. The key is constructed basing on
-%% the #autocleaning_rules{} record.
-%% @end
-%%-------------------------------------------------------------------
--spec to_file_popularity_start_key(rules()) -> [non_neg_integer()] | undefined.
-to_file_popularity_start_key(#autocleaning_rules{enabled = false}) ->
-    undefined;
-to_file_popularity_start_key(#autocleaning_rules{enabled = true,
-    min_file_size = MinFileSizeSetting
-}) ->
-    MinFileSize = get_value(min_file_size, MinFileSizeSetting),
-    [0, 0, MinFileSize, 0, 0, 0].
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns JSON encoded end_key understandable by the
-%% file_popularity_view. The key is constructed basing on
-%% the #autocleaning_rules{} record.
-%% @end
-%%-------------------------------------------------------------------
--spec to_file_popularity_end_key(rules()) -> [non_neg_integer()] | undefined.
-to_file_popularity_end_key(#autocleaning_rules{enabled = false}) ->
-    undefined;
-to_file_popularity_end_key(#autocleaning_rules{
-    enabled = true,
-    max_open_count = MaxOpenCountSetting,
-    max_file_size = MaxFileSizeSetting,
-    min_hours_since_last_open = MinHoursSinceLastOpenSetting,
-    max_hourly_moving_average = MaxHourlyMovingAvgSetting,
-    max_daily_moving_average = MaxDailyMovingAvgSetting,
-    max_monthly_moving_average = MaxMonthlyMovingAvgSetting
-}) ->
-    to_file_popularity_start_key(
-      get_value(max_open_count, MaxOpenCountSetting),
-      get_value(min_hours_since_last_open, MinHoursSinceLastOpenSetting),
-      get_value(max_file_size, MaxFileSizeSetting),
-      get_value(max_hourly_moving_average, MaxHourlyMovingAvgSetting),
-      get_value(max_daily_moving_average, MaxDailyMovingAvgSetting),
-      get_value(max_monthly_moving_average, MaxMonthlyMovingAvgSetting)
-    ).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -216,12 +165,6 @@ get_update_setting_map(RuleName, UpdateRulesMap) ->
 -spec default(non_neg_integer()) -> rule_setting().
 default(Value) ->
     #autocleaning_rule_setting{value = Value}.
-
--spec get_value(rule_name(), rule_setting()) -> rule_setting_value().
-get_value(RuleName, #autocleaning_rule_setting{enabled = false}) ->
-    maps:get(RuleName, ?DEFAULTS);
-get_value(_RuleName, #autocleaning_rule_setting{value = Value}) ->
-    Value.
 
 -spec is_max_open_count_rule_satisfied(file_popularity:record(),
     rule_setting()) -> boolean().
@@ -273,19 +216,3 @@ is_max_monthly_moving_average_rule_satisfied(#file_popularity{mth_mov_avg = MthM
     RuleSetting
 ) ->
     autocleaning_rule_setting:is_less_or_equal(MthMovAvg, RuleSetting).
-
--spec to_file_popularity_start_key(non_neg_integer(), non_neg_integer(),
-    non_neg_integer(), non_neg_integer(), non_neg_integer(),
-    non_neg_integer()) -> [non_neg_integer()].
-to_file_popularity_start_key(MaxOpenCount, MinHoursSinceLastOpen,
-    MaxFileSize, MaxHourlyMovingAvg, MaxDailyMovingAvg, MaxMonthlyMovingAvg
-) ->
-    CurrentTimeInHours = time_utils:cluster_time_seconds() div 3600,
-    [
-        MaxOpenCount,
-        CurrentTimeInHours - MinHoursSinceLastOpen,
-        MaxFileSize,
-        MaxHourlyMovingAvg,
-        MaxDailyMovingAvg,
-        MaxMonthlyMovingAvg
-    ].

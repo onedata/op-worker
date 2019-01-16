@@ -25,7 +25,7 @@
 -export_type([id/0, status/0]).
 
 %% API
--export([get/1, update/2, delete/1, delete/2, create/2, list_reports_since/2,
+-export([get/1, update/2, delete/1, delete/2, create/2,
     mark_completed/1, mark_failed/1, mark_released_file/2, set_index_token/2,
     get_index_token/1, get_bytes_to_release/1, get_released_bytes/1, is_finished/1, get_started_at/1]).
 
@@ -75,25 +75,6 @@ create(SpaceId, BytesToRelease) ->
         }
     },
     datastore_model:create(?CTX, NewDoc).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns list of autocleaning reports, that has been scheduled later
-%% than Since.
-%% @end
-%%-------------------------------------------------------------------
--spec list_reports_since(od_space:id(), non_neg_integer()) -> [maps:map()].
-list_reports_since(SpaceId, Since) ->
-    {ok, ARIds} = autocleaning_run_links:list_since(SpaceId, Since),
-    lists:filtermap(fun(ARId) ->
-        case datastore_model:get(?CTX, ARId) of
-            {ok, ARDoc} ->
-                {true, autocleaning_api:get_run_report(ARDoc)};
-            {error, not_found} ->
-                ?error("Auto-cleaning run document ~p not found", [ARId]),
-                false
-        end
-    end, ARIds).
 
 -spec mark_released_file(undefined | id(), non_neg_integer()) -> ok.
 mark_released_file(undefined, _) -> ok;
@@ -197,10 +178,10 @@ get_record_struct(1) ->
         {space_id, string},
         {started_at, integer},
         {stopped_at, integer},
+        {status, atom},
         {released_bytes, integer},
         {bytes_to_release, integer},
         {released_files, integer},
-        {status, atom},
         {index_token, {record, [
             {last_doc_id, string},
             {last_key, string},

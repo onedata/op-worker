@@ -44,7 +44,7 @@
 
 -define(SMALL_NUM_OF_ATTEMPTS, 5).
 -define(MEDIUM_NUM_OF_ATTEMPTS, 20).
--define(ATTEMPTS_INTERVAL, 50).
+-define(ATTEMPTS_INTERVAL, 200).
 
 %%%===================================================================
 %%% Test functions
@@ -61,10 +61,8 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
-    mock_events_utils(AssertionWorker),
-    mock_aggregate_read_events(AssertionWorker),
-
     mock_event_handler(AssertionWorker),
+    mock_aggregate_read_events(AssertionWorker),
     mock_handle_file_read_events(AssertionWorker),
 
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(
@@ -74,9 +72,9 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     % Send 2 event with some delay and assert correct aggregation
     Block1 = #file_block{offset = 0, size = 4},
     Block2 = #file_block{offset = 10, size = 4},
-    fuse_utils:emit_file_read_event(Sock, 0, 1, FileGuid, [Block1]),
+    fuse_utils:emit_file_read_event(Sock, 0, 1, FileGuid, [Block2]),
     timer:sleep(100),
-    fuse_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block2]),
+    fuse_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block1]),
     assert_aggregate_read_events_called(AssertionWorker, FileGuid, Block1, Block2),
 
     % Assert that file read events handler was not called before aggregation time expires
@@ -92,7 +90,6 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
-    unmock_events_utils(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -108,10 +105,8 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
-    mock_events_utils(AssertionWorker),
-    mock_aggregate_written_events(AssertionWorker),
-
     mock_event_handler(AssertionWorker),
+    mock_aggregate_written_events(AssertionWorker),
     mock_handle_file_written_events(AssertionWorker),
 
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(
@@ -123,9 +118,9 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     % Send 2 event with some delay
     Block1 = #file_block{offset = 0, size = 4},
     Block2 = #file_block{offset = 10, size = 4},
-    fuse_utils:emit_file_written_event(Sock, 0, 1, FileGuid, [Block1]),
+    fuse_utils:emit_file_written_event(Sock, 0, 1, FileGuid, [Block2]),
     timer:sleep(100),
-    fuse_utils:emit_file_written_event(Sock, 0, 0, FileGuid, [Block2]),
+    fuse_utils:emit_file_written_event(Sock, 0, 0, FileGuid, [Block1]),
     assert_aggregate_written_events_called(AssertionWorker, FileGuid, Block1, Block2),
 
     % Assert that file read events handler was not called before aggregation time expires
@@ -141,7 +136,6 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
         blocks = [Block1, Block2]}
     ]),
 
-    unmock_events_utils(AssertionWorker),
     unmock_event_handler(AssertionWorker),
 
     ok = ssl:close(Sock).
@@ -181,14 +175,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-mock_events_utils(Workers) ->
-    test_utils:mock_new(Workers, event_utils, [passthrough]).
-
-
-unmock_events_utils(Workers) ->
-    test_utils:mock_unload(Workers, event_utils).
 
 
 mock_event_handler(Workers) ->
@@ -252,7 +238,7 @@ assert_handle_file_written_events_called(Worker, ExpEvents) ->
 
 
 mock_aggregate_read_events(Workers) ->
-    test_utils:mock_expect(Workers, event_utils, aggregate_file_read_events,
+    test_utils:mock_expect(Workers, fslogic_event_handler, aggregate_file_read_events,
         fun(OldEvt, NewEvt) ->
             meck:passthrough([OldEvt, NewEvt])
         end
@@ -260,7 +246,7 @@ mock_aggregate_read_events(Workers) ->
 
 
 assert_aggregate_read_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
-    Mod = event_utils,
+    Mod = fslogic_event_handler,
     Fun = aggregate_file_read_events,
 
     ?assertMatch([{
@@ -272,7 +258,7 @@ assert_aggregate_read_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
 
 
 mock_aggregate_written_events(Workers) ->
-    test_utils:mock_expect(Workers, event_utils, aggregate_file_written_events,
+    test_utils:mock_expect(Workers, fslogic_event_handler, aggregate_file_written_events,
         fun(OldEvt, NewEvt) ->
             meck:passthrough([OldEvt, NewEvt])
         end
@@ -280,7 +266,7 @@ mock_aggregate_written_events(Workers) ->
 
 
 assert_aggregate_written_events_called(Worker, FileGuid, ExpBlock1, ExpBlock2) ->
-    Mod = event_utils,
+    Mod = fslogic_event_handler,
     Fun = aggregate_file_written_events,
 
     ?assertMatch([{
