@@ -33,9 +33,14 @@
 
 %%tests
 -export([
-    events_aggregation_test_base/3,
-    events_aggregation_failed_test_base/3,
-    events_flush_test_base/5
+    events_aggregation_test/1,
+    events_flush_test/1,
+    events_aggregation_stream_error_test/1,
+    events_aggregation_stream_error_test2/1,
+    events_aggregation_manager_error_test/1,
+    events_aggregation_manager_error_test2/1,
+    events_flush_stream_error_test/1,
+    events_flush_handler_error_test/1
 ]).
 
 -define(TEST_DATA, <<"TEST_DATA">>).
@@ -49,6 +54,132 @@
 
 %%%===================================================================
 %%% Test functions
+%%%===================================================================
+
+events_aggregation_stream_error_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_stream, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_stream, send,
+        fun(Stream, Message) ->
+            case get(first_tested) of
+                undefined ->
+                    put(first_tested, true),
+                    meck:passthrough([undefined, Message]);
+                _ ->
+                    meck:passthrough([Stream, Message])
+
+            end
+        end
+    ),
+
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker),
+    test_utils:mock_unload(Workers, event_stream).
+
+events_aggregation_stream_error_test2(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_stream, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_stream, handle_call, fun
+        (#event{type = #file_read_event{}} = Request, From, State) ->
+            case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
+                {ok, _} ->
+                    meck:passthrough([Request, From, State]);
+                _ ->
+                    application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
+                    throw(test_error)
+
+            end;
+         (Request, From, State) ->
+             meck:passthrough([Request, From, State])
+    end),
+
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker),
+    test_utils:mock_unload(Workers, event_stream).
+
+events_aggregation_manager_error_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_manager, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_manager, send,
+        fun(Stream, Message) ->
+            case get(first_tested) of
+                undefined ->
+                    put(first_tested, true),
+                    meck:passthrough([undefined, Message]);
+                _ ->
+                    meck:passthrough([Stream, Message])
+
+            end
+        end
+    ),
+
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker),
+    test_utils:mock_unload(Workers, event_manager).
+
+events_aggregation_manager_error_test2(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 5),
+    test_utils:mock_new(Workers, event_manager, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_manager, handle_call, fun
+        (#event{type = #file_read_event{}} = Request, From, State) ->
+            case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
+                {ok, _} ->
+                    meck:passthrough([Request, From, State]);
+                _ ->
+                    application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
+                    throw(test_error)
+
+            end;
+        (Request, From, State) ->
+            meck:passthrough([Request, From, State])
+    end),
+
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker),
+    test_utils:mock_unload(Workers, event_manager),
+    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 300).
+
+events_aggregation_test(Config) ->
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker).
+
+
+events_flush_stream_error_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_stream, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_stream, send,
+        fun(Stream, Message) ->
+            case get(first_tested) of
+                undefined ->
+                    put(first_tested, true),
+                    meck:passthrough([undefined, Message]);
+                _ ->
+                    meck:passthrough([Stream, Message])
+
+            end
+        end
+    ),
+
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_flush_test_base(Config, ConnectionWorker, AssertionWorker, false, ok),
+    test_utils:mock_unload(Workers, event_stream).
+
+events_flush_handler_error_test(Config) ->
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_flush_test_base(Config, ConnectionWorker, AssertionWorker, true, eagain).
+
+events_flush_test(Config) ->
+    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
+    events_flush_test_base(Config, ConnectionWorker, AssertionWorker, false, ok).
+
+%%%===================================================================
+%%% Test bases
 %%%===================================================================
 
 
@@ -198,6 +329,11 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
+get_nodes(Config) ->
+    case ?config(op_worker_nodes, Config) of
+        [WorkerP1] -> {WorkerP1, WorkerP1};
+        [WorkerP2, WorkerP1] -> {WorkerP2, WorkerP1}
+    end.
 
 mock_event_handler(Workers) ->
     test_utils:mock_new(Workers, fslogic_event_handler, [passthrough]).
