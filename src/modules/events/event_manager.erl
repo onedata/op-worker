@@ -155,7 +155,7 @@ handle_cast({internal, RetryCounter, Request},
             retry_handle(State, Request, RetryCounter);
         Reason1:Reason2 ->
             ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
-            {noreply, State}
+            retry_handle(State, Request, RetryCounter)
     end;
 handle_cast(Request, State) ->
     Retries = application:get_env(?APP_NAME, event_manager_retries, 1),
@@ -310,7 +310,7 @@ handle_locally({unregister_stream, StmKey}, #state{streams = Stms} = State) ->
 handle_locally(#event{} = Evt, #state{streams = Stms} = State) ->
     StmKey = event_type:get_stream_key(Evt),
     Stm = maps:get(StmKey, Stms, undefined),
-    event_stream:send(Stm, Evt),
+    ok = event_stream:send(Stm, Evt),
     {noreply, State};
 
 handle_locally(#flush_events{} = Request, #state{} = State) ->
@@ -318,7 +318,7 @@ handle_locally(#flush_events{} = Request, #state{} = State) ->
     #state{streams = Stms, subscriptions = Subs} = State,
     {_, StmKey} = maps:get(SubId, Subs, {local, undefined}),
     Stm = maps:get(StmKey, Stms, undefined),
-    event_stream:send(Stm, {flush, NotifyFun}),
+    ok = event_stream:send(Stm, {flush, NotifyFun}),
     {noreply, State};
 
 handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
@@ -331,7 +331,7 @@ handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
     StmKey = subscription_type:get_stream_key(Sub),
     NewStms = case maps:find(StmKey, Stms) of
         {ok, Stm} ->
-            event_stream:send(Stm, {add_subscription, Sub}),
+            ok = event_stream:send(Stm, {add_subscription, Sub}),
             Stms;
         error ->
             {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
@@ -347,7 +347,7 @@ handle_locally(#subscription_cancellation{id = SubId} = Can, #state{} = State) -
     case maps:get(SubId, Subs, {local, undefined}) of
         {local, StmKey} ->
             Stm = maps:get(StmKey, Stms, undefiend),
-            event_stream:send(Stm, {remove_subscription, SubId});
+            ok = event_stream:send(Stm, {remove_subscription, SubId});
         {remote, ProviderId} ->
             handle_remotely(Can, ProviderId, State)
     end,

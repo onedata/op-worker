@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
+-include("modules/events/definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -28,14 +29,18 @@
     events_aggregation_test/1,
     events_flush_test/1,
     events_aggregation_stream_error_test/1,
-    events_aggregation_manager_error_test/1
+    events_aggregation_stream_error_test2/1,
+    events_aggregation_manager_error_test/1,
+    events_aggregationmanager_error_test2/1
 ]).
 
 all() -> ?ALL([
     events_aggregation_test,
     events_flush_test,
     events_aggregation_stream_error_test,
-    events_aggregation_manager_error_test
+    events_aggregation_stream_error_test2,
+    events_aggregation_manager_error_test,
+    events_aggregationmanager_error_test2
 ]).
 
 %%%===================================================================
@@ -63,6 +68,27 @@ events_aggregation_stream_error_test(Config) ->
     events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1),
     test_utils:mock_unload(Workers, event_stream).
 
+events_aggregation_stream_error_test2(Config) ->
+    [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_stream, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_stream, handle_call, fun
+        (#event{type = #file_read_event{}} = Request, From, State) ->
+            case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
+                {ok, _} ->
+                    meck:passthrough([Request, From, State]);
+                _ ->
+                    application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
+                    throw(test_error)
+
+            end;
+        (Request, From, State) ->
+            meck:passthrough([Request, From, State])
+    end),
+
+    events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1),
+    test_utils:mock_unload(Workers, event_stream).
+
 events_aggregation_manager_error_test(Config) ->
     [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, event_manager, [passthrough]),
@@ -81,6 +107,28 @@ events_aggregation_manager_error_test(Config) ->
     ),
 
     events_reliability_test_base:events_aggregation_test_base(Config, WorkerP1, WorkerP1),
+    test_utils:mock_unload(Workers, event_manager).
+
+events_aggregationmanager_error_test2(Config) ->
+    [WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+    test_utils:set_env(WorkerP1, ?APP_NAME, fuse_session_ttl_seconds, 5),
+    test_utils:mock_new(Workers, event_manager, [passthrough]),
+
+    test_utils:mock_expect(Workers, event_manager, handle_call, fun
+        (#event{type = #file_read_event{}} = Request, From, State) ->
+            case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
+                {ok, _} ->
+                    meck:passthrough([Request, From, State]);
+                _ ->
+                    application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
+                    throw(test_error)
+
+            end;
+         (Request, From, State) ->
+             meck:passthrough([Request, From, State])
+    end),
+
+    events_reliability_test_base:events_aggregation_failed_test_base(Config, WorkerP1, WorkerP1),
     test_utils:mock_unload(Workers, event_manager).
 
 events_aggregation_test(Config) ->

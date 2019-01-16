@@ -34,6 +34,7 @@
 %%tests
 -export([
     events_aggregation_test_base/3,
+    events_aggregation_failed_test_base/3,
     events_flush_test_base/3
 ]).
 
@@ -94,6 +95,27 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 
     ok = ssl:close(Sock).
 
+events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker) ->
+    UserId = <<"user1">>,
+    MacaroonAuth = ?config({auth, UserId}, Config),
+    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+
+    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
+    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
+
+    {ok, {Sock, TestSessionID}} = fuse_utils:connect_via_macaroon(
+        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), MacaroonAuth
+    ),
+
+    ?assertMatch({ok, _}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
+    Block1 = #file_block{offset = 0, size = 4},
+    fuse_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block1]),
+    timer:sleep(10000),
+
+    ?assertEqual({error, not_found}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
+    ?assertEqual({error, closed}, ssl:send(Sock, <<"test">>)),
+    ok = ssl:close(Sock).
 
 events_flush_test_base(Config, ConnectionWorker, AssertionWorker) ->
     UserId = <<"user1">>,
