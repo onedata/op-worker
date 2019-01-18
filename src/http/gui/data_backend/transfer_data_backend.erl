@@ -321,7 +321,12 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid, Path};
         _ ->
-            {<<"index">>, index:id(IndexName, SpaceId), IndexName}
+            case index_links:get_index_id(IndexName, SpaceId) of
+                {ok, IndexId} ->
+                    {<<"index">>, IndexId, IndexName};
+                _ ->
+                    {<<"index">>, null, IndexName}
+            end
     end,
     QueryParams = case QueryViewParams of
         undefined -> null;

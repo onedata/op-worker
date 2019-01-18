@@ -59,8 +59,8 @@ create_or_update_db_view(#document{
     end.
 
 -spec remove_db_view(index:doc()) -> ok.
-remove_db_view(#document{value = #index{name = Name, space_id = SpaceId}}) ->
-    case index:delete_db_view(SpaceId, Name) of
+remove_db_view(#document{key = IndexId}) ->
+    case index:delete_db_view(IndexId) of
         ok ->
             ok;
         {error, {<<"not_found">>, <<"missing">>}} ->
@@ -68,6 +68,6 @@ remove_db_view(#document{value = #index{name = Name, space_id = SpaceId}}) ->
         {error, {<<"not_found">>, <<"deleted">>}} ->
             ok;
         {error, Error} = Err ->
-            ?error("Removal of db view from provider failed due to ~p", [Error]),
+            ?error("Removal of db view ~p from provider failed due to ~p", [IndexId, Error]),
             Err
     end.

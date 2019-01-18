@@ -233,7 +233,7 @@ query_index_using_file_popularity(Config) ->
     TestData = <<"test_data">>,
     TestDataSize = byte_size(TestData),
 
-    {ok, _} = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
+    ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
     FilePath = ?TEST_FILE(?SPACE_NAME),
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath, 8#664),
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
@@ -261,9 +261,9 @@ query_index_using_file_popularity(Config) ->
             <<"dy_hist">> :=[1 | _],
             <<"hr_hist">> := [1 | _],
             <<"mth_hist">> := [1 | _],
-            <<"dy_mov_avg">> := 1,
-            <<"hr_mov_avg">> := 1,
-            <<"mth_mov_avg">> := 1,
+            <<"dy_mov_avg">> := 1/30,
+            <<"hr_mov_avg">> := 1/24,
+            <<"mth_mov_avg">> := 1/12,
             <<"last_open">> := _,
             <<"open_count">> := 1,
             <<"size">> := TestDataSize
@@ -337,7 +337,7 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 create_index(Worker, SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, ProviderIds) ->
-    ok = rpc:call(Worker, index, create, [SpaceId, IndexName, MapFunction,
+    ok = rpc:call(Worker, index, save, [SpaceId, IndexName, MapFunction,
         ReduceFunction, Options, Spatial, ProviderIds]).
 
 delete_index(Worker, SpaceId, IndexName) ->

@@ -15,6 +15,8 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
@@ -724,8 +726,9 @@ qs_val(Name, Req, Default) ->
 %% Parse query string.
 %% @end
 %%--------------------------------------------------------------------
+-spec parse_qs(cowboy_req:req()) -> any().
 parse_qs(Req) ->
-    lists:foldl(fun({Key, Val}, AccMap) ->
+    Params = lists:foldl(fun({Key, Val}, AccMap) ->
         case maps:get(Key, AccMap, undefined) of
             undefined ->
                 AccMap#{Key => Val};
@@ -734,4 +737,12 @@ parse_qs(Req) ->
             OldVal ->
                 AccMap#{Key => [Val, OldVal]}
         end
-    end, #{}, cowboy_req:parse_qs(Req)).
+    end, #{}, cowboy_req:parse_qs(Req)),
+    maps:fold(fun
+        (K, V, AccIn) when is_list(V) ->
+            AccIn#{K => lists:reverse(V)};
+        (_K, _V, AccIn) ->
+            AccIn
+    end, Params, Params).
+
+

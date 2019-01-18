@@ -15,13 +15,14 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
     save/7, update/6, update/7, get/1, get/2,
-    delete/2, list/1, list/4, save_db_view/6, delete_db_view/2,
-    query/3, get_json/2, is_supported/3, id/2, update_reduce_function/3,
+    delete/2, list/1, list/4, save_db_view/6, delete_db_view/1,
+    query/3, get_json/2, is_supported/3, update_reduce_function/3,
     build_cdmi_object_id_in_js/0]).
 
 %% datastore_model callbacks
@@ -47,9 +48,18 @@
     model => ?MODULE,
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined(),
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 -define(DISK_CTX, (datastore_model_default:get_default_disk_ctx())).
+
+-define(get_index_id_and_run(IndexName, SpaceId, Fun),
+    case index_links:get_index_id(IndexName, SpaceId) of
+        {ok, __IndexId} ->
+            Fun(__IndexId);
+        __Error ->
+            __Error
+    end).
 
 %%%===================================================================
 %%% API
@@ -64,9 +74,8 @@
 -spec save(od_space:id(), name(), index_function(), undefined | index_function(),
     options(), boolean(), providers()) -> ok | {error, term()}.
 save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
-    IndexId = id(Name, SpaceId),
     ToCreate = #document{
-        key = IndexId,
+        key = IndexId = datastore_utils:gen_key(),
         value = #index{
             name = Name,
             space_id = SpaceId,
@@ -78,14 +87,20 @@ save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
         },
         scope = SpaceId
     },
-    case save(ToCreate) of
-        {ok, Doc} ->
-            ok = index_links:add_link(Name, SpaceId),
-            index_changes:handle(Doc),
-            ok;
-        Error ->
-            Error
+    case index_links:add_link(Name, IndexId, SpaceId) of
+        ok ->
+            case save(ToCreate) of
+                {ok, Doc = #document{key = IndexId}} ->
+                    index_changes:handle(Doc),
+                    ok;
+                Error ->
+                    index_links:delete_links(Name, SpaceId),
+                    Error
+            end;
+        Error2 ->
+            Error2
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,7 +122,6 @@ update(SpaceId, Name, MapFunction, Options, Spatial, Providers) ->
     undefined | index_function(), options(), undefined | boolean(),
     undefined | providers()) -> ok | {error, term()}.
 update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
-    IndexId = id(Name, SpaceId),
     Diff = fun(OldIndex = #index{
         spatial = OldSpatial,
         map_function = OldMap,
@@ -115,20 +129,17 @@ update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
         index_options = OldOptions,
         providers = OldProviders
     }) ->
-        NewOptions = maps:to_list(maps:merge(
-            maps:from_list(OldOptions), maps:from_list(Options)
-        )),
         {ok, OldIndex#index{
             spatial = utils:ensure_defined(Spatial, undefined, OldSpatial),
             map_function = utils:ensure_defined(
                 index_utils:escape_js_function(MapFunction), undefined, OldMap
             ),
             reduce_function = utils:ensure_defined(ReduceFunction, undefined, OldReduce),
-            index_options = NewOptions,
+            index_options = utils:ensure_defined(Options, [], OldOptions),
             providers = utils:ensure_defined(Providers, undefined, OldProviders)
         }}
     end,
-    case update(IndexId, Diff) of
+    case update(Name, Diff, SpaceId) of
         {ok, _} ->
             ok;
         Error ->
@@ -144,9 +155,8 @@ update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
 -spec update_reduce_function(od_space:id(), name(), undefined | index_function()) ->
     ok | {error, term()}.
 update_reduce_function(SpaceId, Name, ReduceFunction) ->
-    IndexId = id(Name, SpaceId),
     Diff = fun(Index) -> {ok, Index#index{reduce_function = ReduceFunction}} end,
-    case update(IndexId, Diff) of
+    case update(Name, Diff, SpaceId) of
         {ok, _} ->
             ok;
         Error ->
@@ -155,7 +165,7 @@ update_reduce_function(SpaceId, Name, ReduceFunction) ->
 
 -spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
 is_supported(SpaceId, IndexName, ProviderId) ->
-    case datastore_model:get(?CTX, id(IndexName, SpaceId)) of
+    case index:get(IndexName, SpaceId) of
         {ok, #document{value = #index{providers = ProviderIds}}} ->
             lists:member(ProviderId, ProviderIds);
         _Error ->
@@ -165,53 +175,70 @@ is_supported(SpaceId, IndexName, ProviderId) ->
 -spec get_json(od_space:id(), binary()) ->
     {ok, #{binary() => term()}} | {error, term()}.
 get_json(SpaceId, IndexName) ->
-    Id = id(IndexName, SpaceId),
-    case datastore_model:get(?CTX, Id) of
-        {ok, #document{value = #index{
-            spatial = Spatial,
-            map_function = MapFunction,
-            reduce_function = ReduceFunction,
-            index_options = Options,
-            providers = Providers
-        }}} ->
-            {ok, #{
-                <<"indexOptions">> => maps:from_list(Options),
-                <<"providers">> => Providers,
-                <<"mapFunction">> => MapFunction,
-                <<"reduceFunction">> => utils:ensure_defined(
-                    index_utils:escape_js_function(ReduceFunction), undefined, null
-                ),
-                <<"spatial">> => Spatial
-            }};
-        Error -> Error
-    end.
+    ?get_index_id_and_run(IndexName, SpaceId, fun(IndexId) ->
+        case datastore_model:get(?CTX, IndexId) of
+            {ok, #document{value = #index{
+                spatial = Spatial,
+                map_function = MapFunction,
+                reduce_function = ReduceFunction,
+                index_options = Options,
+                providers = Providers
+            }}} ->
+                {ok, #{
+                    <<"indexOptions">> => maps:from_list(Options),
+                    <<"providers">> => Providers,
+                    <<"mapFunction">> => MapFunction,
+                    <<"reduceFunction">> => utils:ensure_defined(
+                        index_utils:escape_js_function(ReduceFunction), undefined, null
+                    ),
+                    <<"spatial">> => Spatial
+                }};
+            Error -> Error
+        end
+    end).
+
+
+-spec delete(id()) -> ok | {error, term()}.
+delete(IndexId) ->
+    datastore_model:delete(?CTX, IndexId).
 
 -spec delete(od_space:id(), binary()) -> ok | {error, term()}.
 delete(SpaceId, IndexName) ->
-    Id = id(IndexName, SpaceId),
-    datastore_model:delete(?CTX, Id),
-    couchbase_driver:delete_design_doc(?DISK_CTX, Id),
-    index_links:delete_links(IndexName, SpaceId).
+    Fun = fun(IndexId) ->
+        case index:get(IndexId) of
+            {ok, #document{value = #index{name = FullIndexName}}} ->
+                delete(IndexId),
+                couchbase_driver:delete_design_doc(?DISK_CTX, IndexId),
+                index_links:delete_links(FullIndexName, SpaceId);
+            {error, not_found} ->
+                couchbase_driver:delete_design_doc(?DISK_CTX, IndexId),
+                index_links:delete_links(IndexName, SpaceId)
+        end
+    end,
+    case ?get_index_id_and_run(IndexName, SpaceId, Fun) of
+        ok -> ok;
+        {error, not_found} -> ok;
+        Error -> Error
+    end.
 
--spec list(od_space:id()) -> {ok, [index:name()]}.
+-spec list(od_space:id()) -> {ok, [index:name()]} | {error, term()}.
 list(SpaceId) ->
     list(SpaceId, undefined, 0, all).
 
--spec list(od_space:id(), undefined | name(), integer(), non_neg_integer() | all) -> {ok, [index:name()]}.
+-spec list(od_space:id(), undefined | name(), integer(), non_neg_integer() | all) ->
+    {ok, [index:name()]} | {error, term()}.
 list(SpaceId, StartId, Offset, Limit) ->
-    {ok, index_links:list(SpaceId, StartId, Offset, Limit)}.
+    index_links:list(SpaceId, StartId, Offset, Limit).
 
--spec get(od_space:id(), name()) -> {ok, doc()} | {error, term()}.
-get(SpaceId, IndexName) ->
-    ?MODULE:get(id(IndexName, SpaceId)).
+-spec get(name(), od_space:id()) -> {ok, doc()} | {error, term()}.
+get(IndexName, SpaceId) ->
+    ?get_index_id_and_run(IndexName, SpaceId, fun(IndexId) ->
+        index:get(IndexId)
+    end).
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(IndexId) ->
     datastore_model:get(?CTX, IndexId).
-
--spec id(name(), od_space:id()) -> key().
-id(IndexName, SpaceId) ->
-    datastore_utils:gen_key(IndexName, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -235,10 +262,10 @@ save_db_view(IndexId, SpaceId, Function, ReduceFunction, Spatial, Options) ->
 %% Deletes view from db.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_db_view(od_space:id(), binary()) -> ok | {error, term()}.
-delete_db_view(SpaceId, IndexName) ->
-    Id = id(IndexName, SpaceId),
-    couchbase_driver:delete_design_doc(?DISK_CTX, Id).
+-spec delete_db_view(id()) -> ok | {error, term()}.
+delete_db_view(IndexId) ->
+    couchbase_driver:delete_design_doc(?DISK_CTX, IndexId).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -250,7 +277,9 @@ delete_db_view(SpaceId, IndexName) ->
 query(SpaceId, <<"file-popularity">>, Options) ->
     query(<<"file-popularity-", SpaceId/binary>>, Options);
 query(SpaceId, IndexName, Options) ->
-    query(id(IndexName, SpaceId), Options).
+    ?get_index_id_and_run(IndexName, SpaceId, fun(IndexId) ->
+        query(IndexId, Options)
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -340,9 +369,11 @@ save(Doc) ->
     datastore_model:save(?CTX, Doc).
 
 %% @private
--spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
-update(IndexId, Diff) ->
-    datastore_model:update(?CTX, IndexId, Diff).
+-spec update(name(), diff(), od_space:id()) -> {ok, doc()} | {error, term()}.
+update(IndexName, Diff, SpaceId) ->
+    ?get_index_id_and_run(IndexName, SpaceId, fun(IndexId) ->
+        datastore_model:update(?CTX, IndexId, Diff)
+    end).
 
 %% @private
 -spec query(id(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
@@ -351,6 +382,8 @@ query(IndexId, Options) ->
         {ok, _} = Ans ->
             Ans;
         {error, {<<"case_clause">>, <<"{not_found,deleted}">>}} ->
+            {error, not_found};
+        {error, {<<"not_found">>, _}} ->
             {error, not_found};
         Error ->
             Error
