@@ -20,6 +20,11 @@
 }}).
 
 %% HTTP 400 errors
+-define(ERROR_INVALID_NAME, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_name">>,
+    <<"Given name is not valid">>)
+).
 -define(ERROR_INVALID_ATTRIBUTE, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_attribute">>,

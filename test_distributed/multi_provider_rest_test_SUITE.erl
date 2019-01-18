@@ -50,6 +50,7 @@
     list_dir_range/1,
     list_spaces/1,
     get_space/1,
+    create_share/1,
     set_get_json_metadata/1,
     set_get_json_metadata_id/1,
     set_get_rdf_metadata/1,
@@ -86,6 +87,7 @@ all() ->
         list_dir_range,
         list_spaces,
         get_space,
+        create_share,
         set_get_json_metadata,
         set_get_json_metadata_id,
         set_get_rdf_metadata,
@@ -159,7 +161,7 @@ get_simple_file_distribution(Config) ->
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0_gsfd"])),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok,_} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
+    {ok, _} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
@@ -535,6 +537,47 @@ get_space(Config) ->
         DecodedBody
     ).
 
+create_share(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Dir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    {ok, FileGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir, 8#700),
+    {ok, ObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+
+    % No share name -> error
+    ?assertMatch({ok, 400, _, _},
+        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
+            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"">>)),
+
+    % Share name -> ok
+    ShareName = <<"Share name">>,
+    Payload = json_utils:encode(#{<<"name">> => ShareName}),
+    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _},
+        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
+            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)),
+    #{<<"shareId">> := ShareId} = json_utils:decode(Response),
+    ShareGuid = fslogic_uuid:guid_to_share_guid(FileGuid, ShareId),
+    ?assertMatch(
+        {ok, #document{key = ShareId, value = #od_share{
+            root_file = ShareGuid, name = ShareName, space = SpaceId
+        }}},
+        rpc:call(WorkerP1, share_logic, get, [?ROOT_SESS_ID, ShareId])
+    ),
+
+    % Cannot share the same dir twice
+    ?assertMatch({ok, 400, _, _},
+        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
+            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)),
+
+
+    % Remove the share and try again
+    ok = lfm_proxy:remove_share(WorkerP1, SessionId, ShareId),
+    ?assertMatch({ok, 200, _, _},
+        rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
+            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)).
+
+
 set_get_json_metadata(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -806,7 +849,7 @@ list_transfers(Config) ->
 
     % Check if listing different
     ?assertMatch(AllTransfers, All(P1), ?ATTEMPTS),
-        ?assertMatch(AllTransfers, All(P2), ?ATTEMPTS),
+    ?assertMatch(AllTransfers, All(P2), ?ATTEMPTS),
     ?assertMatch(true, length(Ended(P1)) > OneFourth, ?ATTEMPTS),
     ?assertMatch(true, length(Ended(P2)) > OneFourth, ?ATTEMPTS),
 
@@ -961,6 +1004,11 @@ init_per_testcase(metric_get, Config) ->
     end),
     init_per_testcase(all, Config);
 
+init_per_testcase(create_share, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:mock_share_logic(Config),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
@@ -973,6 +1021,11 @@ end_per_testcase(metric_get = Case, Config) ->
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, changes),
+    end_per_testcase(all, Config);
+
+end_per_testcase(create_share, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:unmock_share_logic(Config),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
