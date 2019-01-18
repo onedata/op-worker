@@ -235,12 +235,12 @@ get_event_manager(MgrRef) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private  @doc
+%% @private
+%% @doc
 %% Sends message to event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_event_managers(Message :: term(), Managers :: [pid()]) ->
-    ok.
+-spec send_to_event_managers(Message :: term(), Managers :: [pid()]) -> ok.
 send_to_event_managers({aggregated, Messages}, Managers) ->
     lists:foreach(fun(Message) ->
         send_to_event_managers(Message, Managers)
@@ -263,6 +263,13 @@ subtract_unique(ListA, ListB) ->
     SetB = gb_sets:from_list(ListB),
     gb_sets:to_list(gb_sets:subtract(SetA, SetB)).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends message to event manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_event_manager(Managers :: pid(), Message :: term(), RetryCounter :: non_neg_integer()) -> ok.
 send_to_event_manager(Manager, Message, 0) ->
     ok = event_manager:send(Manager, Message);
 send_to_event_manager(Manager, Message, RetryCounter) ->

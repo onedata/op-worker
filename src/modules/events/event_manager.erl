@@ -449,6 +449,13 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
         subscriptions = Subs
     }.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Retries to handle request if counter is not 0.
+%% @end
+%%--------------------------------------------------------------------
+-spec retry_handle(#state{}, Request :: term(), RetryCounter :: non_neg_integer()) -> {noreply, NewState :: #state{}}.
 retry_handle(State, Request, 0) ->
     case application:get_env(?APP_NAME, log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
