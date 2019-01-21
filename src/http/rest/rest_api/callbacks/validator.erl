@@ -395,8 +395,9 @@ parse_metadata_type(Req, State) ->
 -spec parse_name(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_name(Req, State) ->
-    {Name, NewReq} = qs_val(<<"name">>, Req),
-    {State#{name => Name}, NewReq}.
+    {ok, Body, NewReq} = cowboy_req:read_body(Req),
+    JsonMap = json_utils:decode(Body),
+    {State#{name => maps:get(<<"name">>, JsonMap, undefined)}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
