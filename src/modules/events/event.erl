@@ -269,19 +269,13 @@ subtract_unique(ListA, ListB) ->
 %% Sends message to event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_event_manager(Managers :: pid(), Message :: term(), RetryCounter :: non_neg_integer()) -> ok.
+-spec send_to_event_manager(Manager :: pid(), Message :: term(), RetryCounter :: non_neg_integer()) -> ok.
 send_to_event_manager(Manager, Message, 0) ->
     ok = event_manager:send(Manager, Message);
 send_to_event_manager(Manager, Message, RetryCounter) ->
     try
         ok = event_manager:send(Manager, Message)
     catch
-        exit:{noproc, _} ->
-            ?debug("No event manager for message ~p, retry", [Message]),
-            send_to_event_manager(Manager, Message, RetryCounter - 1);
-        exit:{normal, _} ->
-            ?debug("Exit of event manager for message ~p, retry", [Message]),
-            send_to_event_manager(Manager, Message, RetryCounter - 1);
         exit:{timeout, _} ->
             ?debug("Timeout of event manager for message ~p, retry", [Message]),
             send_to_event_manager(Manager, Message, RetryCounter - 1);

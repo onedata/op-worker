@@ -319,8 +319,6 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
                 _ -> ok
             end,
 
-            % TODO VFS-4131 - react on error (send error if notify is in
-            % context? can handler crash?)
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
                 [?MODULE, State, Error, Reason])
     end;
