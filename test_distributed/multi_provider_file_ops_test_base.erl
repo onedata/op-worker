@@ -659,11 +659,6 @@ create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWrit
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
-    Workers = ?config(op_worker_nodes, Config),
-
-    lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, false)
-    end, Workers),
 
     delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
     delete_test_skeleton(Config, "Standard", false, false, false, false),
@@ -676,10 +671,6 @@ create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWrit
 
     delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
     delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
-
-    lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, unlink_on_create, true)
-    end, Workers),
 
     ok.
 
@@ -734,10 +725,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                         case CloseAfterVerify of
                             true ->
                                 ok = timer:sleep(timer:seconds(1)),
-                                lfm_proxy:close(W, Handle),
-                                % TODO - VFS-5015 - Delete sleep after fix of
-                                % race between create and delete of open file
-                                ok = timer:sleep(timer:seconds(1));
+                                ok = lfm_proxy:close(W, Handle);
                             _ ->
                                 ok
                         end;

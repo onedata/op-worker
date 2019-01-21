@@ -1079,7 +1079,7 @@ share_permission_denied_test(Config) ->
 storage_file_creation_should_be_delayed_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>, 8#755),
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
     {SfmHandle, _} = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
 
