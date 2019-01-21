@@ -725,6 +725,7 @@ create_duplicated_indexes_on_remote_providers(Config) ->
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpMapFun2 = index_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
     ExpError = ?ERROR_INDEX_NOT_FOUND,
+    ExpError2 = ?ERROR_AMBIGUOUS_INDEX_NAME,
 
     % get by simple name
     ?assertMatch({ok, #{
@@ -743,7 +744,7 @@ create_duplicated_indexes_on_remote_providers(Config) ->
         <<"spatial">> := false
     }}, get_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName), ?ATTEMPTS),
 
-    ?assertMatch(ExpError, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName), ?ATTEMPTS),
+    ?assertMatch(ExpError2, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName), ?ATTEMPTS),
 
     % get by extended name
     ?assertMatch({ok, #{
@@ -818,14 +819,14 @@ create_duplicated_indexes_on_remote_providers(Config) ->
 
     ?assertMatch(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query2(WorkerP2, #{}), ?ATTEMPTS),
-    ?assertEqual(ExpError, Query(WorkerP3, #{}), ?ATTEMPTS),
+    ?assertEqual(ExpError2, Query(WorkerP3, #{}), ?ATTEMPTS),
 
     % query the indexes by extended name
     Query@P1 = query_filter(Config, SpaceId, IndexName@P1),
     Query@P2 = query_filter2(Config, SpaceId, IndexName@P2),
 
     ?assertMatch(ExpGuids, Query@P1(WorkerP1, #{}), ?ATTEMPTS),
-    ?assertMatch(ExpError, Query@P2(WorkerP1, #{})),
+    ?assertMatch(ExpError, Query@P2(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query@P1(WorkerP2, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query@P2(WorkerP2, #{}), ?ATTEMPTS),
     ?assertEqual(ExpError, Query@P1(WorkerP3, #{}), ?ATTEMPTS),
@@ -836,7 +837,7 @@ create_duplicated_indexes_on_remote_providers(Config) ->
     Query@P2Short = query_filter2(Config, SpaceId, IndexName@P2Short),
 
     ?assertMatch(ExpGuids, Query@P1Short(WorkerP1, #{}), ?ATTEMPTS),
-    ?assertMatch(ExpError, Query@P2Short(WorkerP1, #{})),
+    ?assertMatch(ExpError, Query@P2Short(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query@P1Short(WorkerP2, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query@P2Short(WorkerP2, #{}), ?ATTEMPTS),
     ?assertEqual(ExpError, Query@P1Short(WorkerP3, #{}), ?ATTEMPTS),

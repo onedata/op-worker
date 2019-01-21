@@ -813,7 +813,7 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
         {ok, [#link{target = FileUuid}]} ->
             {ok, FileUuid};
         {ok, [#link{} | _]} ->
-            {error, not_found};
+            {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}
     end.

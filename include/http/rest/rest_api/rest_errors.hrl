@@ -268,6 +268,11 @@
     <<"error_invalid_format">>,
     <<"Invalid record \"", __Record/binary, "\" or it's specification.">>
 )).
+-define(ERROR_AMBIGUOUS_INDEX_NAME, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_ambiguous_index_name">>,
+    <<"Given index could not be found.">>)
+).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(

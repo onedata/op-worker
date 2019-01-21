@@ -208,10 +208,10 @@ delete(SpaceId, IndexName) ->
         case index:get(IndexId) of
             {ok, #document{value = #index{name = FullIndexName}}} ->
                 delete(IndexId),
-                couchbase_driver:delete_design_doc(?DISK_CTX, IndexId),
+                delete_design_doc(IndexId),
                 index_links:delete_links(FullIndexName, SpaceId);
             {error, not_found} ->
-                couchbase_driver:delete_design_doc(?DISK_CTX, IndexId),
+                delete_design_doc(IndexId),
                 index_links:delete_links(IndexName, SpaceId)
         end
     end,
@@ -387,6 +387,13 @@ query(IndexId, Options) ->
             {error, not_found};
         Error ->
             Error
+    end.
+
+-spec delete_design_doc(id()) -> ok.
+delete_design_doc(IndexId) ->
+    case couchbase_driver:delete_design_doc(?DISK_CTX, IndexId) of
+        ok -> ok;
+        {error, {<<"not_found">>, _}} -> ok
     end.
 
 %%-------------------------------------------------------------------

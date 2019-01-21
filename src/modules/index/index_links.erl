@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([add_link/3, list/4, delete_links/2, get_index_id/2]).
@@ -79,7 +80,7 @@ get_index_id(IndexName, TreeIds, SpaceId) ->
             {ok, IndexId};
         {ok, [#link{} | _]} ->
             ?error("More than one link associated with index name ~p ", [IndexName]),
-            {error, not_found};
+            {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}
     end.

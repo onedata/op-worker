@@ -15,6 +15,7 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -131,6 +132,8 @@ get_index(Req, State) ->
     case index:get_json(SpaceId, IndexName) of
         {ok, JSON} ->
             {json_utils:encode(JSON), Req3, State3};
+        {error, ?EINVAL} ->
+            throw(?ERROR_AMBIGUOUS_INDEX_NAME);
         {error, not_found} ->
             throw(?ERROR_INDEX_NOT_FOUND)
     end.

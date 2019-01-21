@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -98,6 +99,8 @@ query_index(Req, State) ->
         {ok, {Rows}} ->
             QueryResult = lists:map(fun(Row) -> maps:from_list(Row) end, Rows),
             {json_utils:encode(QueryResult), ReqWithSpatial, StateWithSpatial};
+        {error, ?EINVAL} ->
+            throw(?ERROR_AMBIGUOUS_INDEX_NAME);
         {error, not_found} ->
             throw(?ERROR_INDEX_NOT_FOUND)
     end.
