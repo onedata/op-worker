@@ -31,6 +31,8 @@
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
+-export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
+-export([mock_share_logic/1, unmock_share_logic/1]).
 
 -define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
 
@@ -505,6 +507,43 @@ unmock_provider_ids(Workers) ->
     rpc:multicall(Workers, provider_auth, delete, []),
     ok.
 
+-spec testmaster_mock_space_user_privileges([node()], od_space:id(), od_user:id(),
+    [privileges:space_privilege()]) -> ok.
+testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
+    rpc:multicall(Workers, simple_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
+    ok.
+
+-spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
+node_get_mocked_space_user_privileges(SpaceId, UserId) ->
+    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() -> {false, privileges:space_admin()} end),
+    Privileges.
+
+-spec mock_share_logic(proplists:proplist()) -> ok.
+mock_share_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, share_logic),
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
+        {ok, _} = od_share:save(#document{key = ShareId, value = #od_share{
+            name = Name,
+            space = SpaceId,
+            root_file = ShareFileGuid
+        }}),
+        {ok, ShareId}
+    end),
+    test_utils:mock_expect(Workers, share_logic, get, fun(_Auth, ShareId) ->
+        od_share:get(ShareId)
+    end),
+    test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
+        ok = od_share:delete(ShareId)
+    end).
+
+-spec unmock_share_logic(proplists:proplist()) -> ok.
+unmock_share_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, share_logic).
+
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -891,9 +930,9 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     GetSpaceFun = fun(_, SpaceId) ->
         SpaceName = proplists:get_value(SpaceId, Spaces),
         UserIds = proplists:get_value(SpaceId, Users, []),
-        EffUsers = maps:from_list(
-            [{UID, privileges:space_privileges()} || UID <- UserIds]
-        ),
+        EffUsers = maps:from_list(lists:map(fun(UID) ->
+            {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
+        end, UserIds)),
         {ok, #document{key = SpaceId, value = #od_space{
             name = SpaceName,
             providers = proplists:get_value(SpaceId, SpacesToProviders, maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])),
