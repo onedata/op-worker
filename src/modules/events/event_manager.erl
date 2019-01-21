@@ -463,5 +463,24 @@ retry_handle(State, Request, 0) ->
     end,
     {noreply, State};
 retry_handle(State, Request, RetryCounter) ->
-    State2 = start_event_streams(State),
+    State2 = check_streams(State),
     handle_cast({internal, RetryCounter - 1, Request}, State2).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if any stream registration/unregistration happened.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_streams(#state{}) -> NewState :: #state{}.
+check_streams(State) ->
+    receive
+        {'$gen_cast',{unregister_stream, _} = Request} ->
+            {noreply, State2} = handle_locally(Request, State),
+            check_streams(State2);
+        {'$gen_cast',{register_stream, _, _} = Request} ->
+            {noreply, State2} = handle_locally(Request, State),
+            check_streams(State2)
+    after
+        50 -> State
+    end.
