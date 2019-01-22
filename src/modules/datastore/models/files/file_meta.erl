@@ -366,8 +366,6 @@ get_child_uuid(ParentUuid, Name) ->
                     case get_child_uuid(ParentUuid, TreeId, Name2) of
                         {ok, Doc} ->
                             {ok, Doc};
-                        {error, not_found} ->
-                            get_child_uuid(ParentUuid, all, Name);
                         {error, Reason} ->
                             {error, Reason}
                     end;
