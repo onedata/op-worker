@@ -60,8 +60,6 @@ get_index_id(IndexName, SpaceId) ->
                     case get_index_id(IndexName2, TreeId, SpaceId) of
                         {ok, IndexId} ->
                             {ok, IndexId};
-                        {error, not_found} ->
-                            get_index_id(IndexName, all, SpaceId);
                         {error, Reason} ->
                             {error, Reason}
                     end;
