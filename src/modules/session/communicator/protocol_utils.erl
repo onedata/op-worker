@@ -12,15 +12,18 @@
 -module(protocol_utils).
 -author("Tomasz Lichon").
 
+-include("http/gui_paths.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("http/gui_paths.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([fill_proxy_info/2]).
--export([protocol_upgrade_request/1, verify_protocol_upgrade_response/1]).
+-export([
+    protocol_upgrade_request/1,
+    process_protocol_upgrade_request/1,
+    verify_protocol_upgrade_response/1
+]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -54,6 +57,28 @@ protocol_upgrade_request(Hostname) -> <<
     "Upgrade: ", ?CLIENT_PROTOCOL_UPGRADE_NAME, "\r\n"
     "\r\n"
 >>.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns ok if request contains proper upgrade header for client protocol.
+%% Otherwise informs about necessity of protocol upgrade.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_protocol_upgrade_request(cowboy_req:req()) ->
+    ok | {error, update_required}.
+process_protocol_upgrade_request(Req) ->
+    ConnTokens = cowboy_req:parse_header(<<"connection">>, Req, []),
+    case lists:member(<<"upgrade">>, ConnTokens) of
+        false ->
+            {error, upgrade_required};
+        true ->
+            case cowboy_req:parse_header(<<"upgrade">>, Req, []) of
+                [<<?CLIENT_PROTOCOL_UPGRADE_NAME>>] ->
+                    ok;
+                _ ->
+                    {error, upgrade_required}
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
