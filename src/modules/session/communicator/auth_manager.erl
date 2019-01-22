@@ -50,6 +50,12 @@ get_handshake_error(invalid_token) ->
             status = 'INVALID_MACAROON'
         }
     };
+get_handshake_error(bad_macaroon) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'INVALID_MACAROON'
+        }
+    };
 get_handshake_error(invalid_provider) ->
     #server_message{
         message_body = #handshake_response{

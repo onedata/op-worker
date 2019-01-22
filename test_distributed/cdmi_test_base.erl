@@ -60,8 +60,7 @@
 -define(TIMEOUT, timer:seconds(5)).
 
 user_1_token_header(Config) ->
-    #macaroon_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    {<<"Macaroon">>, Macaroon}.
+    rest_test_utils:user_token_header(Config, <<"user1">>).
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
