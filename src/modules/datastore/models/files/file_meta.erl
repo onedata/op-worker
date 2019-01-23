@@ -642,29 +642,33 @@ setup_onedata_user(UserId, EffSpaces) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add shareId to file meta
+%% Add shareId to file meta. Only one share per file is allowed.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
 add_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid},
-        fun(FileMeta = #file_meta{shares = Shares}) ->
-            {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
-        end).
+    update({uuid, FileUuid}, fun
+        (FileMeta = #file_meta{shares = []}) ->
+            {ok, FileMeta#file_meta{shares = [ShareId]}};
+        (#file_meta{shares = _}) ->
+            {error, already_exists}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove shareId from file meta
+%% Remove shareId from file meta. Only one share per file is allowed.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
 remove_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid},
-        fun(FileMeta = #file_meta{shares = Shares}) ->
-            {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}
-        end).
+    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+        case Shares of
+            [ShareId] -> {ok, FileMeta#file_meta{shares = []}};
+            _ -> {error, not_found}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -833,7 +837,7 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
         {ok, [#link{target = FileUuid}]} ->
             {ok, FileUuid};
         {ok, [#link{} | _]} ->
-            {error, not_found};
+            {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}
     end.

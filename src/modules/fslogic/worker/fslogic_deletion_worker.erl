@@ -133,7 +133,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    encapsulate_deletion(FileCtx, UserCtx, fun delete_deletion_link_and_file/2);
+    delete_file(FileCtx, UserCtx, fun delete_deletion_link_and_file/2);
 handle({dbsync_deletion_request, FileCtx}) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -143,7 +143,7 @@ handle({dbsync_deletion_request, FileCtx}) ->
             true ->
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
-                encapsulate_deletion(FileCtx, UserCtx, fun check_and_maybe_delete/2)
+                delete_file(FileCtx, UserCtx, fun check_and_maybe_delete_storage_file/2)
         end
     catch
         _:{badmatch, {error, not_found}} ->
@@ -165,6 +165,9 @@ handle(_Request) ->
 cleanup() ->
     ok.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private
@@ -173,9 +176,9 @@ cleanup() ->
 %% Otherwise removes storage file.
 %% @end
 %%-------------------------------------------------------------------
--spec check_and_maybe_delete(file_ctx:ctx(), user_ctx:ctx()) ->  
+-spec check_and_maybe_delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
-check_and_maybe_delete(FileCtx, UserCtx) ->
+check_and_maybe_delete_storage_file(FileCtx, UserCtx) ->
     {#document{key = Uuid, value = #file_meta{name = Name}},
         FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     try
@@ -199,7 +202,6 @@ check_and_maybe_delete(FileCtx, UserCtx) ->
             sfm_utils:delete_storage_file_without_location(FileCtx, UserCtx)
     end.
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -207,9 +209,9 @@ check_and_maybe_delete(FileCtx, UserCtx) ->
 %% and removes file document from metadata
 %% @end
 %%-------------------------------------------------------------------
--spec encapsulate_deletion(file_ctx:ctx(), user_ctx:ctx(), 
+-spec delete_file(file_ctx:ctx(), user_ctx:ctx(),
     fun((file_ctx:ctx(), user_ctx:ctx()) -> ok)) -> ok | {error, term()}.
-encapsulate_deletion(FileCtx, UserCtx, DeleteStorageFile) ->
+delete_file(FileCtx, UserCtx, DeleteStorageFile) ->
     try
         ok = DeleteStorageFile(FileCtx, UserCtx)
     catch

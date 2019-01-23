@@ -256,6 +256,9 @@ decode_user_ctx(Encoded, ?S3_HELPER_NAME) ->
 decode_user_ctx(Encoded, ?SWIFT_HELPER_NAME) ->
     [UserName, Password] = binary:split(Encoded, ?SEP, [global]),
     #{<<"username">> => UserName, <<"password">> => Password};
+decode_user_ctx(Encoded, ?WEBDAV_HELPER_NAME) ->
+    [CredentialsType, Credentials] = binary:split(Encoded, ?SEP, [global]),
+    #{<<"credentialsType">> => CredentialsType, <<"credentials">> => Credentials};
 decode_user_ctx(Encoded, HelperName) when
     HelperName =:= ?POSIX_HELPER_NAME orelse
         HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
@@ -287,6 +290,15 @@ encode_user_ctx(#{<<"username">> := UserName, <<"password">> := Password},
     ?SWIFT_HELPER_NAME
 ) ->
     encode(UserName, Password);
+encode_user_ctx(#{<<"credentialsType">> := CredentialsType, <<"credentials">> := Credentials},
+    ?WEBDAV_HELPER_NAME
+) ->
+    encode(CredentialsType, Credentials);
+encode_user_ctx(#{<<"credentialsType">> := CredentialsType = <<"none">>},
+    ?WEBDAV_HELPER_NAME
+) ->
+    % "credentials" field may not be present if "credentialsType" == 'none'
+    encode(CredentialsType, <<"">>);
 encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     HelperName =:= ?POSIX_HELPER_NAME orelse
         HelperName =:= ?GLUSTERFS_HELPER_NAME orelse

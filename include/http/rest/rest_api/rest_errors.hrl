@@ -20,6 +20,11 @@
 }}).
 
 %% HTTP 400 errors
+-define(ERROR_INVALID_NAME, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"invalid_name">>,
+    <<"Given name is not valid">>)
+).
 -define(ERROR_INVALID_ATTRIBUTE, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_attribute">>,
@@ -191,12 +196,6 @@
     <<"error_invalid_bbox">>,
     <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
 ).
-
--define(ERROR_INDEX_NOT_FOUND, ?ERROR_REPLY(
-    ?NOT_FOUND,
-    <<"error_index_not_found">>,
-    <<"Given index could not be found.">>)
-).
 -define(ERROR_INVALID_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"invalid_update_min_changes">>,
@@ -210,13 +209,18 @@
 -define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId, __IndexName, __SpaceId), ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_provider_not_supporting_index">>,
-    <<"Provider ", __ProviderId/binary, " does not support index ", __IndexName/binary, "in space ", __SpaceId/binary>>)
+    <<"Provider ", (__ProviderId)/binary, " does not support index ", (__IndexName)/binary, "in space ", (__SpaceId)/binary>>)
 ).
 -define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
     ?BAD_REQUEST,
     <<"error_index_function">>,
     <<"Processing query result failed."
     "Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
+).
+-define(ERROR_INDEX_ALREADY_EXISTS, ?ERROR_REPLY(
+    ?CONFLICT,
+    <<"error_index_already_exists">>,
+    <<"Index with given name already exists. You can modify the index using the PATCH request.">>)
 ).
 
 -define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(
@@ -269,6 +273,11 @@
     <<"error_invalid_format">>,
     <<"Invalid record \"", __Record/binary, "\" or it's specification.">>
 )).
+-define(ERROR_AMBIGUOUS_INDEX_NAME, ?ERROR_REPLY(
+    ?BAD_REQUEST,
+    <<"error_ambiguous_index_name">>,
+    <<"Given index could not be found.">>)
+).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(
@@ -299,6 +308,11 @@
     ?NOT_FOUND,
     <<"space_not_found">>,
     <<"The space could not be found.">>)
+).
+-define(ERROR_INDEX_NOT_FOUND, ?ERROR_REPLY(
+    ?NOT_FOUND,
+    <<"error_index_not_found">>,
+    <<"Given index could not be found.">>)
 ).
 
 -endif.

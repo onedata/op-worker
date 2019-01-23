@@ -15,6 +15,8 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
@@ -395,8 +397,9 @@ parse_metadata_type(Req, State) ->
 -spec parse_name(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_name(Req, State) ->
-    {Name, NewReq} = qs_val(<<"name">>, Req),
-    {State#{name => Name}, NewReq}.
+    {ok, Body, NewReq} = cowboy_req:read_body(Req),
+    JsonMap = json_utils:decode(Body),
+    {State#{name => maps:get(<<"name">>, JsonMap, undefined)}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -724,8 +727,9 @@ qs_val(Name, Req, Default) ->
 %% Parse query string.
 %% @end
 %%--------------------------------------------------------------------
+-spec parse_qs(cowboy_req:req()) -> any().
 parse_qs(Req) ->
-    lists:foldl(fun({Key, Val}, AccMap) ->
+    Params = lists:foldl(fun({Key, Val}, AccMap) ->
         case maps:get(Key, AccMap, undefined) of
             undefined ->
                 AccMap#{Key => Val};
@@ -734,4 +738,12 @@ parse_qs(Req) ->
             OldVal ->
                 AccMap#{Key => [Val, OldVal]}
         end
-    end, #{}, cowboy_req:parse_qs(Req)).
+    end, #{}, cowboy_req:parse_qs(Req)),
+    maps:fold(fun
+        (K, V, AccIn) when is_list(V) ->
+            AccIn#{K => lists:reverse(V)};
+        (_K, _V, AccIn) ->
+            AccIn
+    end, Params, Params).
+
+

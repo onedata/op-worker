@@ -32,6 +32,7 @@
     replicas_index,
     spaces,
     space_by_id,
+    shares_by_id,
     transfers,
     transfer_by_id,
     transfers_mock,

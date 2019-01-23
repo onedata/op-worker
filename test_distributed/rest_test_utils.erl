@@ -42,7 +42,11 @@ request(Node, URL, Method, Headers, Body, Opts) ->
 
 user_token_header(Config, User)  ->
     #macaroon_auth{macaroon = Macaroon} = ?config({auth, User}, Config),
-    {<<"Macaroon">>, Macaroon}.
+    case rand:uniform(3) of
+        1 -> {<<"Macaroon">>, Macaroon};
+        2 -> {<<"X-Auth-Token">>, Macaroon};
+        3 -> {<<"Authorization">>, <<"Bearer ", Macaroon/binary>>}
+    end.
 
 
 %%%===================================================================

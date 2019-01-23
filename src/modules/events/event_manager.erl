@@ -146,19 +146,16 @@ handle_cast({internal, RetryCounter, Request},
     catch
         exit:{noproc, _} ->
             ?debug("No proc to handle request ~p, retry", [Request]),
-            send_retry_message(Request, RetryCounter),
-            {noreply, State};
+            retry_handle(State, Request, RetryCounter);
         exit:{normal, _} ->
             ?debug("Exit of stream process for request ~p, retry", [Request]),
-            send_retry_message(Request, RetryCounter),
-            {noreply, State};
+            retry_handle(State, Request, RetryCounter);
         exit:{timeout, _} ->
-            ?debug("Exit of stream process for request ~p, retry", [Request]),
-            send_retry_message(Request, RetryCounter),
-            {noreply, State};
+            ?debug("Timeout of stream process for request ~p, retry", [Request]),
+            retry_handle(State, Request, RetryCounter);
         Reason1:Reason2 ->
             ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
-            {noreply, State}
+            retry_handle(State, Request, RetryCounter)
     end;
 handle_cast(Request, State) ->
     Retries = application:get_env(?APP_NAME, event_manager_retries, 1),
@@ -180,10 +177,6 @@ handle_info({'EXIT', MgrSup, shutdown}, #state{manager_sup = MgrSup} = State) ->
 handle_info(timeout, State) ->
     State2 = start_event_streams(State),
     {noreply, State2};
-
-handle_info({retry_request, RetryCounter, Request}, State) ->
-    handle_retry_info(Request, RetryCounter),
-    {noreply, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -317,7 +310,7 @@ handle_locally({unregister_stream, StmKey}, #state{streams = Stms} = State) ->
 handle_locally(#event{} = Evt, #state{streams = Stms} = State) ->
     StmKey = event_type:get_stream_key(Evt),
     Stm = maps:get(StmKey, Stms, undefined),
-    event_stream:send(Stm, Evt),
+    ok = event_stream:send(Stm, Evt),
     {noreply, State};
 
 handle_locally(#flush_events{} = Request, #state{} = State) ->
@@ -325,7 +318,7 @@ handle_locally(#flush_events{} = Request, #state{} = State) ->
     #state{streams = Stms, subscriptions = Subs} = State,
     {_, StmKey} = maps:get(SubId, Subs, {local, undefined}),
     Stm = maps:get(StmKey, Stms, undefined),
-    event_stream:send(Stm, {flush, NotifyFun}),
+    ok = event_stream:send(Stm, {flush, NotifyFun}),
     {noreply, State};
 
 handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
@@ -338,7 +331,7 @@ handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
     StmKey = subscription_type:get_stream_key(Sub),
     NewStms = case maps:find(StmKey, Stms) of
         {ok, Stm} ->
-            event_stream:send(Stm, {add_subscription, Sub}),
+            ok = event_stream:send(Stm, {add_subscription, Sub}),
             Stms;
         error ->
             {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
@@ -354,7 +347,7 @@ handle_locally(#subscription_cancellation{id = SubId} = Can, #state{} = State) -
     case maps:get(SubId, Subs, {local, undefined}) of
         {local, StmKey} ->
             Stm = maps:get(StmKey, Stms, undefiend),
-            event_stream:send(Stm, {remove_subscription, SubId});
+            ok = event_stream:send(Stm, {remove_subscription, SubId});
         {remote, ProviderId} ->
             handle_remotely(Can, ProviderId, State)
     end,
@@ -459,28 +452,35 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends retry request.
+%% Retries to handle request if counter is not 0.
 %% @end
 %%--------------------------------------------------------------------
--spec send_retry_message(Request :: term(), RetryCounter :: non_neg_integer()) ->
-    reference() | max_retries.
-send_retry_message(Request, 0) ->
+-spec retry_handle(#state{}, Request :: term(), RetryCounter :: non_neg_integer()) -> {noreply, NewState :: #state{}}.
+retry_handle(State, Request, 0) ->
     case application:get_env(?APP_NAME, log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
         false -> ?debug("Max retries for request: ~p", [Request])
     end,
-    max_retries;
-send_retry_message(Request, RetryCounter) ->
-    RetryAfter = application:get_env(?APP_NAME, event_manager_retry_after, 1000),
-    erlang:send_after(RetryAfter, self(), {retry_request, RetryCounter, Request}).
+    {noreply, State};
+retry_handle(State, Request, RetryCounter) ->
+    State2 = check_streams(State),
+    handle_cast({internal, RetryCounter - 1, Request}, State2).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles retry request.
+%% Checks if any stream registration/unregistration happened.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_retry_info(Request :: term(), RetryCounter :: non_neg_integer()) ->
-    ok.
-handle_retry_info(Request, RetryCounter) ->
-    gen_server2:cast(self(), {internal, RetryCounter - 1, Request}).
+-spec check_streams(#state{}) -> NewState :: #state{}.
+check_streams(State) ->
+    receive
+        {'$gen_cast',{unregister_stream, _} = Request} ->
+            {noreply, State2} = handle_locally(Request, State),
+            check_streams(State2);
+        {'$gen_cast',{register_stream, _, _} = Request} ->
+            {noreply, State2} = handle_locally(Request, State),
+            check_streams(State2)
+    after
+        50 -> State
+    end.

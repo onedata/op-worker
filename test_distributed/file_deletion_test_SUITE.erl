@@ -41,7 +41,8 @@
     remove_file_on_ceph_using_client/1,
     remove_opened_file_posix_test/1,
     remove_opened_file_ceph_test/1,
-    correct_file_on_storage_is_deleted_test/1
+    correct_file_on_storage_is_deleted_new_file_first/1,
+    correct_file_on_storage_is_deleted_old_file_first/1
 ]).
 
 -define(TEST_CASES, [
@@ -60,7 +61,8 @@
     remove_file_on_ceph_using_client,
     remove_opened_file_posix_test,
     remove_opened_file_ceph_test,
-    correct_file_on_storage_is_deleted_test
+    correct_file_on_storage_is_deleted_new_file_first,
+    correct_file_on_storage_is_deleted_old_file_first
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -377,10 +379,19 @@ remove_opened_file_test_base(Config, SpaceName) ->
     {ok, _} = lfm_proxy:write(Worker, Handle1, Size, Content1),
     ?assertEqual({ok, <<Content1/binary, Content1/binary>>}, lfm_proxy:read(Worker, Handle1, 0, 2*Size)),
     
-    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)).
+    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)),
+    lfm_proxy:close_all(Worker),
+    {ok, Handle3} = lfm_proxy:open(Worker, SessId(User2), {path, FilePath}, read),
+    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle3, 0, Size)).
 
 
-correct_file_on_storage_is_deleted_test(Config) ->
+correct_file_on_storage_is_deleted_new_file_first(Config) ->
+    correct_file_on_storage_is_deleted_test_base(Config, true).
+
+correct_file_on_storage_is_deleted_old_file_first(Config) ->
+    correct_file_on_storage_is_deleted_test_base(Config, false).
+
+correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     SpaceId = <<"space1">>,
@@ -401,13 +412,21 @@ correct_file_on_storage_is_deleted_test(Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
     ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
 
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
-    ok = lfm_proxy:close(Worker, H2),
+    case DeleteNewFileFirst of
+        true ->
+            ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
+            ok = lfm_proxy:close(Worker, H2),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ok = lfm_proxy:close(Worker, H1);
 
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
-    
-    ok = lfm_proxy:close(Worker, H1),
+        false ->
+            ok = lfm_proxy:close(Worker, H1),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
+            ok = lfm_proxy:close(Worker, H2)
+    end,
 
     ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
     ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60).
@@ -480,7 +499,8 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= remove_opened_file_posix_test;
     Case =:= remove_opened_file_ceph_test;
-    Case =:= correct_file_on_storage_is_deleted_test ->
+    Case =:= correct_file_on_storage_is_deleted_new_file_first;
+    Case =:= correct_file_on_storage_is_deleted_old_file_first ->
     initializer:remove_pending_messages(),
     ssl:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
