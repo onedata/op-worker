@@ -1558,7 +1558,7 @@ init_per_testcase(Case, Config) when
         {ok, ?GROUP}
     end),
     test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
-        error(test_reason)
+        error(test_error)
     end),
     init_per_testcase(default, Config);
 

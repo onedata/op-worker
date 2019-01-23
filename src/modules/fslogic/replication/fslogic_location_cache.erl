@@ -34,9 +34,9 @@
 -export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0, get_doc_opts/0]).
 
 %% Location getters/setters
--export([get_location/2, get_location/3, save_location/1, cache_location/1,
-    update_location/4, create_location/1, create_location/2, delete_location/2,
-    force_flush/1]).
+-export([get_location/2, get_location/3, save_location/1, save_location/2,
+    cache_location/1, update_location/4, create_location/1, create_location/2,
+    delete_location/2, force_flush/1]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, set_blocks/2, set_final_blocks/2,
     update_blocks/2, clear_blocks/2]).
@@ -97,17 +97,27 @@ get_location(LocId, FileUuid, BlocksOptions) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Saves location document in cache or datastore.
+%% @equiv save_location(FileLocation, undefined).
 %% @end
 %%-------------------------------------------------------------------
 -spec save_location(file_location:doc()) -> {ok, file_location:id()} | {error, term()}.
-save_location(#document{value = #file_location{uuid = Uuid}} = FileLocation) ->
+save_location(FileLocation) ->
+    save_location(FileLocation, undefined).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Saves location document in cache or datastore.
+%% @end
+%%-------------------------------------------------------------------
+-spec save_location(file_location:doc(), od_user:id() | undefined) ->
+    {ok, file_location:id()} | {error, term()}.
+save_location(#document{value = #file_location{uuid = Uuid}} = FileLocation, UserIdOrUndefined) ->
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
-        file_location:save_and_update_quota(FileLocation)
+        file_location:save_and_update_quota(FileLocation, UserIdOrUndefined)
     end).
 
 %%-------------------------------------------------------------------

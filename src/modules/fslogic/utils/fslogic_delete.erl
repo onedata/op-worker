@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
 remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
-    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true, false).
+    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true, true).
 
 %%--------------------------------------------------------------------
 %% @doc
