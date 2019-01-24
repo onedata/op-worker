@@ -361,7 +361,7 @@ remove_subscription(SessId, SubId, Subs) ->
         {ok, session_only} ->
             maps:remove(SubId, Subs);
         {ok, Key} ->
-            subscription_manager:remove_subscriber(Key, SessId),
+            ok = subscription_manager:remove_subscriber(Key, SessId),
             maps:remove(SubId, Subs);
         error ->
             Subs
@@ -380,8 +380,14 @@ remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
         (_, session_only, _) ->
             ok;
         (_, Key, _) ->
-            % TODO VFS-4131 - react on error
-            subscription_manager:remove_subscriber(Key, SessId)
+            case subscription_manager:remove_subscriber(Key, SessId) of
+                ok ->
+                    ok;
+                Error ->
+                    ?error("Removing subscriptions error: ~p, for key ~p, session ~p",
+                        [Error, Key, SessId]),
+                    Error
+            end
     end, ok, Subs).
 
 %%--------------------------------------------------------------------
