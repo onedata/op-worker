@@ -133,7 +133,13 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    delete_file(FileCtx, UserCtx, fun delete_deletion_link_and_file/2);
+    case file_ctx:get_local_file_location_doc(FileCtx) of
+        {#document{value = #file_location{storage_file_created = true}}, FileCtx} ->
+            delete_file(FileCtx, UserCtx, fun delete_deletion_link_and_file/2);
+        _ ->
+            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
+            file_meta:delete_without_link(FileDoc)
+    end;
 handle({dbsync_deletion_request, FileCtx}) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
