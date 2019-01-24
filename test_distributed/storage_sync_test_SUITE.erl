@@ -96,6 +96,7 @@
     create_directory_import_many_test,
     create_directory_export_test,
     create_file_import_test,
+    % todo VFS-5203 add more tests of sync handling suffixed files
     sync_should_not_reimport_deleted_but_still_opened_file,
     sync_should_not_import_recreated_file_with_suffix_on_storage,
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage,
@@ -318,6 +319,8 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
     {ok, H1} = lfm_proxy:open(W1, SessId, {guid, G1}, write),
     {ok, _} = lfm_proxy:write(W1, H1, 0, ?TEST_DATA2),
     ok = lfm_proxy:close(W1, H1),
+
+    timer:sleep(timer:seconds(1)), %ensure that file1 will be updated
 
     % open file
     {ok, _} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G1}, read), ?ATTEMPTS),

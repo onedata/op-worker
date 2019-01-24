@@ -210,7 +210,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list, []),
     ?assertEqual(0, length(ClearedOpenFiles)),
 
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false ->
@@ -228,6 +228,8 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
+    UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
+    ok = rpc:call(Worker, fslogic_deletion_worker, add_deletion_link_and_remove_normal_link, [FileCtx, UserCtx]),
 
     ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, FileCtx})),
 
@@ -257,7 +259,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, UserCtx, FileCtx, false})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false ->

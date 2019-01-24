@@ -142,7 +142,9 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                 {error, not_found} ->
                     case HasSuffix of
                         true ->
-                            ?error("Deletion link for ~p is unexpectedly missing", [FileName]),
+                            {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
+                            Path = filename:join([ParentStorageFileId, FileName]),
+                            ?error("Deletion link for ~p is unexpectedly missing", [Path]),
                             {processed, undefined, Job2};
                         false ->
                             maybe_import_file(Job2)
@@ -362,6 +364,14 @@ try_to_resolve_child_link(FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     fslogic_path:to_uuid(ParentUuid, FileName).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function tries to resolve child's deletion_link
+%% @end
+%%-------------------------------------------------------------------
+-spec try_to_resolve_child_deletion_link(file_meta:name(), file_ctx:ctx()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
 try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     fslogic_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).

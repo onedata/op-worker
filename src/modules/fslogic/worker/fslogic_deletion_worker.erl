@@ -23,7 +23,7 @@
 %% API
 -export([init/1, handle/1, cleanup/0]).
 -export([request_deletion/3, request_open_file_deletion/1,
-    request_remote_deletion/1]).
+    request_remote_deletion/1, add_deletion_link_and_remove_normal_link/2]).
 
 %%%===================================================================
 %%% API
@@ -188,11 +188,7 @@ check_and_maybe_delete_storage_file(FileCtx, UserCtx) ->
             {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                 ok;
             _ ->
-                ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-                Scope = file_ctx:get_space_id_const(FileCtx3),
-                {DeletionLinkName, FileCtx4} = file_deletion_link_name(FileCtx3),
-                file_meta:delete_child_link(ParentUuid, Scope, Uuid, DeletionLinkName),
-                sfm_utils:recursive_delete(FileCtx4, UserCtx)
+                sfm_utils:recursive_delete(FileCtx3, UserCtx)
         end
     catch
         E1:E2 ->

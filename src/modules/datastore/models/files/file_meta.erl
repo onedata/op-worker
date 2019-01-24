@@ -770,7 +770,7 @@ is_hidden(FileName) ->
 %%--------------------------------------------------------------------
 -spec is_deletion_link(binary()) -> boolean().
 is_deletion_link(LinkName) ->
-    case binary:match(LinkName, ?FILE_DELETION_SUFFIX) of
+    case binary:match(LinkName, ?FILE_DELETION_LINK_SUFFIX) of
         nomatch -> false;
         _ -> true
     end.
