@@ -98,7 +98,9 @@ start_link(Mgr, Sub, SessId) ->
 %% Sends message to event_stream.
 %% @end
 %%--------------------------------------------------------------------
--spec send(pid(), term()) -> ok.
+-spec send(pid() | undefined, term()) -> ok.
+send(undefined, _Message) ->
+    ok;
 send(Stream, Message) ->
     gen_server2:call(Stream, Message, timer:minutes(1)).
 

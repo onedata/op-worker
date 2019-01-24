@@ -65,7 +65,7 @@ events_aggregation_stream_error_test(Config) ->
             case get(first_tested) of
                 undefined ->
                     put(first_tested, true),
-                    meck:passthrough([undefined, Message]);
+                    meck:passthrough([error, Message]);
                 _ ->
                     meck:passthrough([Stream, Message])
 
@@ -108,7 +108,7 @@ events_aggregation_manager_error_test(Config) ->
             case get(first_tested) of
                 undefined ->
                     put(first_tested, true),
-                    meck:passthrough([undefined, Message]);
+                    meck:passthrough([error, Message]);
                 _ ->
                     meck:passthrough([Stream, Message])
 
@@ -158,7 +158,7 @@ events_flush_stream_error_test(Config) ->
             case get(first_tested) of
                 undefined ->
                     put(first_tested, true),
-                    meck:passthrough([undefined, Message]);
+                    meck:passthrough([error, Message]);
                 _ ->
                     meck:passthrough([Stream, Message])
 
