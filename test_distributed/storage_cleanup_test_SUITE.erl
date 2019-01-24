@@ -278,6 +278,7 @@ remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) -
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(WorkerP2, StorageDirPath2)),
     ?assertEqual({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
+
     ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid})),
 
     % then

@@ -23,7 +23,7 @@
 %% API
 -export([init/1, handle/1, cleanup/0]).
 -export([request_deletion/3, request_open_file_deletion/1,
-    request_remote_deletion/1]).
+    request_remote_deletion/1, add_deletion_link_and_remove_normal_link/2]).
 
 %%%===================================================================
 %%% API
@@ -120,6 +120,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         case file_handles:exists(FileUuid) of
             true ->
+                add_deletion_link_and_remove_normal_link(FileCtx, UserCtx),
                 ok = file_handles:mark_to_remove(FileCtx),
                 fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
             false ->
@@ -132,7 +133,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     ok;
 handle({open_file_deletion_request, FileCtx}) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    delete_file(FileCtx, UserCtx, fun sfm_utils:recursive_delete/2);
+    delete_file(FileCtx, UserCtx, fun delete_deletion_link_and_file/2);
 handle({dbsync_deletion_request, FileCtx}) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -222,4 +223,50 @@ delete_file(FileCtx, UserCtx, DeleteStorageFile) ->
     end,
     {FileDoc, _FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     file_meta:delete_without_link(FileDoc).
-    
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is used to delete the file which deletion was delayed
+%% due to existing handles. It removes the file and its deletion_link,
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_deletion_link_and_file(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+delete_deletion_link_and_file(FileCtx, UserCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
+    {DeletionLinkName, FileCtx3} = file_deletion_link_name(FileCtx2),
+    Scope = file_ctx:get_space_id_const(FileCtx3),
+    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, DeletionLinkName),
+    sfm_utils:recursive_delete(FileCtx3, UserCtx).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function adds a deletion_link for the file that is to be deleted.
+%% It also deletes normal link from parent to the file.
+%% @end
+%%-------------------------------------------------------------------
+-spec add_deletion_link_and_remove_normal_link(file_ctx:ctx(), user_ctx:ctx()) -> ok.
+add_deletion_link_and_remove_normal_link(FileCtx, UserCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
+    ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
+    {DeletionLinkName, FileCtx4} = file_deletion_link_name(FileCtx3),
+    Scope = file_ctx:get_space_id_const(FileCtx4),
+    ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
+    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Utility function that returns deletion_link name for given file.
+%% @end
+%%-------------------------------------------------------------------
+-spec file_deletion_link_name(file_ctx:ctx()) -> {file_meta:name(), file_ctx:ctx()}.
+file_deletion_link_name(FileCtx) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    BaseName = filename:basename(StorageFileId),
+    {?FILE_DELETION_LINK_NAME(BaseName), FileCtx2}.

@@ -28,7 +28,7 @@
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
--export([delete_child_link/4, foreach_child/3]).
+-export([delete_child_link/4, foreach_child/3, add_child_link/4]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_parent/1, get_parent_uuid/1]).
@@ -279,6 +279,17 @@ delete_without_link(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Adds link from parent to child
+%% @end
+%%--------------------------------------------------------------------
+-spec add_child_link(uuid(), datastore_doc:scope(), name(), uuid()) ->  ok | {error, term()}.
+add_child_link(ParentUuid, Scope, Name, Uuid) ->
+    Ctx = ?CTX#{scope => Scope},
+    Link = {Name, Uuid},
+    ?extract_ok(datastore_model:add_links(Ctx, ParentUuid, oneprovider:get_id(), Link)).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Deletes link from parent to child
 %% @end
 %%--------------------------------------------------------------------
@@ -289,17 +300,14 @@ delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     [#link{tree_id = ProviderId, name = FileName, rev = Rev}] = lists:filter(fun
         (#link{target = Uuid}) -> Uuid == FileUuid
     end, Links),
+    Ctx = ?CTX#{scope => Scope},
+    Link = {FileName, Rev},
     case oneprovider:is_self(ProviderId) of
         true ->
-            ok = datastore_model:delete_links(
-                ?CTX#{scope => Scope}, ParentUuid, ProviderId, {FileName, Rev}
-            );
+            ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
         false ->
-            ok = datastore_model:mark_links_deleted(
-                ?CTX#{scope => Scope}, ParentUuid, ProviderId, {FileName, Rev}
-            )
-    end,
-    ok.
+            ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -402,9 +410,9 @@ list_children(Entry, Offset, Size, Token) ->
         end,
         Result = datastore_model:fold_links(?CTX, FileUuid, all, fun
             (Link = #link{name = Name}, Acc) ->
-                case is_hidden(Name) of
-                    true -> {ok, Acc};
-                    false -> {ok, [Link | Acc]}
+                case {is_hidden(Name), is_deletion_link(Name)} of
+                    {false, false} -> {ok, [Link | Acc]};
+                    _ -> {ok, Acc}
                 end
         end, [], Opts),
         case Result of
@@ -751,6 +759,18 @@ is_hidden(FileName) ->
     case FileName of
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given link is a deletion link.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_deletion_link(binary()) -> boolean().
+is_deletion_link(LinkName) ->
+    case binary:match(LinkName, ?FILE_DELETION_LINK_SUFFIX) of
+        nomatch -> false;
+        _ -> true
     end.
 
 %%--------------------------------------------------------------------
