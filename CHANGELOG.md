@@ -4,6 +4,59 @@
 CHANGELOG
 ---------
 
+### 18.02.1
+
+* VFS-5139 Handle remote events timeout
+* VFS-5180 improvements of storage_sync mechanism:     - sync now understands and properly handles suffixes for conflicted files     - sync does not synchronize files for which deletion has been delayed due to existing handles     - race between creation of file_meta and file_location docs has been removed, now file_location is always created before file_meta     - this commit also adds tests of implemented improvements
+* VFS-5196 Added bearer authentication
+* VFS-5195 return error when file referenced by explicit name and tree_id is not_found
+* VFS-5165 return error when index referenced by explicit name and tree_id is not_found
+* VFS-5165 handle conflicting indexes' names
+* VFS-5190 Add REST enpoint for creating shares, make sure only directories can be shared and only one share per dir is allowed
+* fix missing function clauses for encoding and decoding webdav credentials in luma_cache module
+* VFS-5141 Fixed conflicting files names on storage
+* VFS-5139 Add notify when flush fails
+* VFS-5154 Clean no_dot_erlang scripts
+* VFS-4751 Ensure forward compatiblity of group/space privileges changing in future Onezone versions
+* VFS-5139 Improve events reliability
+* VFS-5161 Use new configuration endpoint for op compatibility
+* VFS-5161 Check both current and deprecated endpoints for compatibility check
+* VFS-5161 Add endpoint /api/v3/oneprovider/configuration
+* VFS-5142 Clean documents from memory when session is broken
+* VFS-5121 support modification of file-popularity-config
+* VFS-5121 introduce popularity function in the file-popularity view
+* VFS-5077 Update communicator
+* VFS-5023 refactor, move autocleaning util modules to utils directory
+* VFS-5110 check arguments order when calling aggregate_file_read_events
+* VFS-5023 fix test, add 2 fields to auto_cleaning_run report to prepare for infinite scroll over reports
+* VFS-5023 code improvement, revert sorting order of file_popularity_view, fix tests
+* VFS-5077 Refactor provider communicator
+* VFS-5077 Refactor communicator
+* VFS-5077 Refactor auth managers
+* VFS-5077 Refactor session manager worker
+* VFS-5122 Update GlusterFS to 3.12.15 on CentOS
+* VFS-5077 Refactor session manager
+* VFS-5077 Refactor session open files management
+* VFS-5023 refactor of auto-cleaning
+* VFS-5077 Refactor session module
+* VFS-5077 Refactor handshake error handling
+* VFS-4650 Added writing provider macaroon to a file
+* VFS-4977 document new metadata changes API
+* VFS-5077 Further refactor of event_router
+* VFS-5077 Create async request manager
+* VFS-4977 refactor space changes streaming
+* VFS-5021 Fixed changes stream not closing on disconnection
+* VFS-5077 Refactor streams routing
+* VFS-5077 Events refactoring
+* VFS-5046 escape specified map function when updating index
+* VFS-4970 Documents expire
+* VFS-4925 Added check of origin header in ws connection handshake
+* Updating GUI, including: VFS-5038-allow-empty-handle-metadata * allow empty handle metadata * fixes in share page * fixed handle detection after save
+* VFS-4825 call replica_deletion_master:cancel on eviction cancellation
+* VFS-4825 replace eviction_worker with new one using gen_transfer_worker
+* VFS-4825 add initial implementation of transfer_worker_behaviour
+
+
 ### 18.02.0-rc13
 
 * 8.Updating GUI, including: VFS-4980-index-transfers * VFS-4980 Added support for index transfers
