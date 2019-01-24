@@ -45,6 +45,7 @@ load_msg_defs() ->
 -spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session:id()) ->
     {ok, ClientMsg :: #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
+
     DecodedMsg = messages:decode_msg(Message, 'ClientMessage'),
 %%    DecodedMsg = enif_protobuf:decode(Message, 'ClientMessage'),
 
@@ -77,6 +78,7 @@ deserialize_client_message(Message, SessionId) ->
 -spec deserialize_server_message(Message :: binary(), SessionId :: undefined | session:id()) ->
     {ok, ClientMsg :: #server_message{}} | no_return().
 deserialize_server_message(Message, _SessionId) ->
+
     DecodedMsg = messages:decode_msg(Message, 'ServerMessage'),
 %%    DecodedMsg = enif_protobuf:decode(Message, 'ServerMessage'),
 
