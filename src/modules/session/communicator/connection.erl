@@ -6,7 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @TODO WRITEME
+%%% This module handles communication using clproto binary protocol.
+%%% It serves as incoming connection if peer (provider or client) initiates
+%%% it by performing http protocol upgrade on ?CLIENT_PROTOCOL_PATH path
+%%% or as outgoing connection if this provider connects to peer.
+%%% In incoming mode connection can receive `client_message`
+%%% and send `server_message` only. In outgoing mode it is the other way around.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection).
@@ -102,7 +107,8 @@ connect_to_provider(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout)
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @TODO WRITEME
+%% Tries to send a message and provides feedback about success or
+%% eventual errors while serializing/sending.
 %% @end
 %%-------------------------------------------------------------------
 -spec send_sync(pid(), message()) -> ok | {error, term()}.
@@ -112,7 +118,7 @@ send_sync(Pid, Msg) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @TODO WRITEME
+%% Schedules message to be sent.
 %% @end
 %%-------------------------------------------------------------------
 -spec send_async(pid(), message()) -> ok.
