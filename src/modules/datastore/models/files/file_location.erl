@@ -16,10 +16,10 @@
 -include("proto/oneclient/common_messages.hrl").
 
 % API
--export([local_id/1, id/2, critical_section/2, save_and_bump_version/1,
+-export([local_id/1, id/2, critical_section/2, save_and_bump_version/2,
     is_storage_file_created/1, get/2, get_local/1, get_version_vector/1]).
 -export([create/1, create/2, create_and_update_quota/2, save/1,
-    save_and_update_quota/1, get/1, update/2,
+    save_and_update_quota/2, get/1, update/2,
     delete/1, delete_and_update_quota/1, get_owner_id/1,
     set_last_replication_timestamp/2]).
 
@@ -79,9 +79,10 @@ critical_section(ResourceId, Fun) ->
 %% Increases version in version_vector and save document.
 %% @end
 %%--------------------------------------------------------------------
--spec save_and_bump_version(doc()) -> {ok, doc()} | {error, term()}.
-save_and_bump_version(FileLocationDoc) ->
-    fslogic_location_cache:save_location(version_vector:bump_version(FileLocationDoc)).
+-spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
+save_and_bump_version(FileLocationDoc, UserId) ->
+    fslogic_location_cache:save_location(
+        version_vector:bump_version(FileLocationDoc), UserId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -147,13 +148,17 @@ save(Doc = #document{value = #file_location{space_id = SpaceId}}) ->
 %% Saves file location and updates quota.
 %% @end
 %%--------------------------------------------------------------------
--spec save_and_update_quota(doc()) -> {ok, id()} | {error, term()}.
-save_and_update_quota(Doc = #document{key = Key, value = #file_location{
-    uuid = FileUuid,
-    space_id = SpaceId
-}}) ->
-    NewSize = count_bytes(Doc),
+-spec save_and_update_quota(doc(), od_user:id() | undefined) -> {ok, id()} | {error, term()}.
+save_and_update_quota(Doc = #document{
+    value = #file_location{uuid = FileUuid}
+}, undefined) ->
     {ok, UserId} = get_owner_id(FileUuid),
+    save_and_update_quota(Doc, UserId);
+save_and_update_quota(Doc = #document{
+    key = Key,
+    value = #file_location{space_id = SpaceId}
+}, UserId) ->
+    NewSize = count_bytes(Doc),
     case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),

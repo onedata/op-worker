@@ -39,7 +39,10 @@
     file_open_should_return_enoent_after_deletion/1,
     file_handle_should_work_after_deletion/1,
     remove_file_on_ceph_using_client/1,
-    remove_opened_file_test/1
+    remove_opened_file_posix_test/1,
+    remove_opened_file_ceph_test/1,
+    correct_file_on_storage_is_deleted_new_file_first/1,
+    correct_file_on_storage_is_deleted_old_file_first/1
 ]).
 
 -define(TEST_CASES, [
@@ -56,7 +59,10 @@
     file_open_should_return_enoent_after_deletion,
     file_handle_should_work_after_deletion,
     remove_file_on_ceph_using_client,
-    remove_opened_file_test
+    remove_opened_file_posix_test,
+    remove_opened_file_ceph_test,
+    correct_file_on_storage_is_deleted_new_file_first,
+    correct_file_on_storage_is_deleted_old_file_first
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -204,7 +210,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list, []),
     ?assertEqual(0, length(ClearedOpenFiles)),
 
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false ->
@@ -222,6 +228,8 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
+    UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
+    ok = rpc:call(Worker, fslogic_deletion_worker, add_deletion_link_and_remove_normal_link, [FileCtx, UserCtx]),
 
     ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, FileCtx})),
 
@@ -251,7 +259,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, UserCtx, FileCtx, false})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false ->
@@ -335,10 +343,15 @@ remove_file_on_ceph_using_client(Config0) ->
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 
-remove_opened_file_test(Config) ->
+remove_opened_file_posix_test(Config) ->
+    remove_opened_file_test_base(Config, <<"space1">>).
+
+remove_opened_file_ceph_test(Config) ->
+    remove_opened_file_test_base(Config, <<"space2">>).
+
+remove_opened_file_test_base(Config, SpaceName) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
-    SpaceName = <<"space2">>,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     
     User1 = <<"user1">>,
@@ -352,7 +365,7 @@ remove_opened_file_test(Config) ->
     {ok, Guid1} = lfm_proxy:create(Worker, SessId(User1), FilePath, 8#777),
     {ok, Handle1} = lfm_proxy:open(Worker, SessId(User1), {path, FilePath}, rdwr),
     {ok, _} = lfm_proxy:write(Worker, Handle1, 0, Content1),
-
+    
     % File2
     ok = lfm_proxy:unlink(Worker, SessId(User2), {path, FilePath}),
     {ok, _} = lfm_proxy:create(Worker, SessId(User2), FilePath, 8#777),
@@ -368,7 +381,58 @@ remove_opened_file_test(Config) ->
     {ok, _} = lfm_proxy:write(Worker, Handle1, Size, Content1),
     ?assertEqual({ok, <<Content1/binary, Content1/binary>>}, lfm_proxy:read(Worker, Handle1, 0, 2*Size)),
     
-    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)).
+    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)),
+    lfm_proxy:close_all(Worker),
+    {ok, Handle3} = lfm_proxy:open(Worker, SessId(User2), {path, FilePath}, read),
+    ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle3, 0, Size)).
+
+
+correct_file_on_storage_is_deleted_new_file_first(Config) ->
+    correct_file_on_storage_is_deleted_test_base(Config, true).
+
+correct_file_on_storage_is_deleted_old_file_first(Config) ->
+    correct_file_on_storage_is_deleted_test_base(Config, false).
+
+correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    SpaceId = <<"space1">>,
+    ParentGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    FileName = generator:gen_name(),
+    FilePath = fslogic_path:join([<<"/">>, SpaceId, FileName]),
+    
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, 8#665),
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, G1}),
+    {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath, 8#665),
+    {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
+
+    FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
+    {SfmHandle1, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx1]),
+    FileCtx2 = rpc:call(Worker, file_ctx, new_by_guid, [G2]),
+    {SfmHandle2, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx2]),
+
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+
+    case DeleteNewFileFirst of
+        true ->
+            ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
+            ok = lfm_proxy:close(Worker, H2),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ok = lfm_proxy:close(Worker, H1);
+
+        false ->
+            ok = lfm_proxy:close(Worker, H1),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
+            ok = lfm_proxy:close(Worker, H2)
+    end,
+
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60).
+    
 
 %===================================================================
 % SetUp and TearDown functions
@@ -434,7 +498,11 @@ init_per_testcase(Case, Config) when
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
-init_per_testcase(remove_opened_file_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= remove_opened_file_posix_test;
+    Case =:= remove_opened_file_ceph_test;
+    Case =:= correct_file_on_storage_is_deleted_new_file_first;
+    Case =:= correct_file_on_storage_is_deleted_old_file_first ->
     initializer:remove_pending_messages(),
     ssl:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(

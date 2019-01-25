@@ -18,6 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
@@ -97,7 +98,9 @@ start_link(Mgr, Sub, SessId) ->
 %% Sends message to event_stream.
 %% @end
 %%--------------------------------------------------------------------
--spec send(pid(), term()) -> ok.
+-spec send(pid() | undefined, term()) -> ok.
+send(undefined, _Message) ->
+    ok;
 send(Stream, Message) ->
     gen_server2:call(Stream, Message, timer:minutes(1)).
 
@@ -313,8 +316,11 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
         Error:Reason ->
-            % TODO VFS-4131 - react on error (send error if notify is in
-            % context? can handler crash?)
+            case Ctx of
+                #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?EAGAIN}});
+                _ -> ok
+            end,
+
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
                 [?MODULE, State, Error, Reason])
     end;
@@ -357,7 +363,7 @@ remove_subscription(SessId, SubId, Subs) ->
         {ok, session_only} ->
             maps:remove(SubId, Subs);
         {ok, Key} ->
-            subscription_manager:remove_subscriber(Key, SessId),
+            ok = subscription_manager:remove_subscriber(Key, SessId),
             maps:remove(SubId, Subs);
         error ->
             Subs
@@ -376,8 +382,14 @@ remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
         (_, session_only, _) ->
             ok;
         (_, Key, _) ->
-            % TODO VFS-4131 - react on error
-            subscription_manager:remove_subscriber(Key, SessId)
+            case subscription_manager:remove_subscriber(Key, SessId) of
+                ok ->
+                    ok;
+                Error ->
+                    ?error("Removing subscriptions error: ~p, for key ~p, session ~p",
+                        [Error, Key, SessId]),
+                    Error
+            end
     end, ok, Subs).
 
 %%--------------------------------------------------------------------

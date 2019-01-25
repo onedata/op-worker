@@ -62,7 +62,8 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
-    set_storage_path_type/2, get_storage_path_type_const/1]).
+    set_storage_path_type/2, get_storage_path_type_const/1, get_mounted_in_root/1,
+    get_canonical_path_tokens/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
 -export([equals/2]).

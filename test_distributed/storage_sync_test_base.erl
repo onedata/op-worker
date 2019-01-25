@@ -248,6 +248,8 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dir was imported
+    ?assertMatch({ok, [{_, ?TEST_DIR}]},
+        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
@@ -329,6 +331,10 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
     W1MountPoint = get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+
+    ?assertNotMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
+
     StorageTestDirPath =
         storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
     %% Create dir on storage
@@ -352,6 +358,7 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dir was not imported
+    ?assertMatch({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
@@ -3630,15 +3637,45 @@ clean_storage(Config, Readonly) ->
 clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
     SpaceGuid = rpc:call(W, fslogic_uuid, spaceid_to_space_dir_guid, [?SPACE_ID]),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W)}}, Config),
+    close_opened_files(W, SessId),
     {ok, Children} = lfm_proxy:ls(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
     Self = self(),
+
+    % hacky way to remove file, but ignore errors from storage
+    % files will be deleted on storage in other function
+    ok = test_utils:mock_new(W, helpers),
+    test_utils:mock_expect(W, helpers, unlink, fun(HelperHandle, FileId, CurrentSize) ->
+        case meck:passthrough([HelperHandle, FileId, CurrentSize]) of
+            {error, ?EROFS} -> ok;
+            Other -> Other
+        end
+    end),
+    test_utils:mock_expect(W, helpers, rmdir, fun(HelperHandle, FileId) ->
+        case meck:passthrough([HelperHandle, FileId]) of
+            {error, ?EROFS} -> ok;
+            Other -> Other
+        end
+    end),
     Guids = lists:map(fun({Guid, _}) ->
-        lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
+        ok = lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
         ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file_deleted, [W2, Guid, Self, Attempts]}),
         Guid
     end, Children),
-    verify_deletions(Guids, Attempts).
+    test_utils:mock_unload(W, helpers),
+    verify_deletions(Guids, Attempts),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
+
+close_opened_files(Worker, SessionId) ->
+    {ok, Handles} = rpc:call(Worker, file_handles, list, []),
+    lists:foreach(fun(#document{key = Uuid}) ->
+        Guid = fslogic_uuid:uuid_to_guid(Uuid, ?SPACE_ID),
+        FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [Guid]),
+        ok = rpc:call(Worker, file_handles, register_release, [FileCtx, SessionId, infinity])
+    end, Handles).
+
 
 verify_deletions(Guids, Timeout) ->
     verify_deletions(Guids, [], Timeout).
@@ -3801,9 +3838,9 @@ verify_file(FilePath, Pid, W1, SessId, Attempts) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, FilePath}), Attempts),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, FilePath}, read)),
+        lfm_proxy:open(W1, SessId, {path, FilePath}, read), Attempts),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), Attempts),
     lfm_proxy:close(W1, Handle1),
     Pid ! {finished, FilePath}.
 
@@ -3813,9 +3850,9 @@ verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, FileInDirPath}), Attempts),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, FileInDirPath}, read)),
+        lfm_proxy:open(W1, SessId, {path, FileInDirPath}, read), Attempts),
     ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), Attempts),
     lfm_proxy:close(W1, Handle1),
     Pid ! {finished, NBin}.
 

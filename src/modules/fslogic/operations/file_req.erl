@@ -210,7 +210,7 @@ release(UserCtx, FileCtx, HandleId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates and open file. Returns handle to the file, its attributes
+%% Creates and opens file. Returns handle to the file, its attributes
 %% and location.
 %% @end
 %%--------------------------------------------------------------------

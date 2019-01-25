@@ -61,11 +61,13 @@ macaroon_auth(Config) ->
     AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
     AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?MACAROON}),
     AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?MACAROON}),
+    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?MACAROON)/binary>>}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
     ?assertMatch({ok, 200, _, _}, AuthSuccess1),
-    ?assertMatch({ok, 200, _, _}, AuthSuccess2).
+    ?assertMatch({ok, 200, _, _}, AuthSuccess2),
+    ?assertMatch({ok, 200, _, _}, AuthSuccess3).
 
 internal_error_when_handler_crashes(Config) ->
     % given

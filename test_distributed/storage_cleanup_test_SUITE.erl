@@ -34,7 +34,10 @@
     remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
     remote_replica_should_be_truncated_on_storage_after_truncate/1,
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file/1,
-    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1
+    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
+    
+    file_with_suffix_is_deleted_from_storage_after_deletion/1,
+    deleted_open_file_with_suffix_is_deleted_from_storage_after_release/1
 ]).
 
 -define(ATTEMPTS, 60).
@@ -58,7 +61,10 @@ all() -> [
     remote_replica_should_be_truncated_on_storage_after_truncate,
     remote_directory_replica_should_be_deleted_from_storage_after_deletion,
     empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion,
-    replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file
+    replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file,
+
+    file_with_suffix_is_deleted_from_storage_after_deletion,
+    deleted_open_file_with_suffix_is_deleted_from_storage_after_release
 ].
 
 %%%===================================================================
@@ -272,6 +278,7 @@ remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) -
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(WorkerP2, StorageDirPath2)),
     ?assertEqual({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
+
     ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid})),
 
     % then
@@ -352,6 +359,87 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
     ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath1)).
 
+file_with_suffix_is_deleted_from_storage_after_deletion(Config) ->
+    file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, true).
+
+deleted_open_file_with_suffix_is_deleted_from_storage_after_release(Config) ->
+    file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, false).
+
+file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBeforeDeletion) ->
+    [Worker2, Worker1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+
+    SpacePath = <<"/space1">>,
+    FileName = generator:gen_name(),
+    FilePath = <<SpacePath/binary, "/",  FileName/binary>>,
+    StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
+    
+    ListDir = fun(Worker, Session, Path) ->
+        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        List
+    end,
+    {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
+    ListStorageDir = fun() ->
+        {ok, List} = list_dir(Worker1, StorageSpacePathW1),
+        lists:sort(List -- StorageFiles)
+    end,
+
+    % create files
+    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath, 8#664),
+    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
+
+    StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
+    Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
+    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?FILE_WITH_SUFFIX(FileName, Uuid)),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
+    
+    ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
+    
+    % open, write and read
+    Content1 = <<"data_file1">>,
+    Content2 = <<"data_file2">>,
+    
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
+    
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))],
+
+    ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
+    
+    {ok, _} = lfm_proxy:write(Worker1, Handle1, 0, Content1),
+    {ok, _} = lfm_proxy:write(Worker1, Handle2, 0, Content2),
+    
+    ?assertMatch({ok, Content1}, lfm_proxy:read(Worker1, Handle1, 0, byte_size(Content1)), ?ATTEMPTS),
+    ?assertMatch({ok, Content2}, lfm_proxy:read(Worker1, Handle2, 0, byte_size(Content2)), ?ATTEMPTS),
+
+    % check data on storage
+    ?assertMatch({ok, Content1}, read_file(Worker1, StorageFilePath1)),
+    ?assertMatch({ok, Content2}, read_file(Worker1, StorageFilePath2)),
+
+    case ReleaseBeforeDeletion of
+        true ->
+            ok = lfm_proxy:close_all(Worker1),
+            ok = lfm_proxy:unlink(Worker1, SessionId1, {path, FilePath});
+        false ->
+            ok = lfm_proxy:unlink(Worker1, SessionId1, {path, FilePath}),
+            ?assertEqual(1, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
+            ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
+            ok = lfm_proxy:close_all(Worker1)
+    end,
+
+    ?assertEqual([{Guid2, FileName}], ListDir(Worker1, SessionId1, SpacePath), ?ATTEMPTS),
+    ?assertEqual([binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))], ListStorageDir(), ?ATTEMPTS),
+
+    ok = lfm_proxy:unlink(Worker2, SessionId2, {path, FilePath}),
+
+    ?assertEqual([], ListDir(Worker1, SessionId1, SpacePath), ?ATTEMPTS),
+    ?assertEqual([], ListStorageDir(), ?ATTEMPTS).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -371,8 +459,7 @@ init_per_suite(Config) ->
 
         application:start(ssl),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        NewConfig3
+        NewConfig2
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -388,10 +475,12 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     ct:timetrap({minutes, 60}),
-    lfm_proxy:init(Config).
+    lfm_proxy:init(NewConfig).
 
 end_per_testcase(_Case, Config) ->
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
