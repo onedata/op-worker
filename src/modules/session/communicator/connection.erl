@@ -46,7 +46,8 @@
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
 
-    last_message_timestamp = {0, 0, 0} :: erlang:timestamp()
+    last_message_timestamp = {0, 0, 0} :: erlang:timestamp(),
+    verify_msg = true :: boolean()
 }).
 
 -type state() :: #state{}.
@@ -57,6 +58,9 @@
 -define(PACKET_VALUE, 4).
 -define(DEFAULT_SOCKET_MODE,
     application:get_env(?APP_NAME, default_socket_mode, active_once)
+).
+-define(DEFAULT_VERIFY_MSG_FLAG,
+    application:get_env(?APP_NAME, verify_msg_before_encoding, true)
 ).
 
 % Definitions of reconnect intervals for provider connection.
@@ -456,7 +460,8 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         error = Error,
         type = incoming,
         status = performing_handshake,
-        last_message_timestamp = os:timestamp()
+        last_message_timestamp = os:timestamp(),
+        verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
 
@@ -597,7 +602,8 @@ init_connection_to_provider(SessionId, ProviderId, Domain, Host, Port,
         type = outgoing,
         status = upgrading_protocol,
         session_id = SessionId,
-        peer_id = ProviderId
+        peer_id = ProviderId,
+        verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
 
     case SocketMode of
@@ -796,9 +802,9 @@ send_message(State, #server_message{} = ServerMessage) ->
 %% @private
 -spec send_client_message(state(), client_message()) ->
     {ok, state()} | {error, Reason :: term()}.
-send_client_message(State, #client_message{} = ClientMsg) ->
+send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     try
-        {ok, Data} = serializator:serialize_client_message(ClientMsg),
+        {ok, Data} = serializator:serialize_client_message(ClientMsg, VerifyMsg),
         socket_send(State, Data)
     catch
         _:Reason ->
@@ -812,9 +818,9 @@ send_client_message(State, #client_message{} = ClientMsg) ->
 %% @private
 -spec send_server_message(state(), server_message()) ->
     {ok, state()} | {error, Reason :: term()}.
-send_server_message(State, #server_message{} = ServerMsg) ->
+send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     try
-        {ok, Data} = serializator:serialize_server_message(ServerMsg),
+        {ok, Data} = serializator:serialize_server_message(ServerMsg, VerifyMsg),
         socket_send(State, Data)
     catch
         _:Reason ->

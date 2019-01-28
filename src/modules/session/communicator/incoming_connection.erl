@@ -34,11 +34,19 @@
     continue = true,
     wait_map = #{} :: map(),
     wait_pids = #{} :: map(),
-    last_message_timestamp :: erlang:timestamp()
+    last_message_timestamp :: erlang:timestamp(),
+    socket_mode = active_once :: active_always | active_once,
+    verify_msg = true :: boolean()
 }).
 -type state() :: #state{}.
 
 -define(PACKET_VALUE, 4).
+-define(DEFAULT_SOCKET_MODE,
+    application:get_env(?APP_NAME, default_socket_mode, active_once)
+).
+-define(DEFAULT_VERIFY_MSG_FLAG,
+    application:get_env(?APP_NAME, verify_msg_before_encoding, true)
+).
 
 %% API
 -export([init/2, upgrade/4, upgrade/5, takeover/7]).
@@ -105,16 +113,26 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
 takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     ranch:remove_connection(Ref),
     {Ok, Closed, Error} = Transport:messages(),
+    SocketMode = ?DEFAULT_SOCKET_MODE,
+
     State = #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
         closed = Closed,
         error = Error,
-        last_message_timestamp = os:timestamp()
+        last_message_timestamp = os:timestamp(),
+        socket_mode = SocketMode,
+        verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
-    activate_socket_once(State),
+
+    case SocketMode of
+        active_always ->
+            Transport:setopts(Socket, [{active, true}]);
+        active_once ->
+            activate_socket_once(State)
+    end,
 
     Interval = async_request_manager:get_processes_check_interval(),
     erlang:send_after(Interval, self(), heartbeat),
@@ -262,8 +280,13 @@ handle_info(Info, State = #state{wait_map = WaitMap, wait_pids = Pids}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_server_message(state(), #server_message{}) -> {Result :: ok | {error, term()}, state()}.
-send_server_message(State = #state{session_id = SessionId, transport = Transport, socket = Socket}, ServerMsg) ->
-    try serializator:serialize_server_message(ServerMsg) of
+send_server_message(State = #state{
+    session_id = SessionId,
+    transport = Transport,
+    socket = Socket,
+    verify_msg = VerifyMsg
+}, ServerMsg) ->
+    try serializator:serialize_server_message(ServerMsg, VerifyMsg) of
         {ok, Data} ->
             case Transport:send(Socket, Data) of
                 ok ->
@@ -489,5 +512,7 @@ send_via_other_connection(#state{session_id = SessionId}, ServerMsg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec activate_socket_once(state()) -> ok.
+activate_socket_once(#state{socket_mode = active_always}) ->
+    ok;
 activate_socket_once(#state{transport = Transport, socket = Socket}) ->
     ok = Transport:setopts(Socket, [{active, once}]).
