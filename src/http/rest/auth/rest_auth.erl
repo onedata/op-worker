@@ -93,13 +93,20 @@ resolve_auth(Req) ->
 %% Parses macaroon from request headers, accepted headers:
 %%  * Macaroon
 %%  * X-Auth-Token
+%%  * Bearer Authentication
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_macaroon_from_header(req()) -> undefined | binary().
 parse_macaroon_from_header(Req) ->
-    case cowboy_req:header(<<"macaroon">>, Req) of
-        undefined ->
-            cowboy_req:header(<<"x-auth-token">>, Req);
-        Value ->
-            Value
+    case cowboy_req:header(<<"authorization">>, Req) of
+        <<"Bearer ", Macaroon/binary>> ->
+            Macaroon;
+        _ ->
+            case cowboy_req:header(<<"macaroon">>, Req) of
+                undefined ->
+                    cowboy_req:header(<<"x-auth-token">>, Req);
+                Value ->
+                    Value
+            end
     end.
+

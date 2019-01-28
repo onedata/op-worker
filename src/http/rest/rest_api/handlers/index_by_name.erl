@@ -15,6 +15,8 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([terminate/3, allowed_methods/2, is_authorized/2,
@@ -130,6 +132,8 @@ get_index(Req, State) ->
     case index:get_json(SpaceId, IndexName) of
         {ok, JSON} ->
             {json_utils:encode(JSON), Req3, State3};
+        {error, ?EINVAL} ->
+            throw(?ERROR_AMBIGUOUS_INDEX_NAME);
         {error, not_found} ->
             throw(?ERROR_INDEX_NOT_FOUND)
     end.
@@ -182,11 +186,15 @@ create_index(Req, State) ->
         throw_if_provider_does_not_support_space(SpaceId, ProviderId)
     end, Providers),
 
-    ok = index:save(
+    case index:save(
         SpaceId, IndexName, MapFunction, undefined,
         Options, Spatial, Providers
-    ),
-    {stop, cowboy_req:reply(?HTTP_OK, Req8), State8}.
+    ) of
+        ok ->
+            {stop, cowboy_req:reply(?HTTP_OK, Req8), State8};
+        {error, already_exists} ->
+            throw(?ERROR_INDEX_ALREADY_EXISTS)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

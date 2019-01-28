@@ -63,7 +63,7 @@
     emit_file_written_event/5,
     get_configuration/1, get_configuration/2,
     get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
-    flush_events/3
+    flush_events/3, flush_events/4
 ]).
 
 -define(ID, erlang:unique_integer([positive, monotonic])).
@@ -550,9 +550,12 @@ get_subscriptions(Conn, ChosenSubscriptions, MsgId) ->
 
 
 flush_events(Conn, ProviderId, SubscriptionId) ->
-    flush_events(Conn, ProviderId, SubscriptionId, ?MSG_ID).
+    flush_events(Conn, ProviderId, SubscriptionId, ok).
 
-flush_events(Conn, ProviderId, SubscriptionId, MsgId) ->
+flush_events(Conn, ProviderId, SubscriptionId, Code) ->
+    flush_events(Conn, ProviderId, SubscriptionId, ?MSG_ID, Code).
+
+flush_events(Conn, ProviderId, SubscriptionId, MsgId, Code) ->
     Msg = #'ClientMessage'{
         message_id = MsgId,
         message_body = {flush_events, #'FlushEvents'{
@@ -565,5 +568,5 @@ flush_events(Conn, ProviderId, SubscriptionId, MsgId) ->
     ok = ssl:send(Conn, RawMsg),
 
     ?assertMatch(#'ServerMessage'{message_body = {status, #'Status'{
-        code = ok
+        code = Code
     }}, message_id = MsgId}, receive_server_message([], 10), ?ATTEMPTS).

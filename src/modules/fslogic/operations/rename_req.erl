@@ -217,7 +217,7 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
 -spec rename_into_different_place_within_posix_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    TargetFileType :: file_meta:type(), TargetFileCtx :: file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, undefined, _
@@ -237,6 +237,11 @@ rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx
 ) ->
+    {#document{key = FileLocationId, value = #file_location{uuid = TargetFileUuid}}, _} =
+        file_ctx:get_local_file_location_doc(TargetFileCtx),
+    fslogic_location_cache:update_location(TargetFileUuid, FileLocationId, fun
+        (FileLocation) -> {ok, FileLocation#file_location{storage_file_created = false}}
+    end, false),
     #fuse_response{status = #status{code = ?OK}} =
         delete_req:delete(UserCtx, TargetFileCtx, false),
     rename_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);

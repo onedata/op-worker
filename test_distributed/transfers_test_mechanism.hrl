@@ -128,7 +128,7 @@ end).
 -define(assertIndexVisible(Worker, SpaceId, IndexName, Attempts),
     ?assertMatch(true, begin
         ListResult = rpc:call(Worker, index, list, [SpaceId]),
-        GetResult = rpc:call(Worker, index, get, [SpaceId, IndexName]),
+        GetResult = rpc:call(Worker, index, get, [IndexName, SpaceId]),
         case {ListResult, GetResult} of
             {{ok, Indexes}, {ok, __Doc}} -> lists:member(IndexName, Indexes);
             Other -> Other

@@ -132,14 +132,16 @@ create_delayed_storage_file(FileCtx) ->
                     {ok, _} ->
                         FileCtx3 = create_storage_file(
                             user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                        files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx4),
 
                         {ok, #document{}} =
                             fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                             (FileLocation = #file_location{storage_file_created = false}) ->
-                                {ok, FileLocation#file_location{storage_file_created = true}}
+                                {ok, FileLocation#file_location{storage_file_created = true,
+                                    file_id = StorageFileId}}
                         end, false),
-                        FileCtx3
+                        FileCtx4
                 end
             end);
         true ->
@@ -172,14 +174,16 @@ create_delayed_storage_file_and_return_location(FileCtx) ->
                     {ok, _} ->
                         FileCtx3 = create_storage_file(
                             user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                        files_to_chown:chown_or_schedule_chowning(FileCtx3),
+                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx4),
 
                         {ok, #document{} = Doc} =
                             fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                                 (FileLocation = #file_location{storage_file_created = false}) ->
-                                    {ok, FileLocation#file_location{storage_file_created = true}}
+                                    {ok, FileLocation#file_location{storage_file_created = true, 
+                                        file_id = StorageFileId}}
                             end, false),
-                        {Doc, FileCtx3}
+                        {Doc, FileCtx4}
 %%                        file_ctx:update_location_doc(FileCtx3, Doc)
                 end
             end);
@@ -236,7 +240,7 @@ create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create file_location and storage file.
+%% Create storage file.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -250,15 +254,9 @@ create_storage_file(UserCtx, FileCtx) ->
         {error, ?ENOENT} ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
-        {error, ?EEXIST} = Eexists ->
-            case application:get_env(?APP_NAME, unlink_on_create, true) of
-              true ->
-                {Size, _} = file_ctx:get_file_size(FileCtx3),
-                storage_file_manager:unlink(SFMHandle, Size),
-                {storage_file_manager:create(SFMHandle, Mode), FileCtx3};
-              _ ->
-                Eexists
-            end;
+        {error, ?EEXIST} ->
+            {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+            {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)};
         {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
@@ -488,4 +486,24 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
             {ok, FileCtx2};
         false ->
             delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates file on storage with uuid as suffix
+%% @end
+%%-------------------------------------------------------------------
+-spec create_storage_file_with_suffix(storage_file_manager:handle(), 
+    file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
+create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = SFMHandle, Mode) ->
+    NewName = ?FILE_WITH_SUFFIX(FileId, Uuid),
+    SFMHandle1 = SFMHandle#sfm_handle{file = NewName},
+    
+    ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),
+    case storage_file_manager:create(SFMHandle1, Mode) of
+        ok ->
+            {ok, NewName};
+        Error ->
+            Error
     end.
