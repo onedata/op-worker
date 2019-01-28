@@ -98,21 +98,19 @@
     histogram:increment(__Hist, Value)
 end).
 
--define(HIST_MAP(DomainsAndBytes, Length),
-    maps:fold(fun(Domain,  TransferredBytes, AccIn) ->
-        case TransferredBytes > 0 of
-            true ->
-                AccIn#{Domain => ?HIST(TransferredBytes, Length)};
-            false ->
-                AccIn
-        end
-    end, #{}, DomainsAndBytes)
+-define(HIST_ASSERT(DomainsAndBytes, Length),
+    fun(HistMap) ->
+        maps:fold(fun(Domain,  TransferredBytes, AccIn) ->
+            Hist = maps:get(Domain, HistMap),
+            AccIn and (lists:sum(Hist) =:= TransferredBytes) and (length(Hist) =:= Length)
+        end, true, DomainsAndBytes)
+    end
 ).
 
--define(MIN_HIST(DomainsAndBytes), ?HIST_MAP(DomainsAndBytes, ?MIN_HIST_LENGTH)).
--define(HOUR_HIST(DomainsAndBytes), ?HIST_MAP(DomainsAndBytes, ?HOUR_HIST_LENGTH)).
--define(DAY_HIST(DomainsAndBytes), ?HIST_MAP(DomainsAndBytes, ?DAY_HIST_LENGTH)).
--define(MONTH_HIST(DomainsAndBytes), ?HIST_MAP(DomainsAndBytes, ?MONTH_HIST_LENGTH)).
+-define(MIN_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?MIN_HIST_LENGTH)).
+-define(HOUR_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?HOUR_HIST_LENGTH)).
+-define(DAY_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?DAY_HIST_LENGTH)).
+-define(MONTH_HIST(DomainsAndBytes), ?HIST_ASSERT(DomainsAndBytes, ?MONTH_HIST_LENGTH)).
 
 % config keys
 -define(ROOT_DIR_KEY, root_dir_guid_and_path).
