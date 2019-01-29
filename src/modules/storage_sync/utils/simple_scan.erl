@@ -476,7 +476,8 @@ import_file(#space_strategy_job{
                     last_stat = StatTimestamp
                 }}
             end, SpaceId),
-            ok = create_file_location(SpaceId, StorageId, FileUuid2, StorageFileId, FSize, OwnerId);
+            ok = file_location_utils:create_imported_file_location(
+                SpaceId, StorageId, FileUuid2, StorageFileId, FSize, OwnerId);
         _ ->
             {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
     end,
@@ -692,7 +693,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         %todo VFS-4847 refactor this case, use when wherever possible
         {undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
-            update_file_location(FileCtx4, StSize),
+            file_location_utils:update_imported_file_location(FileCtx4, StSize),
             updated;
 
         {undefined, undefined} ->
@@ -712,7 +713,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         {undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
-                    update_file_location(FileCtx4, StSize),
+                    file_location_utils:update_imported_file_location(FileCtx4, StSize),
                     updated;
                 false ->
                     not_updated
@@ -725,7 +726,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     case (MTime < StMtime) of
                         true ->
                             % file was modified on storage
-                            update_file_location(FileCtx4, StSize),
+                            file_location_utils:update_imported_file_location(FileCtx4, StSize),
                             updated;
                         false ->
                             % file was modified via onedata
@@ -753,7 +754,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
-                            update_file_location(FileCtx4, StSize),
+                            file_location_utils:update_imported_file_location(FileCtx4, StSize),
                             updated;
                         false ->
                             % file was modified via onedata
@@ -772,20 +773,6 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         }}
     end, SpaceId),
     Result2.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates file_location
-%% @end
-%%-------------------------------------------------------------------
--spec update_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.
-update_file_location(FileCtx, StorageSize) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    NewFileBlocks = create_file_blocks(StorageSize),
-    replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
-    ok = lfm_event_emitter:emit_file_written(
-        FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -922,44 +909,6 @@ create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
         },
         scope = SpaceId}
     ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates file_location
-%% @end
-%%--------------------------------------------------------------------
--spec create_file_location(od_space:id(), storage:id(), file_meta:uuid(),
-    file_meta:path(), file_meta:size(), od_user:id()) -> ok.
-create_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size, OwnerId) ->
-    Location = #file_location{
-        provider_id = oneprovider:get_id(),
-        file_id = CanonicalPath,
-        storage_id = StorageId,
-        uuid = FileUuid,
-        space_id = SpaceId,
-        size = Size,
-        storage_file_created = true
-    },
-    LocationDoc = #document{
-        key = file_location:local_id(FileUuid),
-        value = Location,
-        scope = SpaceId
-    },
-    LocationDoc2 = fslogic_location_cache:set_blocks(LocationDoc, create_file_blocks(Size)),
-    {ok, _LocId} = file_location:save_and_bump_version(LocationDoc2, OwnerId),
-    ok.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list containing one block with given size.
-%% Is Size == 0 returns empty list.
-%% @end
-%%-------------------------------------------------------------------
--spec create_file_blocks(non_neg_integer()) -> fslogic_blocks:blocks().
-create_file_blocks(0) -> [];
-create_file_blocks(Size) -> [#file_block{offset = 0, size = Size}].
 
 %%-------------------------------------------------------------------
 %% @private
