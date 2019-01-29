@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
 
@@ -90,7 +91,7 @@
 % API
 -export([
     synchronize/6, request_synchronization/6, request_synchronization/7,
-    update_replica/4, force_flush_events/1,
+    update_replica/4, force_flush_events/1, delete_whole_file_replica/2,
     cancel/1, cancel_transfers_of_session/2,
     terminate_all/0
 ]).
@@ -173,6 +174,9 @@ update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
 -spec force_flush_events(file_meta:uuid()) -> ok.
 force_flush_events(Uuid) ->
     apply_if_alive_no_check(Uuid, ?FLUSH_EVENTS).
+
+delete_whole_file_replica(FileCtx, AllowedVV) ->
+    apply_no_check(FileCtx, {delete_whole_file_replica, AllowedVV}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -573,6 +577,10 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
     {reply, ok, flush_events(State), ?DIE_AFTER};
+
+handle_call({delete_whole_file_replica, AllowedVV}, _From, State) ->
+    {Ans, State2} = delete_whole_file_replica_internal(AllowedVV, State),
+    {reply, Ans, State2, ?DIE_AFTER};
 
 handle_call({apply, Fun}, _From, State) ->
     Ans = Fun(),
@@ -1502,4 +1510,44 @@ wait_for_terminate(Pid) ->
             wait_for_terminate(Pid);
         _ ->
             ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes replica of file.
+%% Before deletion checks whether version of local replica is identical
+%% or lesser to allowed.
+%% NOTE!!! This function is not responsible whether given replica is
+%% unique
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{})
+        -> {ok | {error, term()}, #state{}}.
+delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    try
+        LocalFileId = file_location:local_id(FileUuid),
+        {ok, LocDoc} = fslogic_location_cache:get_location(LocalFileId, FileUuid),
+        CurrentVV = file_location:get_version_vector(LocDoc),
+        case version_vector:compare(CurrentVV, AllowedVV) of
+            ComparisonResult when
+                ComparisonResult =:= identical orelse
+                    ComparisonResult =:= lesser
+                ->
+                UserCtx = user_ctx:new(?ROOT_SESS_ID),
+                #fuse_response{status = #status{code = ?OK}} =
+                    truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
+                %todo VFS-4433 file_popularity should be updated after updates on file_location
+                fslogic_location_cache:clear_blocks(FileCtx, LocalFileId),
+                State2 = flush_events(State),
+                {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2};
+            _ ->
+                {{error, file_modified_locally}, State}
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
+                [FileUuid, {Error, Reason}]),
+            {{error, Reason}, State}
     end.
