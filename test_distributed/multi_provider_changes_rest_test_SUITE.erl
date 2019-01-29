@@ -95,7 +95,7 @@ changes_stream_file_meta_test(Config) ->
 
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(2000),
         lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
         lfm_proxy:create(WorkerP1, SessionId, File2, Mode1)
     end),
@@ -139,7 +139,7 @@ changes_stream_xattr_test(Config) ->
 
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(2000),
         lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid},
             #xattr{name = <<"name">>, value = <<"value">>}
         )
@@ -182,7 +182,7 @@ changes_stream_json_metadata_test(Config) ->
 
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(2000),
         lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, json, OnedataJson, [])
     end),
 
@@ -246,7 +246,7 @@ changes_stream_file_location_test(Config) ->
 
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(2000),
         {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
         {ok, 5} = lfm_proxy:write(WorkerP1, Handle, 0, <<"01234">>)
     end),
@@ -277,11 +277,11 @@ changes_stream_request_several_records_test(Config) ->
     Time = 1000,
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(2000),
         lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid},
             #xattr{name = <<"name">>, value = <<"value">>}
         ),
-        timer:sleep(500),
+        timer:sleep(2000),
         lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
     end),
 
@@ -349,7 +349,7 @@ changes_stream_on_multi_provider_test(Config) ->
 
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(2000),
         {ok, Handle} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write),
         lfm_proxy:write(WorkerP2, Handle, 0, <<"data">>)
     end),

@@ -36,7 +36,9 @@
     version_vector:version_vector()) -> ok | {error, term()}.
 delete_blocks(FileCtx, _Blocks, AllowedVV) ->
     %todo VFS-3728 implement deletion of file parts (blocks)
-    replica_synchronizer:apply(FileCtx, fun() ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO - zla sekcja krytyczna
+    file_location:critical_section(FileUuid, fun() ->
         delete_whole_file_replica(FileCtx, AllowedVV)
     end).
 
