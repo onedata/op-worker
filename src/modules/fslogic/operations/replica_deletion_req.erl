@@ -36,8 +36,7 @@
     version_vector:version_vector()) -> ok | {error, term()}.
 delete_blocks(FileCtx, _Blocks, AllowedVV) ->
     %todo VFS-3728 implement deletion of file parts (blocks)
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    file_location:critical_section(FileUuid, fun() ->
+    replica_synchronizer:apply(FileCtx, fun() ->
         delete_whole_file_replica(FileCtx, AllowedVV)
     end).
 
@@ -62,7 +61,7 @@ delete_whole_file_replica(FileCtx, AllowedVV) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     try
         LocalFileId = file_location:local_id(FileUuid),
-        {ok, LocDoc} = file_location:get(LocalFileId),
+        {ok, LocDoc} = fslogic_location_cache:get_location(LocalFileId, FileUuid),
         CurrentVV = file_location:get_version_vector(LocDoc),
         case version_vector:compare(CurrentVV, AllowedVV) of
             ComparisonResult when

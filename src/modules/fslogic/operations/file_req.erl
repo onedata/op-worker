@@ -125,13 +125,10 @@ open_file_insecure(UserCtx, FileCtx, Flag) ->
     fslogic_worker:open_flag(), storage_file_manager:handle_id() | undefined) ->
     no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    FileCtx2 = sfm_utils:create_delayed_storage_file(FileCtx),
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-    {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
-    ok = file_handles:register_open(FileCtx3, SessId, 1),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened_extended{handle_id = HandleId}
+    } = open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}
@@ -146,14 +143,17 @@ open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag()) ->
     no_return() | #fuse_response{}.
 open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
+    open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, undefined).
+
+open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
         storage_id = StorageId}}, FileCtx2} =
-        sfm_utils:create_delayed_storage_file_and_return_location(FileCtx),
+        sfm_utils:create_delayed_storage_file(FileCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-    {ok, HandleId} = save_handle(SessId, Handle, undefined),
+    {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
     ok = file_handles:register_open(FileCtx3, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
@@ -229,7 +229,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
                 sfm_utils:create_storage_file(UserCtx, FileCtx)
         end,
         {FileLocation, FileCtx3} =
-            sfm_utils:create_storage_file_location(FileCtx2, not ExtDIO, true),
+            file_location_utils:get_new_file_location_doc(FileCtx2, not ExtDIO, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
         HandleId = case user_ctx:is_direct_io(UserCtx) of
@@ -326,7 +326,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {_, FileCtx2} = sfm_utils:create_storage_file_location(FileCtx, false, true),
+        {_, FileCtx2} = file_location_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
     catch

@@ -24,10 +24,7 @@
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_storage_file_if_not_exists/1, create_storage_file_location/2,
-    create_storage_file_location/3, create_delayed_storage_file/1,
-    create_delayed_storage_file_and_return_location/1,
-    create_storage_file/2, delete_storage_file/2,
+    create_storage_file/2, create_delayed_storage_file/1, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1, recursive_delete/2, retry_dir_deletion/3]).
 
@@ -92,151 +89,18 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create storage file and file_location if there is no file_location defined.
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(file_ctx:ctx()) -> ok | {error, term()}.
-create_storage_file_if_not_exists(FileCtx) ->
-    replica_synchronizer:apply(FileCtx,
-        fun() ->
-            case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx), false) of
-                {undefined, _} ->
-                    {_, _FileCtx2} = create_storage_file_location(FileCtx, false),
-                    ok;
-                _ ->
-                    ok
-            end
-        end).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
-    {#document{
-        key = FileLocationId,
-        value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
-
-    case StorageFileCreated of
-        false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            replica_synchronizer:apply(FileCtx, fun() ->
-                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
-                    {ok, #document{
-                        value = #file_location{storage_file_created = true}
-                    }} ->
-                        FileCtx2;
-                    {ok, _} ->
-                        FileCtx3 = create_storage_file(
-                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-                        files_to_chown:chown_or_schedule_chowning(FileCtx4),
-
-                        {ok, #document{}} =
-                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
-                            (FileLocation = #file_location{storage_file_created = false}) ->
-                                {ok, FileLocation#file_location{storage_file_created = true,
-                                    file_id = StorageFileId}}
-                        end, false),
-                        FileCtx4
-                end
-            end);
-        true ->
-            FileCtx2
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Create storage file if it hasn't been created yet (it has been delayed).
-%% Returns location document and context.
-%% @end
-%%--------------------------------------------------------------------
--spec create_delayed_storage_file_and_return_location(file_ctx:ctx()) ->
-    {file_location:doc(), file_ctx:ctx()}.
-create_delayed_storage_file_and_return_location(FileCtx) ->
-    {#document{
-        key = FileLocationId,
-        value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = Ans = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
-
-    case StorageFileCreated of
-        false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            file_location:critical_section(FileUuid, fun() ->
-                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
-                    {ok, #document{
-                        value = #file_location{storage_file_created = true}
-                    }} ->
-                        Ans;
-                    {ok, _} ->
-                        FileCtx3 = create_storage_file(
-                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-                        files_to_chown:chown_or_schedule_chowning(FileCtx4),
-
-                        {ok, #document{} = Doc} =
-                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
-                                (FileLocation = #file_location{storage_file_created = false}) ->
-                                    {ok, FileLocation#file_location{storage_file_created = true, 
-                                        file_id = StorageFileId}}
-                            end, false),
-                        {Doc, FileCtx4}
-%%                        file_ctx:update_location_doc(FileCtx3, Doc)
-                end
-            end);
-        true ->
-            Ans
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file location of storage file
-%% @equiv create_storage_file_location(FileCtx, StorageFileCreated, false)
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean()) ->
-    {#file_location{}, file_ctx:ctx()}.
-create_storage_file_location(FileCtx, StorageFileCreated) ->
-    create_storage_file_location(FileCtx, StorageFileCreated, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file location of storage file
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean(),
-    GeneratedKey :: boolean()) -> {#file_location{}, file_ctx:ctx()}.
-create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-    {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
-    Location = #file_location{
-        provider_id = oneprovider:get_id(),
-        file_id = StorageFileId,
-        storage_id = StorageId,
-        uuid = FileUuid,
-        space_id = SpaceId,
-        storage_file_created = StorageFileCreated,
-        size = Size
-    },
-    LocId = file_location:local_id(FileUuid),
-    case fslogic_location_cache:create_location(#document{
-        key = LocId,
-        value = Location
-    }, GeneratedKey) of
-        {ok, _LocId} ->
-            FileCtx5 = file_ctx:add_file_location(FileCtx4, LocId),
-            {Location, FileCtx5};
-        {error, already_exists} ->
-            {#document{value = FileLocation}, FileCtx5} =
-                file_ctx:get_local_file_location_doc(FileCtx4),
-            {FileLocation, FileCtx5}
-    end.
+    CreateOnStorageFun = fun(FileCtx2) ->
+        FileCtx3 = create_storage_file(
+            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+        {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
+    end,
+    file_location_utils:create_file_location(FileCtx, CreateOnStorageFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -278,8 +142,7 @@ create_storage_file(UserCtx, FileCtx) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
     delete_storage_file_without_location(FileCtx, UserCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    fslogic_location_cache:delete_location(FileUuid, file_location:local_id(FileUuid)).
+    file_location_utils:delete_file_location(FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
