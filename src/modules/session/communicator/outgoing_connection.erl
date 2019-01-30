@@ -144,7 +144,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
 %%--------------------------------------------------------------------
 -spec send_server_message(#state{}, #server_message{}) -> ok.
 send_server_message(#state{verify_msg = VerifyMsg} = State, #server_message{} = ServerMsg) ->
-    try serializator:serialize_server_message(ServerMsg, VerifyMsg) of
+    try serializer:serialize_server_message(ServerMsg, VerifyMsg) of
         {ok, Data} ->
             socket_send(State, Data)
     catch
@@ -356,7 +356,7 @@ code_change(_OldVsn, State, _Extra) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_handshake_response(State = #state{session_id = SessId, provider_id = ProviderId}, Data) ->
-    try serializator:deserialize_server_message(Data, SessId) of
+    try serializer:deserialize_server_message(Data, SessId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider '~s'", [ProviderId]),
             {noreply, State#state{status = ready}, ?PROTO_CONNECTION_TIMEOUT};
@@ -387,7 +387,7 @@ handle_handshake_response(State = #state{session_id = SessId, provider_id = Prov
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_server_message(State = #state{session_id = SessId}, Data) ->
-    try serializator:deserialize_server_message(Data, SessId) of
+    try serializer:deserialize_server_message(Data, SessId) of
         {ok, Msg} ->
             handle_server_message_unsafe(State, Msg)
     catch
@@ -448,7 +448,7 @@ activate_socket_once(#state{transport = Transport, socket = Socket}) ->
 %%--------------------------------------------------------------------
 -spec send_client_message(#state{}, #client_message{}) -> ok.
 send_client_message(#state{verify_msg = VerifyMsg} = State, #client_message{} = ClientMsg) ->
-    try serializator:serialize_client_message(ClientMsg, VerifyMsg) of
+    try serializer:serialize_client_message(ClientMsg, VerifyMsg) of
         {ok, Data} ->
             socket_send(State, Data)
     catch

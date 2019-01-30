@@ -286,7 +286,7 @@ send_server_message(State = #state{
     socket = Socket,
     verify_msg = VerifyMsg
 }, ServerMsg) ->
-    try serializator:serialize_server_message(ServerMsg, VerifyMsg) of
+    try serializer:serialize_server_message(ServerMsg, VerifyMsg) of
         {ok, Data} ->
             case Transport:send(Socket, Data) of
                 ok ->
@@ -317,7 +317,7 @@ send_server_message(State = #state{
 handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     State;
 handle_client_message(State = #state{session_id = SessId}, Data) ->
-    try serializator:deserialize_client_message(Data, SessId) of
+    try serializer:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->
             handle_handshake(State, Msg);
         {ok, Msg} ->

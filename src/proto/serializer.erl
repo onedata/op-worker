@@ -9,7 +9,7 @@
 %%% Serializes and deserializes protobuf messages
 %%% @end
 %%%-------------------------------------------------------------------
--module(serializator).
+-module(serializer).
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/client_messages.hrl").
@@ -45,9 +45,8 @@ load_msg_defs() ->
 -spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session:id()) ->
     {ok, ClientMsg :: #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
-
-    DecodedMsg = messages:decode_msg(Message, 'ClientMessage'),
-%%    DecodedMsg = enif_protobuf:decode(Message, 'ClientMessage'),
+%%    DecodedMsg = messages:decode_msg(Message, 'ClientMessage'),
+    DecodedMsg = enif_protobuf:decode(Message, 'ClientMessage'),
 
     #'ClientMessage'{
         message_id = MsgId,
@@ -78,9 +77,8 @@ deserialize_client_message(Message, SessionId) ->
 -spec deserialize_server_message(Message :: binary(), SessionId :: undefined | session:id()) ->
     {ok, ClientMsg :: #server_message{}} | no_return().
 deserialize_server_message(Message, _SessionId) ->
-
-    DecodedMsg = messages:decode_msg(Message, 'ServerMessage'),
-%%    DecodedMsg = enif_protobuf:decode(Message, 'ServerMessage'),
+%%    DecodedMsg = messages:decode_msg(Message, 'ServerMessage'),
+    DecodedMsg = enif_protobuf:decode(Message, 'ServerMessage'),
 
     #'ServerMessage'{
         message_id = MsgId,

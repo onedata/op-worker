@@ -679,7 +679,7 @@ handle_handshake_request(#state{
     try
         {ok, #client_message{
             message_body = HandshakeMsg
-        }} = serializator:deserialize_client_message(Data, SessId),
+        }} = serializer:deserialize_client_message(Data, SessId),
 
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
         {PeerId, SessionId} = auth_manager:handle_handshake(
@@ -705,7 +705,7 @@ handle_handshake_response(#state{
     session_id = SessId,
     peer_id = ProviderId
 } = State, Data) ->
-    try serializator:deserialize_server_message(Data, SessId) of
+    try serializer:deserialize_server_message(Data, SessId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider '~s'", [ProviderId]),
             {ok, State};
@@ -742,7 +742,7 @@ handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     {ok, State};
 handle_client_message(State = #state{session_id = SessId}, Data) ->
     try
-        {ok, Msg} = serializator:deserialize_client_message(Data, SessId),
+        {ok, Msg} = serializer:deserialize_client_message(Data, SessId),
         maybe_create_proxy_session(State, Msg),
         route_message(State, Msg)
     catch Type:Reason ->
@@ -758,7 +758,7 @@ handle_client_message(State = #state{session_id = SessId}, Data) ->
     {ok, state()} | {error, Reason :: term()}.
 handle_server_message(State = #state{session_id = SessId}, Data) ->
     try
-        {ok, Msg0} = serializator:deserialize_server_message(Data, SessId),
+        {ok, Msg0} = serializer:deserialize_server_message(Data, SessId),
         Msg = fill_server_msg_proxy_info(State, Msg0),
         route_message(State, Msg)
     catch Type:Error ->
@@ -804,7 +804,7 @@ send_message(State, #server_message{} = ServerMessage) ->
     {ok, state()} | {error, Reason :: term()}.
 send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     try
-        {ok, Data} = serializator:serialize_client_message(ClientMsg, VerifyMsg),
+        {ok, Data} = serializer:serialize_client_message(ClientMsg, VerifyMsg),
         socket_send(State, Data)
     catch
         _:Reason ->
@@ -820,7 +820,7 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     {ok, state()} | {error, Reason :: term()}.
 send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     try
-        {ok, Data} = serializator:serialize_server_message(ServerMsg, VerifyMsg),
+        {ok, Data} = serializer:serialize_server_message(ServerMsg, VerifyMsg),
         socket_send(State, Data)
     catch
         _:Reason ->

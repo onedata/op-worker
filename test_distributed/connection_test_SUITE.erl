@@ -505,7 +505,7 @@ fulfill_promises_after_connection_close_test(Config) ->
     % about pending requests. Even after connection close, the promises should
     % be handled and responses sent to other connection within the session.
     GenFuseReq = fun() ->
-        {ok, FuseReq} = serializator:serialize_client_message(#client_message{
+        {ok, FuseReq} = serializer:serialize_client_message(#client_message{
             message_id = #message_id{id = crypto:strong_rand_bytes(5)},
             message_body = #fuse_request{
                 fuse_request = #resolve_guid{
