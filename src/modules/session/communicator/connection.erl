@@ -45,8 +45,6 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
-
-    last_message_timestamp = {0, 0, 0} :: erlang:timestamp(),
     verify_msg = true :: boolean()
 }).
 
@@ -168,7 +166,7 @@ handle_call({send, #server_message{} = Msg}, _From, #state{type = incoming} = St
     send_message_sync(State, Msg);
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
-    {reply, wrong_request, State}.
+    {reply, {error, wrong_request}, State, ?PROTO_CONNECTION_TIMEOUT}.
 
 
 %%--------------------------------------------------------------------
@@ -183,15 +181,14 @@ handle_call(_Request, _From, State) ->
 -spec send_message_sync(state(), message()) ->
     {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()}.
-send_message_sync(#state{status = ready} = State0, Msg) ->
-    case send_message(State0, Msg) of
-        {ok, State1} ->
-            State2 = State1#state{last_message_timestamp = os:timestamp()},
-            {reply, ok, State2, ?PROTO_CONNECTION_TIMEOUT};
+send_message_sync(#state{status = ready} = State, Msg) ->
+    case send_message(State, Msg) of
+        {ok, NewState} ->
+            {reply, ok, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, serialization_failed} = SerializationError ->
-            {reply, SerializationError, State0, ?PROTO_CONNECTION_TIMEOUT};
+            {reply, SerializationError, State, ?PROTO_CONNECTION_TIMEOUT};
         Error ->
-            {stop, Error, Error, State0}
+            {stop, Error, Error, State}
     end;
 send_message_sync(#state{status = Status} = State, _Msg) ->
     {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -228,15 +225,14 @@ handle_cast(_Request, State) ->
 -spec send_message_async(state(), message()) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-send_message_async(#state{status = ready} = State0, Msg) ->
-    case send_message(State0, Msg) of
-        {ok, State1} ->
-            State2 = State1#state{last_message_timestamp = os:timestamp()},
-            {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
+send_message_async(#state{status = ready} = State, Msg) ->
+    case send_message(State, Msg) of
+        {ok, NewState} ->
+            {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, serialization_failed} ->
-            {noreply, State0, ?PROTO_CONNECTION_TIMEOUT};
+            {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         Error ->
-            {stop, Error, State0}
+            {stop, Error, State}
     end;
 send_message_async(State, _Msg) ->
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -253,13 +249,12 @@ send_message_async(State, _Msg) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(upgrade_protocol, #state{ip = Hostname} = State0) ->
-    case socket_send(State0, protocol_utils:protocol_upgrade_request(Hostname)) of
-        {ok, State1} ->
-            State2 = State1#state{last_message_timestamp = os:timestamp()},
-            {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
+handle_info(upgrade_protocol, #state{ip = Hostname} = State) ->
+    case socket_send(State, protocol_utils:protocol_upgrade_request(Hostname)) of
+        {ok, NewState} ->
+            {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
-            {stop, Reason, State0}
+            {stop, Reason, State}
     end;
 
 handle_info({Ok, Socket, Data}, State = #state{status = upgrading_protocol, ok = Ok}) ->
@@ -281,10 +276,7 @@ handle_info({Ok, Socket, Data}, State = #state{status = upgrading_protocol, ok =
             ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
             case send_client_message(State, ClientMsg) of
                 {ok, State1} ->
-                    State2 = State1#state{
-                        status = performing_handshake,
-                        last_message_timestamp = os:timestamp()
-                    },
+                    State2 = State1#state{status = performing_handshake},
                     activate_socket_once(State2),
                     {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
                 {error, Reason} ->
@@ -292,27 +284,22 @@ handle_info({Ok, Socket, Data}, State = #state{status = upgrading_protocol, ok =
             end
     end;
 
-handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State0) ->
-    case handle_handshake(State0, Data) of
-        {ok, State1} ->
-            State2 = State1#state{
-                status = ready,
-                last_message_timestamp = os:timestamp()
-            },
-            activate_socket_once(State2),
-            {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
+handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
+    case handle_handshake(State, Data) of
+        {ok, NewState} ->
+            activate_socket_once(NewState),
+            {noreply, NewState#state{status = ready}, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
-            {stop, Reason, State0}
+            {stop, Reason, State}
     end;
 
-handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State0) ->
-    case handle_message(State0, Data) of
-        {ok, State1} ->
-            State2 = State1#state{last_message_timestamp = os:timestamp()},
-            activate_socket_once(State2),
-            {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
+handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
+    case handle_message(State, Data) of
+        {ok, NewState} ->
+            activate_socket_once(NewState),
+            {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
-            {stop, Reason, State0}
+            {stop, Reason, State}
     end;
 
 handle_info({Closed, _}, State = #state{closed = Closed}) ->
@@ -329,22 +316,9 @@ handle_info(timeout, State = #state{socket = Socket}) ->
 handle_info(disconnect, State) ->
     {stop, normal, State};
 
-handle_info(heartbeat, #state{last_message_timestamp = LMT} = State) ->
-    Interval = async_request_manager:get_processes_check_interval(),
-    erlang:send_after(Interval, self(), heartbeat),
-
-    Diff = timer:now_diff(os:timestamp(), LMT),
-    case Diff > ?PROTO_CONNECTION_TIMEOUT * 1000 of
-        true ->
-            ?info("Connection ~p timeout", [State#state.socket]),
-            {stop, normal, State};
-        _ ->
-            {noreply, State, ?PROTO_CONNECTION_TIMEOUT}
-    end;
-
 handle_info(Info, State) ->
     ?log_bad_request(Info),
-    {stop, normal, State}.
+    {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
 
 
 %%--------------------------------------------------------------------
@@ -460,7 +434,6 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         error = Error,
         type = incoming,
         status = performing_handshake,
-        last_message_timestamp = os:timestamp(),
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
     ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
@@ -471,9 +444,6 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         active_once ->
             activate_socket_once(State)
     end,
-
-    Interval = async_request_manager:get_processes_check_interval(),
-    erlang:send_after(Interval, self(), heartbeat),
 
     gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT).
 
