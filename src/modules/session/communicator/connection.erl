@@ -158,40 +158,23 @@ init([]) -> {ok, undefined}.
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({send, #server_message{} = Msg}, _From, #state{type = outgoing} = State) ->
-    send_message_sync(State, to_client_message(Msg));
-handle_call({send, #client_message{} = Msg}, _From, #state{type = outgoing} = State) ->
-    send_message_sync(State, Msg);
-handle_call({send, #server_message{} = Msg}, _From, #state{type = incoming} = State) ->
-    send_message_sync(State, Msg);
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, {error, wrong_request}, State, ?PROTO_CONNECTION_TIMEOUT}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tries to send message to peer if connection is in `ready` state and
-%% provides feedback about eventual failure (e.g. serialization error or
-%% not ready connection). In case of socket errors it also stops
-%% connection process.
-%% @end
-%%--------------------------------------------------------------------
--spec send_message_sync(state(), message()) ->
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: state()}.
-send_message_sync(#state{status = ready} = State, Msg) ->
+handle_call({send, Msg}, _From, #state{status = ready} = State) ->
     case send_message(State, Msg) of
         {ok, NewState} ->
             {reply, ok, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, serialization_failed} = SerializationError ->
             {reply, SerializationError, State, ?PROTO_CONNECTION_TIMEOUT};
+        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+            {reply, WrongConnError, State, ?PROTO_CONNECTION_TIMEOUT};
         Error ->
             {stop, Error, Error, State}
     end;
-send_message_sync(#state{status = Status} = State, _Msg) ->
-    {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT}.
+handle_call({send, _Msg}, _From, #state{status = Status, socket = Socket} = State) ->
+    ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
+    {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT};
+handle_call(_Request, _From, State) ->
+    ?log_bad_request(_Request),
+    {reply, {error, wrong_request}, State, ?PROTO_CONNECTION_TIMEOUT}.
 
 
 %%--------------------------------------------------------------------
@@ -204,37 +187,22 @@ send_message_sync(#state{status = Status} = State, _Msg) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({send, #server_message{} = Msg}, #state{type = outgoing} = State) ->
-    send_message_async(State, to_client_message(Msg));
-handle_cast({send, #client_message{} = Msg}, #state{type = outgoing} = State) ->
-    send_message_async(State, Msg);
-handle_cast({send, #server_message{} = Msg}, #state{type = incoming} = State) ->
-    send_message_async(State, Msg);
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
-    {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tries to send message to peer if connection is in `ready`.
-%% Stops connection process in case of socket errors.
-%% @end
-%%--------------------------------------------------------------------
--spec send_message_async(state(), message()) ->
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-send_message_async(#state{status = ready} = State, Msg) ->
+handle_cast({send, Msg}, #state{status = ready} = State) ->
     case send_message(State, Msg) of
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, serialization_failed} ->
             {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
+        {error, sending_msg_via_wrong_connection} ->
+            {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         Error ->
             {stop, Error, State}
     end;
-send_message_async(State, _Msg) ->
+handle_cast({send, _Msg}, #state{socket = Socket} = State) ->
+    ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
+    {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
+handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
 
 
@@ -257,31 +225,14 @@ handle_info(upgrade_protocol, #state{ip = Hostname} = State) ->
             {stop, Reason, State}
     end;
 
-handle_info({Ok, Socket, Data}, State = #state{status = upgrading_protocol, ok = Ok}) ->
-    case protocol_utils:verify_protocol_upgrade_response(Data) of
-        false ->
-            ?error("Received invalid protocol upgrade response: ~p", [Data]),
-            {stop, normal, State};
-        true ->
-            {ok, MsgId} = message_id:generate(self()),
-            {ok, Nonce} = authorization_nonce:create(),
-            ClientMsg = #client_message{
-                message_id = MsgId,
-                message_body = #provider_handshake_request{
-                    provider_id = oneprovider:get_id(),
-                    nonce = Nonce
-                }
-            },
-            #state{socket = Socket, transport = Transport} = State,
-            ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
-            case send_client_message(State, ClientMsg) of
-                {ok, State1} ->
-                    State2 = State1#state{status = performing_handshake},
-                    activate_socket_once(State2),
-                    {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
-                {error, Reason} ->
-                    {stop, Reason, State}
-            end
+handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
+    case handle_protocol_upgrade(State, Data) of
+        {ok, State1} ->
+            State2 = State1#state{status = performing_handshake},
+            activate_socket_once(State2),
+            {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
+        {error, Reason} ->
+            {stop, Reason, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -298,6 +249,9 @@ handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok}
         {ok, NewState} ->
             activate_socket_once(NewState),
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
+        % Serialization error should not break connection
+        {error, serialization_failed} ->
+            {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             {stop, Reason, State}
     end;
@@ -631,6 +585,30 @@ reset_reconnect_interval(Intervals, ProviderId) ->
 
 
 %% @private
+-spec handle_protocol_upgrade(state(), Data :: binary()) ->
+    {ok, state()} | {error, Reason :: term()}.
+handle_protocol_upgrade(State, Data) ->
+    case protocol_utils:verify_protocol_upgrade_response(Data) of
+        false ->
+            ?error("Received invalid protocol upgrade response: ~p", [Data]),
+            {error, invalid_protocol_upgrade_response};
+        true ->
+            {ok, MsgId} = message_id:generate(self()),
+            {ok, Nonce} = authorization_nonce:create(),
+            ClientMsg = #client_message{
+                message_id = MsgId,
+                message_body = #provider_handshake_request{
+                    provider_id = oneprovider:get_id(),
+                    nonce = Nonce
+                }
+            },
+            #state{socket = Socket, transport = Transport} = State,
+            ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
+            send_client_message(State, ClientMsg)
+    end.
+
+
+%% @private
 -spec handle_handshake(state(), binary()) ->
     {ok, state()} | {error, Reason :: term()}.
 handle_handshake(#state{type = incoming} = State, Data) ->
@@ -747,13 +725,7 @@ route_message(State, Msg) ->
         ok ->
             {ok, State};
         {ok, ServerMsg} ->
-            case send_server_message(State, ServerMsg) of
-                % Ignore serialization errors as they should not break connection
-                {error, serialization_failed} ->
-                    {ok, State};
-                Result ->
-                    Result
-            end;
+            send_server_message(State, ServerMsg);
         {error, Reason} ->
             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
             {ok, State}
@@ -763,10 +735,15 @@ route_message(State, Msg) ->
 %% @private
 -spec send_message(state(), message()) ->
     {ok, state()} | {error, Reason :: term()}.
-send_message(State, #client_message{} = ClientMessage) ->
-    send_client_message(State, ClientMessage);
-send_message(State, #server_message{} = ServerMessage) ->
-    send_server_message(State, ServerMessage).
+send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
+    send_client_message(State, Msg);
+send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
+    send_server_message(State, Msg);
+send_message(#state{type = ConnType}, Msg) ->
+    ?warning("Attempt to send msg ~p via incorrect connection ~p", [
+        Msg, ConnType
+    ]),
+    {error, sending_msg_via_wrong_connection}.
 
 
 %% @private
@@ -808,7 +785,10 @@ socket_send(#state{transport = Transport, socket = Socket} = State, Data) ->
     case Transport:send(Socket, Data) of
         ok ->
             {ok, State};
-        {error, _Reason} = Error ->
+        {error, Reason} = Error ->
+            ?error_stacktrace("Unable to send message via socket ~p due to: ~p", [
+                Socket, Reason
+            ]),
             Error
     end.
 
@@ -856,24 +836,3 @@ activate_socket_once(#state{socket_mode = active_always}) ->
     ok;
 activate_socket_once(#state{transport = Transport, socket = Socket}) ->
     ok = Transport:setopts(Socket, [{active, once}]).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts given server_message to client_message if possible.
-%% @end
-%%--------------------------------------------------------------------
--spec to_client_message(Msg :: server_message()) -> client_message().
-to_client_message(#server_message{
-    message_id = Id,
-    message_stream = Stream,
-    message_body = Body,
-    proxy_session_id = SessId
-}) ->
-    #client_message{
-        message_id = Id,
-        message_stream = Stream,
-        message_body = Body,
-        proxy_session_id = SessId
-    }.
