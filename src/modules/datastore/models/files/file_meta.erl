@@ -132,7 +132,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
             {ok, #link{}} ->
-                case save(FileDoc3) of
+                case ?MODULE:save(FileDoc3) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;

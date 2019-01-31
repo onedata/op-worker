@@ -24,6 +24,9 @@
     open_file_insecure/4, open_file_with_extended_info_insecure/3,
     fsync/4, release/3, flush_event_queue/2]).
 
+%% Test API
+-export([create_file_doc/4]).
+
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
 %%%===================================================================
@@ -332,7 +335,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            fslogic_location_cache:delete_location(FileUuid, file_location:local_id(FileUuid)),
+            file_location_utils:delete_file_location(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)

@@ -76,7 +76,7 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/2,
     sync_should_not_invalidate_file_after_replication/1,
     sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/2,
-    delete_many_subfiles_test/2]).
+    delete_many_subfiles_test/2, create_file_import_race_test/2]).
 
 -define(assertBlocks(Worker, SessionId, ExpectedDistribution, FileGuid),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
@@ -87,9 +87,101 @@
     end, ?ATTEMPTS)
 ).
 
+-define(WRITE_TEXT, <<"overwrite_test_data">>).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+create_file_import_race_test(Config, MountSpaceInRoot) ->
+    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+
+    Master = self(),
+    CreateProc = spawn(fun() ->
+        Ans = receive
+            create ->
+                try
+                    {ok, {_, CreateHandle}} = lfm_proxy:create_and_open(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
+                    {ok, _} = lfm_proxy:write(W1, CreateHandle, 0, ?WRITE_TEXT),
+                    ok = lfm_proxy:close(W1, CreateHandle)
+                catch
+                    E1:E2  ->
+                        {E1, E2}
+                end
+            after
+                60000 ->
+                    timeout
+        end,
+        Master ! {create_ans, Ans}
+    end),
+
+    test_utils:mock_new(Workers, simple_scan, [passthrough]),
+    test_utils:mock_expect(Workers, simple_scan, import_file,
+        fun(Job, FileUuid) ->
+            CreateProc ! create,
+            timer:sleep(5000),
+            meck:passthrough([Job, FileUuid])
+        end),
+
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    %% Create file on storage
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+
+    assertImportTimes(W1, ?SPACE_ID),
+
+    CreateAns = receive
+                    {create_ans, A} -> A
+                after
+                    60000 -> timeout
+                end,
+    ?assertEqual(ok, CreateAns),
+
+    %% Check if file was imported on W1
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    {ok, Handle1} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?WRITE_TEXT},
+        lfm_proxy:read(W1, Handle1, 0, 1000)),
+    lfm_proxy:close(W1, Handle1),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was imported on W2
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), 5 * ?ATTEMPTS),
+    {ok, Handle2} = ?assertMatch({ok, _},
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?WRITE_TEXT},
+        lfm_proxy:read(W2, Handle2, 0, 100), ?ATTEMPTS),
+
+    test_utils:mock_validate_and_unload(Workers, simple_scan).
 
 create_delete_import_test_read_both(Config, MountSpaceInRoot) ->
     create_delete_import_test(Config, MountSpaceInRoot, true).

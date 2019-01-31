@@ -83,7 +83,8 @@
     append_file_not_changing_mtime_update_test/1,
     sync_should_not_invalidate_file_after_replication/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
-    delete_many_subfiles_test/1, sync_should_not_reimport_deleted_but_still_opened_file/1]).
+    delete_many_subfiles_test/1, sync_should_not_reimport_deleted_but_still_opened_file/1,
+    create_file_import_race_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -147,7 +148,8 @@
     update_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
     should_not_sync_file_during_replication,
-    sync_should_not_invalidate_file_after_replication
+    sync_should_not_invalidate_file_after_replication,
+    create_file_import_race_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -155,6 +157,9 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
+
+create_file_import_race_test(Config) ->
+    storage_sync_test_base:create_file_import_race_test(Config, false).
 
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
