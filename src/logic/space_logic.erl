@@ -33,7 +33,7 @@
 -export([is_supported/2, is_supported/3]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
-
+-export([get_harvesters/2, get_harvesters/1]).
 
 %%%===================================================================
 %%% API
@@ -240,3 +240,15 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
     has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
         has_eff_group(SpaceDoc, GroupId).
 
+-spec get_harvesters(session:id(), od_space:id()) -> {ok, [od_harvester:id()]} | gs_protocol:error().
+get_harvesters(SessionId, SpaceId) ->
+    case get(SessionId, SpaceId) of
+        {ok, Doc} ->
+            get_harvesters(Doc);
+        Error ->
+            Error
+    end.
+
+-spec get_harvesters(od_space:doc()) -> {ok, [od_harvester:id()]}.
+get_harvesters(#document{value = #od_space{harvesters = Harvesters}}) ->
+    {ok, Harvesters}.

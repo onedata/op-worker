@@ -78,8 +78,6 @@
     list_xattr, fsync]).
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
--define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
-
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================

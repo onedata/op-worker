@@ -94,6 +94,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     };
 
 translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
+    ?critical("DUPA: ~p", [Result]),
     #document{
         key = Id,
         value = #od_space{
@@ -106,7 +107,10 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
             providers = maps:get(<<"providers">>, Result),
-            shares = maps:get(<<"shares">>, Result)
+            shares = maps:get(<<"shares">>, Result),
+
+            harvesters = maps:get(<<"harvesters">>, Result)
+
         }
     };
 
@@ -208,6 +212,15 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
             public_handle = maps:get(<<"publicHandle">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
             timestamp = time_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result))
+        }
+    };
+
+translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = [private]}, Result) ->
+    #document{
+        key = Id,
+        value = #od_harvester{
+            name = maps:get(<<"name">>, Result),
+            spaces = maps:get(<<"spaces">>, Result)
         }
     };
 

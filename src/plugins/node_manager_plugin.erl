@@ -100,7 +100,11 @@ modules_with_args() -> filter_disabled_workers([
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {space_sync_worker, []}
+    {space_sync_worker, []},
+    {harvest_worker, [
+        {supervisor_flags, harvest_worker:supervisor_flags()},
+        {supervisor_children_spec, harvest_worker:supervisor_children_spec()}
+    ]}
 ]).
 
 %%-------------------------------------------------------------------

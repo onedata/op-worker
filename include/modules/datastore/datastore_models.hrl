@@ -99,6 +99,8 @@
 
     shares = [] :: [od_share:id()],
 
+    harvesters = [] :: [od_harvester:id()],
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -161,6 +163,15 @@
     % Effective relations to other entities
     eff_users = #{} :: maps:map(od_user:id(), [privileges:handle_privilege()]),
     eff_groups = #{} :: maps:map(od_group:id(), [privileges:handle_privilege()]),
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_harvester, {
+    name = <<"">> :: od_harvester:name(),
+
+    % Direct relations to other entities
+    spaces = [] :: entity_graph:relations(od_space:id()),
 
     cache_state = #{} :: cache_state()
 }).
@@ -674,6 +685,11 @@
     reduce_function :: undefined | index:index_function(),
     index_options = [] :: index:options(),
     providers = [] :: all | [od_provider:id()]
+}).
+
+%% Model that holds the last processed seq for given space
+-record(harvest_stream_state, {
+    seq = 1 :: couchbase_changes:seq()
 }).
 
 -endif.

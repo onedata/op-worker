@@ -504,7 +504,9 @@ put_cache_state(CacheState, Doc = #document{value = Provider = #od_provider{}}) 
 put_cache_state(CacheState, Doc = #document{value = HService = #od_handle_service{}}) ->
     Doc#document{value = HService#od_handle_service{cache_state = CacheState}};
 put_cache_state(CacheState, Doc = #document{value = Handle = #od_handle{}}) ->
-    Doc#document{value = Handle#od_handle{cache_state = CacheState}}.
+    Doc#document{value = Handle#od_handle{cache_state = CacheState}};
+put_cache_state(CacheState, Doc = #document{value = Harvester = #od_harvester{}}) ->
+    Doc#document{value = Harvester#od_harvester{cache_state = CacheState}}.
 
 
 -spec get_cache_state(doc()) -> cache_state().
@@ -521,6 +523,8 @@ get_cache_state(#document{value = #od_provider{cache_state = CacheState}}) ->
 get_cache_state(#document{value = #od_handle_service{cache_state = CacheState}}) ->
     CacheState;
 get_cache_state(#document{value = #od_handle{cache_state = CacheState}}) ->
+    CacheState;
+get_cache_state(#document{value = #od_harvester{cache_state = CacheState}}) ->
     CacheState.
 
 
@@ -553,6 +557,9 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
     true;
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
+    true;
+
+is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
 
 % Provider can access shares of spaces that it supports
