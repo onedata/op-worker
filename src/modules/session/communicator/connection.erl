@@ -115,7 +115,24 @@ connect_to_provider(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout)
 %%-------------------------------------------------------------------
 -spec send_sync(pid(), message()) -> ok | {error, term()}.
 send_sync(Pid, Msg) ->
-    gen_server2:call(Pid, {send, Msg}).
+    try
+        gen_server2:call(Pid, {send, Msg})
+    catch
+        exit:{noproc, _} ->
+            ?debug("Connection process ~p does not exist", [Pid]),
+            {error, no_connection};
+        exit:{normal, _} ->
+            ?debug("Exit of connection process ~p for request ~p", [Pid, Msg]),
+            {error, no_connection};
+        exit:{timeout, _} ->
+            ?debug("Timeout of connection process ~p for request ~p", [Pid, Msg]),
+            {error, timeout};
+        Type:Reason ->
+            ?error("Connection ~p cannot send msg ~p due to: ~p", [
+                Pid, Msg, {Type, Reason}
+            ]),
+            {error, Reason}
+    end.
 
 
 %%-------------------------------------------------------------------
