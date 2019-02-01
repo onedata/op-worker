@@ -226,10 +226,10 @@ handle_info(upgrade_protocol, #state{ip = Hostname} = State) ->
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
-    case handle_protocol_upgrade(State, Data) of
+    case handle_protocol_upgrade_response(State, Data) of
         {ok, State1} ->
             State2 = State1#state{status = performing_handshake},
-            activate_socket_once(State2),
+            activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             {stop, Reason, State}
@@ -238,7 +238,7 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
     case handle_handshake(State, Data) of
         {ok, NewState} ->
-            activate_socket_once(NewState),
+            activate_socket(NewState, false),
             {noreply, NewState#state{status = ready}, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             {stop, Reason, State}
@@ -247,7 +247,7 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
     case handle_message(State, Data) of
         {ok, NewState} ->
-            activate_socket_once(NewState),
+            activate_socket(NewState, false),
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         % Serialization error should not break connection
         {error, serialization_failed} ->
@@ -375,13 +375,15 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
 -spec takeover(pid(), ranch:ref(), inet:socket(), module(), any(), binary(),
     any()) -> no_return().
 takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
+    % Remove connection from the overall connections count so it will not be
+    % included in limiting the number of e.g. REST connections.
     ranch:remove_connection(Ref),
+
     {Ok, Closed, Error} = Transport:messages(),
-    SocketMode = ?DEFAULT_SOCKET_MODE,
 
     State = #state{
         socket = Socket,
-        socket_mode = SocketMode,
+        socket_mode = ?DEFAULT_SOCKET_MODE,
         transport = Transport,
         ok = Ok,
         closed = Closed,
@@ -390,14 +392,9 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         status = performing_handshake,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
-    ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
 
-    case SocketMode of
-        active_always ->
-            Transport:setopts(Socket, [{active, true}]);
-        active_once ->
-            activate_socket_once(State)
-    end,
+    ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
+    activate_socket(State, true),
 
     gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT).
 
@@ -432,10 +429,11 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
             exit(normal);
         true ->
             try
-                State = init_connection_to_provider(
+                State = connect_to_provider_internal(
                     SessionId, ProviderId, Domain, Host, Port,
                     Transport, Timeout
                 ),
+                ok = proc_lib:init_ack({ok, self()}),
                 reset_reconnect_interval(Intervals, ProviderId),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
             catch
@@ -454,7 +452,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                     ]),
                     exit(normal);
                 Type:Reason ->
-                    ?warning_stacktrace("Failed to connect to peer provider(~p) - ~p:~p. "
+                    ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
                     "Next retry not sooner than ~p seconds.", [
                         ProviderId, Type, Reason, Interval
                     ]),
@@ -470,22 +468,12 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
 %% Attempts to connect to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec init_connection_to_provider(session:id(), od_provider:id(),
+-spec connect_to_provider_internal(session:id(), od_provider:id(),
     Domain :: binary(), Host :: binary(),
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> state() | no_return().
-init_connection_to_provider(SessionId, ProviderId, Domain, Host, Port,
-    Transport, Timeout
-) ->
-    case provider_logic:verify_provider_identity(ProviderId) of
-        ok ->
-            ok;
-        Err ->
-            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
-                ProviderId, Err
-            ]),
-            throw(cannot_verify_identity)
-    end,
+connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
+    verify_provider_identity(ProviderId),
 
     SslOpts = [
         {cacerts, oneprovider:trusted_ca_certs()},
@@ -502,8 +490,7 @@ init_connection_to_provider(SessionId, ProviderId, Domain, Host, Port,
 
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-
-    {Ok, Closed, Error} = Transport:messages(),
+    self() ! upgrade_protocol,
 
     session_manager:reuse_or_create_provider_session(
         SessionId, provider_outgoing, #user_identity{
@@ -511,13 +498,10 @@ init_connection_to_provider(SessionId, ProviderId, Domain, Host, Port,
         }, self()
     ),
 
-    ok = proc_lib:init_ack({ok, self()}),
-    self() ! upgrade_protocol,
-
-    SocketMode = ?DEFAULT_SOCKET_MODE,
+    {Ok, Closed, Error} = Transport:messages(),
     State = #state{
         socket = Socket,
-        socket_mode = SocketMode,
+        socket_mode = ?DEFAULT_SOCKET_MODE,
         transport = Transport,
         ip = Host,
         ok = Ok,
@@ -529,15 +513,23 @@ init_connection_to_provider(SessionId, ProviderId, Domain, Host, Port,
         peer_id = ProviderId,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
     },
-
-    case SocketMode of
-        active_always ->
-            Transport:setopts(Socket, [{active, true}]);
-        active_once ->
-            activate_socket_once(State)
-    end,
+    activate_socket(State, true),
 
     State.
+
+
+%% @private
+-spec verify_provider_identity(od_provider:id()) -> ok | no_return().
+verify_provider_identity(ProviderId) ->
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok ->
+            ok;
+        Error ->
+            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
+                ProviderId, Error
+            ]),
+            throw(cannot_verify_identity)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -584,10 +576,15 @@ reset_reconnect_interval(Intervals, ProviderId) ->
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec handle_protocol_upgrade(state(), Data :: binary()) ->
+%% @doc
+%% Verifies protocol upgrade response and sends handshake request.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_protocol_upgrade_response(state(), Data :: binary()) ->
     {ok, state()} | {error, Reason :: term()}.
-handle_protocol_upgrade(State, Data) ->
+handle_protocol_upgrade_response(State, Data) ->
     case protocol_utils:verify_protocol_upgrade_response(Data) of
         false ->
             ?error("Received invalid protocol upgrade response: ~p", [Data]),
@@ -638,9 +635,7 @@ handle_handshake_request(#state{
             message_body = #handshake_response{status = 'OK'}
         })
     catch Type:Reason ->
-        ?debug_stacktrace("Invalid handshake request - ~p:~p", [
-            Type, Reason
-        ]),
+        ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
         send_server_message(State, auth_manager:get_handshake_error(Reason)),
         {error, Reason}
     end.
@@ -669,7 +664,7 @@ handle_handshake_response(#state{
             {error, invalid_handshake_response}
     catch
         _:Error ->
-            ?warning_stacktrace("Client message decoding error: ~p", [Error]),
+            ?warning("Client message decoding error: ~p", [Error]),
             {error, Error}
     end.
 
@@ -727,7 +722,7 @@ route_message(State, Msg) ->
         {ok, ServerMsg} ->
             send_server_message(State, ServerMsg);
         {error, Reason} ->
-            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+            ?error_stacktrace("Message ~p handling error: ~p", [Msg, Reason]),
             {ok, State}
     end.
 
@@ -740,7 +735,7 @@ send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
 send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
     send_server_message(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
-    ?warning("Attempt to send msg ~p via incorrect connection ~p", [
+    ?warning_stacktrace("Attempt to send msg ~p via wrong connection ~p", [
         Msg, ConnType
     ]),
     {error, sending_msg_via_wrong_connection}.
@@ -824,15 +819,21 @@ fill_server_msg_proxy_info(_, Msg) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% If socket_mode is set to active_always does nothing because it was
-%% already set during connection creation and every received packet will
-%% be send to process as erlang message.
+%% If socket_mode is set to active_always then set it as such only during
+%% first activation and do nothing for latter ones. It will cause every message
+%% received on socket to be send to connection process as erlang message.
 %% Otherwise (active_once) activates socket so that only next received packet
 %% will be send to process as erlang message.
 %% @end
 %%--------------------------------------------------------------------
--spec activate_socket_once(state()) -> ok.
-activate_socket_once(#state{socket_mode = active_always}) ->
+-spec activate_socket(state(), IsFirstActivation :: boolean()) -> ok.
+activate_socket(#state{
+    socket_mode = active_always,
+    transport = Transport,
+    socket = Socket
+}, true) ->
+    ok = Transport:setopts(Socket, [{active, true}]);
+activate_socket(#state{socket_mode = active_always}, false) ->
     ok;
-activate_socket_once(#state{transport = Transport, socket = Socket}) ->
+activate_socket(#state{transport = Transport, socket = Socket}, _) ->
     ok = Transport:setopts(Socket, [{active, once}]).
