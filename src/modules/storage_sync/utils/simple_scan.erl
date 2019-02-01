@@ -32,6 +32,9 @@
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
+% Test API
+-export([try_to_resolve_child_deletion_link/2]).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% calls ?MODULE:run_internal/1 and catches exceptions
@@ -138,7 +141,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
 
     case try_to_resolve_child_link(FileBaseName, ParentCtx) of
         {error, not_found} ->
-            case try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case ?MODULE:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     case HasSuffix of
                         true ->
