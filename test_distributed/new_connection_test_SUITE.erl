@@ -1,15 +1,16 @@
 %%%--------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests protocol handler
+%%% @doc
+%%% This module tests connection module.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(new_connection_test_SUITE).
--author("Tomasz Lichon").
+-author("Bartosz Walkowicz").
 
 -include("fuse_utils.hrl").
 -include("global_definitions.hrl").
@@ -35,76 +36,74 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 
-%%tests
+%% tests
 -export([
     provider_connection_test/1,
-    rtransfer_connection_secret_test/1,
-    rtransfer_nodes_ips_test/1,
-    macaroon_connection_test/1,
-    compatible_client_connection_test/1,
-    incompatible_client_connection_test/1,
+    client_connection_test/1,
     python_client_test/1,
-    proto_version_test/1,
-%%    broken_connection_test/1,
-    protobuf_msg_test/1,
-    bandwidth_test/1,
-    multi_message_test/1,
-    multi_ping_pong_test/1,
+    multi_connection_test/1,
+
+    protobuf_message_test/1,
     sequential_ping_pong_test/1,
-    multi_connection_test/1
+    multi_ping_pong_test/1,
+
+    bandwidth_test/1,
+    bandwidth_test2/1,
+
+    rtransfer_connection_secret_test/1,
+    rtransfer_nodes_ips_test/1
+
+%%    broken_connection_test/1,
 %%    client_send_test/1,
 %%    client_communicate_test/1,
 %%    client_communicate_async_test/1,
 %%    timeouts_test/1,
 %%    client_keepalive_test/1,
 %%    socket_timeout_test/1,
-%%    fallback_during_sending_response_test/1,
-%%    fulfill_promises_after_connection_close_test/1
 ]).
 
-%%test_bases
+%% test_bases
 -export([
     python_client_test_base/1,
-    bandwidth_test_base/1,
-    multi_message_test_base/1,
-    multi_ping_pong_test_base/1,
+    multi_connection_test_base/1,
     sequential_ping_pong_test_base/1,
-    multi_connection_test_base/1
+    multi_ping_pong_test_base/1,
+    bandwidth_test_base/1,
+    bandwidth_test2_base/1
 ]).
 
 -define(NORMAL_CASES_NAMES, [
     provider_connection_test,
-    rtransfer_connection_secret_test,
-    rtransfer_nodes_ips_test,
-    macaroon_connection_test,
-    compatible_client_connection_test,
-    incompatible_client_connection_test,
+    client_connection_test,
     python_client_test,
-    proto_version_test,
-%%    broken_connection_test,
-    protobuf_msg_test,
-    bandwidth_test,
-    multi_message_test,
-    multi_ping_pong_test,
+    multi_connection_test,
+
+    protobuf_message_test,
     sequential_ping_pong_test,
-    multi_connection_test
+    multi_ping_pong_test,
+
+    bandwidth_test,
+    bandwidth_test2,
+
+    rtransfer_connection_secret_test,
+    rtransfer_nodes_ips_test
+
+%%    broken_connection_test,
 %%    client_send_test,
 %%    client_communicate_test,
 %%    client_communicate_async_test
 %%    socket_timeout_test,
 %%    timeouts_test,
 %%    client_keepalive_test,
-%%    fallback_during_sending_response_test,
-%%    fulfill_promises_after_connection_close_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
     python_client_test,
-    bandwidth_test,
-    multi_message_test,
-    multi_ping_pong_test,
+    multi_connection_test,
     sequential_ping_pong_test,
-    multi_connection_test
+    multi_ping_pong_test,
+    bandwidth_test,
+    bandwidth_test2
 ]).
 
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
@@ -122,159 +121,42 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
     timeout :: timeout()
 }).
 
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
+
 provider_connection_test(Config) ->
-    % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    % then
-    ?assertMatch(
-        {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
-        handshake_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE)
-    ),
-    ?assertMatch(
-        {ok, #'HandshakeResponse'{status = 'INVALID_PROVIDER'}},
-        handshake_as_provider(Worker1, ?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
-    ),
-    ?assertMatch(
-        {ok, #'HandshakeResponse'{status = 'INVALID_NONCE'}},
-        handshake_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE)
-    ),
-    ?assertMatch(
-        {ok, #'HandshakeResponse'{status = 'OK'}},
-        handshake_as_provider(Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE)
-    ).
+    lists:foreach(fun({ProviderId, Nonce, ExpStatus}) ->
+        ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Nonce))
+    end, [
+        {?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE, 'INVALID_PROVIDER'},
+        {?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE, 'INVALID_PROVIDER'},
+        {?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE, 'INVALID_NONCE'},
+        {?CORRECT_PROVIDER_ID, ?CORRECT_NONCE, 'OK'}
+    ]).
 
-rtransfer_connection_secret_test(Config) ->
-    % given
+
+client_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-
-    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = connect_as_provider(
-        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+    {ok, [CompatibleVersion | _]} = rpc:call(
+        Worker1, application, get_env, [?APP_NAME, compatible_oc_versions]
     ),
-
-    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
-    {ok, EncodedId} = message_id:encode(MsgId),
-    ClientMsg = #'ClientMessage'{
-        message_id = EncodedId,
-        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{secret = <<>>}}
-    },
-    RawMsg = messages:encode_msg(ClientMsg),
-    ssl:send(Sock, RawMsg),
-    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
-
-    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, fuse_utils:receive_server_message()),
-
-    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}} = ?assertMatch(
-        {rtransfer_conn_secret, #'RTransferConnSecret'{}},
-        Msg
-    ),
-    ?assert(is_binary(Secret)),
-    ok = ssl:close(Sock).
-
-
-rtransfer_nodes_ips_test(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    ClusterIPs = rpc:call(Worker1, node_manager, get_cluster_ips, []),
-
-    ExpectedIPs = [list_to_binary(inet:ntoa(IP)) || IP <- ClusterIPs],
-    ExpectedPort = proplists:get_value(server_port,
-        application:get_env(rtransfer_link, transfer, []), 6665),
-
-    ExpectedNodes = lists:sort(
-        [#'IpAndPort'{ip = IP, port = ExpectedPort} || IP <- ExpectedIPs]
-    ),
-
-    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = connect_as_provider(
-        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
-    ),
-
-    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
-    {ok, EncodedId} = message_id:encode(MsgId),
-    ClientMsg = #'ClientMessage'{
-        message_id = EncodedId,
-        message_body = {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}}
+    Macaroon = #'Macaroon'{
+        macaroon = ?MACAROON,
+        disch_macaroons = ?DISCH_MACAROONS
     },
 
-    RawMsg = messages:encode_msg(ClientMsg),
-    ssl:send(Sock, RawMsg),
-    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+    lists:foreach(fun({Macaroon, Version, ExpStatus}) ->
+        ?assertMatch(ExpStatus, handshake_as_client(Worker1, Macaroon, Version))
+    end, [
+        {Macaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
+        {Macaroon, CompatibleVersion, 'OK'}
+    ]).
 
-    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, fuse_utils:receive_server_message()),
-
-    {rtransfer_nodes_ips, #'RTransferNodesIPs'{nodes = RespNodes}} = ?assertMatch(
-        {rtransfer_nodes_ips, #'RTransferNodesIPs'{}},
-        Msg
-    ),
-    ?assertEqual(ExpectedNodes, RespNodes),
-    ok = ssl:close(Sock).
-
-macaroon_connection_test(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-
-    % then
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
-    ok = ssl:close(Sock).
-
-compatible_client_connection_test(Config) ->
-    % given
-    [Node | _] = ?config(op_worker_nodes, Config),
-    {ok, [Version | _]} = rpc:call(
-        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
-    ),
-
-    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
-            version = list_to_binary(Version)
-        }
-    }},
-    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-
-    % when
-    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
-
-    % then
-    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
-        status = Status
-    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
-        fuse_utils:receive_server_message()
-    ),
-    ?assertMatch('OK', Status),
-    ok.
-
-incompatible_client_connection_test(Config) ->
-    % given
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
-            version = <<"16.07-rc2">>
-        }
-    }},
-    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-
-    % when
-    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
-
-    % then
-    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
-        status = Status
-    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
-        fuse_utils:receive_server_message()
-    ),
-    ?assertMatch('INCOMPATIBLE_VERSION', Status),
-    ok.
 
 python_client_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -310,7 +192,6 @@ python_client_test_base(Config) ->
         #'ClientHandshakeRequest'{
             session_id = <<"session_id">>,
             macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
-
             version = list_to_binary(Version)
         }
     }},
@@ -353,30 +234,348 @@ python_client_test_base(Config) ->
     catch port_close(PythonClient),
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
-proto_version_test(Config) ->
+
+multi_connection_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 10},
+        {success_rate, 90},
+        {parameters, [
+            [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
+        ]},
+        {description, "Opens 'connections_num' connections to the server, checks "
+        "their state, and closes them."},
+        {config, [{name, multi_connection},
+            {parameters, [
+                [{name, connections_num}, {value, 1000}]
+            ]}
+        ]}
+    ]
+    ).
+multi_connection_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    MsgId = <<"message_id">>,
-    GetProtoVersion = #'ClientMessage'{
-        message_id = MsgId,
-        message_body = {get_protocol_version, #'GetProtocolVersion'{}}
-    },
-    GetProtoVersionRaw = messages:encode_msg(GetProtoVersion),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+    ConnNumbers = ?config(connections_num, Config),
+    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
+    initializer:remove_pending_messages(),
 
     % when
-    ok = ssl:send(Sock, GetProtoVersionRaw),
+    Connections = lists:map(fun(_) ->
+        fuse_utils:connect_via_macaroon(Worker1, [])
+    end, ConnNumbersList),
 
-    %then
-    #'ServerMessage'{message_body = {_, #'ProtocolVersion'{
-        major = Major, minor = Minor
-    }}} = ?assertMatch(#'ServerMessage'{
-        message_id = MsgId,
-        message_body = {protocol_version, #'ProtocolVersion'{}}
-    }, fuse_utils:receive_server_message()),
+    % then
+    lists:foreach(fun(ConnectionAns) ->
+        ?assertMatch({ok, {_, _}}, ConnectionAns),
+        {ok, {_Sock, SessId}} = ConnectionAns,
+        ?assert(is_binary(SessId))
+    end, Connections),
+    lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
+
+
+protobuf_message_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+    {Major, Minor} = fuse_utils:get_protocol_version(Sock),
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
     ok = ssl:close(Sock).
+
+
+sequential_ping_pong_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
+        ]},
+        {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
+        {config, [{name, sequential_ping_pong},
+            {parameters, [
+                [{name, msg_num}, {value, 100000}]
+            ]}
+        ]}
+    ]
+    ).
+sequential_ping_pong_test_base(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
+    Pings = lists:map(fun(Num) ->
+        MsgId = integer_to_binary(Num),
+        Msg = #'ClientMessage'{message_id = MsgId, message_body = {ping, #'Ping'{}}},
+        {MsgId, messages:encode_msg(Msg)}
+    end, lists:seq(1, MsgNum)),
+
+    initializer:remove_pending_messages(),
+
+    % when
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+
+    T1 = erlang:monotonic_time(milli_seconds),
+    lists:foreach(fun({MsgId, Ping}) ->
+        % send ping
+        ok = ssl:send(Sock, Ping),
+
+        % receive & validate pong
+        ?assertMatch(#'ServerMessage'{
+            message_id = MsgId,
+            message_body = {pong, #'Pong'{}}
+        }, fuse_utils:receive_server_message())
+    end, Pings),
+    T2 = erlang:monotonic_time(milli_seconds),
+
+    % then
+    ok = ssl:close(Sock),
+
+    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
+
+
+multi_ping_pong_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 90},
+        {parameters, [
+            [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {description, "Opens 'connections_num' connections and for each connection, "
+        "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
+        "messages."},
+        {config, [{name, ssl},
+            {parameters, [
+                [{name, msg_num}, {value, 100000}]
+            ]}
+        ]}
+    ]
+    ).
+multi_ping_pong_test_base(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    ConnNumbers = ?config(connections_num, Config),
+    MsgNum = ?config(msg_num, Config),
+    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
+    MsgNumbers = lists:seq(1, MsgNum),
+    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
+    Pings = lists:map(fun(N) ->
+        #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+    end, MsgNumbersBin),
+    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
+
+    initializer:remove_pending_messages(),
+    Self = self(),
+
+    T1 = erlang:monotonic_time(milli_seconds),
+    [
+        spawn_link(fun() ->
+            % when
+            {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
+            lists:foreach(fun(E) ->
+                ok = ssl:send(Sock, E)
+                          end, RawPings),
+            Received = lists:map(fun(_) ->
+                Pong = fuse_utils:receive_server_message(),
+                ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
+                {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
+            end, MsgNumbersBin),
+
+            % then
+            {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
+            IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
+            lists:foreach(fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
+                ?assertEqual(Id, MsgId)
+            end, IdToMessage),
+            ok = ssl:close(Sock),
+            Self ! success
+        end) || _ <- ConnNumbersList
+    ],
+    lists:foreach(fun(_) ->
+        ?assertReceivedMatch(success, infinity)
+    end, ConnNumbersList),
+    T2 = erlang:monotonic_time(milli_seconds),
+    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
+
+
+bandwidth_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+            [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {config, [{name, ssl},
+            {parameters, [
+                [{name, packet_num}, {value, 1000}]
+            ]}
+        ]}
+    ]
+    ).
+bandwidth_test_base(Config) ->
+    % given
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    PacketSize = ?config(packet_size, Config),
+    PacketNum = ?config(packet_num, Config),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
+    Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
+    PacketRaw = messages:encode_msg(Packet),
+
+    initializer:remove_pending_messages(),
+    Self = self(),
+    test_utils:mock_expect(Workers, router, route_message, fun
+        (#client_message{message_body = #ping{}}) ->
+            Self ! router_message_called,
+            ok
+    end),
+
+    % when
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
+    T1 = erlang:monotonic_time(milli_seconds),
+    lists:foreach(fun(_) ->
+        ok = ssl:send(Sock, PacketRaw)
+    end, lists:seq(1, PacketNum)),
+    T2 = erlang:monotonic_time(milli_seconds),
+
+    % then
+    lists:foreach(fun(_) ->
+        ?assertReceivedMatch(router_message_called, ?TIMEOUT)
+    end, lists:seq(1, PacketNum)),
+    T3 = erlang:monotonic_time(milli_seconds),
+    ssl:close(Sock),
+
+    [
+        #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
+        #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
+        #parameter{name = full_time, value = T3 - T1, unit = "ms"}
+    ].
+
+
+bandwidth_test2(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 90},
+        {parameters, [
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {config, [{name, ssl},
+            {parameters, [
+                [{name, msg_num}, {value, 100000}]
+            ]}
+        ]}
+    ]).
+bandwidth_test2_base(Config) ->
+    % given
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    MsgNum = ?config(msg_num, Config),
+    Self = self(),
+    MsgNumbers = lists:seq(1, MsgNum),
+    Events = lists:map(fun(N) ->
+        #'ClientMessage'{message_body = {events, #'Events'{events = [#'Event'{
+            type = {file_read, #'FileReadEvent'{
+                counter = N,
+                file_uuid = <<"id">>,
+                size = 1,
+                blocks = []
+            }}
+        }]}}}
+    end, MsgNumbers),
+    RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
+    initializer:remove_pending_messages(),
+    test_utils:mock_expect(Workers, router, route_message, fun
+        (#client_message{message_body = #events{events = [#event{
+            type = #file_read_event{counter = Counter}
+        }]}}) ->
+            Self ! Counter,
+            ok
+    end),
+
+    % when
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
+    T1 = erlang:monotonic_time(milli_seconds),
+    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
+    T2 = erlang:monotonic_time(milli_seconds),
+
+    % then
+    lists:foreach(fun(N) ->
+        ?assertReceivedMatch(N, ?TIMEOUT)
+    end, MsgNumbers),
+    T3 = erlang:monotonic_time(milli_seconds),
+    ok = ssl:close(Sock),
+    [
+        #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
+        #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
+        #parameter{name = full_time, value = T3 - T1, unit = "ms"}
+    ].
+
+
+rtransfer_connection_secret_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    {ok, Sock} = fuse_utils:connect_as_provider(
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+    ),
+
+    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
+    {ok, EncodedId} = message_id:encode(MsgId),
+    ClientMsg = #'ClientMessage'{
+        message_id = EncodedId,
+        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{secret = <<>>}}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Sock, RawMsg),
+    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+
+    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, fuse_utils:receive_server_message()),
+
+    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}} = ?assertMatch(
+        {rtransfer_conn_secret, #'RTransferConnSecret'{}},
+        Msg
+    ),
+    ?assert(is_binary(Secret)),
+    ok = ssl:close(Sock).
+
+
+rtransfer_nodes_ips_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    ClusterIPs = rpc:call(Worker1, node_manager, get_cluster_ips, []),
+
+    ExpectedIPs = [list_to_binary(inet:ntoa(IP)) || IP <- ClusterIPs],
+    ExpectedPort = proplists:get_value(server_port,
+        application:get_env(rtransfer_link, transfer, []), 6665),
+
+    ExpectedNodes = lists:sort(
+        [#'IpAndPort'{ip = IP, port = ExpectedPort} || IP <- ExpectedIPs]
+    ),
+
+    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = fuse_utils:connect_as_provider(
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+    ),
+
+    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
+    {ok, EncodedId} = message_id:encode(MsgId),
+    ClientMsg = #'ClientMessage'{
+        message_id = EncodedId,
+        message_body = {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}}
+    },
+
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Sock, RawMsg),
+    ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+
+    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, fuse_utils:receive_server_message()),
+
+    {rtransfer_nodes_ips, #'RTransferNodesIPs'{nodes = RespNodes}} = ?assertMatch(
+        {rtransfer_nodes_ips, #'RTransferNodesIPs'{}},
+        Msg
+    ),
+    ?assertEqual(ExpectedNodes, RespNodes),
+    ok = ssl:close(Sock).
+
 
 % TODO fix
 %%broken_connection_test(Config) ->
@@ -428,292 +627,8 @@ proto_version_test(Config) ->
 %%    end, lists:seq(1, CallsNum)),
 %%
 %%    ok = test_utils:mock_unload(Workers, [Mod]).
-
-protobuf_msg_test(Config) ->
-    % given
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #events{events = [#event{
-            type = #file_read_event{}
-        }]}}) -> ok
-    end),
-    Msg = #'ClientMessage'{
-        message_id = <<"0">>,
-        message_body = {events, #'Events'{events = [#'Event'{
-            type = {file_read, #'FileReadEvent'{
-                counter = 1, file_uuid = <<"id">>, size = 1, blocks = []
-            }}
-        }]}}
-    },
-    RawMsg = messages:encode_msg(Msg),
-
-    % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
-    ok = ssl:send(Sock, RawMsg),
-
-    % then
-    ok = ssl:close(Sock).
-
-bandwidth_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 5},
-        {success_rate, 80},
-        {parameters, [
-            [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-            [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
-            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-        ]},
-        {config, [{name, ssl},
-            {parameters, [
-                [{name, packet_num}, {value, 1000}]
-            ]}
-        ]}
-    ]
-    ).
-bandwidth_test_base(Config) ->
-    % given
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    PacketSize = ?config(packet_size, Config),
-    PacketNum = ?config(packet_num, Config),
-    Data = crypto:strong_rand_bytes(PacketSize * 1024),
-    Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
-    PacketRaw = messages:encode_msg(Packet),
-
-
-    initializer:remove_pending_messages(),
-    Self = self(),
-    test_utils:mock_expect(Workers, router, route_message, fun
-    (#client_message{message_body = #ping{}}) ->
-        Self ! router_message_called,
-        ok
-    end),
-
-    % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
-    T1 = erlang:monotonic_time(milli_seconds),
-    lists:foreach(fun(_) ->
-        ok = ssl:send(Sock, PacketRaw)
-                  end, lists:seq(1, PacketNum)),
-    T2 = erlang:monotonic_time(milli_seconds),
-
-    % then
-    lists:foreach(fun(_) ->
-        ?assertReceivedMatch(router_message_called, ?TIMEOUT)
-    end, lists:seq(1, PacketNum)),
-    T3 = erlang:monotonic_time(milli_seconds),
-    ssl:close(Sock),
-    [
-        #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
-        #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
-        #parameter{name = full_time, value = T3 - T1, unit = "ms"}
-    ].
-
-multi_message_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 5},
-        {success_rate, 90},
-        {parameters, [
-            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-        ]},
-        {config, [{name, ssl},
-            {parameters, [
-                [{name, msg_num}, {value, 100000}]
-            ]}
-        ]}
-    ]).
-multi_message_test_base(Config) ->
-    % given
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    MsgNum = ?config(msg_num, Config),
-    Self = self(),
-    MsgNumbers = lists:seq(1, MsgNum),
-    Events = lists:map(fun(N) ->
-        #'ClientMessage'{message_body = {events, #'Events'{events = [#'Event'{
-            type = {file_read, #'FileReadEvent'{
-                counter = N,
-                file_uuid = <<"id">>,
-                size = 1,
-                blocks = []
-            }}
-        }]}}}
-    end, MsgNumbers),
-    RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
-    initializer:remove_pending_messages(),
-    test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #events{events = [#event{
-            type = #file_read_event{counter = Counter}
-        }]}}) ->
-            Self ! Counter,
-            ok
-    end),
-
-    % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
-    T1 = erlang:monotonic_time(milli_seconds),
-    lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
-    T2 = erlang:monotonic_time(milli_seconds),
-
-    % then
-    lists:foreach(fun(N) ->
-        ?assertReceivedMatch(N, ?TIMEOUT)
-    end, MsgNumbers),
-    T3 = erlang:monotonic_time(milli_seconds),
-    ok = ssl:close(Sock),
-    [
-        #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
-        #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
-        #parameter{name = full_time, value = T3 - T1, unit = "ms"}
-    ].
-
-multi_ping_pong_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 5},
-        {success_rate, 90},
-        {parameters, [
-            [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
-            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-        ]},
-        {description, "Opens 'connections_num' connections and for each connection, "
-        "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
-        "messages."},
-        {config, [{name, ssl},
-            {parameters, [
-                [{name, msg_num}, {value, 100000}]
-            ]}
-        ]}
-    ]
-    ).
-multi_ping_pong_test_base(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    ConnNumbers = ?config(connections_num, Config),
-    MsgNum = ?config(msg_num, Config),
-    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
-    MsgNumbers = lists:seq(1, MsgNum),
-    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
-    Pings = lists:map(fun(N) ->
-        #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
-    end, MsgNumbersBin),
-    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
-    initializer:remove_pending_messages(),
-    Self = self(),
-
-    T1 = erlang:monotonic_time(milli_seconds),
-    [
-        spawn_link(fun() ->
-            % when
-            {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
-            lists:foreach(fun(E) ->
-                ok = ssl:send(Sock, E)
-            end, RawPings),
-            Received = lists:map(fun(_) ->
-                Pong = fuse_utils:receive_server_message(),
-                ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
-                {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
-            end, MsgNumbersBin),
-
-            % then
-            {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
-            IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
-            lists:foreach(fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
-                ?assertEqual(Id, MsgId)
-            end, IdToMessage),
-            ok = ssl:close(Sock),
-            Self ! success
-        end) || _ <- ConnNumbersList
-    ],
-    lists:foreach(fun(_) ->
-        ?assertReceivedMatch(success, infinity)
-    end, ConnNumbersList),
-    T2 = erlang:monotonic_time(milli_seconds),
-    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
-
-sequential_ping_pong_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 5},
-        {success_rate, 80},
-        {parameters, [
-            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
-        ]},
-        {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
-        {config, [{name, sequential_ping_pong},
-            {parameters, [
-                [{name, msg_num}, {value, 100000}]
-            ]}
-        ]}
-    ]
-    ).
-sequential_ping_pong_test_base(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    MsgNum = ?config(msg_num, Config),
-    MsgNumbers = lists:seq(1, MsgNum),
-    MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
-    Pings = lists:map(fun(N) ->
-        #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
-    end, MsgNumbersBin),
-    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
-    initializer:remove_pending_messages(),
-
-    % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
-    T1 = erlang:monotonic_time(milli_seconds),
-    lists:foldl(fun(E, N) ->
-        % send ping
-        ok = ssl:send(Sock, E),
-
-        % receive & validate pong
-        BinaryN = integer_to_binary(N),
-        ?assertMatch(#'ServerMessage'{message_body = {
-            pong, #'Pong'{}
-        }, message_id = BinaryN}, fuse_utils:receive_server_message()),
-        N + 1
-    end, 1, RawPings),
-    T2 = erlang:monotonic_time(milli_seconds),
-
-    % then
-    ok = ssl:close(Sock),
-
-    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
-
-multi_connection_test(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 10},
-        {success_rate, 90},
-        {parameters, [
-            [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
-        ]},
-        {description, "Opens 'connections_num' connections to the server, checks "
-        "their state, and closes them."},
-        {config, [{name, multi_connection},
-            {parameters, [
-                [{name, connections_num}, {value, 1000}]
-            ]}
-        ]}
-    ]
-    ).
-multi_connection_test_base(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    ConnNumbers = ?config(connections_num, Config),
-    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
-    initializer:remove_pending_messages(),
-
-    % when
-    Connections = lists:map(fun(_) ->
-        fuse_utils:connect_via_macaroon(Worker1, [])
-    end, ConnNumbersList),
-
-    % then
-    lists:foreach(fun(ConnectionAns) ->
-        ?assertMatch({ok, {_, _}}, ConnectionAns),
-        {ok, {_Sock, SessId}} = ConnectionAns,
-        ?assert(is_binary(SessId))
-    end, Connections),
-    lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
-
+%%
+%%
 % TODO fix
 %%client_send_test(Config) ->
 %%    % given
@@ -948,110 +863,6 @@ multi_connection_test_base(Config) ->
 %%        fuse_utils:receive_server_message()) end,
 %%        2
 %%    ).
-%%
-%%fallback_during_sending_response_test(Config) ->
-%%    % given
-%%    [Worker1 | _] = ?config(op_worker_nodes, Config),
-%%
-%%    SessionId = <<"12345">>,
-%%    % Create a couple of connections within the same session
-%%    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock4, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock5, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%
-%%    Ping = messages:encode_msg(#'ClientMessage'{
-%%        message_id = crypto:strong_rand_bytes(5), message_body = {ping, #'Ping'{}}
-%%    }),
-%%
-%%    [ssl:setopts(Sock, [{active, once}]) || Sock <- [Sock1, Sock2, Sock3, Sock4, Sock5]],
-%%
-%%    % Send requests via each of 5 connections, immediately close four of them
-%%    ok = ssl:send(Sock1, Ping),
-%%    lists:foreach(fun(Sock) ->
-%%        ok = ssl:send(Sock, Ping),
-%%        ok = ssl:close(Sock)
-%%    end, [Sock2, Sock3, Sock4, Sock5]),
-%%
-%%    % Expect five responses for the ping, they should be received anyway
-%%    % (from Sock1), given that the fallback mechanism works.
-%%    lists:foreach(fun(_) ->
-%%        ssl:setopts(Sock1, [{active, once}]),
-%%        ?assertMatch(#'ServerMessage'{
-%%            message_body = {pong, #'Pong'{}}
-%%        }, fuse_utils:receive_server_message())
-%%    end, lists:seq(1, 5)),
-%%
-%%    ok = ssl:close(Sock1),
-%%    ok.
-%%
-%%
-%%fulfill_promises_after_connection_close_test(Config) ->
-%%    % given
-%%    [Worker1 | _] = ?config(op_worker_nodes, Config),
-%%
-%%    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-%%    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock4, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%    {ok, {Sock5, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-%%
-%%    [ssl:setopts(Sock, [{active, once}]) || Sock <- [Sock1, Sock2, Sock3, Sock4, Sock5]],
-%%
-%%    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-%%    Path = <<"/", SpaceName/binary, "/test_file">>,
-%%    {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
-%%
-%%    % Fuse requests are handled using promises - connection process holds info
-%%    % about pending requests. Even after connection close, the promises should
-%%    % be handled and responses sent to other connection within the session.
-%%    GenFuseReq = fun() ->
-%%        {ok, FuseReq} = serializator:serialize_client_message(#client_message{
-%%            message_id = #message_id{id = crypto:strong_rand_bytes(5)},
-%%            message_body = #fuse_request{
-%%                fuse_request = #resolve_guid{
-%%                    path = Path
-%%                }
-%%            }
-%%        }),
-%%        FuseReq
-%%    end,
-%%
-%%    % Send 2 requests via each of 5 connections, immediately close four of them
-%%    ok = ssl:send(Sock1, GenFuseReq()),
-%%    ok = ssl:send(Sock1, GenFuseReq()),
-%%    lists:foreach(fun(Sock) ->
-%%        ok = ssl:send(Sock, GenFuseReq()),
-%%        ok = ssl:send(Sock, GenFuseReq()),
-%%        ok = ssl:close(Sock)
-%%    end, [Sock2, Sock3, Sock4, Sock5]),
-%%
-%%    GatherResponses = fun Fun(Counter) ->
-%%        ssl:setopts(Sock1, [{active, once}]),
-%%        case fuse_utils:receive_server_message() of
-%%            #'ServerMessage'{
-%%                message_body = {processing_status, #'ProcessingStatus'{
-%%                    code = 'IN_PROGRESS'
-%%                }}
-%%            } ->
-%%                Fun(Counter);
-%%            #'ServerMessage'{
-%%                message_body = {fuse_response, #'FuseResponse'{
-%%                    status = #'Status'{code = ?OK}
-%%                }}
-%%            } ->
-%%                Fun(Counter + 1);
-%%            {error, timeout} ->
-%%                Counter
-%%        end
-%%    end,
-%%
-%%    ?assertEqual(10, GatherResponses(0)),
-%%
-%%    ok = ssl:close(Sock1),
-%%    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1092,48 +903,10 @@ init_per_testcase(Case, Config) when
 
     init_per_testcase(default, Config);
 
-%%init_per_testcase(Case, Config) when
-%%    Case =:= fallback_during_sending_response_test;
-%%    Case =:= fulfill_promises_after_connection_close_test ->
-%%    Workers = ?config(op_worker_nodes, Config),
-%%    ssl:start(),
-%%    initializer:remove_pending_messages(),
-%%
-%%    test_utils:mock_new(Workers, user_identity),
-%%    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-%%        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-%%            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
-%%        end
-%%    ),
-%%
-%%    % Artificially prolong message handling to avoid races between response from
-%%    % the server and connection close.
-%%    test_utils:mock_new(Workers, router),
-%%    test_utils:mock_expect(Workers, router, route_message,
-%%        fun(Msg) ->
-%%            timer:sleep(2000),
-%%            meck:passthrough([Msg])
-%%        end
-%%    ),
-%%
-%%    % Artificially prolong resolve_guid request processing to check if
-%%    % multiple long-lasting promises are filled properly.
-%%    test_utils:mock_new(Workers, guid_req),
-%%    test_utils:mock_expect(Workers, guid_req, resolve_guid,
-%%        fun(UserCtx, FileCtx) ->
-%%            timer:sleep(rand:uniform(5000) + 10000),
-%%            meck:passthrough([UserCtx, FileCtx])
-%%        end
-%%    ),
-%%
-%%    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-%%    lfm_proxy:init(NewConfig);
-
 init_per_testcase(Case, Config) when
-    Case =:= protobuf_msg_test;
-    Case =:= multi_message_test;
-    Case =:= client_communicate_async_test;
     Case =:= bandwidth_test;
+    Case =:= bandwidth_test2;
+%%    Case =:= client_communicate_async_test;
     Case =:= python_client_test
 ->
     Workers = ?config(op_worker_nodes, Config),
@@ -1213,21 +986,18 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate_and_unload(Workers, [provider_logic]),
     end_per_testcase(default, Config);
 
-%%end_per_testcase(Case, Config) when
-%%    Case =:= fulfill_promises_after_connection_close_test;
-%%    Case =:= fallback_during_sending_response_test ->
-%%    Workers = ?config(op_worker_nodes, Config),
-%%    test_utils:mock_validate_and_unload(Workers, [user_identity, router, guid_req]),
-%%    ssl:stop(),
-%%    lfm_proxy:teardown(Config),
-%%    initializer:clean_test_users_and_spaces_no_validate(Config);
+end_per_testcase(python_client_test, Config) ->
+    file:delete(?TEST_FILE(Config, "handshake.arg")),
+    file:delete(?TEST_FILE(Config, "message.arg")),
+
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, [router]),
+    end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= protobuf_msg_test;
-    Case =:= multi_message_test;
-    Case =:= client_communicate_async_test;
     Case =:= bandwidth_test;
-    Case =:= python_client_test
+    Case =:= bandwidth_test2;
+    Case =:= client_communicate_async_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [router]),
@@ -1266,28 +1036,26 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-connect_as_provider(Node, ProviderId, Nonce) ->
-    MacaroonAuthMessage = #'ClientMessage'{message_body = {provider_handshake_request,
-        #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
-    }},
-    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-
-    % when
-    {ok, Sock} = fuse_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
-
-    % then
-    #'ServerMessage'{
-        message_body = {handshake_response, HandshakeResp}
-    } = fuse_utils:receive_server_message(),
-    {ok, HandshakeResp, Sock}.
-
 
 handshake_as_provider(Node, ProviderId, Nonce) ->
-    {ok, HandshakeResp, Sock} = connect_as_provider(Node, ProviderId, Nonce),
-    ok = ssl:close(Sock),
-    {ok, HandshakeResp}.
+    case fuse_utils:connect_as_provider(Node, ProviderId, Nonce) of
+        {ok, Sock} ->
+            ssl:close(Sock),
+            'OK';
+        {error, HandshakeResp} ->
+            HandshakeResp
+    end.
+
+
+handshake_as_client(Node, Macaroon, Version) ->
+    SessId = crypto:strong_rand_bytes(10),
+    case fuse_utils:connect_as_client(Node, SessId, Macaroon, Version) of
+        {ok, Sock} ->
+            ssl:close(Sock),
+            'OK';
+        {error, HandshakeResp} ->
+            HandshakeResp
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

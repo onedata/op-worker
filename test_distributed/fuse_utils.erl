@@ -31,6 +31,8 @@
 -include_lib("clproto/include/messages.hrl").
 
 -export([
+    connect_as_provider/3, connect_as_client/4,
+
     connect_via_macaroon/1, connect_via_macaroon/2,
     connect_via_macaroon/3, connect_via_macaroon/4
 ]).
@@ -63,7 +65,9 @@
     emit_file_written_event/5,
     get_configuration/1, get_configuration/2,
     get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
-    flush_events/3, flush_events/4
+    flush_events/3, flush_events/4,
+
+    get_protocol_version/1, get_protocol_version/2
 ]).
 
 -define(ID, erlang:unique_integer([positive, monotonic])).
@@ -75,6 +79,80 @@
 %% ====================================================================
 %% API
 %% ====================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using a providerId and nonce.
+%% @end
+%%--------------------------------------------------------------------
+connect_as_provider(Node, ProviderId, Nonce) ->
+    HandshakeReqMsg = #'ClientMessage'{
+        message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
+            provider_id = ProviderId,
+            nonce = Nonce
+        }
+        }},
+    RawMsg = messages:encode_msg(HandshakeReqMsg),
+
+    % when
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, RawMsg),
+
+    % then
+    % then
+    #'ServerMessage'{
+        message_body = {handshake_response, #'HandshakeResponse'{
+            status = Status
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_body = {handshake_response, _}
+    }, fuse_utils:receive_server_message()),
+
+    case Status of
+        'OK' ->
+            {ok, Sock};
+        _ ->
+            ok = ssl:close(Sock),
+            {error, Status}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using a macaroon, sessionId and version.
+%% @end
+%%--------------------------------------------------------------------
+connect_as_client(Node, SessId, Macaroon, Version) ->
+    MacaroonAuthMessage = #'ClientMessage'{
+        message_body = {client_handshake_request, #'ClientHandshakeRequest'{
+            session_id = SessId,
+            macaroon = Macaroon,
+            version = Version
+        }
+        }},
+    RawMsg = messages:encode_msg(MacaroonAuthMessage),
+
+    % when
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, RawMsg),
+
+    % then
+    #'ServerMessage'{
+        message_body = {handshake_response, #'HandshakeResponse'{
+            status = Status
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_body = {handshake_response, _}
+    }, fuse_utils:receive_server_message()),
+
+    case Status of
+        'OK' ->
+            {ok, Sock};
+        _ ->
+            ok = ssl:close(Sock),
+            {error, Status}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -570,3 +648,24 @@ flush_events(Conn, ProviderId, SubscriptionId, MsgId, Code) ->
     ?assertMatch(#'ServerMessage'{message_body = {status, #'Status'{
         code = Code
     }}, message_id = MsgId}, receive_server_message([], 10), ?ATTEMPTS).
+
+
+get_protocol_version(Conn) ->
+    get_protocol_version(Conn, ?MSG_ID).
+
+get_protocol_version(Conn, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {get_protocol_version, #'GetProtocolVersion'{}}
+    },
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{message_body = {_, #'ProtocolVersion'{
+        major = Major, minor = Minor
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {protocol_version, #'ProtocolVersion'{}}
+    }, fuse_utils:receive_server_message()),
+
+    {Major, Minor}.
