@@ -60,7 +60,7 @@ receive_loop(RecvRef, Manager) ->
         ?DEFAULT_REQUEST_TIMEOUT ->
             case rpc:call(node(Manager), erlang, is_process_alive, [Manager]) of
                 true ->
-                    % TODO - VFS-4131
+                    % VFS-5206 - handle heartbeats
 %%                    receive_loop(RecvRef, Manager);
                     {error, timeout};
                 _ ->

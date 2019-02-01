@@ -118,8 +118,6 @@ init([MgrSup, SessId]) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
-    % TODO VFS-4131 - test if error will appear in case of crash in
-    % multiprovider environment (e.g., flush)
     handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
@@ -380,11 +378,11 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
         receive
-            % TODO VFS-4025 - multiprovider communication
+            % VFS-5206 - handle heartbeats
             #server_message{message_body = #status{}} = Msg ->
                 Notify(Msg)
         after timer:minutes(10) ->
-            ok
+            Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
     communicator:communicate_with_provider(ClientMsg, Ref, RequestTranslator),

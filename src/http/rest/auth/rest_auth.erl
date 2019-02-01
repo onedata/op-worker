@@ -101,7 +101,7 @@ parse_macaroon_from_header(Req) ->
     case cowboy_req:header(<<"authorization">>, Req) of
         <<"Bearer ", Macaroon/binary>> ->
             Macaroon;
-        undefined ->
+        _ ->
             case cowboy_req:header(<<"macaroon">>, Req) of
                 undefined ->
                     cowboy_req:header(<<"x-auth-token">>, Req);
