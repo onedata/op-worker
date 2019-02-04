@@ -210,8 +210,8 @@ close_file_import_race_test(Config, MountSpaceInRoot) ->
         Master ! {action_result, Ans}
                        end),
 
-    test_utils:mock_new(Workers, simple_scan, [passthrough]),
-    test_utils:mock_expect(Workers, simple_scan, try_to_resolve_child_deletion_link,
+    test_utils:mock_new(Workers, file_location_utils, [passthrough]),
+    test_utils:mock_expect(Workers, file_location_utils, try_to_resolve_child_deletion_link,
         fun(FileName, ParentCtx) ->
             ActionProc ! do_action,
             timer:sleep(5000),
@@ -260,7 +260,7 @@ close_file_import_race_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
-    test_utils:mock_validate_and_unload(Workers, simple_scan).
+    test_utils:mock_validate_and_unload(Workers, file_location_utils).
 
 create_delete_import_test_read_both(Config, MountSpaceInRoot) ->
     create_delete_import_test(Config, MountSpaceInRoot, true).

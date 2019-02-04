@@ -102,8 +102,6 @@ open_race_test(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(1, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, sfm_utils),
     ok.
 
 make_open_race_test(Config) ->
@@ -177,8 +175,6 @@ make_open_race_test(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(1, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 make_open_race_test2(Config) ->
@@ -245,8 +241,6 @@ make_open_race_test2(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(0, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, [file_meta, file_req]),
     ok.
 
 create_open_race_test(Config) ->
@@ -335,8 +329,6 @@ create_open_race_test(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(1, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 create_open_race_test2(Config) ->
@@ -425,8 +417,6 @@ create_open_race_test2(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(1, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 
@@ -444,7 +434,7 @@ create_open_race_test3(Config) ->
                   end,
 
     test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, import_file,
+    test_utils:mock_expect(W, file_req, create_file,
         fun(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             FileCtx = file_req:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
             FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
@@ -508,8 +498,6 @@ create_open_race_test3(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(1, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, [file_req, sfm_utils]),
     ok.
 
 create_delete_race_test(Config) ->
@@ -568,7 +556,6 @@ create_delete_race_test(Config) ->
     ?assertMatch({ok, _}, CreateAns),
 
     % TODO - sprawdzic czy nie zostaly smieciowe dokumenty typu file_location
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 rename_to_opened_file_test(Config) ->
@@ -597,8 +584,6 @@ rename_to_opened_file_test(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(2, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 % TODO - zakazac tworzenia pliku bez tworzenia na dysku? a co z sync?
@@ -617,15 +602,11 @@ create_file_existing_on_disk_test(Config) ->
     #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
     StoragePath = filename:join([MountPoint, "space_id1", binary_to_list(FileName)]),
 
-    ct:print("aaaaa ~p", [{StoragePath, rpc:call(W, file, list_dir, [filename:join([MountPoint, "space_id1"])])}]),
-
     {ok, FD} = ?assertMatch({ok, _}, rpc:call(W, file, open, [StoragePath, [write]])),
     rpc:call(W, file, close, [FD]),
 
     FilePath = <<"/space_name1/", FileName/binary>>,
     ?assertMatch({error, already_exists}, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)),
-
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 open_delete_race_test(Config) ->
@@ -695,8 +676,6 @@ open_delete_race_test(Config) ->
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(1, length(Dirs2) - Dirs1Length),
-
-    test_utils:mock_validate_and_unload(W, file_req),
     ok.
 
 %%%===================================================================
@@ -720,7 +699,7 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sfm_utils]).
 
 %%%===================================================================
 %%% Internal functions
