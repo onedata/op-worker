@@ -20,6 +20,7 @@
 %% API
 -export([get_new_file_location_doc/3, create_file_location/2, delete_file_location/1,
     create_imported_file_location/6, update_imported_file_location/2]).
+-export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2]).
 
 %%%===================================================================
 %%% API
@@ -55,6 +56,7 @@ get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     end.
 
 create_file_location(FileCtx, CreateOnStorageFun) ->
+    % TODO - dac opcje zeby nie sprawdzac z wyprzedeniem (pod create)
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -70,7 +72,8 @@ create_file_location(FileCtx, CreateOnStorageFun) ->
                     }} ->
                         Ans;
                     {ok, _} ->
-                        {StorageFileId, FileCtx3} = CreateOnStorageFun(FileCtx2),
+                        FileCtx3 = CreateOnStorageFun(FileCtx2),
+                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
 
                         {ok, #document{} = Doc} =
                             fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
@@ -78,7 +81,7 @@ create_file_location(FileCtx, CreateOnStorageFun) ->
                                     {ok, FileLocation#file_location{storage_file_created = true,
                                         file_id = StorageFileId}}
                             end, false),
-                        {Doc, FileCtx3}
+                        {Doc, FileCtx4}
                 end
             end);
         true ->
@@ -127,6 +130,31 @@ update_imported_file_location(FileCtx, StorageSize) ->
     replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
     ok = lfm_event_emitter:emit_file_written(
         FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function tries to resolve child with name FileName of
+%% directory associated with ParentCtx.
+%% @end
+%%-------------------------------------------------------------------
+-spec try_to_resolve_child_link(file_meta:name(), file_ctx:ctx()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+try_to_resolve_child_link(FileName, ParentCtx) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    fslogic_path:to_uuid(ParentUuid, FileName).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function tries to resolve child's deletion_link
+%% @end
+%%-------------------------------------------------------------------
+-spec try_to_resolve_child_deletion_link(file_meta:name(), file_ctx:ctx()) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    fslogic_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).
 
 %%%===================================================================
 %%% Internal functions

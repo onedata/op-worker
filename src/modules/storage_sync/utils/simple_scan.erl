@@ -32,9 +32,6 @@
     handle_already_imported_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
-% Test API
--export([try_to_resolve_child_deletion_link/2]).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% calls ?MODULE:run_internal/1 and catches exceptions
@@ -139,9 +136,9 @@ maybe_sync_storage_file(Job = #space_strategy_job{
         false -> {false, undefined, FileName}
     end,
 
-    case try_to_resolve_child_link(FileBaseName, ParentCtx) of
+    case file_location_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
         {error, not_found} ->
-            case ?MODULE:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case file_location_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     case HasSuffix of
                         true ->
@@ -157,7 +154,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
             end;
         {ok, ResolvedUuid} ->
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
-            case try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case file_location_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -353,31 +350,6 @@ run_internal(Job = #space_strategy_job{
             },
             run_internal(Job#space_strategy_job{data = Data2})
     end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function tries to resolve child with name FileName of
-%% directory associated with ParentCtx.
-%% @end
-%%-------------------------------------------------------------------
--spec try_to_resolve_child_link(file_meta:name(), file_ctx:ctx()) ->
-    {ok, file_meta:uuid()} | {error, term()}.
-try_to_resolve_child_link(FileName, ParentCtx) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    fslogic_path:to_uuid(ParentUuid, FileName).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function tries to resolve child's deletion_link
-%% @end
-%%-------------------------------------------------------------------
--spec try_to_resolve_child_deletion_link(file_meta:name(), file_ctx:ctx()) ->
-    {ok, file_meta:uuid()} | {error, term()}.
-try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    fslogic_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).
 
 %%--------------------------------------------------------------------
 %% @private

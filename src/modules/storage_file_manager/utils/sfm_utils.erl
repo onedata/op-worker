@@ -24,7 +24,8 @@
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_storage_file/2, create_delayed_storage_file/1, delete_storage_file/2,
+    create_storage_file/2, create_delayed_storage_file/1,
+    create_delayed_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
     create_parent_dirs/1, recursive_delete/2, retry_dir_deletion/3]).
 
@@ -94,11 +95,12 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
+    {Doc, FileCtx2} = create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}.
+
+create_delayed_storage_file(FileCtx, UserCtx) ->
     CreateOnStorageFun = fun(FileCtx2) ->
-        FileCtx3 = create_storage_file(
-            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-        {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
+        create_storage_file(UserCtx, FileCtx2)
     end,
     file_location_utils:create_file_location(FileCtx, CreateOnStorageFun).
 

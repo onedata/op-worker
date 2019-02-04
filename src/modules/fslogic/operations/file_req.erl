@@ -37,6 +37,7 @@
 %% @equiv create_file_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
+% TODO - czy sprawdzamy prawo do otwierania pliku?
 -spec create_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
@@ -152,7 +153,7 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
     {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
         storage_id = StorageId}}, FileCtx2} =
-        sfm_utils:create_delayed_storage_file(FileCtx),
+        sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
@@ -163,6 +164,30 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
         fuse_response = #file_opened_extended{handle_id = HandleId,
             provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
     }.
+
+open_generic(FileCtx, UserCtx) ->
+    case user_ctx:is_direct_io(UserCtx) of
+        true ->
+            ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
+            LocationAns = case ExtDIO of
+                true ->
+                    file_location_utils:get_new_file_location_doc(FileCtx, false, true);
+                _ ->
+                    sfm_utils:create_delayed_storage_file(FileCtx, UserCtx)
+            end,
+
+            {?NEW_HANDLE_ID, LocationAns};
+        _ ->
+            % open file on adequate node
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            Node = consistent_hasing:get_node(FileUuid),
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #file_opened{handle_id = HId}
+            } = rpc:call(Node, file_req, open_file_insecure,
+                [UserCtx, FileCtx, rdwr]),
+            {HId, file_ctx:get_local_file_location_doc(FileCtx)}
+    end.
 
 %%--------------------------------------------------------------------
 %% @equiv fsync_insecure(UserCtx, FileCtx, DataOnly) with permission check
@@ -222,35 +247,12 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     try
-        ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
-        FileCtx2 = case ExtDIO of
-            true ->
-                FileCtx;
-            _ ->
-                sfm_utils:create_storage_file(UserCtx, FileCtx)
-        end,
-        {FileLocation, FileCtx3} =
-            file_location_utils:get_new_file_location_doc(FileCtx2, not ExtDIO, true),
+        {HandleId, {FileLocation, FileCtx2}} = open_generic(FileCtx, UserCtx),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
-        HandleId = case user_ctx:is_direct_io(UserCtx) of
-            true ->
-                ?NEW_HANDLE_ID;
-            _ ->
-                % open file on adequate node
-                Node = consistent_hasing:get_node(FileUuid),
-                #fuse_response{
-                    status = #status{code = ?OK},
-                    fuse_response = #file_opened{handle_id = HId}
-                } = rpc:call(Node, file_req, open_file_insecure,
-                    [UserCtx, FileCtx3, rdwr]),
-                HId
-        end,
-
         #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
-            attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx2, false, false),
         FileAttr2 = case Size of
             undefined ->
                 FileAttr#file_attr{size = 0};
@@ -270,6 +272,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             ?error_stacktrace("create_file_insecure error: ~p:~p",
                 [Error, Reason]),
             sfm_utils:delete_storage_file(FileCtx, UserCtx),
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
