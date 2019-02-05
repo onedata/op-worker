@@ -33,7 +33,10 @@
 -spec fill_proxy_info(#server_message{} | #client_message{}, session:id()) ->
     #server_message{} | #client_message{}.
 fill_proxy_info(Msg, SessionId) ->
-    {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
+    {ok, #document{
+        value = #session{proxy_via = ProxyVia}
+    }} = session:get(SessionId),
+
     case {Msg, is_binary(ProxyVia)} of
         {#server_message{proxy_session_id = undefined}, true} ->
             Msg#server_message{proxy_session_id = SessionId};
@@ -105,7 +108,7 @@ verify_protocol_upgrade_response(Response) ->
 has_member_case_insensitive(_Bin, []) ->
     false;
 has_member_case_insensitive(Bin, [First | Rest]) ->
-    case string:to_lower(binary_to_list(Bin)) =:= string:to_lower(binary_to_list(First)) of
+    case string:lowercase(Bin) =:= string:lowercase(First) of
         true -> true;
         false -> has_member_case_insensitive(Bin, Rest)
     end.

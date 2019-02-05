@@ -56,7 +56,7 @@
     timeouts_test/1,
     client_keepalive_test/1,
     socket_timeout_test/1,
-    broken_connection_test/1
+    closing_connection_should_cancel_all_session_transfers_test/1
 ]).
 
 %%test_bases
@@ -92,7 +92,7 @@
     bandwidth_test,
     python_client_test,
     proto_version_test,
-    broken_connection_test
+    closing_connection_should_cancel_all_session_transfers_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -1016,7 +1016,7 @@ proto_version_test(Config) ->
     ?assert(is_integer(Minor)),
     ok = ssl:close(Sock).
 
-broken_connection_test(Config) ->
+closing_connection_should_cancel_all_session_transfers_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
@@ -1188,7 +1188,7 @@ init_per_testcase(timeouts_test, Config) ->
 init_per_testcase(client_keepalive_test, Config) ->
     init_per_testcase(timeouts_test, Config);
 
-init_per_testcase(broken_connection_test, Config) ->
+init_per_testcase(closing_connection_should_cancel_all_session_transfers_test, Config) ->
     % Shorten ttl to force quicker client session removal
     init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
 
@@ -1263,7 +1263,7 @@ end_per_testcase(socket_timeout_test, Config) ->
     end, Workers),
     end_per_testcase(timeouts_test, Config);
 
-end_per_testcase(broken_connection_test, Config) ->
+end_per_testcase(closing_connection_should_cancel_all_session_transfers_test, Config) ->
     end_per_testcase(timeouts_test, Config);
     
 end_per_testcase(default, Config) ->

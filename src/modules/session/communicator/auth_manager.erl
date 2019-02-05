@@ -94,8 +94,11 @@ get_handshake_error(_) ->
 %%--------------------------------------------------------------------
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
-handle_client_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version}, IpAddress)
-    when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
+handle_client_handshake(#client_handshake_request{
+    session_id = SessId,
+    auth = Auth,
+    version = Version
+}, IpAddress) when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
 
     assert_client_compatibility(Version, IpAddress),
     {ok, #document{
@@ -109,10 +112,12 @@ handle_client_handshake(#client_handshake_request{session_id = SessId, auth = Au
 %% Handles provider handshake request
 %% @end
 %%--------------------------------------------------------------------
--spec handle_provider_handshake(#provider_handshake_request{}, IpAddress :: inet:ip_address()) ->
+-spec handle_provider_handshake(#provider_handshake_request{}, inet:ip_address()) ->
     {od_provider:id(), session:id()} | no_return().
-handle_provider_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce}, IpAddress)
-    when is_binary(ProviderId) andalso is_binary(Nonce) ->
+handle_provider_handshake(#provider_handshake_request{
+    provider_id = ProviderId,
+    nonce = Nonce
+}, IpAddress) when is_binary(ProviderId) andalso is_binary(Nonce) ->
 
     case provider_logic:verify_provider_identity(ProviderId) of
         ok ->
