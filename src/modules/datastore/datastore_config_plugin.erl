@@ -29,6 +29,7 @@ get_models() -> [
     od_provider,
     od_handle_service,
     od_handle,
+    od_harvester,
     provider_auth,
     authorization_nonce,
     subscription,

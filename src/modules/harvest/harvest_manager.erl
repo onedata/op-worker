@@ -162,23 +162,25 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec initialise(state()) -> ok.
 initialise(State) ->
-    try provider_logic:get_spaces(oneprovider:get_id()) of
+    try provider_logic:get_spaces(oneprovider:get_id_or_undefined()) of
         {ok, SpaceIds} ->
             lists:foldl(fun(SpaceId, StateIn) ->
                 update_streams_per_space(SpaceId, StateIn)
             end, State, SpaceIds);
         ?ERROR_UNREGISTERED_PROVIDER ->
+            timer:sleep(timer:seconds(?INITIALISATION_TIMEOUT)),
             schedule_initialisation(),
             State;
         ?ERROR_NO_CONNECTION_TO_OZ ->
+            timer:sleep(timer:seconds(?INITIALISATION_TIMEOUT)),
             schedule_initialisation(),
             State;
         Error = {error, _} ->
-            ?error("Unable to initialise harvest_worker due to: ~p", [Error]),
+            ?error("Unable to initialise harvest_manager due to: ~p", [Error]),
             State
     catch
         Error2:Reason ->
-            ?error_stacktrace("Unable to initialise harvest_worker due to: ~p", [{Error2, Reason}]),
+            ?error_stacktrace("Unable to initialise harvest_manager due to: ~p", [{Error2, Reason}]),
             State
     end.
 
@@ -224,5 +226,4 @@ update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
 
 -spec schedule_initialisation() -> ok.
 schedule_initialisation() ->
-    erlang:send_after(?INITIALISATION_TIMEOUT, self(), {sync_timer, ?INITIALISE}),
-    ok.
+    gen_server:cast(self(), ?INITIALISE).

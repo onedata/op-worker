@@ -53,6 +53,8 @@
 -define(HANDLE_SERVICE_2, <<"hservice2Id">>).
 -define(HANDLE_1, <<"handle1Id">>).
 -define(HANDLE_2, <<"handle2Id">>).
+-define(HARVESTER_1, <<"harvester1Id">>).
+-define(HARVESTER_2, <<"harvester2Id">>).
 
 % User authorizations
 % Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
@@ -111,6 +113,7 @@
 -define(SPACE_PROVIDERS_VALUE(__Space), #{?PROVIDER_1 => 1000000000, ?PROVIDER_2 => 1000000000}).
 -define(SPACE_PROVIDERS_MATCHER(__Space), #{?PROVIDER_1 := 1000000000, ?PROVIDER_2 := 1000000000}).
 -define(SPACE_SHARES(__Space), [?SHARE_1, ?SHARE_2]).
+-define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -153,6 +156,8 @@
 -define(HANDLE_EFF_GROUPS_VALUE(__Handle), ?GROUP_PERMS_IN_HANDLE_VALUE_BINARIES).
 -define(HANDLE_EFF_GROUPS_MATCHER(__Handle), ?GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS).
 
+% Mocked harvester data
+-define(HARVESTER_SPACES(__Harvester), [?SPACE_1, ?SPACE_2]).
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
 -define(MOCK_JOINED_GROUP_ID, <<"mockJoinedGroupId">>).
@@ -218,7 +223,8 @@
     direct_groups = ?SPACE_DIRECT_GROUPS_MATCHER(__Space),
     eff_groups = ?SPACE_EFF_GROUPS_MATCHER(__Space),
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
-    shares = ?SPACE_SHARES(__Space)
+    shares = ?SPACE_SHARES(__Space),
+    harvesters = ?SPACE_HARVESTERS(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -227,7 +233,8 @@
     direct_groups = #{},
     eff_groups = #{},
     providers = #{},
-    shares = []
+    shares = [],
+    harvesters = []
 }}).
 
 
@@ -296,6 +303,10 @@
 
 }}).
 
+-define(HARVESTER_PROTECTED_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
+    spaces = ?HARVESTER_SPACES(__Harvester)
+}}).
+
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
@@ -336,7 +347,8 @@ end).
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
-    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
+    <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     __ProtectedData = ?SPACE_PROTECTED_DATA_VALUE(__SpaceId),
@@ -349,7 +361,8 @@ end).
         <<"effectiveGroups">> => ?SPACE_EFF_GROUPS_VALUE(__SpaceId),
 
         <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-        <<"shares">> => ?SPACE_SHARES(__SpaceId)
+        <<"shares">> => ?SPACE_SHARES(__SpaceId),
+        <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
     }
 end).
 
@@ -428,7 +441,7 @@ end).
     }
 end).
 
-
-
-
-
+-define(HARVESTER_PROTECTED_DATA_VALUE(__HarvesterId), #{
+    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = protected}),
+    <<"spaces">> => ?HARVESTER_SPACES(__SpaceId)
+}).

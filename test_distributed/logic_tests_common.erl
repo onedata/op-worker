@@ -250,7 +250,11 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
             {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
-    end.
+    end;
+
+mock_graph_create(#gri{type = od_harvester, id = _, aspect = submit}, undefined, _Data) ->
+    {ok, #gs_resp_graph{data_format = undefined}}.
+
 
 
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
@@ -421,6 +425,23 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
             Data = case GRI#gri.scope of
                 public -> ?HANDLE_PUBLIC_DATA_VALUE(HandleId);
                 private -> ?HANDLE_PRIVATE_DATA_VALUE(HandleId)
+            end,
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance}, Authorization, _) ->
+    Authorized = case {Authorization, GRI#gri.scope} of
+        {undefined, protected} ->
+            true;
+        {?USER_GS_MACAROON_AUTH(_), protected} ->
+            false
+    end,
+    case Authorized of
+        true ->
+            Data = case GRI#gri.scope of
+                protected -> ?HARVESTER_PROTECTED_DATA_VALUE(SpaceId)
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->

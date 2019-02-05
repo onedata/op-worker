@@ -39,7 +39,7 @@
 get(SessionId, HarvesterId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
-        gri = #gri{type = od_harvester, id = HarvesterId, aspect = instance, scope = private},
+        gri = #gri{type = od_harvester, id = HarvesterId, aspect = instance, scope = protected},
         subscribe = true
     }).
 
@@ -53,6 +53,6 @@ get(SessionId, HarvesterId) ->
 submit(SessionId, HarvesterId, Data) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_harvester, id = HarvesterId, aspect = harvest_metadata, scope = private},
+        gri = #gri{type = od_harvester, id = HarvesterId, aspect = submit, scope = private},
         data = Data
     }).

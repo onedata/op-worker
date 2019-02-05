@@ -559,7 +559,7 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
+is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = protected}, _) ->
     true;
 
 % Provider can access shares of spaces that it supports
@@ -654,5 +654,8 @@ is_user_authorized(UserId, _, _, #gri{type = od_handle_service, scope = private}
     handle_service_logic:has_eff_user(CachedDoc, UserId);
 
 is_user_authorized(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
-    handle_logic:has_eff_user(CachedDoc, UserId).
+    handle_logic:has_eff_user(CachedDoc, UserId);
+
+is_user_authorized(_, _, _, _, _) ->
+    false.
 

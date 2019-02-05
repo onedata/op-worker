@@ -94,7 +94,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     };
 
 translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
-    ?critical("DUPA: ~p", [Result]),
+
     #document{
         key = Id,
         value = #od_space{
@@ -215,11 +215,10 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         }
     };
 
-translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = [private]}, Result) ->
+translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = protected}, Result) ->
     #document{
         key = Id,
         value = #od_harvester{
-            name = maps:get(<<"name">>, Result),
             spaces = maps:get(<<"spaces">>, Result)
         }
     };
@@ -275,7 +274,8 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
             direct_groups = #{},
             eff_groups = #{},
 
-            shares = []
+            shares = [],
+            harvesters = []
         }
     };
 

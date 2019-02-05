@@ -168,8 +168,6 @@
 }).
 
 -record(od_harvester, {
-    name = <<"">> :: od_harvester:name(),
-
     % Direct relations to other entities
     spaces = [] :: entity_graph:relations(od_space:id()),
 
