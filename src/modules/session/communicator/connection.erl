@@ -769,7 +769,7 @@ handle_client_message(State = #state{session_id = SessId}, Data) ->
         maybe_create_proxy_session(State, Msg),
         route_message(State, Msg)
     catch Type:Reason ->
-        ?warning_stacktrace("Client message decoding error - ~p:~p", [
+        ?warning_stacktrace("Client message handling error - ~p:~p", [
             Type, Reason
         ]),
         {ok, State}
@@ -785,7 +785,7 @@ handle_server_message(State = #state{session_id = SessId}, Data) ->
         Msg = fill_server_msg_proxy_info(State, Msg0),
         route_message(State, Msg)
     catch Type:Error ->
-        ?warning_stacktrace("Server message decoding error - ~p:~p", [
+        ?warning_stacktrace("Server message handling error - ~p:~p", [
             Type, Error
         ]),
         {ok, State}

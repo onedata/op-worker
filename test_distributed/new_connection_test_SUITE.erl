@@ -54,7 +54,10 @@
     rtransfer_nodes_ips_test/1,
 
     sending_server_msg_via_incoming_connection_should_succeed/1,
-    sending_client_msg_via_incoming_connection_should_fail/1
+    sending_client_msg_via_incoming_connection_should_fail/1,
+
+    errors_other_then_socket_ones_should_not_terminate_connection/1,
+    socket_error_should_terminate_connection/1
 ]).
 
 %% test_bases
@@ -84,7 +87,10 @@
     rtransfer_nodes_ips_test,
 
     sending_server_msg_via_incoming_connection_should_succeed,
-    sending_client_msg_via_incoming_connection_should_fail
+    sending_client_msg_via_incoming_connection_should_fail,
+
+    errors_other_then_socket_ones_should_not_terminate_connection,
+    socket_error_should_terminate_connection
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -102,14 +108,6 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
 -define(CORRECT_NONCE, <<"correct-nonce">>).
 -define(INCORRECT_NONCE, <<"incorrect-nonce">>).
-
--define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
-    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
-
--record(file_handle, {
-    handle :: helpers_nif:file_handle(),
-    timeout :: timeout()
-}).
 
 
 %%%===================================================================
@@ -588,6 +586,42 @@ sending_client_msg_via_incoming_connection_should_fail(Config) ->
     ok = ssl:close(Sock).
 
 
+errors_other_then_socket_ones_should_not_terminate_connection(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+    Ping = fuse_utils:generate_ping_message(),
+
+    lists:foreach(fun({MockFun, UnMockFun}) ->
+        MockFun(Worker1),
+        ssl:send(Sock, Ping),
+        ?assertEqual({error, timeout}, fuse_utils:receive_server_message()),
+        UnMockFun(Worker1),
+        fuse_utils:ping(Sock)
+    end, [
+        {fun mock_client_msg_decoding/1, fun unmock_serializer/1},
+        {fun mock_server_msg_encoding/1, fun unmock_serializer/1},
+        {fun mock_route_msg/1, fun unmock_route_msg/1}
+    ]),
+
+    ok = ssl:close(Sock).
+
+
+socket_error_should_terminate_connection(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+
+    mock_ranch_ssl(Worker1),
+    Ping = fuse_utils:generate_ping_message(),
+    ssl:send(Sock, Ping),
+    ?assertEqual({error, timeout}, fuse_utils:receive_server_message()),
+    unmock_ranch_ssl(Worker1),
+
+    ?assertMatch({error, closed}, ssl:send(Sock, Ping)),
+    ok = ssl:close(Sock).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -718,3 +752,47 @@ mock_identity(Workers) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).
+
+
+mock_client_msg_decoding(Node) ->
+    test_utils:mock_new(Node, serializer, [passthrough]),
+
+    test_utils:mock_expect(Node, serializer, deserialize_client_message, fun(_, _) ->
+        throw(inproper_msg)
+    end).
+
+
+mock_server_msg_encoding(Node) ->
+    test_utils:mock_new(Node, serializer, [passthrough]),
+
+    test_utils:mock_expect(Node, serializer, serialize_server_message, fun(_, _) ->
+        throw(inproper_msg)
+    end).
+
+
+unmock_serializer(Node) ->
+    test_utils:mock_unload(Node, [serializer]).
+
+
+mock_route_msg(Node) ->
+    test_utils:mock_new(Node, router, [passthrough]),
+
+    test_utils:mock_expect(Node, router, route_message, fun(_) ->
+        throw(you_shall_not_pass)
+    end).
+
+
+unmock_route_msg(Node) ->
+    test_utils:mock_unload(Node, [router]).
+
+
+mock_ranch_ssl(Node) ->
+    test_utils:mock_new(Node, ranch_ssl, [passthrough]),
+
+    test_utils:mock_expect(Node, ranch_ssl, send, fun(_, _) ->
+        {error, you_shall_not_send}
+    end).
+
+
+unmock_ranch_ssl(Node) ->
+    test_utils:mock_unload(Node, [ranch_ssl]).

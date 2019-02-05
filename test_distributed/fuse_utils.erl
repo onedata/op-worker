@@ -34,7 +34,9 @@
     connect_as_provider/3, connect_as_client/4,
 
     connect_via_macaroon/1, connect_via_macaroon/2,
-    connect_via_macaroon/3, connect_via_macaroon/4
+    connect_via_macaroon/3, connect_via_macaroon/4,
+
+    generate_msg_id/0
 ]).
 -export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1]).
@@ -48,6 +50,9 @@
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4, 
     generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
 -export([generate_subscription_cancellation_message/3]).
+
+%% Misc messages
+-export([generate_ping_message/0, generate_ping_message/1]).
 
 %% ProxyIO messages
 -export([generate_write_message/5, generate_read_message/5]).
@@ -69,7 +74,9 @@
 
     get_protocol_version/1, get_protocol_version/2,
     generate_rtransfer_conn_secret/1, generate_rtransfer_conn_secret/2,
-    get_rtransfer_nodes_ips/1, get_rtransfer_nodes_ips/2
+    get_rtransfer_nodes_ips/1, get_rtransfer_nodes_ips/2,
+
+    ping/1, ping/2
 ]).
 
 -define(ID, erlang:unique_integer([positive, monotonic])).
@@ -81,6 +88,8 @@
 %% ====================================================================
 %% API
 %% ====================================================================
+
+generate_msg_id() -> ?MSG_ID.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -719,3 +728,30 @@ get_rtransfer_nodes_ips(Conn, MsgId) ->
     }, fuse_utils:receive_server_message()),
 
     RespNodes.
+
+
+generate_ping_message() ->
+    generate_ping_message(?MSG_ID).
+
+generate_ping_message(MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {ping, #'Ping'{}}
+    },
+    messages:encode_msg(Msg).
+
+
+ping(Conn) ->
+    ping(Conn, ?MSG_ID).
+
+ping(Conn, MsgId) ->
+    Ping = generate_ping_message(MsgId),
+
+    ssl:send(Conn, Ping),
+
+    ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {pong, #'Pong'{}}
+    }, fuse_utils:receive_server_message()),
+
+    ok.
