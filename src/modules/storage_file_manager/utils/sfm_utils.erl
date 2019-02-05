@@ -121,6 +121,7 @@ create_storage_file(UserCtx, FileCtx) ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         {error, ?EEXIST} ->
+            % TODO - Sprawdzamy deletion linka - jesli istnieje to nie tworzymy pliku
             {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
             {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)};
         {error, ?EACCES} ->

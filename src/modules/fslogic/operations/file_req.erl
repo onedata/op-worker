@@ -155,6 +155,13 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = file_handles:register_open(FileCtx, SessId, 1),
     try
+        FileUuid = file_ctx:get_uuid_const(FileCtx),
+        {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
+        case Deleted of
+            true -> throw({error, not_found});
+            _ -> ok
+        end,
+
         {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId}}, FileCtx2} =
             sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
@@ -180,6 +187,14 @@ open_generic(FileCtx, UserCtx) ->
         true ->
             SessId = user_ctx:get_session_id(UserCtx),
             ok = file_handles:register_open(FileCtx, SessId, 1),
+
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
+            case Deleted of
+                true -> throw({error, not_found});
+                _ -> ok
+            end,
+
             try
                 ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
                 case ExtDIO of

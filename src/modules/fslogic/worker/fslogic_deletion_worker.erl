@@ -122,6 +122,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
             true ->
                 add_deletion_link_and_remove_normal_link(FileCtx, UserCtx),
                 ok = file_handles:mark_to_remove(FileCtx),
+                % Czemu nie bierzemy pod uwage silent?
                 fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
             false ->
                 fslogic_delete:remove_file_and_file_meta(FileCtx, UserCtx, Silent)
@@ -147,6 +148,7 @@ handle({dbsync_deletion_request, FileCtx}) ->
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
         case file_handles:exists(FileUuid) of
             true ->
+                % TODO - czemu nie dodajemy deletion_linka? Grozi nam reimport
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
                 delete_file(FileCtx, UserCtx, fun check_and_maybe_delete_storage_file/2)
@@ -190,6 +192,8 @@ check_and_maybe_delete_storage_file(FileCtx, UserCtx) ->
     try
         {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
         {ParentDoc, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
+        % TODO - zamiast tego chyba powinnismy pobrac file_location i sprawdzic,
+            % bo plik moglbyc na storage'u pod inna nazwa
         case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
             {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                 ok;
