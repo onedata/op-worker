@@ -150,33 +150,53 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
     open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, undefined).
 
 open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
+    % TODO - nie otwierac jesli jest to call od klienta po directIO (ale otwierac jak jest fallback z proxy)
+    % TODO - fallback z proxy nie powinien rejestrowac file_handle
     SessId = user_ctx:get_session_id(UserCtx),
-    {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-        storage_id = StorageId}} = FL, FileCtx2} =
-        sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-    {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
-    ok = file_handles:register_open(FileCtx3, SessId, 1),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened_extended{handle_id = HandleId,
-            provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-    }.
+    ok = file_handles:register_open(FileCtx, SessId, 1),
+    try
+        {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
+            storage_id = StorageId}}, FileCtx2} =
+            sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
+        {SFMHandle, _FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+        SFMHandle2 = storage_file_manager:set_size(SFMHandle),
+        {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
+        {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
+        #fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = #file_opened_extended{handle_id = HandleId,
+                provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
+        }
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
+                [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
+            file_handles:register_release(FileCtx, SessId, 1),
+            throw(E2)
+    end.
 
 open_generic(FileCtx, UserCtx) ->
     case user_ctx:is_direct_io(UserCtx) of
         true ->
-            ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
-            case ExtDIO of
-                true ->
-                    {FL, FileCtx2} =
-                        file_location_utils:get_new_file_location_doc(FileCtx, false, true),
-                    {?NEW_HANDLE_ID, FL, FileCtx2};
-                _ ->
-                    {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
-                    {?NEW_HANDLE_ID, FL, FileCtx2}
+            SessId = user_ctx:get_session_id(UserCtx),
+            ok = file_handles:register_open(FileCtx, SessId, 1),
+            try
+                ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
+                case ExtDIO of
+                    true ->
+                        {FL, FileCtx2} =
+                            file_location_utils:get_new_file_location_doc(FileCtx, false, true),
+                        {?NEW_HANDLE_ID, FL, FileCtx2};
+                    _ ->
+                        {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
+                        {?NEW_HANDLE_ID, FL, FileCtx2}
+                end
+            catch
+                E1:E2 ->
+                    ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
+                        [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
+                    file_handles:register_release(FileCtx, SessId, 1),
+                    throw(E2)
             end;
         _ ->
             % open file on adequate node

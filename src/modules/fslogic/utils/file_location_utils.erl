@@ -56,7 +56,7 @@ get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     end.
 
 create_file_location(FileCtx, CreateOnStorageFun) ->
-    % TODO - dac opcje zeby nie sprawdzac z wyprzedeniem (pod create)
+    % TODO - dac opcje zeby nie sprawdzac z wyprzedeniem (pod create) jesli mozna (co wtedy jesli pojawi sie sync?)
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}

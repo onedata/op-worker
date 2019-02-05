@@ -22,6 +22,7 @@
 
 %% API
 -export([rename/4]).
+% TODO - moze warto dodac API do rename na storage'u (jak zostaje plik z sufix)?
 
 -define(LS_CHUNK_SIZE, 1000).
 
