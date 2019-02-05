@@ -30,12 +30,16 @@
 ]).
 
 -export([
-    incompatible_providers_should_not_connect/1
+    incompatible_providers_should_not_connect/1,
+    deprecated_configuration_endpoint_is_served/1,
+    configuration_endpoints_give_same_results/1
 ]).
 
 all() ->
     ?ALL([
-        incompatible_providers_should_not_connect
+        incompatible_providers_should_not_connect,
+        deprecated_configuration_endpoint_is_served,
+        configuration_endpoints_give_same_results
     ]).
 
 
@@ -68,6 +72,35 @@ incompatible_providers_should_not_connect(Config) ->
     ok.
 
 
+deprecated_configuration_endpoint_is_served(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Node) ->
+        ExpectedConfiguration = expected_configuration(Node),
+        URL = str_utils:format("https://~s/configuration/",
+            [maps:get(<<"domain">>, ExpectedConfiguration)]),
+        {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
+            http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertMatch(ExpectedConfiguration, json_utils:decode(Body))
+    end, Nodes).
+
+
+configuration_endpoints_give_same_results(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Node) ->
+        {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+        OldURL = str_utils:format("https://~s/configuration", [Domain]),
+        NewURL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [Domain]),
+
+        {_, _, _, OldBody} = ?assertMatch({ok, 200, _, _},
+            http_client:get(OldURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        {_, _, _, NewBody} = ?assertMatch({ok, 200, _, _},
+            http_client:get(NewURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertEqual(json_utils:decode(OldBody), json_utils:decode(NewBody))
+    end, Nodes).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -87,11 +120,24 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+init_per_testcase(Case, Config) when
+    Case == deprecated_configuration_endpoint_is_served;
+    Case == configuration_endpoints_give_same_results ->
+    ssl:start(),
+    hackney:start(),
+    init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+
+end_per_testcase(Case, Config) when
+    Case == deprecated_configuration_endpoint_is_served;
+    Case == configuration_endpoints_give_same_results ->
+    hackney:stop(),
+    ssl:stop(),
+    end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
@@ -120,3 +166,29 @@ get_provider_session_id(Worker, Type, ProviderId) ->
 
 session_exists(Provider, SessId) ->
     rpc:call(Provider, session, exists, [SessId]).
+
+
+-spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
+expected_configuration(Node) ->
+    {ok, CompOzVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oz_versions),
+    {ok, CompOpVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_op_versions),
+    {ok, CompOcVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oc_versions),
+    {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
+    {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+
+    #{
+        <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
+        <<"name">> => Name,
+        <<"domain">> => Domain,
+        <<"onezoneDomain">> => list_to_binary(rpc:call(Node, oneprovider, get_oz_domain, [])),
+        <<"version">> => rpc:call(Node, oneprovider, get_version, []),
+        <<"build">> => rpc:call(Node, oneprovider, get_build, []),
+        <<"compatibleOnezoneVersions">> => to_binaries(CompOzVersions),
+        <<"compatibleOneproviderVersions">> => to_binaries(CompOpVersions),
+        <<"compatibleOneclientVersions">> => to_binaries(CompOcVersions)
+    }.
+
+
+-spec to_binaries([string()]) -> [binary()].
+to_binaries(Strings) ->
+    [list_to_binary(S) || S <- Strings].
