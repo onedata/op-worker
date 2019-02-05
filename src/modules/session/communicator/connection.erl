@@ -7,11 +7,74 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles communication using clproto binary protocol.
-%%% It serves as incoming connection if peer (provider or client) initiates
-%%% it by performing http protocol upgrade on ?CLIENT_PROTOCOL_PATH path
-%%% or as outgoing connection if this provider connects to peer.
-%%% In incoming mode connection can receive `client_message`
-%%% and send `server_message` only. In outgoing mode it is the other way around.
+%%% Created connection can be one of the two possible types:
+%%% - incoming - when it is initiated in response to peer (provider or client)
+%%%              request. It awaits client_messages, handles them and
+%%%              responds with server_messages,
+%%% - outgoing - when this provider initiates it in order to connect to peer.
+%%%              In order to do so, thirst http protocol upgrade request on
+%%%              ?CLIENT_PROTOCOL_PATH is send to other provider.
+%%%              If confirmation response is received, meaning that protocol
+%%%              upgrade from http to clproto succeeded, then communication
+%%%              using binary protocol can start.
+%%%              This type of connection can send only client_messages and
+%%%              receive server_messages.
+%%%
+%%% Beside type, connection has also one of the following statuses:
+%%% - upgrading_protocol - valid only for outgoing connection. This status
+%%%                        indicates that protocol upgrade request has been
+%%%                        sent and response is awaited,
+%%% - performing_handshake - indicates that connection either awaits
+%%%                          authentication request (incoming connection)
+%%%                          or response (outgoing connection),
+%%% - ready - indicates that connection is in operational mode,
+%%%           so that it can send and receive messages.
+%%%
+%%% More detailed transitions between statuses for each connection and
+%%% message flow is depicted on below diagram.
+%%%
+%%%              INCOMING              |              OUTGOING
+%%%                                    |
+%%%                                    |             Provider B
+%%%                                    |                 |
+%%%                                    |        0: connect_to_provider
+%%%                                    |                 |
+%%%                                    |                 v
+%%%           Provider A          1: protocol      +------------+
+%%%          HTTP listener  <------ upgrade ------ |    init    |
+%%%               |                 request        +------------+
+%%%               |                    |                 |
+%%%              1.5                   |                1.5
+%%%               |                    |                 |
+%%%               v                    |                 v
+%%%          +----------+        2: protocol       +--------------------+
+%%%          |   init   | -------- upgrade ------> | upgrading_protocol |
+%%%          +----------+          response        +--------------------+
+%%%               |                    |                 |      |
+%%%              2.5                   |                 |      |
+%%%               |                    |                 |      |
+%%%               v                    |                 |      |
+%%%    +----------------------+       3: handshake       |      |
+%%%    | performing_handshake | <------ request ---------+      |
+%%%    +----------------------+        |                       3.5
+%%%           |        |               |                        |
+%%%           |        |               |                        v
+%%%           |        |       4: handshake        +----------------------+
+%%%           |        +--------- response ------> | performing_handshake |
+%%%           |                        |           +----------------------+
+%%%           |                        |                      |
+%%%          4.5                       |                     4.5
+%%%           |                        |                      |
+%%%           v                        |                      v
+%%%       +-------+ <-------- n: client_message --------- +-------+
+%%%       | ready |                    |                  | ready |
+%%%       +-------+ -------- n+1: server_message -------> +-------+
+%%%                                    |
+%%%
+%%% In case of errors during init, upgrading_protocol or performing_handshake
+%%% connection is immediately terminated.
+%%% When connection is in ready status, every kind of error is logged, but
+%%% only socket errors terminates it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection).
