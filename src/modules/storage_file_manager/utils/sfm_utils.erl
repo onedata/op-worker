@@ -80,10 +80,20 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 
     SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
         FileUuid, Storage, SourceFileId, undefined),
+    TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
+        FileUuid, Storage, TargetFileId, undefined),
 
     case SourceFileId =/= TargetFileId of
         true ->
-            storage_file_manager:mv(SourceHandle, TargetFileId);
+            case storage_file_manager:stat(TargetHandle) of
+                {ok, _} ->
+                    ?warning("Moving file into existing one, source ~p, target ~p",
+                        [SourceFileId, TargetFileId]),
+                    NewTargetFileId = ?FILE_WITH_SUFFIX(TargetFileId, FileUuid),
+                    storage_file_manager:mv(SourceHandle, NewTargetFileId);
+                _ ->
+                    storage_file_manager:mv(SourceHandle, TargetFileId)
+            end;
         false ->
             ok
     end.
