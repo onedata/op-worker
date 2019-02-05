@@ -67,7 +67,9 @@
     get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
     flush_events/3, flush_events/4,
 
-    get_protocol_version/1, get_protocol_version/2
+    get_protocol_version/1, get_protocol_version/2,
+    generate_rtransfer_conn_secret/1, generate_rtransfer_conn_secret/2,
+    get_rtransfer_nodes_ips/1, get_rtransfer_nodes_ips/2
 ]).
 
 -define(ID, erlang:unique_integer([positive, monotonic])).
@@ -669,3 +671,51 @@ get_protocol_version(Conn, MsgId) ->
     }, fuse_utils:receive_server_message()),
 
     {Major, Minor}.
+
+
+generate_rtransfer_conn_secret(Conn) ->
+    generate_rtransfer_conn_secret(Conn, ?MSG_ID).
+
+generate_rtransfer_conn_secret(Conn, MsgId) ->
+    ClientMsg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{
+            secret = <<>>
+        }}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{
+        message_body = {rtransfer_conn_secret, #'RTransferConnSecret'{
+            secret = Secret
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {rtransfer_conn_secret, #'RTransferConnSecret'{}}
+    }, fuse_utils:receive_server_message()),
+
+    Secret.
+
+
+get_rtransfer_nodes_ips(Conn) ->
+    get_rtransfer_nodes_ips(Conn, ?MSG_ID).
+
+get_rtransfer_nodes_ips(Conn, MsgId) ->
+    ClientMsg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{
+        message_body = {rtransfer_nodes_ips, #'RTransferNodesIPs'{
+            nodes = RespNodes
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {rtransfer_nodes_ips, #'RTransferNodesIPs'{}}
+    }, fuse_utils:receive_server_message()),
+
+    RespNodes.

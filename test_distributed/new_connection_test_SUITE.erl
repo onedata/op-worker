@@ -518,24 +518,11 @@ rtransfer_connection_secret_test(Config) ->
     {ok, Sock} = fuse_utils:connect_as_provider(
         Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
     ),
-
-    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
-    {ok, EncodedId} = message_id:encode(MsgId),
-    ClientMsg = #'ClientMessage'{
-        message_id = EncodedId,
-        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{secret = <<>>}}
-    },
-    RawMsg = messages:encode_msg(ClientMsg),
-    ssl:send(Sock, RawMsg),
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
 
-    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, fuse_utils:receive_server_message()),
-
-    {rtransfer_conn_secret, #'RTransferConnSecret'{secret = Secret}} = ?assertMatch(
-        {rtransfer_conn_secret, #'RTransferConnSecret'{}},
-        Msg
-    ),
+    Secret = fuse_utils:generate_rtransfer_conn_secret(Sock),
     ?assert(is_binary(Secret)),
+
     ok = ssl:close(Sock).
 
 
@@ -546,33 +533,19 @@ rtransfer_nodes_ips_test(Config) ->
 
     ExpectedIPs = [list_to_binary(inet:ntoa(IP)) || IP <- ClusterIPs],
     ExpectedPort = proplists:get_value(server_port,
-        application:get_env(rtransfer_link, transfer, []), 6665),
-
+        application:get_env(rtransfer_link, transfer, []), 6665
+    ),
     ExpectedNodes = lists:sort(
         [#'IpAndPort'{ip = IP, port = ExpectedPort} || IP <- ExpectedIPs]
     ),
 
-    {ok, #'HandshakeResponse'{status = 'OK'}, Sock} = fuse_utils:connect_as_provider(
+    {ok, Sock} = fuse_utils:connect_as_provider(
         Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
     ),
 
-    {ok, MsgId} = message_id:generate(self(), <<"provId">>),
-    {ok, EncodedId} = message_id:encode(MsgId),
-    ClientMsg = #'ClientMessage'{
-        message_id = EncodedId,
-        message_body = {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}}
-    },
-
-    RawMsg = messages:encode_msg(ClientMsg),
-    ssl:send(Sock, RawMsg),
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+    RespNodes = fuse_utils:get_rtransfer_nodes_ips(Sock),
 
-    #'ServerMessage'{message_body = Msg} = ?assertMatch(#'ServerMessage'{}, fuse_utils:receive_server_message()),
-
-    {rtransfer_nodes_ips, #'RTransferNodesIPs'{nodes = RespNodes}} = ?assertMatch(
-        {rtransfer_nodes_ips, #'RTransferNodesIPs'{}},
-        Msg
-    ),
     ?assertEqual(ExpectedNodes, RespNodes),
     ok = ssl:close(Sock).
 
@@ -629,7 +602,6 @@ rtransfer_nodes_ips_test(Config) ->
 %%    ok = test_utils:mock_unload(Workers, [Mod]).
 %%
 %%
-% TODO fix
 %%client_send_test(Config) ->
 %%    % given
 %%    [Worker1 | _] = ?config(op_worker_nodes, Config),
