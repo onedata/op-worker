@@ -1070,6 +1070,7 @@ closing_connection_should_cancel_all_session_transfers_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
+    serializer:load_msg_defs(),
     Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
