@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Serializes and deserializes protobuf messages
+%%% Module handling serialization and deserialization of client/server
+%%% messages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(serializer).
@@ -26,6 +27,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Loads clproto message definitions for later use by enif_protobuf
@@ -39,11 +41,11 @@ load_msg_defs() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% deserialize protobuf binary data to client message
+%% Deserializes protobuf binary data to client message.
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_client_message(Message :: binary(), SessionId :: undefined | session:id()) ->
-    {ok, ClientMsg :: #client_message{}} | no_return().
+-spec deserialize_client_message(binary(), SessionId :: undefined | session:id()) ->
+    {ok, #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
 %%    DecodedMsg = messages:decode_msg(Message, 'ClientMessage'),
     DecodedMsg = enif_protobuf:decode(Message, 'ClientMessage'),
@@ -57,25 +59,23 @@ deserialize_client_message(Message, SessionId) ->
     } = DecodedMsg,
 
     {ok, DecodedId} = message_id:decode(MsgId),
-    Rec = #client_message{
+    {ok, #client_message{
         message_id = DecodedId,
         message_stream = translator:translate_from_protobuf(MsgStm),
         session_id = SessionId,
         proxy_session_id = PSessID,
         proxy_session_auth = translator:translate_from_protobuf(PToken),
         message_body = translator:translate_from_protobuf(MsgBody)
-    },
-
-    {ok, Rec}.
+    }}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% deserialize protobuf binary data to client message
+%% Deserializes protobuf binary data to server message.
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_server_message(Message :: binary(), SessionId :: undefined | session:id()) ->
-    {ok, ClientMsg :: #server_message{}} | no_return().
+-spec deserialize_server_message(binary(), SessionId :: undefined | session:id()) ->
+    {ok, #server_message{}} | no_return().
 deserialize_server_message(Message, _SessionId) ->
 %%    DecodedMsg = messages:decode_msg(Message, 'ServerMessage'),
     DecodedMsg = enif_protobuf:decode(Message, 'ServerMessage'),
@@ -88,21 +88,20 @@ deserialize_server_message(Message, _SessionId) ->
     } = DecodedMsg,
 
     {ok, DecodedId} = message_id:decode(MsgId),
-    Rec = #server_message{
+    {ok, #server_message{
         message_id = DecodedId,
         message_stream = translator:translate_from_protobuf(MsgStm),
         message_body = translator:translate_from_protobuf(MsgBody),
         proxy_session_id = SessionId
-    },
+    }}.
 
-    {ok, Rec}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% serialize server message to protobuf binary data
+%% Serializes server message to protobuf binary data.
 %% @end
 %%--------------------------------------------------------------------
--spec serialize_server_message(#server_message{}, boolean()) ->
+-spec serialize_server_message(#server_message{}, VerifyMsg :: boolean()) ->
     {ok, binary()} | no_return().
 serialize_server_message(#server_message{
     message_id = MsgId,
@@ -131,10 +130,10 @@ serialize_server_message(#server_message{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% serialize client message to protobuf binary data
+%% Serializes client message to protobuf binary data.
 %% @end
 %%--------------------------------------------------------------------
--spec serialize_client_message(#client_message{}, boolean()) ->
+-spec serialize_client_message(#client_message{}, VerifyMsg :: boolean()) ->
     {ok, binary()} | no_return().
 serialize_client_message(#client_message{
     message_id = MsgId,
@@ -161,7 +160,3 @@ serialize_client_message(#client_message{
     end,
 
     {ok, enif_protobuf:encode(ClientMessage)}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
