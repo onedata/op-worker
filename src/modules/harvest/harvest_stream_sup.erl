@@ -15,9 +15,10 @@
 -behaviour(supervisor).
 
 -include("modules/harvest/harvest.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, start_child/2, terminate_child/2]).
+-export([start_link/0, start_child/3, terminate_child/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -38,14 +39,16 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
--spec start_child(od_harvester:id(), od_space:id()) -> supervisor:startchild_ret().
-start_child(HarvesterId, SpaceId) ->
-    supervisor:start_child(?SERVER, child_spec(HarvesterId, SpaceId)).
+-spec start_child(harvest_stream:id(), od_harvester:id(), od_space:id()) ->
+    supervisor:startchild_ret().
+start_child(Id, HarvesterId, SpaceId) ->
+    supervisor:start_child(?SERVER, child_spec(Id, HarvesterId, SpaceId)).
 
--spec terminate_child(od_harvester:id(), od_space:id()) -> ok | {error, term()}.
-terminate_child(HarvesterId, SpaceId) ->
-    ChildId = harvest_stream_state:id(HarvesterId, SpaceId),
-    supervisor:terminate_child(?SERVER, ChildId).
+-spec terminate_child(harvest_stream:id()) -> ok | {error, term()}.
+terminate_child(StreamId) ->
+    ?critical("DUUUPA: ~p", [supervisor:count_children(?SERVER)]),
+    ?critical("DUUUPA: ~p", [supervisor:which_children(?SERVER)]),
+    supervisor:terminate_child(?SERVER, StreamId).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -68,13 +71,13 @@ init([]) ->
 %%% Internal functions
 %%%===================================================================
 
--spec child_spec(od_harvester:id(), od_space:id()) -> supervisor:child_spec().
-child_spec(HarvesterId, SpaceId) ->
+-spec child_spec(harvest_stream:id(), od_harvester:id(), od_space:id()) -> supervisor:child_spec().
+child_spec(Id, HarvesterId, SpaceId) ->
     #{
-        id => {HarvesterId, SpaceId},
-        start => {harvest_stream, start_link, [HarvesterId, SpaceId]},
+        id => Id,
+        start => {harvest_stream, start_link, [Id, HarvesterId, SpaceId]},
         restart => transient,
-        shutdown => timer:seconds(10),
+        shutdown => timer:seconds(100),
         type => worker
     }.
 

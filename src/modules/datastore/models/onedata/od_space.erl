@@ -73,7 +73,8 @@ get(Key) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
     ok = datastore_model:delete(?CTX, Key),
-    harvest_manager:update_all_spaces_harvest_streams_on_all_nodes().
+    ?critical("DELETE"),
+    harvest_manager:delete_space_harvest_streams_on_all_nodes(Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -244,8 +245,10 @@ emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
 %%-------------------------------------------------------------------
 -spec maybe_notify_harvest_manager(doc()) -> ok.
 maybe_notify_harvest_manager(SpaceDoc = #document{key = SpaceId}) ->
+    ?critical("AAA: ~p", [oneprovider:get_id_or_undefined()]),
     case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
         true ->
+            ?critical("DUPA1"),
             case space_logic:get_harvesters(SpaceDoc) of
                 {ok, Harvesters} ->
                     harvest_manager:update_space_harvest_streams_on_all_nodes(SpaceId, Harvesters);
@@ -253,5 +256,6 @@ maybe_notify_harvest_manager(SpaceDoc = #document{key = SpaceId}) ->
                     ?error("Unexpected error: ~p in od_space:maybe_notify_harvest_worker", [Error])
             end;
         false ->
+            ?critical("DUPA2"),
             ok
     end.

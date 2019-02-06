@@ -113,7 +113,7 @@
 -define(SPACE_PROVIDERS_VALUE(__Space), #{?PROVIDER_1 => 1000000000, ?PROVIDER_2 => 1000000000}).
 -define(SPACE_PROVIDERS_MATCHER(__Space), #{?PROVIDER_1 := 1000000000, ?PROVIDER_2 := 1000000000}).
 -define(SPACE_SHARES(__Space), [?SHARE_1, ?SHARE_2]).
--define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
+-define(SPACE_HARVESTERS(__Space), [?HARVESTER_1]).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -351,8 +351,7 @@ end).
     <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
-    __ProtectedData = ?SPACE_PROTECTED_DATA_VALUE(__SpaceId),
-    __ProtectedData#{
+    (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = private}),
         <<"users">> => ?SPACE_DIRECT_USERS_VALUE(__SpaceId),
         <<"effectiveUsers">> => ?SPACE_EFF_USERS_VALUE(__SpaceId),

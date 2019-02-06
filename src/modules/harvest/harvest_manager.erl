@@ -25,10 +25,10 @@
 
 %% API
 -export([start_link/0, update_space_harvest_streams_on_all_nodes/2,
-    update_all_spaces_harvest_streams_on_all_nodes/0]).
+    delete_space_harvest_streams_on_all_nodes/1]).
 
 %% exported for rpc
--export([update_space_harvest_streams/2, update_all_spaces_harvest_streams/0]).
+-export([update_space_harvest_streams/2, delete_space_harvest_streams/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -38,11 +38,17 @@
 -define(INITIALISE, initialise).
 -define(UPDATE, update).
 -define(UPDATE(SpaceId, Harvesters), {?UPDATE, SpaceId, Harvesters}).
--define(UPDATE_ALL, update_all).
+-define(DELETE, delete).
+-define(DELETE(SpaceId), {?DELETE, SpaceId}).
 
 -define(INITIALISATION_TIMEOUT, timer:seconds(5)).
 
 -type state() :: #{od_space:id() => sets:set(harvest_stream:id())}.
+
+-record(stream, {
+    id :: harvest_stream:id(),
+    harvester_id :: od_harvester:id()
+}).
 
 %%%===================================================================
 %%% API
@@ -58,10 +64,10 @@ update_space_harvest_streams_on_all_nodes(SpaceId, Harvesters) ->
     rpc:multicall(Nodes, ?MODULE, update_space_harvest_streams, [SpaceId, Harvesters]),
     ok.
 
--spec update_all_spaces_harvest_streams_on_all_nodes() -> ok.
-update_all_spaces_harvest_streams_on_all_nodes() ->
+-spec delete_space_harvest_streams_on_all_nodes(od_space:id()) -> ok.
+delete_space_harvest_streams_on_all_nodes(SpaceId) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
-    rpc:multicall(Nodes, ?MODULE, update_all_spaces_harvest_streams, []),
+    rpc:multicall(Nodes, ?MODULE, delete_space_harvest_streams, [SpaceId]),
     ok.
 
 %%%===================================================================
@@ -72,9 +78,9 @@ update_all_spaces_harvest_streams_on_all_nodes() ->
 update_space_harvest_streams(SpaceId, Harvesters) ->
     gen_server:cast(?HARVEST_MANAGER, ?UPDATE(SpaceId, Harvesters)).
 
--spec update_all_spaces_harvest_streams() -> ok.
-update_all_spaces_harvest_streams() ->
-    gen_server:cast(?HARVEST_MANAGER, ?UPDATE_ALL).
+-spec delete_space_harvest_streams(od_space:id()) -> ok.
+delete_space_harvest_streams(SpaceId) ->
+    gen_server:cast(?HARVEST_MANAGER, ?DELETE(SpaceId)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -88,6 +94,7 @@ update_all_spaces_harvest_streams() ->
 -spec init(Args :: term()) -> {ok, State :: state()}.
 init([]) ->
     schedule_initialisation(),
+    ?critical("Initialized manager: ~p ~p", [self(), whereis(?HARVEST_MANAGER)]),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -111,9 +118,9 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()}.
 handle_cast(?INITIALISE, State) ->
     {noreply, initialise(State)};
-handle_cast(?UPDATE_ALL, State) ->
-    {noreply, update_streams_for_all_supported_spaces(State)};
-handle_cast({?UPDATE, SpaceId, Harvesters}, State) ->
+handle_cast(?DELETE(SpaceId), State) ->
+    {noreply, delete_streams(SpaceId, State)};
+handle_cast(?UPDATE(SpaceId, Harvesters), State) ->
     {noreply, update_streams_per_space(SpaceId, Harvesters, State)};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -162,17 +169,17 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec initialise(state()) -> ok.
 initialise(State) ->
-    try provider_logic:get_spaces(oneprovider:get_id_or_undefined()) of
+    try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foldl(fun(SpaceId, StateIn) ->
                 update_streams_per_space(SpaceId, StateIn)
             end, State, SpaceIds);
         ?ERROR_UNREGISTERED_PROVIDER ->
-            timer:sleep(timer:seconds(?INITIALISATION_TIMEOUT)),
+            timer:sleep(?INITIALISATION_TIMEOUT),
             schedule_initialisation(),
             State;
         ?ERROR_NO_CONNECTION_TO_OZ ->
-            timer:sleep(timer:seconds(?INITIALISATION_TIMEOUT)),
+            timer:sleep(?INITIALISATION_TIMEOUT),
             schedule_initialisation(),
             State;
         Error = {error, _} ->
@@ -184,27 +191,26 @@ initialise(State) ->
             State
     end.
 
--spec update_streams_for_all_supported_spaces(state()) -> state().
-update_streams_for_all_supported_spaces(State) ->
-    {ok, SpaceIds} = provider_logic:get_spaces(oneprovider:get_id()),
-    lists:foldl(fun(SpaceId, StateIn) ->
-        update_streams_per_space(SpaceId, StateIn)
-    end, State, SpaceIds).
+-spec delete_streams(od_space:id(), state()) -> state().
+delete_streams(SpaceId, State) ->
+    update_streams_per_space(SpaceId, [], State).
 
 -spec update_streams_per_space(od_space:id(), state()) -> state().
 update_streams_per_space(SpaceId, State) ->
+    ?critical("SpaceId: ~p", [SpaceId]),
     {ok, Harvesters} = space_logic:get_harvesters(?ROOT_SESS_ID, SpaceId),
+    ?critical("Harvesters: ~p", [Harvesters]),
     update_streams_per_space(SpaceId, Harvesters, State).
 
 -spec update_streams_per_space(od_space:id(), [od_harvester:id()], state()) -> ok.
 update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
     OldStreams = maps:get(SpaceId, State, sets:new()),
     Node = node(),
-    CurrentStreams = sets:from_list(lists:filtermap(fun(Harvester) ->
-        Id = harvest_stream_state:id(Harvester, SpaceId),
+    CurrentStreams = sets:from_list(lists:filtermap(fun(HarvesterId) ->
+        Id = harvest_stream:id(HarvesterId, SpaceId),
         case Node =:= consistent_hashing:get_node(Id) of
             true ->
-                {true, Id};
+                {true, #stream{id = Id, harvester_id = HarvesterId}};
             false ->
                 false
         end
@@ -213,15 +219,18 @@ update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
     StreamsToStart = sets:subtract(CurrentStreams, OldStreams),
     StreamsToStop = sets:subtract(OldStreams, CurrentStreams),
 
-    lists:foreach(fun(HarvesterId) ->
-        harvest_stream_sup:terminate_child(HarvesterId, SpaceId)
+    lists:foreach(fun(#stream{id = Id}) ->
+        harvest_stream_sup:terminate_child(Id)
     end, sets:to_list(StreamsToStop)),
 
-    lists:foreach(fun(HarvesterId) ->
-        harvest_stream_sup:start_child(HarvesterId, SpaceId)
+    lists:foreach(fun(#stream{id = Id, harvester_id = HarvesterId}) ->
+        harvest_stream_sup:start_child(Id, HarvesterId, SpaceId)
     end, sets:to_list(StreamsToStart)),
 
-    State#{SpaceId => CurrentStreams}.
+    case CurrentHarvesters =:= [] of
+        true -> maps:remove(SpaceId, State);
+        _ -> State#{SpaceId => CurrentStreams}
+    end.
 
 
 -spec schedule_initialisation() -> ok.

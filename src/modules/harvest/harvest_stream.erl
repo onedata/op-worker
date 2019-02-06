@@ -23,7 +23,7 @@
 -define(DEFAULT_BUCKET, <<"onedata">>).
 
 %% API
--export([start_link/2]).
+-export([start_link/3, id/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -32,7 +32,7 @@
 -record(state, {
     id :: id(),
     harvester_id :: od_harvester:id(),
-    scope_id :: od_space:id()}
+    space_id :: od_space:id()}
 ).
 
 -type state() :: #state{}.
@@ -44,9 +44,13 @@
 %%% API
 %%%===================================================================
 
--spec start_link(d_harvester:id(), od_space:id()) -> {ok, pid()} | {error, Reason :: term()}.
-start_link(HarvesterId, SpaceId) ->
-    gen_server:start_link({local, {HarvesterId, SpaceId}}, ?MODULE, [HarvesterId, SpaceId], []).
+-spec start_link(id(), od_harvester:id(), od_space:id()) -> {ok, pid()} | {error, Reason :: term()}.
+start_link(Id, HarvesterId, SpaceId) ->
+    gen_server:start_link({local, binary_to_atom(Id, latin1)}, ?MODULE, [Id, HarvesterId, SpaceId], []).
+
+-spec id(od_harvester:id(), od_space:id()) -> id().
+id(HarvesterId, SpaceId) ->
+    harvest_stream_state:id(HarvesterId, SpaceId).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -60,19 +64,19 @@ start_link(HarvesterId, SpaceId) ->
 -spec init(Args :: term()) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([HarvesterId, SpaceId]) ->
+init([Id, HarvesterId, SpaceId]) ->
     Stream = self(),
-    Id = harvest_stream_state:id(HarvesterId, SpaceId),
     ?critical("Started harvest stream for space ~p and harverster ~p with id: ~p", [SpaceId, HarvesterId, Id]),
     Since = harvest_stream_state:get_seq(Id),
     Callback = fun(Change) -> gen_server2:cast(Stream, {change, Change}) end,
-    {ok, _} = couchbase_changes_stream:start_link(
+    {ok, P} = couchbase_changes_stream:start_link(
         ?DEFAULT_BUCKET, SpaceId, Callback,
         [{since, Since}, {until, infinity}], []
     ),
+    ?critical("Started stream on: ~p", [P]),
     {ok, #state{
         id = Id,
-        scope_id = SpaceId,
+        space_id = SpaceId,
         harvester_id = HarvesterId
     }}.
 
@@ -149,7 +153,7 @@ handle_info(Info, #state{} = State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, #state{
-    scope_id = SpaceId,
+    space_id = SpaceId,
     harvester_id = HarvesterId,
     id = Id
 } = State) ->
@@ -176,6 +180,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_change(Id, HarvesterId, Doc = #document{seq = Seq, value = Value}) ->
     % Let the gen_server crash if anything goes wrong (no error is expected
     % on this level).
+    % todo only from this provider !!!
     Type = element(1, Value),
     case Type =:= custom_metadata of
         true ->
