@@ -18,12 +18,19 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([fill_proxy_info/2]).
+-export([
+    fill_proxy_info/2,
+    maybe_create_proxy_session/2
+]).
 -export([
     protocol_upgrade_request/1,
     process_protocol_upgrade_request/1,
     verify_protocol_upgrade_response/1
 ]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,6 +52,23 @@ fill_proxy_info(Msg, SessionId) ->
         _ ->
             Msg
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates proxy session if requested by peer.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_create_proxy_session(od_provider:id(), #client_message{}) -> ok.
+maybe_create_proxy_session(ProviderId, #client_message{
+    proxy_session_id = ProxySessionId,
+    proxy_session_auth = Auth
+}) when ProxySessionId =/= undefined ->
+    {ok, _} = session_manager:reuse_or_create_proxy_session(
+        ProxySessionId, ProviderId, Auth, fuse
+    ),
+    ok;
+maybe_create_proxy_session(_, _) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

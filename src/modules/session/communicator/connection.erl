@@ -73,8 +73,8 @@
 %%%
 %%% In case of errors during init, upgrading_protocol or performing_handshake
 %%% connection is immediately terminated.
-%%% When connection is in ready status, every kind of error is logged, but
-%%% only socket errors terminates it.
+%%% On the other hand, When connection is in ready status, every kind of error
+%%% is logged, but only socket errors terminates it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection).
@@ -185,10 +185,14 @@ send_sync(Pid, Msg) ->
             ?debug("Connection process ~p does not exist", [Pid]),
             {error, no_connection};
         exit:{normal, _} ->
-            ?debug("Exit of connection process ~p for request ~p", [Pid, Msg]),
+            ?debug("Exit of connection process ~p for message ~p", [
+                Pid, Msg
+            ]),
             {error, no_connection};
         exit:{timeout, _} ->
-            ?debug("Timeout of connection process ~p for request ~p", [Pid, Msg]),
+            ?debug("Timeout of connection process ~p for message ~p", [
+                Pid, Msg
+            ]),
             {error, timeout};
         Type:Reason ->
             ?error("Connection ~p cannot send msg ~p due to: ~p", [
@@ -329,9 +333,6 @@ handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok}
         {ok, NewState} ->
             activate_socket(NewState, false),
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
-        % Serialization error should not break connection
-        {error, serialization_failed} ->
-            {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             {stop, Reason, State}
     end;
@@ -527,9 +528,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                     postpone_next_reconnect(Intervals, ProviderId, Interval),
                     exit(normal);
                 exit:normal ->
-                    ?info("Connection to peer provider(~p) closed", [
-                        ProviderId
-                    ]),
+                    ?info("Connection to peer provider(~p) closed", [ProviderId]),
                     exit(normal);
                 Type:Reason ->
                     ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
@@ -697,26 +696,22 @@ handle_handshake(#state{type = outgoing} = State, Data) ->
 %% @private
 -spec handle_handshake_request(state(), binary()) ->
     {ok, state()} | {error, Reason :: term()}.
-handle_handshake_request(#state{
-    socket = Socket,
-    session_id = SessId
-} = State, Data) ->
+handle_handshake_request(#state{socket = Socket} = State, Data) ->
     try
-        {ok, #client_message{
-            message_body = HandshakeMsg
-        }} = serializer:deserialize_client_message(Data, SessId),
-
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
-        {PeerId, SessionId} = auth_manager:handle_handshake(
-            HandshakeMsg, IpAddress
+        {ok, Msg} = serializer:deserialize_client_message(Data, undefined),
+
+        {PeerId, SessionId} = protocol_auth:handle_handshake(
+            Msg#client_message.message_body, IpAddress
         ),
         NewState = State#state{peer_id = PeerId, session_id = SessionId},
+
         send_server_message(NewState, #server_message{
             message_body = #handshake_response{status = 'OK'}
         })
     catch Type:Reason ->
         ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
-        send_server_message(State, auth_manager:get_handshake_error(Reason)),
+        send_server_message(State, protocol_auth:get_handshake_error(Reason)),
         {error, Reason}
     end.
 
@@ -744,7 +739,7 @@ handle_handshake_response(#state{
             {error, invalid_handshake_response}
     catch
         _:Error ->
-            ?warning("Client message decoding error: ~p", [Error]),
+            ?error_stacktrace("Client message decoding error: ~p", [Error]),
             {error, Error}
     end.
 
@@ -763,13 +758,16 @@ handle_message(#state{type = outgoing} = State, Data) ->
     {ok, state()} | {error, Reason :: term()}.
 handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     {ok, State};
-handle_client_message(State = #state{session_id = SessId}, Data) ->
+handle_client_message(#state{
+    peer_id = PeerId,
+    session_id = SessId
+} = State, Data) ->
     try
         {ok, Msg} = serializer:deserialize_client_message(Data, SessId),
-        maybe_create_proxy_session(State, Msg),
+        protocol_utils:maybe_create_proxy_session(PeerId, Msg),
         route_message(State, Msg)
     catch Type:Reason ->
-        ?warning_stacktrace("Client message handling error - ~p:~p", [
+        ?error_stacktrace("Client message handling error - ~p:~p", [
             Type, Reason
         ]),
         {ok, State}
@@ -779,13 +777,13 @@ handle_client_message(State = #state{session_id = SessId}, Data) ->
 %% @private
 -spec handle_server_message(state(), binary()) ->
     {ok, state()} | {error, Reason :: term()}.
-handle_server_message(State = #state{session_id = SessId}, Data) ->
+handle_server_message(#state{session_id = SessId} = State, Data) ->
     try
         {ok, Msg0} = serializer:deserialize_server_message(Data, SessId),
         Msg = fill_server_msg_proxy_info(State, Msg0),
         route_message(State, Msg)
     catch Type:Error ->
-        ?warning_stacktrace("Server message handling error - ~p:~p", [
+        ?error_stacktrace("Server message handling error - ~p:~p", [
             Type, Error
         ]),
         {ok, State}
@@ -800,7 +798,13 @@ route_message(State, Msg) ->
         ok ->
             {ok, State};
         {ok, ServerMsg} ->
-            send_server_message(State, ServerMsg);
+            case send_server_message(State, ServerMsg) of
+                % Serialization errors should not break ready connection
+                {error, serialization_failed} ->
+                    {ok, State};
+                Ans ->
+                    Ans
+            end;
         {error, Reason} ->
             ?error_stacktrace("Message ~p handling error: ~p", [Msg, Reason]),
             {ok, State}
@@ -866,26 +870,6 @@ socket_send(#state{transport = Transport, socket = Socket} = State, Data) ->
             ]),
             Error
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% If message comes from provider and proxy session is requested - proceed
-%% with authorization and switch context to the proxy session.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_create_proxy_session(state(), client_message()) -> ok.
-maybe_create_proxy_session(#state{peer_id = ProviderId}, #client_message{
-    proxy_session_id = ProxySessionId,
-    proxy_session_auth = Auth
-}) when ProxySessionId =/= undefined ->
-    {ok, _} = session_manager:reuse_or_create_proxy_session(
-        ProxySessionId, ProviderId, Auth, fuse
-    ),
-    ok;
-maybe_create_proxy_session(_, _) ->
-    ok.
 
 
 %% @private

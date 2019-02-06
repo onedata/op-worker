@@ -342,7 +342,7 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
     try
         #client_message{message_body = HandshakeMsg} = ClientMsg,
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
-        {PeerId, SessionId} = auth_manager:handle_handshake(
+        {PeerId, SessionId} = protocol_auth:handle_handshake(
             HandshakeMsg, IpAddress
         ),
         NewState = State#state{peer_id = PeerId, session_id = SessionId},
@@ -357,7 +357,7 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
             Type, Reason
         ]),
         send_server_message(State,
-            auth_manager:get_handshake_error(Reason)),
+            protocol_auth:get_handshake_error(Reason)),
         State#state{continue = false}
     end.
 
