@@ -76,7 +76,7 @@ deserialize_client_message(Message, SessionId) ->
 %%--------------------------------------------------------------------
 -spec deserialize_server_message(binary(), SessionId :: undefined | session:id()) ->
     {ok, #server_message{}} | no_return().
-deserialize_server_message(Message, _SessionId) ->
+deserialize_server_message(Message, SessionId) ->
 %%    DecodedMsg = messages:decode_msg(Message, 'ServerMessage'),
     DecodedMsg = enif_protobuf:decode(Message, 'ServerMessage'),
 
@@ -84,7 +84,7 @@ deserialize_server_message(Message, _SessionId) ->
         message_id = MsgId,
         message_stream = MsgStm,
         message_body = {_, MsgBody},
-        proxy_session_id = SessionId
+        proxy_session_id = ProxySessionId
     } = DecodedMsg,
 
     {ok, DecodedId} = message_id:decode(MsgId),
@@ -92,7 +92,9 @@ deserialize_server_message(Message, _SessionId) ->
         message_id = DecodedId,
         message_stream = translator:translate_from_protobuf(MsgStm),
         message_body = translator:translate_from_protobuf(MsgBody),
-        proxy_session_id = SessionId
+        proxy_session_id = utils:ensure_defined(
+            ProxySessionId, undefined, SessionId
+        )
     }}.
 
 

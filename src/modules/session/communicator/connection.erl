@@ -124,11 +124,6 @@
     application:get_env(?APP_NAME, verify_msg_before_encoding, true)
 ).
 
-% Definitions of reconnect intervals for provider connection.
--define(INITIAL_RECONNECT_INTERVAL_SEC, 2).
--define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
--define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
-
 %% API
 -export([
     connect_to_provider/7,
@@ -496,13 +491,9 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
 init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     % Map keeping reconnect interval and time between provider connection
     % retries; needed to implement backoff algorithm
-    Intervals = application:get_env(
-        ?APP_NAME, providers_reconnect_intervals, #{}
-    ),
+    Intervals = application:get_env(?APP_NAME, providers_reconnect_intervals, #{}),
     ProviderId = session_utils:session_id_to_provider_id(SessionId),
-    {NextReconnect, Interval} = maps:get(ProviderId, Intervals,
-        {time_utils:cluster_time_seconds(), ?INITIAL_RECONNECT_INTERVAL_SEC}
-    ),
+    NextReconnect = protocol_utils:get_next_reconnect(ProviderId, Intervals),
     case time_utils:cluster_time_seconds() >= NextReconnect of
         false ->
             ?debug("Discarding connection request to provider(~p) as the "
@@ -515,27 +506,27 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                     Transport, Timeout
                 ),
                 ok = proc_lib:init_ack({ok, self()}),
-                reset_reconnect_interval(Intervals, ProviderId),
+                protocol_utils:reset_reconnect_interval(ProviderId, Intervals),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
             catch
                 throw:incompatible_peer_op_version ->
-                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal);
                 throw:cannot_check_peer_op_version ->
-                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal);
                 throw:cannot_verify_identity ->
-                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal);
                 exit:normal ->
                     ?info("Connection to peer provider(~p) closed", [ProviderId]),
                     exit(normal);
                 Type:Reason ->
                     ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
-                    "Next retry not sooner than ~p seconds.", [
-                        ProviderId, Type, Reason, Interval
+                             "Next retry not sooner than ~p.", [
+                        ProviderId, Type, Reason, NextReconnect
                     ]),
-                    postpone_next_reconnect(Intervals, ProviderId, Interval),
+                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal)
             end
     end.
@@ -552,7 +543,15 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> state() | no_return().
 connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
-    verify_provider_identity(ProviderId),
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok ->
+            ok;
+        Err ->
+            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
+                ProviderId, Err
+            ]),
+            throw(cannot_verify_identity)
+    end,
 
     SslOpts = [
         {cacerts, oneprovider:trusted_ca_certs()},
@@ -595,59 +594,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
     activate_socket(State, true),
 
     State.
-
-
-%% @private
--spec verify_provider_identity(od_provider:id()) -> ok | no_return().
-verify_provider_identity(ProviderId) ->
-    case provider_logic:verify_provider_identity(ProviderId) of
-        ok ->
-            ok;
-        Error ->
-            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
-                ProviderId, Error
-            ]),
-            throw(cannot_verify_identity)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Postpones the time of next reconnect in an increasing manner,
-%% according to RECONNECT_INTERVAL_INCREASE_RATE.
-%% @end
-%%--------------------------------------------------------------------
--spec postpone_next_reconnect(Intervals :: #{},
-    ProviderId :: od_provider:id(), Interval :: integer()) -> ok.
-postpone_next_reconnect(Intervals, ProviderId, Interval) ->
-    NewInterval = min(
-        Interval * ?RECONNECT_INTERVAL_INCREASE_RATE,
-        ?MAX_RECONNECT_INTERVAL
-    ),
-    NewIntervals = Intervals#{
-        ProviderId => {time_utils:cluster_time_seconds() + Interval, NewInterval}
-    },
-    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Resets the reconnect interval to its initial value and next reconnect to
-%% current time (which means next reconnect can be performed immediately).
-%% @end
-%%--------------------------------------------------------------------
--spec reset_reconnect_interval(Intervals :: #{},
-    ProviderId :: od_provider:id()) -> ok.
-reset_reconnect_interval(Intervals, ProviderId) ->
-    NewIntervals = Intervals#{
-        ProviderId => {
-            time_utils:cluster_time_seconds(),
-            ?INITIAL_RECONNECT_INTERVAL_SEC
-        }
-    },
-    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
 
 
 %%%===================================================================
@@ -733,7 +679,8 @@ handle_handshake_response(#state{
             ]),
             {error, {handshake_failed, Error}};
         _ ->
-            ?error("Received invalid handshake response from provider '~s', closing connection.", [
+            ?error("Received invalid handshake response from provider '~s', "
+                   "closing connection.", [
                 ProviderId
             ]),
             {error, invalid_handshake_response}
@@ -779,8 +726,7 @@ handle_client_message(#state{
     {ok, state()} | {error, Reason :: term()}.
 handle_server_message(#state{session_id = SessId} = State, Data) ->
     try
-        {ok, Msg0} = serializer:deserialize_server_message(Data, SessId),
-        Msg = fill_server_msg_proxy_info(State, Msg0),
+        {ok, Msg} = serializer:deserialize_server_message(Data, SessId),
         route_message(State, Msg)
     catch Type:Error ->
         ?error_stacktrace("Server message handling error - ~p:~p", [
@@ -802,8 +748,8 @@ route_message(State, Msg) ->
                 % Serialization errors should not break ready connection
                 {error, serialization_failed} ->
                     {ok, State};
-                Ans ->
-                    Ans
+                Result ->
+                    Result
             end;
         {error, Reason} ->
             ?error_stacktrace("Message ~p handling error: ~p", [Msg, Reason]),
@@ -870,14 +816,6 @@ socket_send(#state{transport = Transport, socket = Socket} = State, Data) ->
             ]),
             Error
     end.
-
-
-%% @private
--spec fill_server_msg_proxy_info(state(), server_message()) -> server_message().
-fill_server_msg_proxy_info(State, #server_message{proxy_session_id = undefined} = Msg) ->
-    Msg#server_message{proxy_session_id = State#state.session_id};
-fill_server_msg_proxy_info(_, Msg) ->
-    Msg.
 
 
 %%--------------------------------------------------------------------
