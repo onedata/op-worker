@@ -127,7 +127,12 @@ serialize_server_message(#server_message{
             ok
     end,
 
-    {ok, enif_protobuf:encode(ServerMessage)}.
+    case enif_protobuf:encode(ServerMessage) of
+        {error, Reason} ->
+            throw({serialization_failed, Reason});
+        EncodedServerMessage ->
+            {ok, EncodedServerMessage}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -161,4 +166,9 @@ serialize_client_message(#client_message{
             ok
     end,
 
-    {ok, enif_protobuf:encode(ClientMessage)}.
+    case enif_protobuf:encode(ClientMessage) of
+        {error, Reason} ->
+            throw({serialization_failed, Reason});
+        EncodedClientMessage ->
+            {ok, EncodedClientMessage}
+    end.
