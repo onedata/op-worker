@@ -148,9 +148,10 @@ handle({dbsync_deletion_request, FileCtx}) ->
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
         case file_handles:exists(FileUuid) of
             true ->
-                % TODO - czemu nie dodajemy deletion_linka? Grozi nam reimport
+                add_deletion_link(FileCtx, UserCtx),
                 ok = file_handles:mark_to_remove(FileCtx);
             false ->
+                % TODO - ja zabezpieczyc synca przed reimportem (nie ma linka i file_meta)?
                 delete_file(FileCtx, UserCtx, fun check_and_maybe_delete_storage_file/2)
         end
     catch
@@ -194,6 +195,8 @@ check_and_maybe_delete_storage_file(FileCtx, UserCtx) ->
         {ParentDoc, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
         % TODO - zamiast tego chyba powinnismy pobrac file_location i sprawdzic,
             % bo plik moglbyc na storage'u pod inna nazwa
+            % czemu tego nie sprawdzamy ja nie jest kasowanie z dbsync tylko otwartego pliku?
+            % czemy sfm_utils moze skasowac nie swoj plik?
         case fslogic_path:resolve(ParentDoc, <<"/", Name/binary>>) of
             {ok, #document{key = Uuid2}} when Uuid2 =/= Uuid ->
                 ok;
@@ -248,8 +251,8 @@ delete_deletion_link_and_file(FileCtx, UserCtx) ->
     ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
     {DeletionLinkName, FileCtx3} = file_deletion_link_name(FileCtx2),
     Scope = file_ctx:get_space_id_const(FileCtx3),
-    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, DeletionLinkName),
-    sfm_utils:recursive_delete(FileCtx3, UserCtx).
+    ok =  sfm_utils:recursive_delete(FileCtx3, UserCtx),
+    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, DeletionLinkName).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -268,6 +271,14 @@ add_deletion_link_and_remove_normal_link(FileCtx, UserCtx) ->
     Scope = file_ctx:get_space_id_const(FileCtx4),
     ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
     ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName).
+
+add_deletion_link(FileCtx, UserCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
+    {DeletionLinkName, FileCtx3} = file_deletion_link_name(FileCtx2),
+    Scope = file_ctx:get_space_id_const(FileCtx3),
+    ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid).
 
 %%-------------------------------------------------------------------
 %% @private

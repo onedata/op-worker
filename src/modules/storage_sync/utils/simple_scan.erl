@@ -147,7 +147,11 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                             ?error("Deletion link for ~p is unexpectedly missing", [Path]),
                             {processed, undefined, Job2};
                         false ->
-                            maybe_import_file(Job2)
+                            {SFMHandle, _} = storage_file_ctx:get_handle(StorageFileCtx),
+                            case storage_file_manager:stat(SFMHandle) of
+                                {ok, _} -> maybe_import_file(Job2);
+                                _ -> {processed, undefined, Job2}
+                            end
                     end;
                 {ok, _FileUuid} ->
                     {processed, undefined, Job2}
@@ -387,9 +391,11 @@ maybe_sync_file_with_existing_metadata(Job, FileCtx) ->
             ErrorCode =:= ?ENOENT;
             ErrorCode =:= ?EAGAIN
         ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
-            {LocalResult, FileCtx3, Job}
+            % TODO - dodac log
+            {processed, undefined, Job}
+%%            FileUuid = file_ctx:get_uuid_const(FileCtx),
+%%            {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
+%%            {LocalResult, FileCtx3, Job}
     end.
 
 %%--------------------------------------------------------------------
@@ -865,6 +871,7 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 -spec create_file_meta(file_meta:uuid() | undefined, file_meta:name(),
     file_meta:mode(), od_user:id(), undefined | od_group:id(), file_meta:size(),
     file_meta:uuid(), od_space:id(), boolean()) -> {ok, file_meta:uuid()}.
+% TODO - chyba mozna usunac argument CreateLinks
 create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, FileSize,
     ParentUuid, SpaceId, CreateLinks
 ) ->
