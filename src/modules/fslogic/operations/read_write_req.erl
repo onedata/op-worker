@@ -97,11 +97,9 @@ get_handle(UserCtx, FileCtx, HandleId) ->
 -spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
     HandleId :: storage_file_manager:handle_id()) -> ok.
 create_handle(UserCtx, FileCtx, HandleId) ->
-    Node = consistent_hasing:get_node(file_ctx:get_uuid_const(FileCtx)),
     #fuse_response{
         status = #status{code = ?OK}
-    } = rpc:call(Node, file_req, open_file_insecure,
-        [UserCtx, FileCtx, rdwr, HandleId]),
+    } = file_req:open_file_insecure(UserCtx, FileCtx, rdwr, HandleId),
     ok.
 
 %%--------------------------------------------------------------------

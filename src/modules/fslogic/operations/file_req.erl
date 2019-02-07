@@ -153,7 +153,10 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     % TODO - nie otwierac jesli jest to call od klienta po directIO (ale otwierac jak jest fallback z proxy)
     % TODO - fallback z proxy nie powinien rejestrowac file_handle
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = file_handles:register_open(FileCtx, SessId, 1),
+    ok = case HandleId0 of
+             undefined -> file_handles:register_open(FileCtx, SessId, 1);
+    _ -> ok
+        end,
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
@@ -178,7 +181,10 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
         E1:E2 ->
             ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
                 [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
-            file_handles:register_release(FileCtx, SessId, 1),
+            case HandleId0 of
+                undefined -> file_handles:register_release(FileCtx, SessId, 1);
+                _ -> ok
+            end,
             throw(E2)
     end.
 
