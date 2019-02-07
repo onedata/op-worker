@@ -94,7 +94,6 @@ delete_space_harvest_streams(SpaceId) ->
 -spec init(Args :: term()) -> {ok, State :: state()}.
 init([]) ->
     schedule_initialisation(),
-    ?critical("Initialized manager: ~p ~p", [self(), whereis(?HARVEST_MANAGER)]),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -167,7 +166,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec initialise(state()) -> ok.
+-spec initialise(state()) -> state().
 initialise(State) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
@@ -197,12 +196,10 @@ delete_streams(SpaceId, State) ->
 
 -spec update_streams_per_space(od_space:id(), state()) -> state().
 update_streams_per_space(SpaceId, State) ->
-    ?critical("SpaceId: ~p", [SpaceId]),
     {ok, Harvesters} = space_logic:get_harvesters(?ROOT_SESS_ID, SpaceId),
-    ?critical("Harvesters: ~p", [Harvesters]),
     update_streams_per_space(SpaceId, Harvesters, State).
 
--spec update_streams_per_space(od_space:id(), [od_harvester:id()], state()) -> ok.
+-spec update_streams_per_space(od_space:id(), [od_harvester:id()], state()) -> state().
 update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
     OldStreams = maps:get(SpaceId, State, sets:new()),
     Node = node(),

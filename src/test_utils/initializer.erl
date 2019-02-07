@@ -700,9 +700,14 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
+    SpacesToHarvesters = lists:map(fun({SpaceId, SpaceConfig}) ->
+        Harvesters = proplists:get_value(<<"harvesters">>, SpaceConfig, []),
+        {SpaceId, Harvesters}
+    end, SpacesSetup),
+
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders, SpacesToHarvesters),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
@@ -921,15 +926,16 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}]) ->
-    ok.
-space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
+    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
+    [{binary(), [binary()]}]) -> ok.
+space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesToHarvesters) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, space_logic),
 
     GetSpaceFun = fun(_, SpaceId) ->
         SpaceName = proplists:get_value(SpaceId, Spaces),
         UserIds = proplists:get_value(SpaceId, Users, []),
+        Harvesters = proplists:get_value(SpaceId, SpacesToHarvesters),
         EffUsers = maps:from_list(lists:map(fun(UID) ->
             {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
         end, UserIds)),
@@ -937,7 +943,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
             name = SpaceName,
             providers = proplists:get_value(SpaceId, SpacesToProviders, maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])),
             eff_users = EffUsers,
-            eff_groups = #{}
+            eff_groups = #{},
+            harvesters = Harvesters
         }}}
     end,
 

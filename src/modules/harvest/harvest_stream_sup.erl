@@ -46,9 +46,8 @@ start_child(Id, HarvesterId, SpaceId) ->
 
 -spec terminate_child(harvest_stream:id()) -> ok | {error, term()}.
 terminate_child(StreamId) ->
-    ?critical("DUUUPA: ~p", [supervisor:count_children(?SERVER)]),
-    ?critical("DUUUPA: ~p", [supervisor:which_children(?SERVER)]),
-    supervisor:terminate_child(?SERVER, StreamId).
+    ok = supervisor:terminate_child(?SERVER, StreamId),
+    ok = supervisor:delete_child(?SERVER, StreamId).
 
 %%%===================================================================
 %%% Supervisor callbacks

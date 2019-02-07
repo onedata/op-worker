@@ -242,13 +242,10 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 
 -spec get_harvesters(session:id(), od_space:id()) -> {ok, [od_harvester:id()]} | gs_protocol:error().
 get_harvesters(SessionId, SpaceId) ->
-    ?critical("CCC"),
-    case get(SessionId, SpaceId) of
+    case space_logic:get(SessionId, SpaceId) of
         {ok, Doc} ->
-            ?critical("DDD: ~p", [Doc]),
             get_harvesters(Doc);
         Error ->
-            ?critical("EEE"),
             Error
     end.
 

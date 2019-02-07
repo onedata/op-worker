@@ -35,8 +35,8 @@
     many_harvest_streams_should_be_started_for_many_spaces/1,
     harvest_stream_should_be_stopped_for_space/1,
     many_harvest_streams_should_be_stopped/1,
-    many_harvest_streams_should_be_stopped_for_many_spaces/1
-    , all_harvest_streams_should_be_stopped_when_the_space_is_deleted/1]).
+    many_harvest_streams_should_be_stopped_for_many_spaces/1,
+    all_harvest_streams_should_be_stopped_when_the_space_is_deleted/1]).
 
 all() -> ?ALL([
     manager_and_stream_sup_should_be_started,

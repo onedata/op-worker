@@ -32,8 +32,9 @@
 -record(state, {
     id :: id(),
     harvester_id :: od_harvester:id(),
-    space_id :: od_space:id()}
-).
+    space_id :: od_space:id(),
+    provider_id :: od_provider:id()
+}).
 
 -type state() :: #state{}.
 -type id() :: binary().
@@ -66,18 +67,17 @@ id(HarvesterId, SpaceId) ->
     {stop, Reason :: term()} | ignore.
 init([Id, HarvesterId, SpaceId]) ->
     Stream = self(),
-    ?critical("Started harvest stream for space ~p and harverster ~p with id: ~p", [SpaceId, HarvesterId, Id]),
     Since = harvest_stream_state:get_seq(Id),
     Callback = fun(Change) -> gen_server2:cast(Stream, {change, Change}) end,
-    {ok, P} = couchbase_changes_stream:start_link(
+    {ok, _} = couchbase_changes_stream:start_link(
         ?DEFAULT_BUCKET, SpaceId, Callback,
         [{since, Since}, {until, infinity}], []
     ),
-    ?critical("Started stream on: ~p", [P]),
     {ok, #state{
         id = Id,
         space_id = SpaceId,
-        harvester_id = HarvesterId
+        harvester_id = HarvesterId,
+        provider_id = oneprovider:get_id()
     }}.
 
 
@@ -109,13 +109,21 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({change, {ok, Docs}}, State = #state{id = Id, harvester_id = HId})
+handle_cast({change, {ok, Docs}}, State = #state{
+    id = Id,
+    harvester_id = HarvesterId,
+    provider_id = ProviderId
+})
     when is_list(Docs)
 ->
-    [handle_change(Id, HId, Doc) || Doc <- Docs],
+    [handle_change(Id, HarvesterId, ProviderId, Doc) || Doc <- Docs],
     {noreply, State};
-handle_cast({change, {ok, #document{} = Doc}}, State = #state{id = Id, harvester_id = HId}) ->
-    handle_change(Id, HId, Doc),
+handle_cast({change, {ok, #document{} = Doc}}, State = #state{
+    id = Id,
+    harvester_id = HarvesterId,
+    provider_id = ProviderId
+}) ->
+    handle_change(Id, HarvesterId, ProviderId, Doc),
     {noreply, State};
 handle_cast({change, {ok, end_of_stream}}, State) ->
     {stop, normal, State};
@@ -152,12 +160,7 @@ handle_info(Info, #state{} = State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(Reason, #state{
-    space_id = SpaceId,
-    harvester_id = HarvesterId,
-    id = Id
-} = State) ->
-    ?critical("Stopping harvest stream for space ~p and harverster ~p with id: ~p", [SpaceId, HarvesterId, Id]),
+terminate(Reason, #state{} = State) ->
     ?log_terminate(Reason, State).
 
 
@@ -176,20 +179,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle_change(id(), od_harvester:id(), Doc :: datastore:document()) -> ok.
-handle_change(Id, HarvesterId, Doc = #document{seq = Seq, value = Value}) ->
-    % Let the gen_server crash if anything goes wrong (no error is expected
-    % on this level).
-    % todo only from this provider !!!
-    Type = element(1, Value),
-    case Type =:= custom_metadata of
-        true ->
-            ?alert("Doc: ~p", [Doc]),
-            ToSend = doc_to_map(Doc),
-            ?alert("ToSend: ~p", [ToSend]),
-            harvester_logic:submit(?ROOT_SESS_ID, HarvesterId, ToSend);
-        false -> ok
-    end,
+-spec handle_change(id(), od_harvester:id(), od_provider:id(), datastore:document()) -> ok.
+handle_change(Id, HarvesterId, ProviderId, Doc = #document{
+    seq = Seq,
+    value = #custom_metadata{},
+    mutators = [ProviderId | _ ]
+}) ->
+    ToSend = doc_to_map(Doc),
+    harvester_logic:submit(?ROOT_SESS_ID, HarvesterId, ToSend),
+    ok = harvest_stream_state:set_seq(Id, Seq);
+handle_change(Id, _, _, #document{seq = Seq}) ->
     ok = harvest_stream_state:set_seq(Id, Seq).
 
 -spec doc_to_map(datastore:document()) -> maps:map().

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Macros used in test of auto-cleaning.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(autocleaning_config_test).

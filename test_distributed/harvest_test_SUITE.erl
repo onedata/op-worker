@@ -27,437 +27,727 @@
 
 %% tests
 -export([
-    empty_xattr_test/1,
-    crud_xattr_test/1,
-    list_xattr_test/1,
-    xattr_create_flag/1,
-    xattr_replace_flag/1,
-    xattr_replace_and_create_flag_in_conflict/1,
-    remove_file_test/1,
-    modify_cdmi_attrs/1,
-    create_and_query_view/1,
-    get_empty_json/1,
-    get_empty_rdf/1,
-    has_custom_metadata_test/1,
-    resolve_guid_of_root_should_return_root_guid/1,
-    resolve_guid_of_space_should_return_space_guid/1,
-    resolve_guid_of_dir_should_return_dir_guid/1,
-    custom_metadata_doc_should_contain_file_objectid/1,
-    create_and_query_view_mapping_one_file_to_many_rows/1]).
+    set_xattr_test/1, modify_xattr_test/1,
+    delete_xattr_test/1, delete_file_with_xattr_test/1,
+    set_json_metadata_test/1, modify_json_metadata_test/1,
+    delete_json_metadata_test/1, delete_file_with_json_metadata_test/1,
+    set_rdf_metadata_test/1, modify_rdf_metadata_test/1,
+    delete_rdf_metadata_test/1, delete_file_with_rdf_metadata_test/1,
+    set_mixed_metadata_test/1, modify_mixed_metadata_test/1,
+    delete_mixed_metadata_test/1, delete_file_with_mixed_metadata_test/1,
+    set_many_xattrs_test/1,
+    changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space/1,
+    changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester/1,
+    each_provider_should_submit_only_local_changes_to_the_harvester/1]).
 
 all() ->
     ?ALL([
-        empty_xattr_test,
-        crud_xattr_test,
-        list_xattr_test,
-        xattr_create_flag,
-        xattr_replace_flag,
-        xattr_replace_and_create_flag_in_conflict,
-        remove_file_test,
-        modify_cdmi_attrs,
-        create_and_query_view,
-        get_empty_json,
-        get_empty_rdf,
-        has_custom_metadata_test,
-        resolve_guid_of_root_should_return_root_guid,
-        resolve_guid_of_space_should_return_space_guid,
-        resolve_guid_of_dir_should_return_dir_guid,
-        custom_metadata_doc_should_contain_file_objectid
+        set_xattr_test,
+        modify_xattr_test,
+        delete_xattr_test,
+        delete_file_with_xattr_test,
+        set_json_metadata_test,
+        modify_json_metadata_test,
+        delete_json_metadata_test,
+        delete_file_with_json_metadata_test,
+        set_rdf_metadata_test,
+        modify_rdf_metadata_test,
+        delete_rdf_metadata_test,
+        delete_file_with_rdf_metadata_test,
+        set_mixed_metadata_test,
+        modify_mixed_metadata_test,
+        delete_mixed_metadata_test,
+        delete_file_with_mixed_metadata_test,
+        set_many_xattrs_test,
+        changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space,
+        changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester,
+        each_provider_should_submit_only_local_changes_to_the_harvester
     ]).
+
+-define(SPACE_ID1, <<"space_id1">>).
+-define(SPACE_ID2, <<"space_id2">>).
+-define(SPACE_ID3, <<"space_id3">>).
+-define(SPACE_ID4, <<"space_id4">>).
+-define(SPACE_ID5, <<"space_id5">>).
+
+-define(SPACE_NAME1, <<"space1">>).
+-define(SPACE_NAME2, <<"space2">>).
+-define(SPACE_NAME3, <<"space3">>).
+-define(SPACE_NAME4, <<"space4">>).
+-define(SPACE_NAME5, <<"space5">>).
+
+-define(SPACE_NAMES, #{
+    ?SPACE_ID1 => ?SPACE_NAME1,
+    ?SPACE_ID2 => ?SPACE_NAME2,
+    ?SPACE_ID3 => ?SPACE_NAME3,
+    ?SPACE_ID4 => ?SPACE_NAME4,
+    ?SPACE_ID5 => ?SPACE_NAME5
+}).
+
+-define(SPACE_NAME(__SpaceId), maps:get(__SpaceId, ?SPACE_NAMES)).
+
+-define(PATH(FileName, SpaceId), filename:join(["/", ?SPACE_NAME(SpaceId), FileName])).
+
+-define(HARVESTER1, <<"harvester1">>).
+-define(HARVESTER2, <<"harvester2">>).
+-define(HARVESTER3, <<"harvester3">>).
+
+-define(USER_ID, <<"user1">>).
+-define(SESS_ID(Worker),
+    ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
+
+-define(XATTR_NAME, <<"xattr_name_", (?RAND_NAME)/binary>>).
+-define(XATTR_VAL, <<"xattr_val_", (?RAND_NAME)/binary>>).
+
+-define(FILE_NAME, <<"file_", (?RAND_NAME)/binary>>).
+
+-define(RAND_NAME,
+    <<(str_utils:to_binary(?FUNCTION))/binary, "_", (integer_to_binary(rand:uniform(?RAND_RANGE)))/binary>>).
+
+-define(RAND_RANGE, 1000000000).
+-define(TIMEOUT, 10000).
+
+% todo test of passing only local changes !!!!! 2 providers supporting space
+
+%% Test config:
+%% space_id1:
+%%  * supported by: p1
+%%  * harvesters: harvester1
+%% space_id2:
+%%  * supported by: p1
+%%  * harvesters: harvester1, harvester2
+%% space_id3:
+%%  * supported by: p1
+%%  * harvesters: harvester1
+%% space_id4:
+%%  * supported by: p1
+%%  * harvesters: harvester1
+%% space_id5:
+%%  * supported by: p1, p2
+%%  * harvesters: harvester3
+
 
 %%%====================================================================
 %%% Test function
 %%%====================================================================
 
-empty_xattr_test(Config) ->
+set_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t1_file">>,
-    Name1 = <<"t1_name1">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    SessId = ?SESS_ID(Worker),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
-
-crud_xattr_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t2_file">>,
-    Name1 = <<"t2_name1">>,
-    Value1 = <<"t2_value1">>,
-    Value2 = <<"t2_value2">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    UpdatedXattr1 = #xattr{name = Name1, value = Value2},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    WholeCRUD = fun() ->
-        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-        ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, UpdatedXattr1)),
-        ?assertEqual({ok, UpdatedXattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-        ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name1)),
-        ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1))
-    end,
-
-    WholeCRUD(),
-    WholeCRUD().
-
-list_xattr_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t3_file">>,
-    Name1 = <<"t3_name1">>,
-    Value1 = <<"t3_value1">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    Name2 = <<"t3_name2">>,
-    Value2 = <<"t3_value2">>,
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    Name2 = ?XATTR_NAME,
+    Value2 = ?XATTR_VAL,
     Xattr2 = #xattr{name = Name2, value = Value2},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2)),
-    ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
-    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name1)),
-    ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-xattr_create_flag(Config) ->
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1,
+        Name2 => Value2
+    }},?TIMEOUT).
+
+modify_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/xattr_create_flag_file">>,
-    Name1 = <<"name">>,
-    Value1 = <<"value">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    Name2 = <<"name">>,
-    Value2 = <<"value2">>,
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1
+    }},?TIMEOUT),
+
+    Value2 = ?XATTR_VAL,
+    Xattr2 = #xattr{name = Name, value = Value2},
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value2
+    }},?TIMEOUT).
+
+delete_xattr_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1
+    }},?TIMEOUT),
+
+    ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name),
+    
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1
+    }},?TIMEOUT).
+
+delete_file_with_xattr_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1
+    }},?TIMEOUT),
+
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"true">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1
+    }},?TIMEOUT).
+
+set_json_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedJSON = json_utils:encode(JSON),
+    
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedJSON
+    }},?TIMEOUT).
+
+modify_json_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedMetaJSON = json_utils:encode(JSON),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedMetaJSON
+    }},?TIMEOUT),
+    
+    JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
+    EncodedJSON2 = json_utils:encode(JSON2),
+
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedJSON2
+    }},?TIMEOUT).
+
+delete_json_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedJSON = json_utils:encode(JSON),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedJSON
+    }},?TIMEOUT),
+    
+    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1
+    }},?TIMEOUT).
+
+delete_file_with_json_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    MetaBlue = #{<<"color">> => <<"blue">>},
+    EncodedMetaBlue = json_utils:encode(MetaBlue),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, MetaBlue, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedMetaBlue
+    }},?TIMEOUT),
+
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"true">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedMetaBlue
+    }},?TIMEOUT).
+
+set_rdf_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT).
+
+modify_rdf_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT),
+
+    RDF2 = <<"dummy rdf 2">>,
+    EncodedRDF2 = json_utils:encode(RDF2),
+
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"rdf">> => EncodedRDF2
+    }},?TIMEOUT).
+
+delete_rdf_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT),
+
+    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1
+    }},?TIMEOUT).
+
+delete_file_with_rdf_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT),
+
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"true">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT).
+
+set_mixed_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedJSON = json_utils:encode(JSON),
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1,
+        <<"json">> => EncodedJSON,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT).
+
+modify_mixed_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedJSON = json_utils:encode(JSON),
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1,
+        <<"json">> => EncodedJSON,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT),
+
+    Value2 = ?XATTR_VAL,
+    Xattr2 = #xattr{name = Name, value = Value2},
+    Name3 = ?XATTR_NAME,
+    Value3 = ?XATTR_VAL,
+    Xattr3 = #xattr{name = Name3, value = Value3},
+    JSON2 = #{<<"size">> => <<"big">>, <<"color">> => <<"blue">>},
+    EncodedJSON2 = json_utils:encode(JSON2),
+    RDF2 = <<"dummy rdf 2">>,
+    EncodedRDF2 = json_utils:encode(RDF2),
+
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr3),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value2,
+        Name3 => Value3,
+        <<"json">> => EncodedJSON2,
+        <<"rdf">> => EncodedRDF2
+    }},?TIMEOUT).
+
+delete_mixed_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedJSON = json_utils:encode(JSON),
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1,
+        <<"json">> => EncodedJSON,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT),
+    
+    % delete xattr and rdf metadata
+    ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name),
+    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"json">> => EncodedJSON
+    }},?TIMEOUT).
+
+delete_file_with_mixed_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON = #{<<"color">> => <<"blue">>},
+    EncodedJSON = json_utils:encode(JSON),
+    RDF = <<"dummy rdf">>,
+    EncodedRDF = json_utils:encode(RDF),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1,
+        <<"json">> => EncodedJSON,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT),
+    
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"true">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        Name => Value1,
+        <<"json">> => EncodedJSON,
+        <<"rdf">> => EncodedRDF
+    }},?TIMEOUT).
+
+set_many_xattrs_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    XattrsToSetNum = 10000,
+
+    FileName = ?FILE_NAME,
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ExpectedDoc0 = #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID1
+    },
+
+    ExpectedDoc = lists:foldl(fun(_, AccIn) ->
+        Name = ?XATTR_NAME,
+        Value = ?XATTR_VAL,
+        Xattr = #xattr{name = Name, value = Value},
+        ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
+        AccIn#{Name => Value}
+    end, ExpectedDoc0, lists:seq(1, XattrsToSetNum)),
+
+    ?assertReceivedEqual({?HARVESTER1, ExpectedDoc},?TIMEOUT).
+
+changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space(Config) ->
+    % ?HARVESTER1 and ?HARVESTER2 are subscribed for ?SPACE_ID2
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    Name2 = ?XATTR_NAME,
+    Value2 = ?XATTR_VAL,
     Xattr2 = #xattr{name = Name2, value = Value2},
-    OtherName = <<"other_name">>,
-    OtherValue = <<"other_value">>,
-    OtherXattr = #xattr{name = OtherName, value = OtherValue},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
-    % create first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, false)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2), 8#600),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    % fail to replace xattr
-    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, true, false)),
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID2,
+        Name => Value1,
+        Name2 => Value2
+    }},?TIMEOUT),
 
-    % create second xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, true, false)),
-    ?assertEqual({ok, OtherXattr}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, OtherName)).
+    ?assertReceivedEqual({?HARVESTER2, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID2,
+        Name => Value1,
+        Name2 => Value2
+    }},?TIMEOUT).
 
-xattr_replace_flag(Config) ->
+changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) ->
+    % ?HARVESTER1 is subscribed for ?SPACE_ID3 and ?SPACE_ID4
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/xattr_create_flag_file">>,
-    Name1 = <<"name">>,
-    Value1 = <<"value">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    Name2 = <<"name">>,
-    Value2 = <<"value2">>,
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    FileName2 = ?FILE_NAME,
+    Name2 = ?XATTR_NAME,
+    Value2 = ?XATTR_VAL,
     Xattr2 = #xattr{name = Name2, value = Value2},
-    OtherName = <<"other_name">>,
-    OtherValue = <<"other_value">>,
-    OtherXattr = #xattr{name = OtherName, value = OtherValue},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
-    % fail to create first xattr with replace flag
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, true)),
-
-    % create first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, false)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-
-    % replace first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, false, true)),
-    ?assertEqual({ok, Xattr2}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-
-    % fail to create second xattr
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, false, true)).
-
-xattr_replace_and_create_flag_in_conflict(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/xattr_create_flag_file">>,
-    Name1 = <<"name">>,
-    Value1 = <<"value">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    Name2 = <<"name">>,
-    Value2 = <<"value2">>,
-    Xattr2 = #xattr{name = Name2, value = Value2},
-    OtherName = <<"other_name">>,
-    OtherValue = <<"other_value">>,
-    OtherXattr = #xattr{name = OtherName, value = OtherValue},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-
-    % fail to create first xattr due to replace flag
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, true)),
-
-    % create first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, false)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-
-    % fail to set xattr due to create flag
-    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, true, true)),
-
-    % fail to create second xattr due to replace flag
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, true, true)).
-
-remove_file_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t4_file">>,
-    Name1 = <<"t4_name1">>,
-    Value1 = <<"t4_value1">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
-
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, Guid})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid2}, false, true)),
-    ?assertEqual({error, not_found}, rpc:call(Worker, custom_metadata, get, [Uuid])),
-    ?assertEqual({error, not_found}, rpc:call(Worker, times, get, [Uuid])).
-
-modify_cdmi_attrs(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t5_file">>,
-    Name1 = <<"cdmi_attr">>,
-    Value1 = <<"t5_value1">>,
-    Xattr1 = #xattr{name = Name1, value = Value1},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-
-    ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
-
-create_and_query_view(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    SpaceId = <<"space_id1">>,
-    ViewName = <<"view_name">>,
-    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
-    Path1 = <<"/space_name1/t6_file">>,
-    Path2 = <<"/space_name1/t7_file">>,
-    Path3 = <<"/space_name1/t8_file">>,
-    MetaBlue = #{<<"meta">> => #{<<"color">> => <<"blue">>}},
-    MetaRed = #{<<"meta">> => #{<<"color">> => <<"red">>}},
-    ViewFunction =
-        <<"function (id, type, meta, ctx) {
-             if(type == 'custom_metadata'
-                && meta['onedata_json']
-                && meta['onedata_json']['meta']
-                && meta['onedata_json']['meta']['color'])
-             {
-                 return [meta['onedata_json']['meta']['color'], id];
-             }
-             return null;
-       }">>,
-    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
-    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
-    {ok, FileId1} = cdmi_id:guid_to_objectid(Guid1),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4), 8#600),
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    {ok, FileId3} = cdmi_id:guid_to_objectid(Guid3),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
-    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
-    ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
-    FinalCheck = fun() ->
-        try
-            {ok, QueryResultBlue} = query_index(Worker, SpaceId, ViewName, [{key, <<"blue">>}, {stale, false}]),
-            {ok, QueryResultRed} = query_index(Worker, SpaceId, ViewName, [{key, <<"red">>}]),
-            {ok, QueryResultOrange} = query_index(Worker, SpaceId, ViewName, [{key, <<"orange">>}]),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2),
 
-            IdsBlue = extract_query_values(QueryResultBlue),
-            IdsRed = extract_query_values(QueryResultRed),
-            IdsOrange = extract_query_values(QueryResultOrange),
-            true = lists:member(FileId1, IdsBlue),
-            false = lists:member(FileId2, IdsBlue),
-            true = lists:member(FileId3, IdsBlue),
-            [FileId2] = IdsRed,
-            [] = IdsOrange,
-            ok
-        catch
-            E1:E2 ->
-                {error, E1, E2}
-        end
-    end,
-    ?assertEqual(ok, FinalCheck(), 10, timer:seconds(3)).
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID3,
+        Name => Value1
+    }},?TIMEOUT),
 
-get_empty_json(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t6_file">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    ?assertReceivedEqual({?HARVESTER1, #{
+        <<"id">> => FileId2,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID4,
+        Name2 => Value2
+    }},?TIMEOUT).
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, Guid}, json, [], false)).
+each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
+    % ?HARVESTER3 is subscribed for ?SPACE_ID5 which is supported by both providers
+    [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(WorkerP1),
+    SessId2 = ?SESS_ID(WorkerP2),
 
-get_empty_rdf(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t6_file">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+    FileName2 = ?FILE_NAME,
+    Name2 = ?XATTR_NAME,
+    Value2 = ?XATTR_VAL,
+    Xattr2 = #xattr{name = Name2, value = Value2},
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, Guid}, rdf, [], false)).
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(WorkerP1, SessId, {guid, Guid}, Xattr1),
 
-has_custom_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    Path = <<"/space_name1/t6_file">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
-    % json
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, #{}, [])),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json)),
-
-    % rdf
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, <<"<xml>">>, [])),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf)),
-
-    % xattr
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, #xattr{name = <<"name">>, value = <<"value">>})),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, <<"name">>)),
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})).
-
-resolve_guid_of_root_should_return_root_guid(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    RootGuid = rpc:call(Worker, fslogic_uuid, user_root_dir_guid, [UserId]),
-
-    ?assertEqual({ok, RootGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/">>)).
-
-resolve_guid_of_space_should_return_space_guid(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    SpaceDirGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
-
-    ?assertEqual({ok, SpaceDirGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)).
-
-resolve_guid_of_dir_should_return_dir_guid(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    DirPath = <<"/", SpaceName/binary, "/dir">>,
-    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
-
-    ?assertEqual({ok, Guid}, lfm_proxy:resolve_guid(Worker, SessId, DirPath)).
-
-custom_metadata_doc_should_contain_file_objectid(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-
-    Path = <<"/", SpaceName/binary, "/custom_meta_file">>,
-    Xattr1 = #xattr{name = <<"name">>, value = <<"value">>},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    FileUuid = fslogic_uuid:guid_to_uuid(Guid),
-
-    {ok, #document{value = #custom_metadata{file_objectid = FileObjectid}}} =
-        rpc:call(Worker, custom_metadata, get, [FileUuid]),
-
-    {ok, ExpectedFileObjectid} = cdmi_id:guid_to_objectid(Guid),
-    ?assertEqual(ExpectedFileObjectid, FileObjectid).
-
-create_and_query_view_mapping_one_file_to_many_rows(Config) ->
-    FilePrefix = str_utils:to_binary(?FUNCTION_NAME),
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    SpaceId = <<"space_id1">>,
-    ViewName = <<"view_name">>,
-    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
-    Path1 = <<"/space_name1/", FilePrefix/binary, "_file1">>,
-    Path2 = <<"/space_name1/", FilePrefix/binary, "_file2">>,
-    Path3 = <<"/space_name1/", FilePrefix/binary, "_file3">>,
-
-    Xattr1 = #xattr{name = <<"jobId.1">>},
-    Xattr2 = #xattr{name = <<"jobId.2">>},
-    Xattr3 = #xattr{name = <<"jobId.3">>},
-
-    ViewFunction =
-        <<"
-        function (id, type, meta, ctx) {
-            if (type == 'custom_metadata') {
-                const JOB_PREFIX = 'jobId.'
-                var results = [];
-                for (var key of Object.keys(meta)) {
-                    if (key.startsWith(JOB_PREFIX)) {
-                        var jobId = key.slice(JOB_PREFIX.length);
-                        results.push([jobId, id]);
-                    }
-                }
-                return {'list': results};
-            }
-       }">>,
-
-    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
-    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
-
-    {ok, FileId1} = cdmi_id:guid_to_objectid(Guid1),
+    {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    {ok, FileId3} = cdmi_id:guid_to_objectid(Guid3),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessId2, {guid, Guid2}, Xattr2),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr1)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr2)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr3)),
+    ?assertReceivedEqual({?HARVESTER3, #{
+        <<"id">> => FileId,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID5,
+        Name => Value1
+    }},?TIMEOUT),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr1)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2)),
+    ?assertReceivedEqual({?HARVESTER3, #{
+        <<"id">> => FileId2,
+        <<"deleted">> => <<"false">>,
+        <<"spaceId">> => ?SPACE_ID5,
+        Name2 => Value2
+    }},?TIMEOUT),
 
-    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
-    ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
-
-    FinalCheck = fun() ->
-        try
-            {ok, QueryResult1} = ?assertMatch({ok, _},
-                query_index(Worker, SpaceId, ViewName, [{key, <<"1">>}, {stale, false}])),
-            {ok, QueryResult2} = ?assertMatch({ok, _},
-                query_index(Worker, SpaceId, ViewName, [{key, <<"2">>}])),
-            {ok, QueryResult3} = ?assertMatch({ok, _},
-                query_index(Worker, SpaceId, ViewName, [{key, <<"3">>}])),
-            {ok, QueryResult4} = ?assertMatch({ok, _},
-                query_index(Worker, SpaceId, ViewName, [{key, <<"4">>}])),
-
-            Ids1 = extract_query_values(QueryResult1),
-            Ids2 = extract_query_values(QueryResult2),
-            Ids3 = extract_query_values(QueryResult3),
-            Ids4 = extract_query_values(QueryResult4),
-
-            ?assertEqual(true, lists:member(FileId1, Ids1)),
-            ?assertEqual(true, lists:member(FileId1, Ids2)),
-            ?assertEqual(true, lists:member(FileId1, Ids3)),
-
-            ?assertEqual(true, lists:member(FileId2, Ids1)),
-            ?assertEqual(true, lists:member(FileId2, Ids2)),
-            ?assertEqual(false, lists:member(FileId2, Ids3)),
-
-            ?assertEqual(false, lists:member(FileId3, Ids1)),
-            ?assertEqual(false, lists:member(FileId3, Ids2)),
-            ?assertEqual(false, lists:member(FileId3, Ids3)),
-
-            ?assertEqual([FileId1],  Ids3),
-            ?assertEqual([], Ids4),
-
-            ok
-        catch
-            E1:E2 ->
-                {error, E1, E2}
-        end
-    end,
-    ?assertEqual(ok, FinalCheck(), 10, timer:seconds(3)).
+    ?assertNotReceivedMatch({?HARVESTER3, #{<<"id">> := FileId}}, ?TIMEOUT),
+    ?assertNotReceivedMatch({?HARVESTER3, #{<<"id">> := FileId2}}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -471,13 +761,17 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Config2 = sort_workers(Config),
+    Workers = ?config(op_worker_nodes, Config2),
     initializer:communicator_mock(Workers),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config2),
+    Config3 = lfm_proxy:init(ConfigWithSessionInfo),
+    mock_harvest_logic_submit(Workers),
+    Config3.
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    unmock_harvest_logic_submit(Workers),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
@@ -486,12 +780,16 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-query_index(Worker, SpaceId, ViewName, Options) ->
-    rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).
+mock_harvest_logic_submit(Node) ->
+    Self = self(),
+    ok = test_utils:mock_new(Node, harvester_logic),
+    ok = test_utils:mock_expect(Node, harvester_logic, submit, fun(_SessionId, HarvesterId, Data) ->
+        Self ! {HarvesterId, Data}
+    end).
 
-extract_query_values(QueryResult) ->
-    {Rows} = QueryResult,
-    lists:map(fun(Row) ->
-        {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-        Value
-    end, Rows).
+unmock_harvest_logic_submit(Node) ->
+    ok = test_utils:mock_unload(Node, harvester_logic).
+
+sort_workers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
