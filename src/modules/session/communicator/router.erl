@@ -188,22 +188,6 @@ route_and_send_answer(Msg = #client_message{
     end, Id);
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    message_body = FuseRequest = #fuse_request{
-        fuse_request = #file_request{
-            context_guid = FileGuid,
-            file_request = Req
-        }}
-}) when is_record(Req, open_file) orelse
-    is_record(Req, open_file_with_extended_info) orelse is_record(Req, release) ->
-    async_request_manager:delegate(fun() ->
-        Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
-        Ref = make_ref(),
-        Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
-            {fuse_request, effective_session_id(Msg), FuseRequest}, Ref),
-        {Pid, Ref}
-    end, Id);
-route_and_send_answer(Msg = #client_message{
-    message_id = Id,
     message_body = FuseRequest = #fuse_request{}
 }) ->
     async_request_manager:delegate(fun() ->
@@ -236,7 +220,7 @@ route_and_send_answer(Msg = #client_message{
     }
 }) ->
     async_request_manager:delegate(fun() ->
-        Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+        Node = read_write_req:get_proxyio_node(fslogic_uuid:guid_to_uuid(FileGuid)),
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
             {proxyio_request, effective_session_id(Msg), ProxyIORequest}, Ref),

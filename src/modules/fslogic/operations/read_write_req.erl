@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([read/5, write/4]).
+-export([read/5, write/4, get_proxyio_node/1]).
 
 %%%===================================================================
 %%% API functions
@@ -62,6 +62,9 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
         status = #status{code = ?OK},
         proxyio_response = #remote_write_result{wrote = Written}
     }.
+
+get_proxyio_node(Uuid) ->
+    consistent_hasing:get_node(Uuid).
 
 %%%===================================================================
 %%% Internal functions

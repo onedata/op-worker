@@ -24,6 +24,9 @@
     open_file_insecure/4, open_file_with_extended_info_insecure/3,
     fsync/4, release/3, flush_event_queue/2]).
 
+%% Export for RPC
+-export([open_storage_on_node/4]).
+
 %% Test API
 -export([create_file_doc/4]).
 
@@ -150,87 +153,75 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
     open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, undefined).
 
 open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
-    % TODO - nie otwierac jesli jest to call od klienta po directIO (ale otwierac jak jest fallback z proxy)
-    % TODO - fallback z proxy nie powinien rejestrowac file_handle
-    SessId = user_ctx:get_session_id(UserCtx),
-    ok = case HandleId0 of
-             undefined -> file_handles:register_open(FileCtx, SessId, 1);
-    _ -> ok
-        end,
-    try
-        FileUuid = file_ctx:get_uuid_const(FileCtx),
-        {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
-        case Deleted of
-            true -> throw({error, not_found});
-            _ -> ok
-        end,
+    {HandleId, #file_location{provider_id = ProviderId, file_id = FileId, storage_id = StorageId}, _} =
+        open_file_internal(UserCtx, FileCtx, Flag, HandleId0),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened_extended{handle_id = HandleId,
+            provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
+    }.
 
-        {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-            storage_id = StorageId}}, FileCtx2} =
-            sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
-        {SFMHandle, _FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-        SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-        {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-        {ok, HandleId} = save_handle(SessId, Handle, HandleId0),
-        #fuse_response{
-            status = #status{code = ?OK},
-            fuse_response = #file_opened_extended{handle_id = HandleId,
-                provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-        }
+open_file_internal(UserCtx, FileCtx, Flag, HandleId0) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    check_and_register_open(FileCtx, SessId, HandleId0),
+    try
+        check_open_delete_race(FileCtx),
+        {FileLocation, FileCtx2} =
+            create_location(FileCtx, UserCtx),
+        HandleId = open_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
+        {HandleId, FileLocation, FileCtx2}
     catch
         E1:E2 ->
             ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
                 [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
-            case HandleId0 of
-                undefined -> file_handles:register_release(FileCtx, SessId, 1);
-                _ -> ok
-            end,
+            check_and_register_release(FileCtx, SessId, HandleId0),
             throw(E2)
     end.
 
-open_generic(FileCtx, UserCtx) ->
-    case user_ctx:is_direct_io(UserCtx) of
+create_location(FileCtx, UserCtx) ->
+    ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
+    case ExtDIO of
         true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            ok = file_handles:register_open(FileCtx, SessId, 1),
-
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
-            case Deleted of
-                true -> throw({error, not_found});
-                _ -> ok
-            end,
-
-            try
-                ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
-                case ExtDIO of
-                    true ->
-                        {FL, FileCtx2} =
-                            file_location_utils:get_new_file_location_doc(FileCtx, false, true),
-                        {?NEW_HANDLE_ID, FL, FileCtx2};
-                    _ ->
-                        {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
-                        {?NEW_HANDLE_ID, FL, FileCtx2}
-                end
-            catch
-                E1:E2 ->
-                    ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                        [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
-                    file_handles:register_release(FileCtx, SessId, 1),
-                    throw(E2)
-            end;
+            file_location_utils:get_new_file_location_doc(FileCtx, false, true);
         _ ->
-            % open file on adequate node
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            Node = consistent_hasing:get_node(FileUuid),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened{handle_id = HId}
-            } = rpc:call(Node, file_req, open_file_insecure,
-                [UserCtx, FileCtx, rdwr]),
-            {#document{value = LocRecord}, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx),
-            {HId, LocRecord, FileCtx2}
+            {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
+            {FL, FileCtx2}
     end.
+
+open_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
+    ?NEW_HANDLE_ID;
+open_storage(FileCtx, SessId, Flag, false, undefined) ->
+    open_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
+open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
+    Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
+    rpc:call(Node, ?MODULE, open_storage_on_node, [FileCtx, SessId, Flag, HandleId]).
+
+open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
+    {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
+    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
+    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
+    session_handles:add(SessId, HandleId, Handle),
+    HandleId.
+
+check_open_delete_race(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
+    case Deleted of
+        true -> throw({error, not_found});
+        _ -> ok
+    end.
+
+check_and_register_open(FileCtx, SessId, HandleId) ->
+    ok = case HandleId of
+             undefined -> file_handles:register_open(FileCtx, SessId, 1);
+             _ -> ok
+         end.
+
+check_and_register_release(FileCtx, SessId, HandleId) ->
+    ok = case HandleId of
+             undefined -> file_handles:register_release(FileCtx, SessId, 1);
+             _ -> ok
+         end.
 
 %%--------------------------------------------------------------------
 %% @equiv fsync_insecure(UserCtx, FileCtx, DataOnly) with permission check
@@ -291,7 +282,7 @@ release(UserCtx, FileCtx, HandleId) ->
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {HandleId, FileLocation, FileCtx2} = open_generic(FileCtx, UserCtx),
+        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
         #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
@@ -443,24 +434,6 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     }, scope = SpaceId}),
 
     file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Saves file handle in user's session, returns id of saved handle.
-%% @end
-%%--------------------------------------------------------------------
--spec save_handle(session:id(), storage_file_manager:handle(),
-    storage_file_manager:handle_id() | undefined) -> {ok, binary()}.
-save_handle(SessId, Handle, HandleId0) ->
-    HandleId = case HandleId0 of
-        undefined ->
-            ?NEW_HANDLE_ID;
-        _ ->
-            HandleId0
-    end,
-    session_handles:add(SessId, HandleId, Handle),
-    {ok, HandleId}.
 
 %%--------------------------------------------------------------------
 %% @private
