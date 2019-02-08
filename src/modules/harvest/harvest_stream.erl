@@ -182,31 +182,45 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_change(id(), od_harvester:id(), od_provider:id(), datastore:document()) -> ok.
 handle_change(Id, HarvesterId, ProviderId, Doc = #document{
     seq = Seq,
-    value = #custom_metadata{},
-    mutators = [ProviderId | _ ]
+    value = #custom_metadata{file_objectid = FileId},
+    mutators = [ProviderId | _ ],
+    deleted = false
 }) ->
-    ToSend = doc_to_map(Doc),
-    harvester_logic:submit(?ROOT_SESS_ID, HarvesterId, ToSend),
+    harvester_logic:create_entry(?ROOT_SESS_ID, HarvesterId, FileId, prepare_payload(Doc)),
+    ok = harvest_stream_state:set_seq(Id, Seq);
+handle_change(Id, HarvesterId, ProviderId, #document{
+    seq = Seq,
+    value = #custom_metadata{file_objectid = FileId},
+    mutators = [ProviderId | _],
+    deleted = true
+}) ->
+    harvester_logic:delete_entry(?ROOT_SESS_ID, HarvesterId, FileId),
     ok = harvest_stream_state:set_seq(Id, Seq);
 handle_change(Id, _, _, #document{seq = Seq}) ->
     ok = harvest_stream_state:set_seq(Id, Seq).
 
--spec doc_to_map(datastore:document()) -> maps:map().
-doc_to_map(#document{
+
+
+-spec prepare_payload(datastore:document()) -> gs_protocol:data().
+prepare_payload(#document{
     value = #custom_metadata{
         file_objectid = FileId,
         value = Metadata
     },
-    scope = SpaceId,
-    deleted = Deleted
+    scope = SpaceId
 }) ->
-    ToSubmit = #{
-        <<"id">> => FileId,
-        <<"deleted">> => json_utils:encode(Deleted),
+    Payload = #{
+        <<"fileId">> => FileId,
         <<"spaceId">> => SpaceId
     },
-    maps:fold(fun
-        (<<"onedata_json">>, JSON, AccIn) -> AccIn#{<<"json">> => json_utils:encode(JSON)};
-        (<<"onedata_rdf">>, RDF, AccIn) -> AccIn#{<<"rdf">> => json_utils:encode(RDF)};
-        (Key, Value, AccIn) -> AccIn#{Key => Value}
-    end, ToSubmit, Metadata).
+    Payload2 = json_utils:encode(maps:fold(fun
+        (<<"onedata_json">>, JSON, AccIn) ->
+            AccIn#{<<"json">> => JSON};
+        (<<"onedata_rdf">>, RDF, AccIn) ->
+            AccIn#{<<"rdf">> => RDF};
+        (Key, Value, AccIn = #{<<"xattrs">> := Xattrs}) ->
+            AccIn#{<<"xattrs">> => Xattrs#{Key => Value}};
+        (Key, Value, AccIn) ->
+            AccIn#{<<"xattrs">> => #{Key => Value}}
+    end, Payload, Metadata)),
+    #{<<"payload">> => Payload2}.

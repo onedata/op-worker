@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module tests harvester logic API using mocked gs_client module.
+%%% This module tests harvest_worker supervision tree.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(harvest_manager_test_SUITE).

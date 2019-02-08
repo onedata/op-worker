@@ -20,13 +20,15 @@
 -export([
     get_test/1,
     subscribe_test/1,
-    submit_test/1
+    create_entry_test/1,
+    delete_entry_test/1
 ]).
 
 all() -> ?ALL([
     get_test,
     subscribe_test,
-    submit_test
+    create_entry_test,
+    delete_entry_test
 
 ]).
 
@@ -141,19 +143,33 @@ subscribe_test(Config) ->
     ok.
 
 
-submit_test(Config) ->
+create_entry_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
+    
+    FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit, [?ROOT_SESS_ID, ?HARVESTER_1, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, create_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit, [?ROOT_SESS_ID, ?HARVESTER_1, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, create_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
 
+delete_entry_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    FileId = <<"dummyFileId">>,
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId])),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId])),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+
+    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

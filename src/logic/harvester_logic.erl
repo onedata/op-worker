@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([get/2, submit/3]).
+-export([get/2, create_entry/4, delete_entry/3]).
 
 %%%===================================================================
 %%% API
@@ -45,14 +45,29 @@ get(SessionId, HarvesterId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Submits metadata for given HarvesterId to Onezone.
+%% Pushes entry with metadata for given HarvesterId and FileId to Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec submit(gs_client_worker:client(), od_harvester:id(), gs_protocol:data()) ->
-    ok | gs_protocol:error().
-submit(SessionId, HarvesterId, Data) ->
+-spec create_entry(gs_client_worker:client(), od_harvester:id(), cdmi_id:objectid(),
+    gs_protocol:data()) -> ok | gs_protocol:error().
+create_entry(SessionId, HarvesterId, FileId, Data) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_harvester, id = HarvesterId, aspect = submit, scope = private},
+        gri = #gri{type = od_harvester, id = HarvesterId,
+            aspect = {entry, FileId}, scope = private},
         data = Data
+    }).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes entry for given HarvesterId and FileId in Onezone.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_entry(gs_client_worker:client(), od_harvester:id(), cdmi_id:objectid()) ->
+    ok | gs_protocol:error().
+delete_entry(SessionId, HarvesterId, FileId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_harvester, id = HarvesterId, aspect = {entry, FileId},
+            scope = private}
     }).
