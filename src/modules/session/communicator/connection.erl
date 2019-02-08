@@ -12,7 +12,7 @@
 %%%              request. It awaits client_messages, handles them and
 %%%              responds with server_messages,
 %%% - outgoing - when this provider initiates it in order to connect to peer.
-%%%              In order to do so, thirst http protocol upgrade request on
+%%%              In order to do so, first http protocol upgrade request on
 %%%              ?CLIENT_PROTOCOL_PATH is send to other provider.
 %%%              If confirmation response is received, meaning that protocol
 %%%              upgrade from http to clproto succeeded, then communication
@@ -73,7 +73,7 @@
 %%%
 %%% In case of errors during init, upgrading_protocol or performing_handshake
 %%% connection is immediately terminated.
-%%% On the other hand, When connection is in ready status, every kind of error
+%%% On the other hand, when connection is in ready status, every kind of error
 %%% is logged, but only socket errors terminates it.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -96,7 +96,6 @@
     socket :: ssl:socket(),
     socket_mode = active_once :: active_always | active_once,
     transport :: module(),
-    ip = undefined :: undefined | binary(),
 
     % transport messages
     ok :: atom(),
@@ -116,7 +115,12 @@
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
 
+% Default value for {packet, N} socket option. When specified, erlang first
+% reads N bytes to get length of your data, allocates a buffer to hold it
+% and reads data into buffer after getting each tcp packet.
+% Then it sends the buffer as one msg to your process.
 -define(PACKET_VALUE, 4).
+
 -define(DEFAULT_SOCKET_MODE,
     application:get_env(?APP_NAME, default_socket_mode, active_once)
 ).
@@ -157,11 +161,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_to_provider(od_provider:id(), session:id(), Domain :: binary(),
-    IP :: binary(), Port :: non_neg_integer(), Transport :: atom(),
+    Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> {ok, Pid :: pid()}.
-connect_to_provider(ProviderId, SessionId, Domain, IP, Port, Transport, Timeout) ->
+connect_to_provider(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     proc_lib:start(?MODULE, init, [
-        ProviderId, SessionId, Domain, IP, Port, Transport, Timeout
+        ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
     ]).
 
 
@@ -296,7 +300,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(upgrade_protocol, #state{ip = Hostname} = State) ->
+handle_info({upgrade_protocol, Hostname}, State) ->
     case socket_send(State, protocol_utils:protocol_upgrade_request(Hostname)) of
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
@@ -343,6 +347,7 @@ handle_info(timeout, State = #state{socket = Socket}) ->
     ?warning("Connection ~p timeout", [Socket]),
     {stop, normal, State};
 
+% TODO add api call for disconnect
 handle_info(disconnect, State) ->
     {stop, normal, State};
 
@@ -568,7 +573,7 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
 
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-    self() ! upgrade_protocol,
+    self() ! {upgrade_protocol, Host},
 
     session_manager:reuse_or_create_provider_session(
         SessionId, provider_outgoing, #user_identity{
@@ -581,7 +586,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
         socket = Socket,
         socket_mode = ?DEFAULT_SOCKET_MODE,
         transport = Transport,
-        ip = Host,
         ok = Ok,
         closed = Closed,
         error = Error,
@@ -743,6 +747,7 @@ route_message(State, Msg) ->
     case router:route_message(Msg) of
         ok ->
             {ok, State};
+        % TODO think about sending it via higher layer.
         {ok, ServerMsg} ->
             case send_server_message(State, ServerMsg) of
                 % Serialization errors should not break ready connection
