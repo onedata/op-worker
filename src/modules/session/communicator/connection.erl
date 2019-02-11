@@ -131,6 +131,7 @@
 %% API
 -export([
     connect_to_provider/7,
+    close/1,
     send_sync/2, send_async/2
 ]).
 
@@ -167,6 +168,15 @@ connect_to_provider(ProviderId, SessionId, Domain, Host, Port, Transport, Timeou
     proc_lib:start(?MODULE, init, [
         ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
     ]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends msg for specified connection to shutdown itself.
+%% @end
+%%--------------------------------------------------------------------
+close(Pid) ->
+    gen_server2:cast(Pid, disconnect).
 
 
 %%-------------------------------------------------------------------
@@ -270,6 +280,8 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_cast(disconnect, State) ->
+    {stop, normal, State};
 handle_cast({send, Msg}, #state{status = ready} = State) ->
     case send_message(State, Msg) of
         {ok, NewState} ->
@@ -336,19 +348,15 @@ handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok}
             {stop, Reason, State}
     end;
 
-handle_info({Closed, _}, State = #state{closed = Closed}) ->
-    {stop, normal, State};
-
 handle_info({Error, Socket, Reason}, State = #state{error = Error}) ->
     ?warning("Connection ~p error: ~p", [Socket, Reason]),
     {stop, Reason, State};
 
-handle_info(timeout, State = #state{socket = Socket}) ->
-    ?warning("Connection ~p timeout", [Socket]),
+handle_info({Closed, _}, State = #state{closed = Closed}) ->
     {stop, normal, State};
 
-% TODO add api call for disconnect
-handle_info(disconnect, State) ->
+handle_info(timeout, State = #state{socket = Socket}) ->
+    ?warning("Connection ~p timeout", [Socket]),
     {stop, normal, State};
 
 handle_info(Info, State) ->
@@ -510,7 +518,6 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                     SessionId, ProviderId, Domain, Host, Port,
                     Transport, Timeout
                 ),
-                ok = proc_lib:init_ack({ok, self()}),
                 protocol_utils:reset_reconnect_interval(ProviderId, Intervals),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
             catch
@@ -573,6 +580,7 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
 
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
+    ok = proc_lib:init_ack({ok, self()}),
     self() ! {upgrade_protocol, Host},
 
     session_manager:reuse_or_create_provider_session(
