@@ -20,17 +20,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--define(DEFAULT_BUCKET, <<"onedata">>).
-
 %% API
--export([start_link/3, id/2]).
+-export([start_link/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 -record(state, {
-    id :: id(),
+    id :: harvest_stream_state:id(),
     harvester_id :: od_harvester:id(),
     space_id :: od_space:id(),
     provider_id :: od_provider:id(),
@@ -38,9 +36,6 @@
 }).
 
 -type state() :: #state{}.
--type id() :: binary().
-
--export_type([id/0]).
 
 -define(MAX_NOT_PERSISTED_SEQ_GAP, 1000).
 
@@ -48,16 +43,10 @@
 %%% API
 %%%===================================================================
 
--spec start_link(id(), od_harvester:id(), od_space:id()) ->
+-spec start_link(od_harvester:id(), od_space:id()) ->
     {ok, pid()} | {error, Reason :: term()}.
-start_link(Id, HarvesterId, SpaceId) ->
-    gen_server:start_link({local, binary_to_atom(Id, latin1)}, ?MODULE,
-        [Id, HarvesterId, SpaceId], []
-    ).
-
--spec id(od_harvester:id(), od_space:id()) -> id().
-id(HarvesterId, SpaceId) ->
-    datastore_utils:gen_key(HarvesterId, SpaceId).
+start_link(HarvesterId, SpaceId) ->
+    gen_server:start_link(?MODULE, [HarvesterId, SpaceId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -71,12 +60,13 @@ id(HarvesterId, SpaceId) ->
 -spec init(Args :: term()) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([Id, HarvesterId, SpaceId]) ->
+init([HarvesterId, SpaceId]) ->
     Stream = self(),
+    Id = harvest_stream_state:id(HarvesterId, SpaceId),
     Since = harvest_stream_state:get_seq(Id),
     Callback = fun(Change) -> gen_server2:cast(Stream, {change, Change}) end,
     {ok, _} = couchbase_changes_stream:start_link(
-        ?DEFAULT_BUCKET, SpaceId, Callback,
+        couchbase_changes:design(), SpaceId, Callback,
         [{since, Since}, {until, infinity}], []
     ),
     {ok, #state{
@@ -202,7 +192,7 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = false
 }) ->
-    harvester_logic:create_entry(HarvesterId, FileId, prepare_payload(Doc)),
+    harvester_logic:submit_entry(HarvesterId, FileId, prepare_payload(Doc)),
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
@@ -226,18 +216,8 @@ handle_change(State, _Doc) ->
     State.
 
 -spec prepare_payload(datastore:document()) -> gs_protocol:data().
-prepare_payload(#document{
-    value = #custom_metadata{
-        file_objectid = FileId,
-        value = Metadata
-    },
-    scope = SpaceId
-}) ->
-    Payload = #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => SpaceId
-    },
-    Payload2 = json_utils:encode(maps:fold(fun
+prepare_payload(#document{value = #custom_metadata{value = Metadata}}) ->
+    Payload = json_utils:encode(maps:fold(fun
         (<<"onedata_json">>, JSON, AccIn) ->
             AccIn#{<<"json">> => JSON};
         (<<"onedata_rdf">>, RDF, AccIn) ->
@@ -246,5 +226,5 @@ prepare_payload(#document{
             AccIn#{<<"xattrs">> => Xattrs#{Key => Value}};
         (Key, Value, AccIn) ->
             AccIn#{<<"xattrs">> => #{Key => Value}}
-    end, Payload, Metadata)),
-    #{<<"payload">> => Payload2}.
+    end, #{}, Metadata)),
+    #{<<"payload">> => Payload}.

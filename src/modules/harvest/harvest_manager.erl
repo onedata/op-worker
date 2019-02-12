@@ -27,7 +27,7 @@
 -export([start_link/0, update_space_harvest_streams_on_all_nodes/2,
     delete_space_harvest_streams_on_all_nodes/1]).
 
-%% exported for rpc
+%% exported for RPC
 -export([update_space_harvest_streams/2, delete_space_harvest_streams/1]).
 
 %% gen_server callbacks
@@ -43,12 +43,7 @@
 
 -define(INITIALISATION_TIMEOUT, timer:seconds(5)).
 
--type state() :: #{od_space:id() => sets:set(harvest_stream:id())}.
-
--record(stream, {
-    id :: harvest_stream:id(),
-    harvester_id :: od_harvester:id()
-}).
+-type state() :: #{od_space:id() => sets:set(od_harvester:id())}.
 
 %%%===================================================================
 %%% API
@@ -175,9 +170,11 @@ initialise(State) ->
             end, State, SpaceIds),
             {noreply, State2};
         ?ERROR_UNREGISTERED_PROVIDER ->
+            ?debug("Unable to initialise harvest_manager due to unregistered provider"),
             schedule_initialisation(),
             {noreply, State};
         ?ERROR_NO_CONNECTION_TO_OZ ->
+            ?debug("Unable to initialise harvest_manager due to no connection to oz"),
             schedule_initialisation(),
             {noreply, State};
         Error ->
@@ -189,6 +186,13 @@ initialise(State) ->
             {stop, {Error2, Reason2}, State}
     end.
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Stops all streams for given SpaceId by passing an empty list
+%% as a list of current harvesters.
+%% @end
+%%-------------------------------------------------------------------
 -spec delete_streams(od_space:id(), state()) -> state().
 delete_streams(SpaceId, State) ->
     update_streams_per_space(SpaceId, [], State).
@@ -198,34 +202,43 @@ update_streams_per_space(SpaceId, State) ->
     {ok, Harvesters} = space_logic:get_harvesters(?ROOT_SESS_ID, SpaceId),
     update_streams_per_space(SpaceId, Harvesters, State).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% This function updates currently started harvest_streams per given
+%% SpaceId. according to passed CurrentHarvesters parameters.
+%% It checks which streams should be handled on giver node and
+%% compares set of OldStreams with set of CurrentStreams.
+%% Streams missing in the CurrentStreams are stopped and
+%% streams that appeared in the CurrentStreams are started.
+%% @end
+%%-------------------------------------------------------------------
 -spec update_streams_per_space(od_space:id(), [od_harvester:id()], state()) -> state().
 update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
-    OldStreams = maps:get(SpaceId, State, sets:new()),
+    OldLocalNodeHarvesters = maps:get(SpaceId, State, sets:new()),
     Node = node(),
-    CurrentStreams = sets:from_list(lists:filtermap(fun(HarvesterId) ->
-        Id = harvest_stream:id(HarvesterId, SpaceId),
-        case Node =:= consistent_hashing:get_node(Id) of
+    LocalNodeHarvesters = sets:from_list(lists:filtermap(fun(HarvesterId) ->
+        case Node =:= consistent_hashing:get_node({HarvesterId, SpaceId}) of
             true ->
-                {true, #stream{id = Id, harvester_id = HarvesterId}};
+                {true, HarvesterId};
             false ->
                 false
         end
     end, CurrentHarvesters)),
 
-    StreamsToStart = sets:subtract(CurrentStreams, OldStreams),
-    StreamsToStop = sets:subtract(OldStreams, CurrentStreams),
+    StreamsToStart = sets:subtract(LocalNodeHarvesters, OldLocalNodeHarvesters),
+    StreamsToStop = sets:subtract(OldLocalNodeHarvesters, LocalNodeHarvesters),
 
-    lists:foreach(fun(#stream{id = Id}) ->
-        harvest_stream_sup:terminate_child(Id)
+    lists:foreach(fun(HarvesterId) ->
+        harvest_stream_sup:terminate_child(HarvesterId, SpaceId)
     end, sets:to_list(StreamsToStop)),
 
-    lists:foreach(fun(#stream{id = Id, harvester_id = HarvesterId}) ->
-        harvest_stream_sup:start_child(Id, HarvesterId, SpaceId)
+    lists:foreach(fun(HarvesterId) ->
+        harvest_stream_sup:start_child(HarvesterId, SpaceId)
     end, sets:to_list(StreamsToStart)),
 
     case CurrentHarvesters =:= [] of
         true -> maps:remove(SpaceId, State);
-        _ -> State#{SpaceId => CurrentStreams}
+        _ -> State#{SpaceId => LocalNodeHarvesters}
     end.
 
 

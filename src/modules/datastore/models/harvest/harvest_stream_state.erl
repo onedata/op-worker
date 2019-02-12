@@ -17,12 +17,12 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get_seq/1, set_seq/2]).
+-export([get_seq/1, set_seq/2, id/2]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1]).
 
--type id() :: harvest_stream:id().
+-type id() :: binary().
 -type record() :: #harvest_stream_state{}.
 
 -export_type([id/0, record/0]).
@@ -58,6 +58,10 @@ set_seq(Id, Seq) ->
     ?extract_ok(datastore_model:save(?CTX, #document{
         key = Id, value = #harvest_stream_state{seq = Seq}
     })).
+
+-spec id(od_harvester:id(), od_space:id()) -> id().
+id(HarvesterId, SpaceId) ->
+    datastore_utils:gen_key(HarvesterId, SpaceId).
 
 %%%===================================================================
 %%% datastore_model callbacks

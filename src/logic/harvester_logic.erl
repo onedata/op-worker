@@ -24,7 +24,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([get/2, create_entry/3, delete_entry/2]).
+-export([submit_entry/3, delete_entry/2]).
 
 %%%===================================================================
 %%% API
@@ -32,26 +32,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves harvester doc by given HarvesterId.
-%% @end
-%%--------------------------------------------------------------------
--spec get(gs_client_worker:client(), od_harvester:id()) ->
-    {ok, od_harvester:doc()} | gs_protocol:error().
-get(SessionId, HarvesterId) ->
-    gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_harvester, id = HarvesterId, aspect = instance, scope = protected},
-        subscribe = true
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Pushes entry with metadata for given HarvesterId and FileId to Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_entry(od_harvester:id(), cdmi_id:objectid(),
+-spec submit_entry(od_harvester:id(), cdmi_id:objectid(),
     gs_protocol:data()) -> ok | gs_protocol:error().
-create_entry(HarvesterId, FileId, Data) ->
+submit_entry(HarvesterId, FileId, Data) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_harvester, id = HarvesterId,

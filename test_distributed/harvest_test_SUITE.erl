@@ -126,20 +126,20 @@ all() ->
 %%  * supported by: p1, p2
 %%  * harvesters: harvester3
 
--define(CREATE_ENTRY, create_entry).
--define(CREATE_ENTRY(FileId, Harvester, Payload), {?CREATE_ENTRY, FileId, Harvester, Payload}).
+-define(SUBMIT_ENTRY, submit_entry).
+-define(SUBMIT_ENTRY(FileId, Harvester, Payload), {?SUBMIT_ENTRY, FileId, Harvester, Payload}).
 
--define(assertReceivedCreateEntry(ExpFileId, ExpHarvester, ExpPayload),
-    ?assertReceivedCreateEntry(ExpFileId, ExpHarvester, ExpPayload, ?TIMEOUT)).
--define(assertReceivedCreateEntry(ExpFileId, ExpHarvester, ExpPayload, Timeout),
-    ?assertReceivedEqual(?CREATE_ENTRY(ExpFileId, ExpHarvester,
+-define(assertReceivedSubmitEntry(ExpFileId, ExpHarvester, ExpPayload),
+    ?assertReceivedSubmitEntry(ExpFileId, ExpHarvester, ExpPayload, ?TIMEOUT)).
+-define(assertReceivedSubmitEntry(ExpFileId, ExpHarvester, ExpPayload, Timeout),
+    ?assertReceivedEqual(?SUBMIT_ENTRY(ExpFileId, ExpHarvester,
         #{<<"payload">> => json_utils:encode(ExpPayload)}
     ), Timeout)).
 
--define(assertNotReceivedCreateEntry(ExpFileId, ExpHarvester, ExpPayload),
-    ?assertNotReceivedCreateEntry(ExpFileId, ExpHarvester, ExpPayload, ?TIMEOUT)).
--define(assertNotReceivedCreateEntry(ExpFileId, ExpHarvester, ExpPayload, Timeout),
-    ?assertNotReceivedMatch(?CREATE_ENTRY(ExpFileId, ExpHarvester, ExpPayload), Timeout)).
+-define(assertNotReceivedSubmitEntry(ExpFileId, ExpHarvester, ExpPayload),
+    ?assertNotReceivedSubmitEntry(ExpFileId, ExpHarvester, ExpPayload, ?TIMEOUT)).
+-define(assertNotReceivedSubmitEntry(ExpFileId, ExpHarvester, ExpPayload, Timeout),
+    ?assertNotReceivedMatch(?SUBMIT_ENTRY(ExpFileId, ExpHarvester, ExpPayload), Timeout)).
 
 
 -define(DELETE_ENTRY, delete_entry).
@@ -176,9 +176,7 @@ set_xattr_test(Config) ->
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{
             Name => Value1,
             Name2 => Value2
@@ -198,9 +196,7 @@ modify_xattr_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{Name => Value1}
     }),
 
@@ -208,9 +204,7 @@ modify_xattr_test(Config) ->
     Xattr2 = #xattr{name = Name, value = Value2},
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{Name => Value2}
     }).
 
@@ -227,18 +221,13 @@ delete_xattr_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{Name => Value1}
     }),
 
     ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1
-    }).
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{}).
 
 delete_file_with_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -253,9 +242,7 @@ delete_file_with_xattr_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{Name => Value1}
     }),
 
@@ -273,9 +260,7 @@ set_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON
     }).
 
@@ -290,18 +275,14 @@ modify_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON
     }),
 
     JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON2
     }).
 
@@ -316,18 +297,13 @@ delete_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON
     }),
 
     ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1
-    }).
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{}).
 
 delete_file_with_json_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -340,9 +316,7 @@ delete_file_with_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON
     }),
 
@@ -360,9 +334,7 @@ set_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"rdf">> => RDF
     }).
 
@@ -377,9 +349,7 @@ modify_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"rdf">> => RDF
     }),
 
@@ -387,9 +357,7 @@ modify_rdf_metadata_test(Config) ->
 
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"rdf">> => RDF2
     }).
 
@@ -404,18 +372,13 @@ delete_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"rdf">> => RDF
     }),
 
     ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1
-    }).
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{}).
 
 delete_file_with_rdf_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -428,9 +391,7 @@ delete_file_with_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"rdf">> => RDF
     }),
 
@@ -455,9 +416,7 @@ set_mixed_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON,
         <<"rdf">> => RDF,
         <<"xattrs">> => #{Name => Value1}
@@ -480,9 +439,7 @@ modify_mixed_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON,
         <<"rdf">> => RDF,
         <<"xattrs">> => #{Name => Value1}
@@ -501,9 +458,7 @@ modify_mixed_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON2,
         <<"rdf">> => RDF2,
         <<"xattrs">> => #{
@@ -529,9 +484,7 @@ delete_mixed_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON,
         <<"rdf">> => RDF,
         <<"xattrs">> => #{Name => Value1}
@@ -541,9 +494,7 @@ delete_mixed_metadata_test(Config) ->
     ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name),
     ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON
     }).
 
@@ -564,9 +515,7 @@ delete_file_with_mixed_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"json">> => JSON,
         <<"rdf">> => RDF,
         <<"xattrs">> => #{Name => Value1}
@@ -585,21 +534,15 @@ set_many_xattrs_test(Config) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ExpectedDoc0 = #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID1,
-        <<"xattrs">> => #{}
-    },
-
     ExpectedDoc = lists:foldl(fun(_, AccIn = #{<<"xattrs">> := Xattrs}) ->
         Name = ?XATTR_NAME,
         Value = ?XATTR_VAL,
         Xattr = #xattr{name = Name, value = Value},
         ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
         AccIn#{<<"xattrs">> => Xattrs#{Name => Value}}
-    end, ExpectedDoc0, lists:seq(1, XattrsToSetNum)),
+    end, #{<<"xattrs">> => #{}}, lists:seq(1, XattrsToSetNum)),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, ExpectedDoc).
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, ExpectedDoc).
 
 changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space(Config) ->
     % ?HARVESTER1 and ?HARVESTER2 are subscribed for ?SPACE_ID2
@@ -619,18 +562,14 @@ changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space(Config) -
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID2,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{
             Name => Value1,
             Name2 => Value2
         }
     }),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER2, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID2,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER2, #{
         <<"xattrs">> => #{
             Name => Value1,
             Name2 => Value2
@@ -658,15 +597,11 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER1, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID3,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
         <<"xattrs">> => #{Name => Value1}
     }),
 
-    ?assertReceivedCreateEntry(FileId2, ?HARVESTER1, #{
-        <<"fileId">> => FileId2,
-        <<"spaceId">> => ?SPACE_ID4,
+    ?assertReceivedSubmitEntry(FileId2, ?HARVESTER1, #{
         <<"xattrs">> => #{Name2 => Value2}
     }).
 
@@ -693,21 +628,17 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_xattr(WorkerP2, SessId2, {guid, Guid2}, Xattr2),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER3, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID5,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER3, #{
         <<"xattrs">> => #{Name => Value1}
     }),
 
-    ?assertReceivedCreateEntry(FileId2, ?HARVESTER3, #{
-        <<"fileId">> => FileId2,
-        <<"spaceId">> => ?SPACE_ID5,
+    ?assertReceivedSubmitEntry(FileId2, ?HARVESTER3, #{
         <<"xattrs">> => #{Name2 => Value2}
     }),
 
     % calls to harvester_logic:create entry should not be duplicated
-    ?assertNotReceivedCreateEntry(FileId, ?HARVESTER3, _),
-    ?assertNotReceivedCreateEntry(FileId2, ?HARVESTER3, _).
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER3, _),
+    ?assertNotReceivedSubmitEntry(FileId2, ?HARVESTER3, _).
 
 each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Config) ->
     % ?HARVESTER3 is subscribed for ?SPACE_ID5 which is supported by both providers
@@ -732,21 +663,17 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_xattr(WorkerP2, SessId2, {guid, Guid2}, Xattr2),
 
-    ?assertReceivedCreateEntry(FileId, ?HARVESTER3, #{
-        <<"fileId">> => FileId,
-        <<"spaceId">> => ?SPACE_ID5,
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER3, #{
         <<"xattrs">> => #{Name => Value1}
     }),
 
-    ?assertReceivedCreateEntry(FileId2, ?HARVESTER3, #{
-        <<"fileId">> => FileId2,
-        <<"spaceId">> => ?SPACE_ID5,
+    ?assertReceivedSubmitEntry(FileId2, ?HARVESTER3, #{
         <<"xattrs">> => #{Name2 => Value2}
     }),
 
     % calls to harvester_logic:create entry should not be duplicated
-    ?assertNotReceivedCreateEntry(FileId, ?HARVESTER3, _),
-    ?assertNotReceivedCreateEntry(FileId2, ?HARVESTER3, _),
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER3, _),
+    ?assertNotReceivedSubmitEntry(FileId2, ?HARVESTER3, _),
 
     ok = lfm_proxy:unlink(WorkerP1, SessId, {guid, Guid2}),
     ok = lfm_proxy:unlink(WorkerP2, SessId2, {guid, Guid}),
@@ -792,13 +719,13 @@ end_per_testcase(_Case, Config) ->
 mock_harvester_logic(Node) ->
     Self = self(),
     ok = test_utils:mock_new(Node, harvester_logic),
-    ok = test_utils:mock_expect(Node, harvester_logic, create_entry,
+    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
         fun(HarvesterId, FileId, Payload) ->
-            Self ! ?CREATE_ENTRY(FileId, HarvesterId, Payload)
+            Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, Payload)
         end
     ),
     ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
-        fun(_SessionId, HarvesterId, FileId) ->
+        fun(HarvesterId, FileId) ->
             Self ! ?DELETE_ENTRY(FileId, HarvesterId)
         end
     ).
