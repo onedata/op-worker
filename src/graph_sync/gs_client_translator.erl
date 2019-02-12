@@ -94,7 +94,6 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     };
 
 translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
-
     #document{
         key = Id,
         value = #od_space{
@@ -108,7 +107,6 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
-
             harvesters = maps:get(<<"harvesters">>, Result)
 
         }

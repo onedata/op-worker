@@ -687,7 +687,7 @@
 
 %% Model that holds the last processed seq for given space
 -record(harvest_stream_state, {
-    seq = 1 :: couchbase_changes:seq()
+    seq = 0 :: couchbase_changes:seq()
 }).
 
 -endif.

@@ -15,15 +15,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvester_logic).
--author("Lukasz Opiola").
+-author("Jakub Kudzia").
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([get/2, create_entry/4, delete_entry/3]).
+-export([get/2, create_entry/3, delete_entry/2]).
 
 %%%===================================================================
 %%% API
@@ -48,10 +49,10 @@ get(SessionId, HarvesterId) ->
 %% Pushes entry with metadata for given HarvesterId and FileId to Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_entry(gs_client_worker:client(), od_harvester:id(), cdmi_id:objectid(),
+-spec create_entry(od_harvester:id(), cdmi_id:objectid(),
     gs_protocol:data()) -> ok | gs_protocol:error().
-create_entry(SessionId, HarvesterId, FileId, Data) ->
-    gs_client_worker:request(SessionId, #gs_req_graph{
+create_entry(HarvesterId, FileId, Data) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_harvester, id = HarvesterId,
             aspect = {entry, FileId}, scope = private},
@@ -63,10 +64,10 @@ create_entry(SessionId, HarvesterId, FileId, Data) ->
 %% Removes entry for given HarvesterId and FileId in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_entry(gs_client_worker:client(), od_harvester:id(), cdmi_id:objectid()) ->
+-spec delete_entry(od_harvester:id(), cdmi_id:objectid()) ->
     ok | gs_protocol:error().
-delete_entry(SessionId, HarvesterId, FileId) ->
-    gs_client_worker:request(SessionId, #gs_req_graph{
+delete_entry(HarvesterId, FileId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = delete,
         gri = #gri{type = od_harvester, id = HarvesterId, aspect = {entry, FileId},
             scope = private}

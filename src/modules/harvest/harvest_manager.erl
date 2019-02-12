@@ -115,8 +115,6 @@ handle_call(Request, _From, State) ->
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: state()) ->
     {noreply, NewState :: state()}.
-handle_cast(?INITIALISE, State) ->
-    {noreply, initialise(State)};
 handle_cast(?DELETE(SpaceId), State) ->
     {noreply, delete_streams(SpaceId, State)};
 handle_cast(?UPDATE(SpaceId, Harvesters), State) ->
@@ -133,6 +131,8 @@ handle_cast(Request, State) ->
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: state()) ->
     {noreply, NewState :: state()}.
+handle_info(?INITIALISE, State) ->
+    initialise(State);
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -166,28 +166,27 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec initialise(state()) -> state().
+-spec initialise(state()) -> {noreply, state()} | {stop, term(), state()}.
 initialise(State) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foldl(fun(SpaceId, StateIn) ->
+            State2 = lists:foldl(fun(SpaceId, StateIn) ->
                 update_streams_per_space(SpaceId, StateIn)
-            end, State, SpaceIds);
+            end, State, SpaceIds),
+            {noreply, State2};
         ?ERROR_UNREGISTERED_PROVIDER ->
-            timer:sleep(?INITIALISATION_TIMEOUT),
             schedule_initialisation(),
-            State;
+            {noreply, State};
         ?ERROR_NO_CONNECTION_TO_OZ ->
-            timer:sleep(?INITIALISATION_TIMEOUT),
             schedule_initialisation(),
-            State;
-        Error = {error, _} ->
+            {noreply, State};
+        Error ->
             ?error("Unable to initialise harvest_manager due to: ~p", [Error]),
-            State
+            {stop, Error, State}
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialise harvest_manager due to: ~p", [{Error2, Reason}]),
-            State
+        Error2:Reason2 ->
+            ?error_stacktrace("Unable to initialise harvest_manager due to: ~p", [{Error2, Reason2}]),
+            {stop, {Error2, Reason2}, State}
     end.
 
 -spec delete_streams(od_space:id(), state()) -> state().
@@ -232,4 +231,5 @@ update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
 
 -spec schedule_initialisation() -> ok.
 schedule_initialisation() ->
-    gen_server:cast(self(), ?INITIALISE).
+    erlang:send_after(?INITIALISATION_TIMEOUT, ?HARVEST_MANAGER, ?INITIALISE),
+    ok.

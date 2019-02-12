@@ -80,6 +80,7 @@ delete(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================

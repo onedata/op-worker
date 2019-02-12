@@ -109,8 +109,6 @@ all() ->
 -define(RAND_RANGE, 1000000000).
 -define(TIMEOUT, 10000).
 
-% todo test of passing only local changes !!!!! 2 providers supporting space
-
 %% Test config:
 %% space_id1:
 %%  * supported by: p1
@@ -795,7 +793,7 @@ mock_harvester_logic(Node) ->
     Self = self(),
     ok = test_utils:mock_new(Node, harvester_logic),
     ok = test_utils:mock_expect(Node, harvester_logic, create_entry,
-        fun(_SessionId, HarvesterId, FileId, Payload) ->
+        fun(HarvesterId, FileId, Payload) ->
             Self ! ?CREATE_ENTRY(FileId, HarvesterId, Payload)
         end
     ),

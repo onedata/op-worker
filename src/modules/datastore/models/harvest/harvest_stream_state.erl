@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get_seq/1, set_seq/2, id/2]).
+-export([get_seq/1, set_seq/2]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1]).
@@ -44,7 +44,7 @@ get_seq(Id) ->
         {ok, #document{value = #harvest_stream_state{seq = Seq}}} ->
             Seq;
         {error, not_found} ->
-            1
+            0
     end.
 
 %%--------------------------------------------------------------------
@@ -58,11 +58,6 @@ set_seq(Id, Seq) ->
     ?extract_ok(datastore_model:save(?CTX, #document{
         key = Id, value = #harvest_stream_state{seq = Seq}
     })).
-
-
--spec id(od_harvester:id(), od_space:id()) -> id().
-id(HarvesterId, SpaceId) ->
-    datastore_utils:gen_key(HarvesterId, SpaceId).
 
 %%%===================================================================
 %%% datastore_model callbacks

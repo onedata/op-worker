@@ -39,10 +39,10 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
--spec start_child(harvest_stream:id(), od_harvester:id(), od_space:id()) ->
-    supervisor:startchild_ret().
+-spec start_child(harvest_stream:id(), od_harvester:id(), od_space:id()) -> ok.
 start_child(Id, HarvesterId, SpaceId) ->
-    supervisor:start_child(?SERVER, child_spec(Id, HarvesterId, SpaceId)).
+    {ok, _} = supervisor:start_child(?SERVER, child_spec(Id, HarvesterId, SpaceId)),
+    ok.
 
 -spec terminate_child(harvest_stream:id()) -> ok | {error, term()}.
 terminate_child(StreamId) ->

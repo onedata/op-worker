@@ -149,10 +149,10 @@ create_entry_test(Config) ->
     FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, create_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, create_entry, [?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, create_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, create_entry, [?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
@@ -163,10 +163,10 @@ delete_entry_test(Config) ->
     FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, FileId])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?ROOT_SESS_ID, ?HARVESTER_1, FileId])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, FileId])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.

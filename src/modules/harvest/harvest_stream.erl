@@ -33,7 +33,8 @@
     id :: id(),
     harvester_id :: od_harvester:id(),
     space_id :: od_space:id(),
-    provider_id :: od_provider:id()
+    provider_id :: od_provider:id(),
+    last_persisted_seq = 0
 }).
 
 -type state() :: #state{}.
@@ -41,17 +42,22 @@
 
 -export_type([id/0]).
 
+-define(MAX_NOT_PERSISTED_SEQ_GAP, 1000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec start_link(id(), od_harvester:id(), od_space:id()) -> {ok, pid()} | {error, Reason :: term()}.
+-spec start_link(id(), od_harvester:id(), od_space:id()) ->
+    {ok, pid()} | {error, Reason :: term()}.
 start_link(Id, HarvesterId, SpaceId) ->
-    gen_server:start_link({local, binary_to_atom(Id, latin1)}, ?MODULE, [Id, HarvesterId, SpaceId], []).
+    gen_server:start_link({local, binary_to_atom(Id, latin1)}, ?MODULE,
+        [Id, HarvesterId, SpaceId], []
+    ).
 
 -spec id(od_harvester:id(), od_space:id()) -> id().
 id(HarvesterId, SpaceId) ->
-    harvest_stream_state:id(HarvesterId, SpaceId).
+    datastore_utils:gen_key(HarvesterId, SpaceId).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -109,22 +115,8 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({change, {ok, Docs}}, State = #state{
-    id = Id,
-    harvester_id = HarvesterId,
-    provider_id = ProviderId
-})
-    when is_list(Docs)
-->
-    [handle_change(Id, HarvesterId, ProviderId, Doc) || Doc <- Docs],
-    {noreply, State};
-handle_cast({change, {ok, #document{} = Doc}}, State = #state{
-    id = Id,
-    harvester_id = HarvesterId,
-    provider_id = ProviderId
-}) ->
-    handle_change(Id, HarvesterId, ProviderId, Doc),
-    {noreply, State};
+handle_cast({change, {ok, DocOrDocs}}, State) ->
+    handle_change_and_stop_on_error(State, DocOrDocs);
 handle_cast({change, {ok, end_of_stream}}, State) ->
     {stop, normal, State};
 handle_cast({change, {error, _Seq, Reason}}, State) ->
@@ -179,27 +171,59 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle_change(id(), od_harvester:id(), od_provider:id(), datastore:document()) -> ok.
-handle_change(Id, HarvesterId, ProviderId, Doc = #document{
+-spec handle_change_and_stop_on_error(state(), datastore:doc() | [datastore:doc()]) ->
+    {noreply, state()} | {stop, term(), state()}.
+handle_change_and_stop_on_error(State = #state{
+    id = Id, harvester_id = HarvesterId, space_id = SpaceId
+}, DocOrDocs) ->
+    try
+        State2 = handle_change(State, DocOrDocs),
+        {noreply, State2}
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
+            "handling changes for harvester ~p in space ~p",
+                [Error, Reason, Id, HarvesterId, SpaceId]),
+            {stop, {Error, Reason}, State}
+    end.
+
+-spec handle_change(state(), datastore:doc() | [datastore:doc()]) -> state().
+handle_change(State, Docs) when is_list(Docs) ->
+    lists:foldl(fun(Doc, StateIn) ->
+        handle_change(StateIn, Doc)
+    end, State, Docs);
+handle_change(State = #state{
+    id = Id,
+    harvester_id = HarvesterId,
+    provider_id = ProviderId
+}, Doc = #document{
     seq = Seq,
     value = #custom_metadata{file_objectid = FileId},
-    mutators = [ProviderId | _ ],
+    mutators = [ProviderId | _],
     deleted = false
 }) ->
-    harvester_logic:create_entry(?ROOT_SESS_ID, HarvesterId, FileId, prepare_payload(Doc)),
-    ok = harvest_stream_state:set_seq(Id, Seq);
-handle_change(Id, HarvesterId, ProviderId, #document{
+    harvester_logic:create_entry(HarvesterId, FileId, prepare_payload(Doc)),
+    ok = harvest_stream_state:set_seq(Id, Seq),
+    State#state{last_persisted_seq = Seq};
+handle_change(State = #state{
+    id = Id,
+    harvester_id = HarvesterId,
+    provider_id = ProviderId
+}, #document{
     seq = Seq,
     value = #custom_metadata{file_objectid = FileId},
     mutators = [ProviderId | _],
     deleted = true
 }) ->
-    harvester_logic:delete_entry(?ROOT_SESS_ID, HarvesterId, FileId),
-    ok = harvest_stream_state:set_seq(Id, Seq);
-handle_change(Id, _, _, #document{seq = Seq}) ->
-    ok = harvest_stream_state:set_seq(Id, Seq).
-
-
+    harvester_logic:delete_entry(HarvesterId, FileId),
+    ok = harvest_stream_state:set_seq(Id, Seq),
+    State#state{last_persisted_seq = Seq};
+handle_change(State = #state{id = Id, last_persisted_seq = LastSeq}, #document{seq = Seq})
+    when (Seq - LastSeq) > ?MAX_NOT_PERSISTED_SEQ_GAP ->
+    ok = harvest_stream_state:set_seq(Id, Seq),
+    State#state{last_persisted_seq = Seq};
+handle_change(State, _Doc) ->
+    State.
 
 -spec prepare_payload(datastore:document()) -> gs_protocol:data().
 prepare_payload(#document{
