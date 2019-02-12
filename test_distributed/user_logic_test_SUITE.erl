@@ -611,7 +611,7 @@ acquire_idp_access_token_test(Config) ->
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     ?assertMatch(
-        {ok, ?MOCK_IDP_ACCESS_TOKEN},
+        {ok, #{?MOCK_IDP_ACCESS_TOKEN, _Ttl}},
         rpc:call(Node, user_logic, acquire_idp_access_token, [User1Sess, ?USER_1, ?MOCK_IDP])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
