@@ -725,7 +725,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                         case CloseAfterVerify of
                             true ->
                                 ok = timer:sleep(timer:seconds(1)),
-                                ok = lfm_proxy:close(W, Handle);
+                                ?assertEqual(ok, lfm_proxy:close(W, Handle));
                             _ ->
                                 ok
                         end;

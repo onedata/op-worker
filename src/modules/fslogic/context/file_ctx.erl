@@ -70,7 +70,7 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1,
+    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_file_children/5, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
@@ -473,12 +473,15 @@ get_parent_guid(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}) ->
-    case get_local_file_location_doc(FileCtx0, false) of
-        {#document{value = #file_location{file_id = ID}}, FileCtx}
-            when ID =/= undefined ->
+get_storage_file_id(FileCtx) ->
+    get_storage_file_id(FileCtx, true).
+
+get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
+    case {get_local_file_location_doc(FileCtx0, false), Generate} of
+        {{#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}, _}
+            when ID =/= undefined, SFC or Generate ->
             {ID, FileCtx};
-        {_, FileCtx} ->
+        {{_, FileCtx}, true} ->
             {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
             #document{value = #storage{helpers
             = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
@@ -499,9 +502,11 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}) ->
                     end,
 
                     {FileId, FileCtx3#file_ctx{storage_file_id = FileId}}
-            end
+            end;
+        {{_, FileCtx}, _} ->
+            {undefined, FileCtx}
     end;
-get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
+get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
 
 %%--------------------------------------------------------------------

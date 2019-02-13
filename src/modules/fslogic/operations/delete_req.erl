@@ -103,6 +103,6 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
-    fslogic_delete:check_if_opened_and_remove(UserCtx, FileCtx, Silent),
+    fslogic_delete:check_if_opened_and_remove(UserCtx, FileCtx, Silent, false),
     fslogic_delete:remove_auxiliary_documents(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.

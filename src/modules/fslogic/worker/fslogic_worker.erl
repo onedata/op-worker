@@ -93,7 +93,6 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     transfer:init(),
-    fslogic_delete:delete_all_opened_files(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
@@ -114,6 +113,7 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
+    fslogic_delete:delete_all_opened_files(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------

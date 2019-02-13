@@ -49,11 +49,15 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
         {true, _FileCtx2} ->
             ok;
         {false, FileCtx2} ->
-            {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
-            case storage_file_manager:chmod(SFMHandle, Mode) of
-                ok -> ok;
-                {error, ?ENOENT} -> ok;
-                {error, ?EROFS} -> {error, ?EROFS}
+            case storage_file_manager:new_handle(SessId, FileCtx2, false) of
+                {undefined, _} ->
+                    ok;
+                {SFMHandle, _} ->
+                    case storage_file_manager:chmod(SFMHandle, Mode) of
+                        ok -> ok;
+                        {error, ?ENOENT} -> ok;
+                        {error, ?EROFS} -> {error, ?EROFS}
+                    end
             end
     end.
 
@@ -166,9 +170,13 @@ delete_storage_file(FileCtx, UserCtx) ->
     ok | {error, term()}.
 delete_storage_file_without_location(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
-    {Size, _} = file_ctx:get_file_size(FileCtx),
-    storage_file_manager:unlink(SFMHandle, Size).
+    case storage_file_manager:new_handle(SessId, FileCtx, false) of
+        {undefined, _} ->
+            {error, ?ENOENT};
+        {SFMHandle, _} ->
+            {Size, _} = file_ctx:get_file_size(FileCtx),
+            storage_file_manager:unlink(SFMHandle, Size)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -179,9 +187,9 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
 -spec recursive_delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
 recursive_delete(FileCtx, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
     case IsDir of
         true ->
+            {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
             {ok, FileCtx3} = delete_children(FileCtx2, UserCtx, 0, ChunkSize),
             delete_storage_dir(FileCtx3, UserCtx);
         false ->
@@ -198,19 +206,23 @@ recursive_delete(FileCtx, UserCtx) ->
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
-    case storage_file_manager:rmdir(SFMHandle) of
-        ok ->
-            dir_location:delete(FileUuid);
-        {error, ?ENOENT} ->
-            dir_location:delete(FileUuid);
-        {error, ?ENOTEMPTY} ->
-            % todo VFS-4997
-            spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
+    case storage_file_manager:new_handle(SessId, FileCtx, false) of
+        {undefined, _} ->
             ok;
-        Error ->
-            ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
-            Error
+        {SFMHandle, _} ->
+            case storage_file_manager:rmdir(SFMHandle) of
+                ok ->
+                    dir_location:delete(FileUuid);
+                {error, ?ENOENT} ->
+                    dir_location:delete(FileUuid);
+                {error, ?ENOTEMPTY} ->
+                    % todo VFS-4997
+                    spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
+                    ok;
+                Error ->
+                    ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+                    Error
+            end
     end.
 
 %%-------------------------------------------------------------------

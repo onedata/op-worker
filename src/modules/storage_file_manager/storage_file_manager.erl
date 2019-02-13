@@ -21,7 +21,7 @@
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/6, set_size/1, increase_size/2]).
+-export([new_handle/2, new_handle/3, new_handle/6, set_size/1, increase_size/2]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/4, link/2, readdir/3,
     get_child_handle/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
@@ -45,10 +45,13 @@
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), file_ctx:ctx()) -> {handle(), file_ctx:ctx()}.
 new_handle(SessionId, FileCtx) ->
+    new_handle(SessionId, FileCtx, true).
+
+new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2, Generate),
     ShareId = file_ctx:get_share_id_const(FileCtx3),
     {new_handle(SessionId, SpaceId, FileUuid, Storage, FileId, ShareId), FileCtx3}.
 

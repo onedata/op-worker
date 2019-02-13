@@ -249,9 +249,12 @@ release(UserCtx, FileCtx, HandleId) ->
             ok = session_handles:remove(SessId, HandleId),
             ok = file_handles:register_release(FileCtx, SessId, 1),
             ok = storage_file_manager:release(SfmHandle);
+        % TODO - wyjasnic czemu to tu jest
         {error, link_not_found} ->
             ok;
         {error, {not_found, _}} ->
+            ok;
+        {error, not_found} ->
             ok;
         Other ->
             Other
@@ -540,6 +543,8 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
         {error, link_not_found} ->
             ok;
         {error, {not_found, _}} ->
+            ok;
+        {error, not_found} ->
             ok;
         Other ->
             Other

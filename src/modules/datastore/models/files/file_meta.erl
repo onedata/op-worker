@@ -28,7 +28,7 @@
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
--export([delete_child_link/4, foreach_child/3, add_child_link/4]).
+-export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_parent/1, get_parent_uuid/1]).
@@ -308,6 +308,18 @@ delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
         false ->
             ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_deletion_link(ParentUuid :: uuid(), Scope :: datastore_doc:scope(),
+    FileName :: name()) -> ok.
+% TODO - wartosc zwracana
+delete_deletion_link(ParentUuid, Scope, Link) ->
+    Ctx = ?CTX#{scope => Scope},
+    datastore_model:delete_links(Ctx, ParentUuid, oneprovider:get_id(), Link).
 
 %%--------------------------------------------------------------------
 %% @doc

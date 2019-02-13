@@ -148,8 +148,8 @@ delete_imported_file(ChildName, ParentCtx) ->
 delete_imported_file(FileCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        ok = fslogic_delete:remove_file(FileCtx, RootUserCtx,
-            false, false, true),
+        ok = fslogic_delete:remove_file(FileCtx, RootUserCtx, false, true),
+        fslogic_event_emitter:emit_file_removed(FileCtx, []),
         ok = fslogic_delete:remove_file_handles(FileCtx),
         fslogic_delete:remove_auxiliary_documents(FileCtx)
     catch
