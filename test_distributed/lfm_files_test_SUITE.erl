@@ -73,7 +73,12 @@
     readdir_plus_should_work_with_token/1,
     readdir_plus_should_work_with_token2/1,
     readdir_should_work_with_token/1,
-    readdir_should_work_with_token2/1
+    readdir_should_work_with_token2/1,
+    lfm_recreate_handle_test/1,
+    lfm_open_failure_test/1,
+    lfm_create_and_open_failure_test/1,
+    open_in_direct_mode_test/1,
+    lfm_copy_failure_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -120,7 +125,12 @@
     readdir_plus_should_work_with_token,
     readdir_plus_should_work_with_token2,
     readdir_should_work_with_token,
-    readdir_should_work_with_token2
+    readdir_should_work_with_token2,
+    lfm_recreate_handle_test,
+    lfm_open_failure_test,
+    lfm_create_and_open_failure_test,
+    open_in_direct_mode_test,
+    lfm_copy_failure_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -152,6 +162,87 @@ end).
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+lfm_recreate_handle_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+
+    Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
+    HandleId = lfm_context:get_handle_id(Context),
+    rpc:call(W, session_handles, remove, [SessId1, HandleId]),
+
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+
+    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)),
+
+    FileGuid = lfm_context:get_guid(Context),
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
+
+lfm_open_failure_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    {error, ?EAGAIN} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
+
+lfm_create_and_open_failure_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    ParentGuid = get_guid(W, SessId1, <<"/space_name1">>),
+
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    {error, ?EAGAIN} = lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])).
+
+open_in_direct_mode_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+
+    test_utils:mock_new(W, user_ctx, [passthrough]),
+    test_utils:mock_expect(W, user_ctx, is_direct_io,
+        fun(_) ->
+            true
+        end),
+
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
+    HandleId = lfm_context:get_handle_id(Context),
+    ?assertEqual({error, not_found}, rpc:call(W, session_handles, get, [SessId1, HandleId])).
+
+
+lfm_copy_failure_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    %% File has to be moved to different space in order to use copy / delete
+    {error, ?EAGAIN} = lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name2/test_read2">>),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])).
+
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 0),
