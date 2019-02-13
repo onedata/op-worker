@@ -51,9 +51,13 @@ new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2, Generate),
-    ShareId = file_ctx:get_share_id_const(FileCtx3),
-    {new_handle(SessionId, SpaceId, FileUuid, Storage, FileId, ShareId), FileCtx3}.
+    case file_ctx:get_storage_file_id(FileCtx2, Generate) of
+        {undefined, FileCtx3} ->
+            {undefined, FileCtx3};
+        {FileId, FileCtx3} ->
+            ShareId = file_ctx:get_share_id_const(FileCtx3),
+            {new_handle(SessionId, SpaceId, FileUuid, Storage, FileId, ShareId), FileCtx3}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

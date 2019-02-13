@@ -106,7 +106,7 @@ remove_auxiliary_documents(FileCtx) ->
 %%    boolean(), boolean()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
     {FileDoc, FileCtx4} = case DeleteMetadata of
-        all ->
+        true ->
             {FD = #document{value = #file_meta{
                 shares = Shares
             }
