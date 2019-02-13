@@ -19,23 +19,23 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, send/2]).
+-export([start_link/2]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
+-export([
+    init/1,
+    handle_call/3, handle_cast/2, handle_info/2,
+    terminate/2, code_change/3
+]).
 
 %% session watcher state:
 %% session_id - ID of session associated with sequencer manager
 -record(state, {
     session_id :: session:id(),
-    session_ttl :: non_neg_integer(),
-    overloaded_connections = #{} :: #{pid() => non_neg_integer()}
+    session_ttl :: non_neg_integer()
 }).
 
 -define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(15)).
--define(CONNECTION_CHECK_INTERVAL, timer:seconds(30)).
--define(MAX_PENDING_REQUESTS_PER_CONNECTION, 100).
 
 %%%===================================================================
 %%% API
@@ -50,15 +50,6 @@
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends message to session_watcher.
-%% @end
-%%--------------------------------------------------------------------
--spec send(pid(), term()) -> ok.
-send(SessionWatcher, Msg) ->
-    SessionWatcher ! Msg.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -81,7 +72,6 @@ init([SessId, SessType]) ->
     end),
     TTL = get_session_ttl(SessType),
     schedule_session_status_checkup(TTL),
-    schedule_connections_status_checkup(?CONNECTION_CHECK_INTERVAL),
     {ok, #state{session_id = SessId, session_ttl = TTL}}.
 
 %%--------------------------------------------------------------------
@@ -155,39 +145,6 @@ handle_info(check_session_status, #state{session_id = SessId,
         {false, RemainingTime} ->
             schedule_session_status_checkup(RemainingTime),
             {noreply, State, hibernate}
-    end;
-
-handle_info(check_connections_status, #state{session_id = SessId, overloaded_connections = Conns} = State) ->
-    NewConnsProplist = lists:foldl(
-        fun({Pid, QueueLen}, AccIn) ->
-            case utils:process_info(Pid, message_queue_len) of
-                undefined ->
-                    session_connections:remove_connection(SessId, Pid),
-                    AccIn;
-                {message_queue_len, NewQueueLen} when NewQueueLen < ?MAX_PENDING_REQUESTS_PER_CONNECTION ->
-                    %% Queue is still not too long
-                    [{Pid, NewQueueLen} | AccIn];
-                {message_queue_len, NewQueueLen} when NewQueueLen < QueueLen ->
-                    %% Connection didn't hang, it's just very slow
-                    [{Pid, NewQueueLen} | AccIn];
-                {message_queue_len, NewQueueLen} ->
-                    ?error("Connection ~p on session ~p hang with ~p messages
-                            in request queue. Removing.", [Pid, SessId, NewQueueLen]),
-                    session_connections:remove_connection(SessId, Pid),
-                    erlang:exit(Pid, kill),
-                    AccIn
-            end
-        end, [], maps:to_list(Conns)),
-
-    schedule_connections_status_checkup(?CONNECTION_CHECK_INTERVAL),
-    {noreply, State#state{overloaded_connections = maps:from_list(NewConnsProplist)}, hibernate};
-
-handle_info({overloaded_connection, Pid}, State = #state{overloaded_connections = Connections}) ->
-    case utils:process_info(Pid, message_queue_len) of
-        undefined ->
-            {noreply, State, hibernate};
-        {message_queue_len, QueueLen} ->
-            {noreply, State#state{overloaded_connections = maps:put(Pid, QueueLen, Connections)}, hibernate}
     end;
 
 handle_info({'EXIT', _, shutdown}, State) ->
@@ -292,18 +249,6 @@ is_session_ttl_exceeded(SessId, TTL) ->
     TimeRef :: reference().
 schedule_session_status_checkup(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), check_session_status).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Schedules connections status checkup that should take place after 'Delay'
-%% milliseconds.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_connections_status_checkup(Delay :: non_neg_integer()) ->
-    TimeRef :: reference().
-schedule_connections_status_checkup(Delay) ->
-    erlang:send_after(Delay, self(), check_connections_status).
 
 %%--------------------------------------------------------------------
 %% @private

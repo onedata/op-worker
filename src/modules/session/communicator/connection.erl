@@ -132,7 +132,8 @@
 -export([
     connect_to_provider/7,
     close/1,
-    send_sync/2, send_async/2
+    send_sync/2, send_async/2,
+    send_keepalive/1
 ]).
 
 %% Private API
@@ -188,7 +189,7 @@ close(Pid) ->
 -spec send_sync(pid(), message()) -> ok | {error, term()}.
 send_sync(Pid, Msg) ->
     try
-        gen_server2:call(Pid, {send, Msg})
+        gen_server2:call(Pid, {send_msg, Msg})
     catch
         exit:{noproc, _} ->
             ?debug("Connection process ~p does not exist", [Pid]),
@@ -218,7 +219,17 @@ send_sync(Pid, Msg) ->
 %%-------------------------------------------------------------------
 -spec send_async(pid(), message()) -> ok.
 send_async(Pid, Msg) ->
-    gen_server2:cast(Pid, {send, Msg}).
+    gen_server2:cast(Pid, {send_msg, Msg}).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Schedules keepalive message to be sent.
+%% @end
+%%-------------------------------------------------------------------
+-spec send_keepalive(pid()) -> ok.
+send_keepalive(Pid) ->
+    gen_server2:cast(Pid, send_keepalive).
 
 
 %%%===================================================================
@@ -251,7 +262,7 @@ init([]) -> {ok, undefined}.
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({send, Msg}, _From, #state{status = ready} = State) ->
+handle_call({send_msg, Msg}, _From, #state{status = ready} = State) ->
     case send_message(State, Msg) of
         {ok, NewState} ->
             {reply, ok, NewState, ?PROTO_CONNECTION_TIMEOUT};
@@ -262,7 +273,7 @@ handle_call({send, Msg}, _From, #state{status = ready} = State) ->
         Error ->
             {stop, Error, Error, State}
     end;
-handle_call({send, _Msg}, _From, #state{status = Status, socket = Socket} = State) ->
+handle_call({send_msg, _Msg}, _From, #state{status = Status, socket = Socket} = State) ->
     ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
     {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT};
 handle_call(_Request, _From, State) ->
@@ -282,7 +293,14 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast(disconnect, State) ->
     {stop, normal, State};
-handle_cast({send, Msg}, #state{status = ready} = State) ->
+handle_cast(send_keepalive, State) ->
+    case socket_send(State, ?CLIENT_KEEPALIVE_MSG) of
+        {ok, NewState} ->
+            {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
+        Error ->
+            {stop, Error, State}
+    end;
+handle_cast({send_msg, Msg}, #state{status = ready} = State) ->
     case send_message(State, Msg) of
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
@@ -293,7 +311,7 @@ handle_cast({send, Msg}, #state{status = ready} = State) ->
         Error ->
             {stop, Error, State}
     end;
-handle_cast({send, _Msg}, #state{socket = Socket} = State) ->
+handle_cast({send_msg, _Msg}, #state{socket = Socket} = State) ->
     ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
 handle_cast(_Request, State) ->

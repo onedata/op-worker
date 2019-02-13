@@ -32,27 +32,7 @@
 -spec get_random_connection(session:id()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId) ->
-    get_random_connection(SessId, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns connections associated with session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_connections(session:id()) ->
-    {ok, [Comm :: pid()]} | {error, term()}.
-get_connections(SessId) ->
-    get_connections(SessId, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns random connection associated with session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_random_connection(session:id(), HideOverloaded :: boolean()) ->
-    {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
-get_random_connection(SessId, HideOverloaded) ->
-    case get_connections(SessId, HideOverloaded) of
+    case get_connections(SessId) of
         {ok, []} -> {error, empty_connection_pool};
         {ok, Cons} -> {ok, utils:random_element(Cons)};
         {error, Reason} -> {error, Reason}
@@ -60,40 +40,17 @@ get_random_connection(SessId, HideOverloaded) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns connections associated with session. If HideOverloaded is set to true,
-%% hides connections that have too long request queue and and removes invalid
-%% connections.
+%% Returns connections associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_connections(session:id(), HideOverloaded :: boolean()) ->
-    {ok, [Comm :: pid()]} | {error, term()}.
-get_connections(SessId, HideOverloaded) ->
+-spec get_connections(session:id()) -> {ok, [Conn :: pid()]} | {error, term()}.
+get_connections(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
-            get_connections(ProxyViaSession, HideOverloaded);
-        {ok, #document{value = #session{connections = Cons, watcher = SessionWatcher}}} ->
-            case HideOverloaded of
-                false ->
-                    {ok, Cons};
-                true ->
-                    NewCons = lists:foldl( %% Foreach connection
-                        fun(Pid, AccIn) ->
-                            case utils:process_info(Pid, message_queue_len) of
-                                undefined ->
-                                    %% Connection died, removing from session
-                                    ok = session_connections:remove_connection(SessId, Pid),
-                                    AccIn;
-                                {message_queue_len, QueueLen} when QueueLen > 15 ->
-                                    session_watcher:send(SessionWatcher,
-                                        {overloaded_connection, Pid}),
-                                    AccIn;
-                                _ ->
-                                    [Pid | AccIn]
-                            end
-                        end, [], Cons),
-                    {ok, NewCons}
-            end;
+            get_connections(ProxyViaSession);
+        {ok, #document{value = #session{connections = Cons}}} ->
+            {ok, Cons};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -156,7 +113,7 @@ remove_connection(SessId, Con) ->
 ensure_connected(Conn) when is_pid(Conn) ->
     ok;
 ensure_connected(SessId) ->
-    case get_random_connection(SessId, true) of
+    case get_random_connection(SessId) of
         {error, _} ->
             ProviderId = case session:get(SessId) of
                 {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(
@@ -184,7 +141,7 @@ ensure_connected(SessId) ->
                     Port = https_listener:port(),
                     critical_section:run([?MODULE, ProviderId, SessId], fun() ->
                         % check once more to prevent races
-                        case get_random_connection(SessId, true) of
+                        case get_random_connection(SessId) of
                             {error, _} ->
                                 outgoing_connection:start(ProviderId, SessId,
                                     Domain, Host, Port, ranch_ssl, timer:seconds(5));
