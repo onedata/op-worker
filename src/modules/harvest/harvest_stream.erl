@@ -105,10 +105,10 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({change, {ok, DocOrDocs}}, State) ->
-    handle_change_and_stop_on_error(State, DocOrDocs);
 handle_cast({change, {ok, end_of_stream}}, State) ->
     {stop, normal, State};
+handle_cast({change, {ok, DocOrDocs}}, State) ->
+    handle_change_and_stop_on_error(State, DocOrDocs);
 handle_cast({change, {error, _Seq, Reason}}, State) ->
     {stop, Reason, State};
 handle_cast(Request, #state{} = State) ->
@@ -192,7 +192,7 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = false
 }) ->
-    harvester_logic:submit_entry(HarvesterId, FileId, prepare_payload(Doc)),
+    ok = harvester_logic:submit_entry(HarvesterId, FileId, prepare_payload(Doc)),
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
@@ -205,7 +205,7 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = true
 }) ->
-    harvester_logic:delete_entry(HarvesterId, FileId),
+    ok = harvester_logic:delete_entry(HarvesterId, FileId),
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{id = Id, last_persisted_seq = LastSeq}, #document{seq = Seq})

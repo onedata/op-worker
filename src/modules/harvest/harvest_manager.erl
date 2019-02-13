@@ -35,13 +35,13 @@
     code_change/3]).
 
 % requests
--define(INITIALISE, initialise).
+-define(CHECK_ALL_SPACES, check_all_spaces).
 -define(UPDATE, update).
 -define(UPDATE(SpaceId, Harvesters), {?UPDATE, SpaceId, Harvesters}).
 -define(DELETE, delete).
 -define(DELETE(SpaceId), {?DELETE, SpaceId}).
 
--define(INITIALISATION_TIMEOUT, timer:seconds(5)).
+-define(CONNECTION_TO_OZ_TIMEOUT, timer:seconds(5)).
 
 -type state() :: #{od_space:id() => sets:set(od_harvester:id())}.
 
@@ -88,7 +88,7 @@ delete_space_harvest_streams(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> {ok, State :: state()}.
 init([]) ->
-    schedule_initialisation(),
+    schedule_check_all_spaces(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -126,8 +126,8 @@ handle_cast(Request, State) ->
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: state()) ->
     {noreply, NewState :: state()}.
-handle_info(?INITIALISE, State) ->
-    initialise(State);
+handle_info(?CHECK_ALL_SPACES, State) ->
+    check_all_spaces(State);
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -161,8 +161,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec initialise(state()) -> {noreply, state()} | {stop, term(), state()}.
-initialise(State) ->
+-spec check_all_spaces(state()) -> {noreply, state()} | {stop, term(), state()}.
+check_all_spaces(State) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             State2 = lists:foldl(fun(SpaceId, StateIn) ->
@@ -170,19 +170,19 @@ initialise(State) ->
             end, State, SpaceIds),
             {noreply, State2};
         ?ERROR_UNREGISTERED_PROVIDER ->
-            ?debug("Unable to initialise harvest_manager due to unregistered provider"),
-            schedule_initialisation(),
+            ?debug("harvest_manager was unable to check_all_spaces due to unregistered provider"),
+            schedule_check_all_spaces(),
             {noreply, State};
         ?ERROR_NO_CONNECTION_TO_OZ ->
-            ?debug("Unable to initialise harvest_manager due to no connection to oz"),
-            schedule_initialisation(),
+            ?debug("harvest_manager was unable to check_all_spaces due to no connection to oz"),
+            schedule_check_all_spaces(),
             {noreply, State};
         Error ->
-            ?error("Unable to initialise harvest_manager due to: ~p", [Error]),
+            ?error("harvest_manager was unable to check_all_spaces due to: ~p", [Error]),
             {stop, Error, State}
     catch
         Error2:Reason2 ->
-            ?error_stacktrace("Unable to initialise harvest_manager due to: ~p", [{Error2, Reason2}]),
+            ?error_stacktrace("harvest_manager was unable to check_all_spaces due to: ~p", [{Error2, Reason2}]),
             {stop, {Error2, Reason2}, State}
     end.
 
@@ -229,11 +229,11 @@ update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
     StreamsToStop = sets:subtract(OldLocalNodeHarvesters, LocalNodeHarvesters),
 
     lists:foreach(fun(HarvesterId) ->
-        harvest_stream_sup:terminate_child(HarvesterId, SpaceId)
+        ok = harvest_stream_sup:terminate_child(HarvesterId, SpaceId)
     end, sets:to_list(StreamsToStop)),
 
     lists:foreach(fun(HarvesterId) ->
-        harvest_stream_sup:start_child(HarvesterId, SpaceId)
+        ok = harvest_stream_sup:start_child(HarvesterId, SpaceId)
     end, sets:to_list(StreamsToStart)),
 
     case CurrentHarvesters =:= [] of
@@ -242,7 +242,7 @@ update_streams_per_space(SpaceId, CurrentHarvesters, State) ->
     end.
 
 
--spec schedule_initialisation() -> ok.
-schedule_initialisation() ->
-    erlang:send_after(?INITIALISATION_TIMEOUT, ?HARVEST_MANAGER, ?INITIALISE),
+-spec schedule_check_all_spaces() -> ok.
+schedule_check_all_spaces() ->
+    erlang:send_after(?CONNECTION_TO_OZ_TIMEOUT, ?HARVEST_MANAGER, ?CHECK_ALL_SPACES),
     ok.

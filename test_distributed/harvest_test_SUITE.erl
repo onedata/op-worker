@@ -39,7 +39,10 @@
     changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space/1,
     changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester/1,
     each_provider_should_submit_only_local_changes_to_the_harvester/1,
-    each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test/1]).
+    each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test/1,
+    restart_harvest_stream_on_submit_entry_failure_test/1,
+    restart_harvest_stream_on_delete_entry_failure_test/1
+]).
 
 all() ->
     ?ALL([
@@ -63,7 +66,9 @@ all() ->
         changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space,
         changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester,
         each_provider_should_submit_only_local_changes_to_the_harvester,
-        each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test
+        each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test,
+        restart_harvest_stream_on_submit_entry_failure_test,
+        restart_harvest_stream_on_delete_entry_failure_test
     ]).
 
 -define(SPACE_ID1, <<"space_id1">>).
@@ -107,7 +112,8 @@ all() ->
     <<(str_utils:to_binary(?FUNCTION))/binary, "_", (integer_to_binary(rand:uniform(?RAND_RANGE)))/binary>>).
 
 -define(RAND_RANGE, 1000000000).
--define(TIMEOUT, 10000).
+-define(ATTEMPTS, 10).
+-define(TIMEOUT, timer:seconds(?ATTEMPTS)).
 
 %% Test config:
 %% space_id1:
@@ -685,6 +691,96 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     ?assertNotReceivedDeleteEntry(FileId, ?HARVESTER3),
     ?assertNotReceivedDeleteEntry(FileId2, ?HARVESTER3).
 
+restart_harvest_stream_on_submit_entry_failure_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+
+    HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1),
+
+    mock_harvester_logic_submit_entry(Worker),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"xattrs">> => #{Name => Value1}
+    }),
+
+    mock_harvester_logic_submit_entry_failure(Worker),
+
+    Value2 = ?XATTR_VAL,
+    Xattr2 = #xattr{name = Name, value = Value2},
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+
+    % change should not be submitted as connection to onezone failed
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"xattrs">> := #{Name := Value2}
+    }),
+
+    mock_harvester_logic_submit_entry(Worker),
+
+    % harvest_stream should have been restarted
+    ?assertNotEqual(HSPid1,
+        get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1)),
+
+    % previously sent change should not be submitted
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"xattrs">> := #{Name := Value1}
+    }),
+
+    % missing change should be submitted
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"xattrs">> => #{Name => Value2}
+    }).
+
+restart_harvest_stream_on_delete_entry_failure_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    Name = ?XATTR_NAME,
+    Value1 = ?XATTR_VAL,
+    Xattr1 = #xattr{name = Name, value = Value1},
+
+    HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1),
+
+    mock_harvester_logic_submit_entry(Worker),
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"xattrs">> => #{Name => Value1}
+    }),
+
+    mock_harvester_logic_delete_entry_failure(Worker),
+
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+
+    % change should not be submitted as connection to onezone failed
+    ?assertNotReceivedDeleteEntry(FileId, ?HARVESTER1),
+
+    mock_harvester_logic_delete_entry(Worker),
+
+    % harvest_stream should have been restarted
+    ?assertNotEqual(HSPid1,
+        get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1)),
+
+    % previously sent change should not be submitted
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"xattrs">> := #{Name := Value1}
+    }),
+
+    % missing change should be submitted
+    ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -696,18 +792,31 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= restart_harvest_stream_on_submit_entry_failure_test;
+    Case =:= restart_harvest_stream_on_delete_entry_failure_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(Workers, harvester_logic),
+    init_per_testcase(default, Config);
+
+init_per_testcase(default, Config) ->
     Config2 = sort_workers(Config),
     Workers = ?config(op_worker_nodes, Config2),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config2),
-    Config3 = lfm_proxy:init(ConfigWithSessionInfo),
-    mock_harvester_logic(Workers),
-    Config3.
+    lfm_proxy:init(ConfigWithSessionInfo);
+
+init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(Workers, harvester_logic),
+    mock_harvester_logic_submit_entry(Workers),
+    mock_harvester_logic_delete_entry(Workers),
+    init_per_testcase(default, Config).
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    unmock_harvester_logic(Workers),
+    ok = test_utils:mock_unload(Workers, harvester_logic),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
@@ -716,23 +825,43 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-mock_harvester_logic(Node) ->
+mock_harvester_logic_submit_entry(Node) ->
     Self = self(),
-    ok = test_utils:mock_new(Node, harvester_logic),
     ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
         fun(HarvesterId, FileId, Payload) ->
-            Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, Payload)
-        end
-    ),
-    ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
-        fun(HarvesterId, FileId) ->
-            Self ! ?DELETE_ENTRY(FileId, HarvesterId)
+            Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, Payload),
+            ok
         end
     ).
 
-unmock_harvester_logic(Node) ->
-    ok = test_utils:mock_unload(Node, harvester_logic).
+mock_harvester_logic_delete_entry(Node) ->
+    Self = self(),
+    ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
+        fun(HarvesterId, FileId) ->
+            Self ! ?DELETE_ENTRY(FileId, HarvesterId),
+            ok
+        end
+    ).
+
+mock_harvester_logic_submit_entry_failure(Node) ->
+    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
+        fun(_HarvesterId, _FileId, _Payload) -> {error, test_error} end).
+
+mock_harvester_logic_delete_entry_failure(Node) ->
+    ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
+        fun(_HarvesterId, _FileId) ->
+            {error, test_error}
+        end).
 
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
+
+which_children(Node, SupRef) ->
+    rpc:call(Node, supervisor, which_children, [SupRef]).
+
+get_harvest_stream_pid(Node, HarvesterId, SpaceId) ->
+    {_, HSPid, _, _} = ?assertMatch({_, _, _, _},
+        lists:keyfind({HarvesterId, SpaceId}, 1, which_children(Node, harvest_stream_sup)),
+        ?ATTEMPTS),
+    HSPid.
