@@ -391,11 +391,11 @@ maybe_sync_file_with_existing_metadata(Job, FileCtx) ->
             ErrorCode =:= ?ENOENT;
             ErrorCode =:= ?EAGAIN
         ->
-            % TODO - dodac log
-            {processed, undefined, Job}
-%%            FileUuid = file_ctx:get_uuid_const(FileCtx),
-%%            {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
-%%            {LocalResult, FileCtx3, Job}
+            % TODO - czy na pewno chcemy powtarzac przy tych bledach?
+%%            {processed, undefined, Job}
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
+            {LocalResult, FileCtx3, Job}
     end.
 
 %%--------------------------------------------------------------------
