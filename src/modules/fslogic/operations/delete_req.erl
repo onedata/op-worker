@@ -98,21 +98,11 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 %%--------------------------------------------------------------------
 -spec delete_insecure(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
-delete_insecure(UserCtx, FileCtx3, Silent) ->
-%%    {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
-%%    {#document{key = ParentUuid}, _ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
-%%    {#document{key = FileUuid, scope = Scope, value = #file_meta{
-%%        name = FileName
-%%    }}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    FileGuid = file_ctx:get_guid_const(FileCtx3),
+delete_insecure(UserCtx, FileCtx, Silent) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
-    fslogic_deletion_worker:request_deletion(UserCtx, FileCtx3, Silent),
-    ok = file_popularity:delete(FileUuid),
-    ok = custom_metadata:delete(FileUuid),
-    ok = file_force_proxy:delete(FileUuid),
-    ok = times:delete(FileUuid),
-    ok = transferred_file:clean_up(FileGuid),
+    fslogic_delete:check_if_opened_and_remove(UserCtx, FileCtx, Silent),
+    fslogic_delete:remove_auxiliary_documents(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.

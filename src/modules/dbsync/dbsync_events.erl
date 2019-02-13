@@ -56,7 +56,7 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    fslogic_deletion_worker:request_remote_deletion(FileCtx),
+    fslogic_delete:remove_storage_file_deleted_remotely(FileCtx),
     file_popularity:delete(FileUuid),
     ok;
 change_replicated_internal(SpaceId, #document{

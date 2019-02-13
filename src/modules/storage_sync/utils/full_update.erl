@@ -147,17 +147,11 @@ delete_imported_file(ChildName, ParentCtx) ->
 -spec delete_imported_file(file_ctx:ctx()) -> ok.
 delete_imported_file(FileCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
     try
-        ok = fslogic_delete:remove_file_and_file_meta(FileCtx, RootUserCtx,
+        ok = fslogic_delete:remove_file(FileCtx, RootUserCtx,
             false, false, true),
         ok = fslogic_delete:remove_file_handles(FileCtx),
-        ok = file_popularity:delete(FileUuid),
-        ok = custom_metadata:delete(FileUuid),
-        ok = file_force_proxy:delete(FileUuid),
-        ok = times:delete(FileUuid),
-        ok = transferred_file:clean_up(FileGuid)
+        fslogic_delete:remove_auxiliary_documents(FileCtx)
     catch
         throw:?ENOENT ->
             ok
