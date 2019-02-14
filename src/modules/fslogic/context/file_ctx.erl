@@ -482,7 +482,8 @@ get_storage_file_id(FileCtx) ->
 %%            storage
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_file_id(ctx(), boolean()) -> {StorageFileId :: helpers:file_id(), ctx()}.
+-spec get_storage_file_id(ctx(), boolean()) ->
+    {StorageFileId :: helpers:file_id() | undefined, ctx()}.
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case get_local_file_location_doc(FileCtx0, false) of
         {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}

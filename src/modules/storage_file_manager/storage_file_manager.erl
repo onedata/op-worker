@@ -52,7 +52,7 @@ new_handle(SessionId, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), file_ctx:ctx(), boolean()) ->
-    {handle(), file_ctx:ctx()}.
+    {handle() | undefined, file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
