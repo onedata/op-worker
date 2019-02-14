@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Util functions for fslogic_deletion_worker
+%%% Util functions for file deletion.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_delete).

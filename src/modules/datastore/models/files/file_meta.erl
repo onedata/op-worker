@@ -311,12 +311,11 @@ delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%%
+%% Removes deletion link for local provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_deletion_link(ParentUuid :: uuid(), Scope :: datastore_doc:scope(),
-    FileName :: name()) -> ok.
-% TODO - wartosc zwracana
+    FileName :: name()) -> ok | {error, term()}.
 delete_deletion_link(ParentUuid, Scope, Link) ->
     Ctx = ?CTX#{scope => Scope},
     datastore_model:delete_links(Ctx, ParentUuid, oneprovider:get_id(), Link).

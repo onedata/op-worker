@@ -462,7 +462,17 @@ get_parent_guid(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns storage file ID (the ID of file on storage.
+%% @equiv get_storage_file_id(FileCtx, true).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
+get_storage_file_id(FileCtx) ->
+    get_storage_file_id(FileCtx, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage file ID (the ID of file on storage). If file ID does not
+%% exists it can be generated (depending on second argument).
 %% Storage file Id depends on the storage file mapping setting, currently
 %% 2 options are supported:
 %%   - canonical - which is POSIX-style file mapping including complete
@@ -472,10 +482,7 @@ get_parent_guid(FileCtx, UserCtx) ->
 %%            storage
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_storage_file_id(FileCtx) ->
-    get_storage_file_id(FileCtx, true).
-
+-spec get_storage_file_id(ctx(), boolean()) -> {StorageFileId :: helpers:file_id(), ctx()}.
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case get_local_file_location_doc(FileCtx0, false) of
         {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}

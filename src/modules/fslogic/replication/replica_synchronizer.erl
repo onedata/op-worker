@@ -175,6 +175,13 @@ update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
 force_flush_events(Uuid) ->
     apply_if_alive_no_check(Uuid, ?FLUSH_EVENTS).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes delete_whole_file_replica_internal inside synchronizer.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_whole_file_replica(file_ctx:ctx(), version_vector:version_vector()) ->
+    ok | {error, term()}.
 delete_whole_file_replica(FileCtx, AllowedVV) ->
     apply_no_check(FileCtx, {delete_whole_file_replica, AllowedVV}).
 

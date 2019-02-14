@@ -22,6 +22,8 @@
 %% API
 -export([read/5, write/4, get_proxyio_node/1]).
 
+-type operation() :: read | write.
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -35,7 +37,7 @@
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, Offset, Size) ->
-    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId),
+    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, read),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
     #proxyio_response{
         status = #status{code = ?OK},
@@ -51,7 +53,7 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     HandleId :: storage_file_manager:handle_id(),
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
-    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId),
+    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId, write),
     {Written, _} =
         lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
             {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
@@ -63,6 +65,12 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
         proxyio_response = #remote_write_result{wrote = Written}
     }.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns node that  handles proxy operations for particular file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_proxyio_node(file_meta:uuid()) -> node().
 get_proxyio_node(Uuid) ->
     consistent_hasing:get_node(Uuid).
 
@@ -77,15 +85,15 @@ get_proxyio_node(Uuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_handle(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id()) ->
+    HandleId :: storage_file_manager:handle_id(), operation()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
-get_handle(UserCtx, FileCtx, HandleId) ->
+get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
             ?warning("Hanlde not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
-            create_handle(UserCtx, FileCtx, HandleId),
+            create_handle(UserCtx, FileCtx, HandleId, Operation),
             session_handles:get(SessId, HandleId);
         Other ->
             Other
@@ -98,11 +106,28 @@ get_handle(UserCtx, FileCtx, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id()) -> ok.
-create_handle(UserCtx, FileCtx, HandleId) ->
+    HandleId :: storage_file_manager:handle_id(), operation()) -> ok.
+create_handle(UserCtx, FileCtx, HandleId, Operation) ->
+    try
+        create_handle_helper(UserCtx, FileCtx, HandleId, rdwr)
+    catch
+        ?EACCES ->
+            create_handle_helper(UserCtx, FileCtx, HandleId, Operation)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates handle to file with particular open flag.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_handle_helper(user_ctx:ctx(), file_ctx:ctx(),
+    HandleId :: storage_file_manager:handle_id(),
+    fslogic_worker:open_flag()) -> ok.
+create_handle_helper(UserCtx, FileCtx, HandleId, Flag) ->
     #fuse_response{
         status = #status{code = ?OK}
-    } = file_req:open_file_insecure(UserCtx, FileCtx, rdwr, HandleId),
+    } = file_req:open_file(UserCtx, FileCtx, Flag, HandleId),
     ok.
 
 %%--------------------------------------------------------------------

@@ -19,9 +19,8 @@
 
 %% API
 -export([create_file/5, storage_file_created/2, make_file/4,
-    get_file_location/2, open_file/3, open_file_with_extended_info/3,
-    open_file_insecure/3, storage_file_created_insecure/2,
-    open_file_insecure/4, open_file_with_extended_info_insecure/3,
+    get_file_location/2, open_file/3, open_file/4,
+    open_file_with_extended_info/3, storage_file_created_insecure/2,
     fsync/4, release/3, flush_event_queue/2]).
 
 %% Export for RPC
@@ -29,6 +28,8 @@
 
 %% Test API
 -export([create_file_doc/4]).
+
+-type handle_id() :: storage_file_manager:handle_id() | undefined.
 
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
@@ -40,7 +41,6 @@
 %% @equiv create_file_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
-% TODO - czy sprawdzamy prawo do otwierania pliku?
 -spec create_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
@@ -87,18 +87,28 @@ get_file_location(_UserCtx, FileCtx) ->
         fun get_file_location_insecure/2).
 
 %%--------------------------------------------------------------------
-%% @equiv open_file(UserCtx, FileCtx) with permission check
-%% depending on the open flag.
+%% @equiv open_file(UserCtx, FileCtx, OpenFlag, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file(UserCtx, FileCtx, read) ->
-    open_file_for_read(UserCtx, FileCtx);
-open_file(UserCtx, FileCtx, write) ->
-    open_file_for_write(UserCtx, FileCtx);
-open_file(UserCtx, FileCtx, rdwr) ->
-    open_file_for_rdwr(UserCtx, FileCtx).
+open_file(UserCtx, FileCtx, OpenFlag) ->
+    open_file(UserCtx, FileCtx, OpenFlag, undefined).
+
+%%--------------------------------------------------------------------
+%% @equiv open_file_insecure(UserCtx, FileCtx, OpenFlag, HandleId)
+%% with permission check depending on the open flag.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    OpenFlag :: fslogic_worker:open_flag(), handle_id()) ->
+    no_return() | #fuse_response{}.
+open_file(UserCtx, FileCtx, read, HandleId) ->
+    open_file_for_read(UserCtx, FileCtx, HandleId);
+open_file(UserCtx, FileCtx, write, HandleId) ->
+    open_file_for_write(UserCtx, FileCtx, HandleId);
+open_file(UserCtx, FileCtx, rdwr, HandleId) ->
+    open_file_for_rdwr(UserCtx, FileCtx, HandleId).
 
 %%--------------------------------------------------------------------
 %% @equiv open_file_with_extended_info(UserCtx, FileCtx) with permission check
@@ -113,115 +123,6 @@ open_file_with_extended_info(UserCtx, FileCtx, write) ->
     open_file_with_extended_info_for_write(UserCtx, FileCtx);
 open_file_with_extended_info(UserCtx, FileCtx, rdwr) ->
     open_file_with_extended_info_for_rdwr(UserCtx, FileCtx).
-
-%%--------------------------------------------------------------------
-%% @equiv open_file_insecure(UserCtx, FileCtx, Flag, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
-    fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file_insecure(UserCtx, FileCtx, Flag) ->
-    open_file_insecure(UserCtx, FileCtx, Flag, undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Opens a file and returns a handle to it.
-%% @end
-%%--------------------------------------------------------------------
--spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
-    fslogic_worker:open_flag(), storage_file_manager:handle_id() | undefined) ->
-    no_return() | #fuse_response{}.
-open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened_extended{handle_id = HandleId}
-    } = open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened{handle_id = HandleId}
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Opens a file and returns a handle to it with extended information about location.
-%% @end
-%%--------------------------------------------------------------------
--spec open_file_with_extended_info_insecure(user_ctx:ctx(),
-    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag()) ->
-    no_return() | #fuse_response{}.
-open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
-    open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, undefined).
-
-open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
-    {HandleId, #file_location{provider_id = ProviderId, file_id = FileId, storage_id = StorageId}, _} =
-        open_file_internal(UserCtx, FileCtx, Flag, HandleId0),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened_extended{handle_id = HandleId,
-            provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-    }.
-
-open_file_internal(UserCtx, FileCtx, Flag, HandleId0) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    check_and_register_open(FileCtx, SessId, HandleId0),
-    try
-        check_open_delete_race(FileCtx),
-        {FileLocation, FileCtx2} =
-            create_location(FileCtx, UserCtx),
-        HandleId = open_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
-        {HandleId, FileLocation, FileCtx2}
-    catch
-        E1:E2 ->
-            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
-            check_and_register_release(FileCtx, SessId, HandleId0),
-            throw(E2)
-    end.
-
-create_location(FileCtx, UserCtx) ->
-    ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
-    case ExtDIO of
-        true ->
-            file_location_utils:get_new_file_location_doc(FileCtx, false, true);
-        _ ->
-            {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
-            {FL, FileCtx2}
-    end.
-
-open_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
-    ?NEW_HANDLE_ID;
-open_storage(FileCtx, SessId, Flag, false, undefined) ->
-    open_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
-open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
-    Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
-    rpc:call(Node, ?MODULE, open_storage_on_node, [FileCtx, SessId, Flag, HandleId]).
-
-open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
-    {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
-    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-    session_handles:add(SessId, HandleId, Handle),
-    HandleId.
-
-check_open_delete_race(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, #document{value = #file_meta{deleted = Deleted}}} = file_meta:get({uuid, FileUuid}),
-    case Deleted of
-        true -> throw({error, not_found});
-        _ -> ok
-    end.
-
-check_and_register_open(FileCtx, SessId, HandleId) ->
-    ok = case HandleId of
-             undefined -> file_handles:register_open(FileCtx, SessId, 1);
-             _ -> ok
-         end.
-
-check_and_register_release(FileCtx, SessId, HandleId) ->
-    ok = case HandleId of
-             undefined -> file_handles:register_release(FileCtx, SessId, 1);
-             _ -> ok
-         end.
 
 %%--------------------------------------------------------------------
 %% @equiv fsync_insecure(UserCtx, FileCtx, DataOnly) with permission check
@@ -244,10 +145,10 @@ fsync(UserCtx, FileCtx, DataOnly, HandleId) ->
     fslogic_worker:fuse_response().
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
+    ok = file_handles:register_release(FileCtx, SessId, 1),
     ok = case session_handles:get(SessId, HandleId) of
         {ok, SfmHandle} ->
             ok = session_handles:remove(SessId, HandleId),
-            ok = file_handles:register_release(FileCtx, SessId, 1),
             ok = storage_file_manager:release(SfmHandle);
         % TODO - wyjasnic czemu to tu jest
         {error, link_not_found} ->
@@ -269,7 +170,7 @@ release(UserCtx, FileCtx, HandleId) ->
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
-%%% Internal functions
+%%% Private insecure API functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -415,6 +316,181 @@ get_file_location_insecure(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Opens a file and returns a handle to it.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    fslogic_worker:open_flag(), handle_id()) ->
+    no_return() | #fuse_response{}.
+open_file_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened_extended{handle_id = HandleId}
+    } = open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened{handle_id = HandleId}
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, undefined).
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_with_extended_info_insecure(user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag()) ->
+    no_return() | #fuse_response{}.
+open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
+    open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, undefined).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Opens a file and returns a handle to it with extended information about location.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_with_extended_info_insecure(user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id()) ->
+    no_return() | #fuse_response{}.
+open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
+    {HandleId, #file_location{provider_id = ProviderId, file_id = FileId, storage_id = StorageId}, _} =
+        open_file_internal(UserCtx, FileCtx, Flag, HandleId0),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened_extended{handle_id = HandleId,
+            provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
+    }.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Opens a file and returns a handle id and location.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_internal(user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id()) ->
+    no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
+open_file_internal(UserCtx, FileCtx, Flag, HandleId0) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    check_and_register_open(FileCtx, SessId, HandleId0),
+    try
+        check_open_delete_race(FileCtx),
+        {FileLocation, FileCtx2} =
+            create_location(FileCtx, UserCtx),
+        HandleId = open_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
+        {HandleId, FileLocation, FileCtx2}
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
+                [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
+            check_and_register_release(FileCtx, SessId, HandleId0),
+            throw(E2)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Opens a file on storage if needed. Chooses appropriate node.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
+    handle_id()) -> storage_file_manager:handle_id().
+open_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
+    ?NEW_HANDLE_ID;
+open_storage(FileCtx, SessId, Flag, false, undefined) ->
+    open_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
+open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
+    Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
+    rpc:call(Node, ?MODULE, open_storage_on_node, [FileCtx, SessId, Flag, HandleId]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Opens a file on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_storage_on_node(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
+    handle_id()) -> storage_file_manager:handle_id().
+open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
+    {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
+    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
+    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
+    session_handles:add(SessId, HandleId, Handle),
+    HandleId.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies if file is deleted during the operation (race appeared).
+%% @end
+%%--------------------------------------------------------------------
+-spec check_open_delete_race(file_ctx:ctx()) -> ok | no_return().
+check_open_delete_race(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case file_meta:get({uuid, FileUuid}) of
+        {ok, #document{value = #file_meta{deleted = Deleted}}} ->
+            case Deleted of
+                true -> throw({error, not_found});
+                _ -> ok
+            end;
+        {error, not_found} ->
+            throw({error, not_found})
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies handle id and registers it.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id()) ->
+    ok | no_return().
+check_and_register_open(FileCtx, SessId, HandleId) ->
+    ok = case HandleId of
+             undefined -> file_handles:register_open(FileCtx, SessId, 1);
+             _ -> ok
+         end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies handle id and releases it.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_and_register_release(file_ctx:ctx(), session:id(), handle_id()) ->
+    ok | no_return().
+check_and_register_release(FileCtx, SessId, HandleId) ->
+    ok = case HandleId of
+             undefined -> file_handles:register_release(FileCtx, SessId, 1);
+             _ -> ok
+         end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates location and storage file if extended directIO is set.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_location(file_ctx:ctx(), user_ctx:ctx()) ->
+    {file_location:record(), file_ctx:ctx()}.
+create_location(FileCtx, UserCtx) ->
+    ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
+    case ExtDIO of
+        true ->
+            file_location_utils:get_new_file_location_doc(FileCtx, false, true);
+        _ ->
+            {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
+            {FL, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Creates file_meta and times documents for the new file.
 %% @end
 %%--------------------------------------------------------------------
@@ -443,39 +519,39 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 %% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_for_read(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec open_file_for_read(user_ctx:ctx(), file_ctx:ctx(), handle_id()) ->
     no_return() | #fuse_response{}.
-open_file_for_read(UserCtx, FileCtx) ->
+open_file_for_read(UserCtx, FileCtx, HandleId) ->
     check_permissions:execute(
         [traverse_ancestors, ?read_object],
-        [UserCtx, FileCtx, read],
-        fun open_file_insecure/3).
+        [UserCtx, FileCtx, read, HandleId],
+        fun open_file_insecure/4).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_for_write(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec open_file_for_write(user_ctx:ctx(), file_ctx:ctx(), handle_id()) ->
     no_return() | #fuse_response{}.
-open_file_for_write(UserCtx, FileCtx) ->
+open_file_for_write(UserCtx, FileCtx, HandleId) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, write],
-        fun open_file_insecure/3).
+        [UserCtx, FileCtx, write, HandleId],
+        fun open_file_insecure/4).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_for_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec open_file_for_rdwr(user_ctx:ctx(), file_ctx:ctx(), handle_id()) ->
     no_return() | #fuse_response{}.
-open_file_for_rdwr(UserCtx, FileCtx) ->
+open_file_for_rdwr(UserCtx, FileCtx, HandleId) ->
     check_permissions:execute(
         [traverse_ancestors, ?read_object, ?write_object],
-        [UserCtx, FileCtx, rdwr],
-        fun open_file_insecure/3).
+        [UserCtx, FileCtx, rdwr, HandleId],
+        fun open_file_insecure/4).
 
 %%--------------------------------------------------------------------
 %% @private
