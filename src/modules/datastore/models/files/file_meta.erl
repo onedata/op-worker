@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -362,7 +363,7 @@ get_child(ParentUuid, Name) ->
 %%--------------------------------------------------------------------
 -spec get_child_uuid(uuid(), name()) -> {ok, uuid()} | {error, term()}.
 get_child_uuid(ParentUuid, Name) ->
-    Tokens = binary:split(Name, <<"@">>, [global]),
+    Tokens = binary:split(Name, ?CONFLIOCTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
             case get_child_uuid(ParentUuid, oneprovider:get_id(), Name) of

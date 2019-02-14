@@ -15,6 +15,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
 %% API

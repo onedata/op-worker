@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
 -include_lib("ctool/include/posix/errors.hrl").
@@ -24,10 +25,14 @@
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_storage_file/2, create_delayed_storage_file/1,
-    create_delayed_storage_file/2, delete_storage_file/2,
-    delete_storage_file_without_location/2, delete_storage_dir/2,
-    create_parent_dirs/1, recursive_delete/2, retry_dir_deletion/3]).
+    create_delayed_storage_file/1,create_delayed_storage_file/2,
+    delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
+
+% For spawning
+-export([retry_dir_deletion/3]).
+
+% Test API
+-export([create_storage_file/2]).
 
 -define(CLEANUP_MAX_RETRIES_NUM, 10).
 -define(CLEANUP_DELAY, 5).
@@ -93,7 +98,8 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
                 {ok, _} ->
                     ?warning("Moving file into existing one, source ~p, target ~p",
                         [SourceFileId, TargetFileId]),
-                    NewTargetFileId = ?FILE_WITH_SUFFIX(TargetFileId, FileUuid),
+                    % TODO - move macro
+                    NewTargetFileId = ?CONFLIOCTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
                     storage_file_manager:mv(SourceHandle, NewTargetFileId);
                 _ ->
                     storage_file_manager:mv(SourceHandle, TargetFileId)
@@ -104,7 +110,8 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create storage file if it hasn't been created yet (it has been delayed)
+%% Create storage file if it hasn't been created yet (it has been delayed).
+%% Creation is performed with root credentials.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
@@ -112,6 +119,12 @@ create_delayed_storage_file(FileCtx) ->
     {Doc, FileCtx2} = create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Create storage file if it hasn't been created yet (it has been delayed)
+%% @end
+%%--------------------------------------------------------------------
+-spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx, UserCtx) ->
     CreateOnStorageFun = fun(FileCtx2) ->
         create_storage_file(UserCtx, FileCtx2)
@@ -385,7 +398,7 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
 -spec create_storage_file_with_suffix(storage_file_manager:handle(), 
     file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
 create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = SFMHandle, Mode) ->
-    NewName = ?FILE_WITH_SUFFIX(FileId, Uuid),
+    NewName = ?CONFLIOCTING_STORAGE_FILE_NAME(FileId, Uuid),
     SFMHandle1 = SFMHandle#sfm_handle{file = NewName},
     
     ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),

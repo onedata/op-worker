@@ -40,13 +40,19 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
+%% @equiv new_handle(SessionId, FileCtx, true).
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), file_ctx:ctx()) -> {handle(), file_ctx:ctx()}.
 new_handle(SessionId, FileCtx) ->
     new_handle(SessionId, FileCtx, true).
 
+%%--------------------------------------------------------------------
+%% @equiv new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
+%% @end
+%%--------------------------------------------------------------------
+-spec new_handle(session:id(), file_ctx:ctx(), boolean()) ->
+    {handle(), file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),

@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -21,6 +22,19 @@
 -export([check_if_opened_and_remove/4, remove_opened_file/1, remove_file/4,
     remove_file_handles/1, remove_auxiliary_documents/1, delete_all_opened_files/0]).
 
+-type delete_metadata_opts() :: boolean() | deletion_link.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file is opened and deletes it or marks to be deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(),
+    Silent :: boolean(), RemoteDelete :: boolean()) -> ok.
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -40,7 +54,7 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Request deletion of given open file
+%% Deletes opened file.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_opened_file(file_ctx:ctx()) -> ok.
@@ -48,6 +62,12 @@ remove_opened_file(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, true, deletion_link).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes all opened files.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_all_opened_files() -> ok.
 delete_all_opened_files() ->
     case file_handles:list() of
         {ok, Docs} ->
@@ -85,6 +105,12 @@ remove_file_handles(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     ok = file_handles:delete(FileUuid).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes auxiliary documents connected with file.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_auxiliary_documents(file_ctx:ctx()) -> ok.
 remove_auxiliary_documents(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
@@ -96,14 +122,13 @@ remove_auxiliary_documents(FileCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file and file meta.
-%% If parameter Silent is true, file_removed_event will not be emitted.
 %% If parameter RemoveStorageFile is false, file will not be deleted
 %% on storage.
-%% If parameter DeleteParentLink is true, link in parent is deleted.
+%% Parameter DeleteMetadata verifies which metadata is deleted with file.
 %% @end
 %%--------------------------------------------------------------------
-%%-spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-%%    boolean(), boolean()) -> ok.
+-spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
+    delete_metadata_opts()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
     {FileDoc, FileCtx4} = case DeleteMetadata of
         true ->
@@ -147,11 +172,11 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
 %% @private
 %% @doc
 %% This function adds a deletion_link for the file that is to be deleted.
-%% It also deletes normal link from parent to the file.
+%% It can also delete normal link from parent to the file.
 %% @end
 %%-------------------------------------------------------------------
-%%-spec add_deletion_link_and_remove_normal_link(file_ctx:ctx(), user_ctx:ctx()) -> ok.
-process_file_links(FileCtx, UserCtx, Remote) ->
+-spec process_file_links(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
+process_file_links(FileCtx, UserCtx, KeepParentLink) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
@@ -159,7 +184,7 @@ process_file_links(FileCtx, UserCtx, Remote) ->
     Scope = file_ctx:get_space_id_const(FileCtx3),
     ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
     {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
-    ok = case Remote of
+    ok = case KeepParentLink of
              false ->
                  file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
              _ ->
