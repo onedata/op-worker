@@ -205,7 +205,7 @@ update_streams_per_space(SpaceId, State) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% This function updates currently started harvest_streams per given
-%% SpaceId. according to passed CurrentHarvesters parameters.
+%% SpaceId, according to passed CurrentHarvesters parameters.
 %% It checks which streams should be handled on giver node and
 %% compares set of OldStreams with set of CurrentStreams.
 %% Streams missing in the CurrentStreams are stopped and
