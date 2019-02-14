@@ -15,6 +15,7 @@
 
 -include("storage_sync_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -343,7 +344,7 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
     {ok, _} = lfm_proxy:write(W1, H3, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W1, H3),
     U2 = fslogic_uuid:guid_to_uuid(G2),
-    StorageTestFilePathWithSuffix = ?FILE_WITH_SUFFIX(StorageTestFilePath, U2),
+    StorageTestFilePathWithSuffix = ?CONFLIOCTING_STORAGE_FILE_NAME(StorageTestFilePath, U2),
 
     % there should be 2 files on storage
     ?assertMatch({ok, [_, _]}, file:list_dir(StorageSpacePath)),
@@ -495,7 +496,7 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     {ok, _} = lfm_proxy:write(W2, H2, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W2, H2),
     U2 = fslogic_uuid:guid_to_uuid(G2),
-    StorageTestFilePathWithSuffix = ?FILE_WITH_SUFFIX(StorageTestFilePath, U2),
+    StorageTestFilePathWithSuffix = ?CONFLIOCTING_STORAGE_FILE_NAME(StorageTestFilePath, U2),
 
     % replicate file to W1
     {ok, H3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G2}, read), ?ATTEMPTS),

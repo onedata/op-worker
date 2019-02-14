@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -397,7 +398,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
 
     StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
     Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
-    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?FILE_WITH_SUFFIX(FileName, Uuid)),
+    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
@@ -411,7 +412,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
     {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
     
-    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))],
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid))],
 
     ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
     
@@ -437,7 +438,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     end,
 
     ?assertEqual([{Guid2, FileName}], ListDir(Worker1, SessionId1, SpacePath), ?ATTEMPTS),
-    ?assertEqual([binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))], ListStorageDir(), ?ATTEMPTS),
+    ?assertEqual([binary_to_list(?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid))], ListStorageDir(), ?ATTEMPTS),
 
     ok = lfm_proxy:unlink(Worker2, SessionId2, {path, FilePath}),
 
@@ -472,7 +473,7 @@ sufix_in_metadata_and_storage_test(Config) ->
 
     StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
     Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
-    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?FILE_WITH_SUFFIX(FileName, Uuid)),
+    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
@@ -486,7 +487,7 @@ sufix_in_metadata_and_storage_test(Config) ->
     {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
     {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
 
-    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))],
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid))],
 
     ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
 
@@ -538,7 +539,7 @@ sufix_in_dir_metadata_test(Config) ->
     DirStoragePath = storage_file_path(Worker1, SpaceId, DirName),
     StorageFilePath1 = filename:join([DirStoragePath, FileName]),
     Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
-    StorageFilePath2 = filename:join([DirStoragePath, ?FILE_WITH_SUFFIX(FileName, Uuid)]),
+    StorageFilePath2 = filename:join([DirStoragePath, ?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid)]),
 
     %%    {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
     ListStorageDir = fun() ->
@@ -559,7 +560,7 @@ sufix_in_dir_metadata_test(Config) ->
     {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
     {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
 
-    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))],
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?CONFLIOCTING_STORAGE_FILE_NAME(FileName, Uuid))],
 
     ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
 
