@@ -77,8 +77,12 @@
     lfm_recreate_handle_test/1,
     lfm_open_failure_test/1,
     lfm_create_and_open_failure_test/1,
-    open_in_direct_mode_test/1,
-    lfm_copy_failure_test/1
+    lfm_open_in_direct_mode_test/1,
+    lfm_copy_failure_test/1,
+    lfm_open_multiple_times_failure_test/1,
+    lfm_open_failure_multiple_users_test/1,
+    lfm_open_and_create_open_failure_test/1,
+    lfm_copy_failure_multiple_users_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -130,7 +134,11 @@
     lfm_open_failure_test,
     lfm_create_and_open_failure_test,
     open_in_direct_mode_test,
-    lfm_copy_failure_test
+    lfm_copy_failure_test,
+    lfm_open_multiple_times,
+    lfm_open_multiple_users,
+    lfm_open_and_create_open_test,
+    lfm_copy_failure_multiple_users_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -208,9 +216,98 @@ lfm_create_and_open_failure_test(Config) ->
         end),
 
     {error, ?EAGAIN} = lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_read">>})),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])).
 
-open_in_direct_mode_test(Config) ->
+
+lfm_open_and_create_open_failure_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    ParentGuid = get_guid(W, SessId1, <<"/space_name1">>),
+
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    {error, ?EAGAIN} = lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_read">>})),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
+
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    {error, ?EAGAIN} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
+
+
+lfm_open_multiple_times_failure_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+
+    %% Everything goes ok
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    {ok, 9} = lfm_proxy:write(W, Handle, 0, <<"test_data">>),
+    ok = lfm_proxy:close(W, Handle),
+
+    %% This time an error occurs during opening file
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    {error, ?EAGAIN} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
+    test_utils:mock_unload(W, file_handles),
+
+    %% And again everything goes ok
+    {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    {ok, 11} = lfm_proxy:write(W, Handle2, 9, <<" test_data2">>),
+    {ok, <<"test_data test_data2">>} = lfm_proxy:read(W, Handle2, 0, 20),
+    ok = lfm_proxy:close(W, Handle2),
+
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
+
+
+lfm_open_failure_multiple_users_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>, 8#775),
+
+    %% User1 writes to file
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    {ok, 9} = lfm_proxy:write(W, Handle, 0, <<"test_data">>),
+
+    %% User2 fails to open file
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    {error, ?EAGAIN} = lfm_proxy:open(W, SessId2, {path, <<"/space_name2/test_read">>}, rdwr),
+    ?assertEqual(0, get_session_file_handles_num(W, FileGuid, SessId2)),
+
+    %% User1 handle should still exists
+    ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
+
+    test_utils:mock_unload(W, file_handles),
+
+    %% And again everything goes ok
+    {ok, 11} = lfm_proxy:write(W, Handle, 9, <<" test_data2">>),
+    {ok, <<"test_data test_data2">>} = lfm_proxy:read(W, Handle, 0, 20),
+    ok = lfm_proxy:close(W, Handle),
+
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
+
+
+lfm_open_in_direct_mode_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
@@ -242,6 +339,43 @@ lfm_copy_failure_test(Config) ->
     %% File has to be moved to different space in order to use copy / delete
     {error, ?EAGAIN} = lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name2/test_read2">>),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])).
+
+
+lfm_copy_failure_multiple_users_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>, 8#775),
+
+    %% User1 writes to file using handle
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    {ok, 9} = lfm_proxy:write(W, Handle, 0, <<"test_data">>),
+
+    test_utils:mock_new(W, file_handles, [passthrough]),
+    test_utils:mock_expect(W, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end),
+
+    %% User2 fails to move file
+    {error, ?EAGAIN} = lfm_proxy:mv(W, SessId2, {guid, FileGuid}, <<"/space_name3/test_read2">>),
+    ?assertEqual(0, get_session_file_handles_num(W, FileGuid, SessId2)),
+    {ok, Docs} = rpc:call(W, file_handles, list, []),
+    ?assertEqual(1, length(Docs)),
+
+    test_utils:mock_unload(W, file_handles),
+
+    %% User1 handle should still exists
+    ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
+
+    %% User1 can still write to file using his handle
+    {ok, 11} = lfm_proxy:write(W, Handle, 9, <<" test_data2">>),
+    {ok, <<"test_data test_data2">>} = lfm_proxy:read(W, Handle, 0, 20),
+    ok = lfm_proxy:close(W, Handle),
+
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
 
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
@@ -1412,6 +1546,19 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+get_session_file_handles_num(W, FileGuid, SessionId) ->
+    {ok, Docs} = rpc:call(W, file_handles, list, []),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    Doc = lists:keyfind(FileUuid, 2, Docs),
+    {document, FileUuid, FileHandles, _, _, _, _, _, _} = Doc,
+    {_, _, FileHandlesMap} = FileHandles,
+    case maps:find(SessionId, FileHandlesMap) of
+      {ok, HandlesNum} ->
+        HandlesNum;
+      error ->
+          0
+    end.
 
 %% Get guid of given by path file. Possible as root to bypass permissions checks.
 get_guid_privileged(Worker, SessId, Path) ->
