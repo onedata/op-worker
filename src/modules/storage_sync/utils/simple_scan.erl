@@ -137,9 +137,9 @@ maybe_sync_storage_file(Job = #space_strategy_job{
         false -> {false, undefined, FileName}
     end,
 
-    case file_location_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
+    case location_and_link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
         {error, not_found} ->
-            case file_location_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     case HasSuffix of
                         true ->
@@ -159,7 +159,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
             end;
         {ok, ResolvedUuid} ->
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
-            case file_location_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -470,7 +470,7 @@ import_file(#space_strategy_job{
                     last_stat = StatTimestamp
                 }}
             end, SpaceId),
-            ok = file_location_utils:create_imported_file_location(
+            ok = location_and_link_utils:create_imported_file_location(
                 SpaceId, StorageId, FileUuid2, StorageFileId, FSize, OwnerId);
         _ ->
             {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
@@ -687,7 +687,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         %todo VFS-4847 refactor this case, use when wherever possible
         {undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
-            file_location_utils:update_imported_file_location(FileCtx4, StSize),
+            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
             updated;
 
         {undefined, undefined} ->
@@ -707,7 +707,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         {undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
-                    file_location_utils:update_imported_file_location(FileCtx4, StSize),
+                    location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
                     updated;
                 false ->
                     not_updated
@@ -720,7 +720,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     case (MTime < StMtime) of
                         true ->
                             % file was modified on storage
-                            file_location_utils:update_imported_file_location(FileCtx4, StSize),
+                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
                             updated;
                         false ->
                             % file was modified via onedata
@@ -748,7 +748,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
-                            file_location_utils:update_imported_file_location(FileCtx4, StSize),
+                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
                             updated;
                         false ->
                             % file was modified via onedata

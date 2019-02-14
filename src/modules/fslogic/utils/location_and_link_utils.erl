@@ -6,11 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This provides functions operating on file_location use during file
-%%% creation/deletion/import/sync/rename.
+%%% This provides functions operating on file_location and links
+%%% (especially deletion links).
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_location_utils).
+-module(location_and_link_utils).
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -19,14 +19,23 @@
 -include("proto/oneclient/common_messages.hrl").
 
 %% API
--export([get_new_file_location_doc/3, create_file_location/2, delete_file_location/1,
-    create_imported_file_location/6, update_imported_file_location/2]).
--export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2]).
+-export([get_new_file_location_doc/3, is_location_created/2,
+    mark_location_created/3]).
+-export([create_imported_file_location/6, update_imported_file_location/2]).
+-export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2,
+    add_deletion_link/2, remove_deletion_link/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file location of storage file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_new_file_location_doc(file_ctx:ctx(), StorageFileCreated :: boolean(),
+    GeneratedKey :: boolean()) -> {file_location:record(), file_ctx:ctx()}.
 get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -56,42 +65,35 @@ get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
             {FileLocation, FileCtx5}
     end.
 
-create_file_location(FileCtx, CreateOnStorageFun) ->
-    % TODO - dac opcje zeby nie sprawdzac z wyprzedeniem (pod create) jesli mozna (co wtedy jesli pojawi sie sync?)
-    {#document{
-        key = FileLocationId,
-        value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = Ans = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
-
-    case StorageFileCreated of
-        false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            replica_synchronizer:apply(FileCtx, fun() ->
-                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
-                    {ok, #document{
-                        value = #file_location{storage_file_created = true}
-                    }} ->
-                        Ans;
-                    {ok, _} ->
-                        FileCtx3 = CreateOnStorageFun(FileCtx2),
-                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-
-                        {ok, #document{} = Doc} =
-                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
-                                (FileLocation = #file_location{storage_file_created = false}) ->
-                                    {ok, FileLocation#file_location{storage_file_created = true,
-                                        file_id = StorageFileId}}
-                            end, false),
-                        {Doc, FileCtx4}
-                end
-            end);
-        true ->
-            Ans
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file location is created.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_location_created(file_meta:uuid(), file_location:id()) -> boolean().
+is_location_created(FileUuid, FileLocationId) ->
+    case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
+        {ok, #document{
+            value = #file_location{storage_file_created = Created}
+        }} ->
+            Created;
+        {ok, _} ->
+            false
     end.
 
-delete_file_location(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    fslogic_location_cache:delete_location(FileUuid, file_location:local_id(FileUuid)).
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks that file is created on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_location_created(file_meta:uuid(), file_location:id(),
+    helpers:file_id()) -> {ok, file_location:doc()} | {error, term()}.
+mark_location_created(FileUuid, FileLocationId, StorageFileId) ->
+    fslogic_location_cache:update_location(FileUuid, FileLocationId,
+        fun(FileLocation = #file_location{storage_file_created = false}) ->
+            {ok, FileLocation#file_location{storage_file_created = true,
+                file_id = StorageFileId}}
+        end, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -133,7 +135,6 @@ update_imported_file_location(FileCtx, StorageSize) ->
         FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% This function tries to resolve child with name FileName of
 %% directory associated with ParentCtx.
@@ -146,7 +147,6 @@ try_to_resolve_child_link(FileName, ParentCtx) ->
     fslogic_path:to_uuid(ParentUuid, FileName).
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% This function tries to resolve child's deletion_link
 %% @end
@@ -156,6 +156,31 @@ try_to_resolve_child_link(FileName, ParentCtx) ->
 try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     fslogic_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function adds a deletion_link for the file.
+%% @end
+%%-------------------------------------------------------------------
+-spec add_deletion_link(file_ctx:ctx(), file_meta:uuid()) -> file_ctx:ctx().
+add_deletion_link(FileCtx, ParentUuid) ->
+    {DeletionLinkName, FileCtx2} = file_deletion_link_name(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+    Scope = file_ctx:get_space_id_const(FileCtx2),
+    ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
+    FileCtx2.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function remove a deletion_link for the file.
+%% @end
+%%-------------------------------------------------------------------
+-spec remove_deletion_link(file_ctx:ctx(), file_meta:uuid()) -> file_ctx:ctx().
+remove_deletion_link(FileCtx, ParentUuid) ->
+    {DeletionLinkName, FileCtx2} = file_deletion_link_name(FileCtx),
+    Scope = file_ctx:get_space_id_const(FileCtx2),
+    ok = file_meta:delete_deletion_link(ParentUuid, Scope, DeletionLinkName),
+    FileCtx2.
 
 %%%===================================================================
 %%% Internal functions
@@ -171,3 +196,15 @@ try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
 -spec create_file_blocks(non_neg_integer()) -> fslogic_blocks:blocks().
 create_file_blocks(0) -> [];
 create_file_blocks(Size) -> [#file_block{offset = 0, size = Size}].
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Utility function that returns deletion_link name for given file.
+%% @end
+%%-------------------------------------------------------------------
+-spec file_deletion_link_name(file_ctx:ctx()) -> {file_meta:name(), file_ctx:ctx()}.
+file_deletion_link_name(FileCtx) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    BaseName = filename:basename(StorageFileId),
+    {?FILE_DELETION_LINK_NAME(BaseName), FileCtx2}.

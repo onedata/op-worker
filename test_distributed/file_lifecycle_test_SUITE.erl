@@ -68,7 +68,7 @@ open_race_test(Config) ->
                 timer:sleep(2000),
                 {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
             end,
-            file_location_utils:create_file_location(FileCtx, CreateOnStorageFun)
+            location_and_link_utils:create_file_location(FileCtx, CreateOnStorageFun)
         end),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -129,7 +129,7 @@ make_open_race_test(Config) ->
                 5000 -> timeout
             end,
 
-            {_, FileCtx2} = file_location_utils:get_new_file_location_doc(FileCtx, false, true),
+            {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
             fslogic_times:update_mtime_ctime(ParentFileCtx),
             attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
         end),
@@ -270,7 +270,7 @@ create_open_race_test(Config) ->
 
             FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
             {FileLocation, FileCtx3} =
-                file_location_utils:get_new_file_location_doc(FileCtx2, true, true),
+                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
 
             #fuse_response{fuse_response = FileAttr} =
                 attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
@@ -358,7 +358,7 @@ create_open_race_test2(Config) ->
                  end,
 
             {FileLocation, FileCtx3} =
-                file_location_utils:get_new_file_location_doc(FileCtx2, true, true),
+                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
 
             #fuse_response{fuse_response = FileAttr} =
                 attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
@@ -443,7 +443,7 @@ create_open_race_test3(Config) ->
             timer:sleep(2000),
 
             {FileLocation, FileCtx3} =
-                file_location_utils:get_new_file_location_doc(FileCtx2, true, true),
+                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
 
             #fuse_response{fuse_response = FileAttr} =
                 attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
@@ -467,7 +467,7 @@ create_open_race_test3(Config) ->
                 timer:sleep(5000),
                 {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
             end,
-            file_location_utils:create_file_location(FileCtx, CreateOnStorageFun)
+            location_and_link_utils:create_file_location(FileCtx, CreateOnStorageFun)
         end),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -518,7 +518,7 @@ create_delete_race_test(Config) ->
 
             FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
             {FileLocation, FileCtx3} =
-                file_location_utils:get_new_file_location_doc(FileCtx2, true, true),
+                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
 
             #fuse_response{fuse_response = FileAttr} =
                 attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),

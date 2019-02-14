@@ -25,7 +25,7 @@
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_delayed_storage_file/1,create_delayed_storage_file/2,
+    create_delayed_storage_file/1, create_delayed_storage_file/2,
     delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
 
 % For spawning
@@ -126,10 +126,30 @@ create_delayed_storage_file(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx, UserCtx) ->
-    CreateOnStorageFun = fun(FileCtx2) ->
-        create_storage_file(UserCtx, FileCtx2)
-    end,
-    file_location_utils:create_file_location(FileCtx, CreateOnStorageFun).
+    {#document{
+        key = FileLocationId,
+        value = #file_location{storage_file_created = StorageFileCreated}
+    }, FileCtx2} = Ans = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+
+    case StorageFileCreated of
+        false ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            replica_synchronizer:apply(FileCtx, fun() ->
+                case location_and_link_utils:is_location_created(FileUuid, FileLocationId) of
+                    true ->
+                        Ans;
+                    _ ->
+                        FileCtx3 = create_storage_file(UserCtx, FileCtx2),
+                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+
+                        {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
+                            FileUuid, FileLocationId, StorageFileId),
+                        {Doc, FileCtx4}
+                end
+            end);
+        true ->
+            Ans
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -171,17 +191,6 @@ create_storage_file(UserCtx, FileCtx) ->
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
-    delete_storage_file_without_location(FileCtx, UserCtx),
-    file_location_utils:delete_file_location(FileCtx).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file from storage.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_storage_file_without_location(file_ctx:ctx(), user_ctx:ctx()) ->
-    ok | {error, term()}.
-delete_storage_file_without_location(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case storage_file_manager:new_handle(SessId, FileCtx, false) of
         {undefined, _} ->
@@ -206,7 +215,7 @@ recursive_delete(FileCtx, UserCtx) ->
             {ok, FileCtx3} = delete_children(FileCtx2, UserCtx, 0, ChunkSize),
             delete_storage_dir(FileCtx3, UserCtx);
         false ->
-            delete_storage_file_without_location(FileCtx2, UserCtx)
+            delete_storage_file(FileCtx2, UserCtx)
     end.
 
 %%--------------------------------------------------------------------

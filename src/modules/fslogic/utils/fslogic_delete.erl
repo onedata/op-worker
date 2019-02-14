@@ -157,9 +157,8 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
         deletion_link ->
             {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
             ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
-            {DeletionLinkName, FileCtx6} = file_deletion_link_name(FileCtx5),
-            Scope = file_ctx:get_space_id_const(FileCtx6),
-            file_meta:delete_deletion_link(ParentUuid, Scope, DeletionLinkName);
+            location_and_link_utils:remove_deletion_link(FileCtx5, ParentUuid),
+            ok;
         false ->
             ok
     end.
@@ -177,32 +176,18 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
 %%-------------------------------------------------------------------
 -spec process_file_links(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
 process_file_links(FileCtx, UserCtx, KeepParentLink) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
-    {DeletionLinkName, FileCtx3} = file_deletion_link_name(FileCtx2),
-    Scope = file_ctx:get_space_id_const(FileCtx3),
-    ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
-    {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
+    FileCtx3 = location_and_link_utils:add_deletion_link(FileCtx2, ParentUuid),
     ok = case KeepParentLink of
              false ->
+                 FileUuid = file_ctx:get_uuid_const(FileCtx3),
+                 Scope = file_ctx:get_space_id_const(FileCtx3),
+                 {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
                  file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
              _ ->
                  ok
          end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Utility function that returns deletion_link name for given file.
-%% @end
-%%-------------------------------------------------------------------
--spec file_deletion_link_name(file_ctx:ctx()) -> {file_meta:name(), file_ctx:ctx()}.
-% TODO - do modulu z sufixami !!!!
-file_deletion_link_name(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    BaseName = filename:basename(StorageFileId),
-    {?FILE_DELETION_LINK_NAME(BaseName), FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @private

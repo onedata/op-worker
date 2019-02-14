@@ -1260,7 +1260,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
     case get_local_file_location_doc(FileCtx, IncludeBlocks) of
         {undefined, FileCtx2} ->
             {CreatedLocation, FileCtx3} =
-                file_location_utils:get_new_file_location_doc(FileCtx2, false, false),
+                location_and_link_utils:get_new_file_location_doc(FileCtx2, false, false),
             {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
             lists:foreach(fun(ChangedLocation) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)

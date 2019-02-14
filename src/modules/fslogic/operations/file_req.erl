@@ -270,13 +270,12 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {_, FileCtx2} = file_location_utils:get_new_file_location_doc(FileCtx, false, true),
+        {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            file_location_utils:delete_file_location(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
@@ -482,7 +481,7 @@ create_location(FileCtx, UserCtx) ->
     ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
     case ExtDIO of
         true ->
-            file_location_utils:get_new_file_location_doc(FileCtx, false, true);
+            location_and_link_utils:get_new_file_location_doc(FileCtx, false, true);
         _ ->
             {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
             {FL, FileCtx2}
