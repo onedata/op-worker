@@ -18,6 +18,7 @@
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([start_link/0]).
@@ -25,7 +26,7 @@
     communicate/2,
     send_sync/2, send_sync/3,
     send_async/2,
-    respond/0
+    respond/3
 ]).
 
 %% gen_server callbacks
@@ -37,13 +38,29 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {
+    pending_requests = #{} :: #{ref() => pid()},
+    unreported_requests = #{} :: #{ref() => pid()},
+    withheld_heartbeats = #{} :: #{ref() => pid()}
+}).
 
 -type state() :: #state{}.
--type message() :: #client_message{} | #server_message{}.
+-type server_message() :: #server_message{}.
+-type message() :: #client_message{} | server_message().
+
+-type req_id() :: {ref(), message_id:id()}.
+-type return_address() :: {Conn :: pid(), ConnManager :: pid(), session:id()}.
 
 -define(DEFAULT_PROCESSES_CHECK_INTERVAL, timer:seconds(10)).
 
+-define(HEARTBEAT_MSG(__MSG_ID), #server_message{
+    message_id = __MSG_ID,
+    message_body = #processing_status{code = 'IN_PROGRESS'}
+}).
+-define(ERROR_MSG(__MSG_ID), #server_message{
+    message_id = __MSG_ID,
+    message_body = #processing_status{code = 'ERROR'}
+}).
 
 %%%===================================================================
 %%% API
@@ -126,11 +143,145 @@ send_async(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Executes function that handles message and asynchronously wait for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec route_and_supervise(fun(() -> {pid(), reference()}), message_id:id()) ->
+    delegate_ans() | {ok, #server_message{}}.
+route_and_supervise(Fun, Id, ReturnAddr) ->
+    Fun2 = fun() ->
+        Master = self(),
+        Ref = make_ref(),
+        Pid = spawn(fun() ->
+            try
+                Ans = Fun(),
+                respond(ReturnAddr, {Ref, Id}, Ans)
+            catch
+                _:E ->
+                    ?error_stacktrace("Route_and_supervise error: ~p for "
+                    "message id ~p", [E, Id]),
+                    Master ! {slave_ans, Ref, #processing_status{code = 'ERROR'}}
+            end
+        end),
+        {Pid, Ref}
+    end,
+    delegate(Fun2, Id, ReturnAddr).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes function that handles message and returns information needed for
+%% asynchronous waiting for answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec delegate(fun(() -> {pid(), reference()}), message_id:id()) ->
+    delegate_ans() | {ok, #server_message{}}.
+delegate(Fun, MsgId, {_, ConnManager, _}) ->
+    try
+        {Pid, Ref} = Fun(),
+        case is_pid(Pid) of
+            true ->
+                gen_server2:cast(ConnManager, {report_pending_req, Pid, Ref});
+            false ->
+                ?error("Router error: ~p for message id ~p", [Pid, MsgId]),
+                {ok, ?ERROR_MSG(MsgId)}
+        end
+    catch
+        _:E ->
+            ?error_stacktrace("Router error: ~p for message id ~p", [E, MsgId]),
+            {ok, ?ERROR_MSG(MsgId)}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Sends response to peer.
 %% @end
 %%--------------------------------------------------------------------
--spec respond() -> ok.
-respond() -> ok.
+-spec respond(return_address(), req_id(), term()) -> ok | {error, term()}.
+respond({Conn, ConnManager, SessionId}, {Ref, MsgId}, Ans) ->
+    case withheld_heartbeats(ConnManager, Ref) of
+        ok ->
+            Response = prepare_response(MsgId, Ans),
+            case respond_internal(Conn, SessionId, Response) of
+                ok ->
+                    report_sending_response(ConnManager, Ref);
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
+
+
+respond_internal(Conn, SessionId, Response) ->
+    case connection:send_sync(Conn, Response) of
+        ok ->
+            ok;
+        {error, serialization_failed} = SerializationError ->
+            SerializationError;
+        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+            WrongConnError;
+        _Error ->
+            send_sync_internal(SessionId, Response, [Conn])
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes answer and returns message to be sent.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_response(message_id:id(), term()) -> server_message().
+prepare_response(MsgId, {process_error, ErrorAns}) ->
+    ?error("Router wrong answer: ~p for message id ~p", [ErrorAns, MsgId]),
+    #server_message{
+        message_id = MsgId,
+        message_body = #processing_status{code = 'ERROR'}
+    };
+prepare_response(MsgId, Ans) ->
+    #server_message{
+        message_id = MsgId,
+        message_body = Ans
+    }.
+
+
+-spec withheld_heartbeats(ConnManager :: pid(), ref()) ->
+    ok | {error, term()}.
+withheld_heartbeats(ConnManager, Ref) ->
+    call(ConnManager, {withheld_heartbeats, self(), Ref}).
+
+
+-spec report_sending_response(ConnManager :: pid(), ref()) ->
+    ok | {error, term()}.
+report_sending_response(ConnManager, Ref) ->
+    call(ConnManager, {response_sent, Ref}).
+
+
+-spec call(ConnManager :: pid(), ref()) ->
+    ok | {error, term()}.
+call(ConnManager, Msg) ->
+    try
+        gen_server2:call(ConnManager, Msg)
+    catch
+        exit:{noproc, _} ->
+            ?debug("Connection manager process ~p does not exist", [
+                ConnManager
+            ]),
+            {error, no_connection_manager};
+        exit:{normal, _} ->
+            ?debug("Exit of connection manager process ~p", [ConnManager]),
+            {error, no_connection_manager};
+        exit:{timeout, _} ->
+            ?debug("Timeout of connection manager process ~p", [ConnManager]),
+            {error, timeout};
+        Type:Reason ->
+            ?error("Cannot call connection manager ~p due to: ~p", [
+                ConnManager, {Type, Reason}
+            ]),
+            {error, Reason}
+    end.
 
 
 %%%===================================================================
@@ -164,8 +315,31 @@ init([]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({withheld_heartbeats, Pid, Ref}, _From, #state{
+    pending_requests = PendingReqs,
+    unreported_requests = UnreportedReqs,
+    withheld_heartbeats = WithheldHeartbeats
+} = State) ->
+    {NewPendingReqs, NewUnreportedReqs} = case maps:take(Ref, PendingReqs) of
+        {Pid, PendingReqs2} ->
+            {PendingReqs2, UnreportedReqs};
+        error ->
+            {PendingReqs, UnreportedReqs#{Ref => Pid}}
+    end,
+    {reply, ok, State#state{
+        pending_requests = NewPendingReqs,
+        unreported_requests = NewUnreportedReqs,
+        withheld_heartbeats = WithheldHeartbeats#{Ref => Pid}
+    }};
+handle_call({response_sent, Ref}, _From, #state{
+    withheld_heartbeats = WithheldHeartbeats
+} = State) ->
+    {reply, ok, State#state{
+        withheld_heartbeats = maps:remove(Ref, WithheldHeartbeats)
+    }};
 handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+    ?log_bad_request(_Request),
+    {reply, {error, wrong_request}, State}.
 
 
 %%--------------------------------------------------------------------
@@ -178,7 +352,19 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_cast({report_pending_req, Pid, Ref}, #state{
+    pending_requests = PendingReqs,
+    unreported_requests = UnreportedReqs
+} = State) ->
+    NewState = case maps:take(Ref, UnreportedReqs) of
+        {Pid, NewUnreportedReqs} ->
+            State#state{unreported_requests = NewUnreportedReqs};
+        error ->
+            State#state{pending_requests = PendingReqs#{Ref => Pid}}
+    end,
+    {noreply, NewState};
 handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 
@@ -192,7 +378,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(_Info, State) ->
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 
@@ -250,11 +437,16 @@ fill_msg_id(#server_message{} = Msg, MsgId) ->
 %% @private
 -spec send_sync_internal(session:id(), message()) -> ok | {error, term()}.
 send_sync_internal(SessionId, Msg) ->
+    send_sync_internal(SessionId, Msg, []).
+
+
+%% @private
+-spec send_sync_internal(session:id(), message(), [pid()]) ->
+    ok | {error, term()}.
+send_sync_internal(SessionId, Msg, ExcludedCons) ->
     case session_connections:get_connections(SessionId) of
-        {ok, []} ->
-            {error, no_connections};
         {ok, Cons} ->
-            send_in_loop(Msg, shuffle_connections(Cons));
+            send_in_loop(Msg, shuffle_connections(Cons -- ExcludedCons));
         Error ->
             Error
     end.
@@ -267,6 +459,8 @@ shuffle_connections(Cons) ->
 
 %% @private
 -spec send_in_loop(message(), [pid()]) -> ok | {error, term()}.
+send_in_loop(_Msg, []) ->
+    {error, no_connections};
 send_in_loop(Msg, [Conn]) ->
     connection:send_sync(Conn, Msg);
 send_in_loop(Msg, [Conn | Cons]) ->

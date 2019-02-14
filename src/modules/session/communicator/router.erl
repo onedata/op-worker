@@ -26,7 +26,7 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 
 %% API
--export([route_message/1]).
+-export([route_message/2]).
 -export([effective_session_id/1]).
 
 %%%===================================================================
@@ -39,15 +39,16 @@
 %% otherwise routes it directly
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Msg :: #client_message{} | #server_message{}) ->
+-spec route_message(Msg :: #client_message{} | #server_message{},
+    connection_manager:return_address()) ->
     ok | {ok, #server_message{}} |
     async_request_manager:delegate_ans() | {error, term()}.
-route_message(Msg) ->
+route_message(Msg, ReturnAddr) ->
     case stream_router:is_stream_message(Msg) of
         true ->
             stream_router:route_message(Msg);
         false ->
-            route_direct_message(Msg);
+            route_direct_message(Msg, ReturnAddr);
         ignore ->
             ok
     end.
@@ -73,15 +74,16 @@ effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_direct_message(Msg :: #client_message{} | #server_message{}) ->
+-spec route_direct_message(Msg :: #client_message{} | #server_message{},
+    connection_manager:return_address()) ->
     ok | {ok, #server_message{}} | async_request_manager:delegate_ans() |
     {error, term()}.
-route_direct_message(Msg = #client_message{message_id = undefined}) ->
+route_direct_message(Msg = #client_message{message_id = undefined}, _) ->
     route_and_ignore_answer(Msg);
 route_direct_message(Msg = #client_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}}) ->
+}}, ReturnAddr) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
@@ -90,12 +92,12 @@ route_direct_message(Msg = #client_message{message_id = #message_id{
             Pid ! Msg,
             ok;
         false ->
-            route_and_send_answer(Msg)
+            route_and_send_answer(Msg, ReturnAddr)
     end;
 route_direct_message(Msg = #server_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}}) ->
+}}, _) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             ok;
@@ -140,52 +142,74 @@ route_and_ignore_answer(ClientMsg) ->
 %% repack it into server_message and send to the client
 %% @end
 %%--------------------------------------------------------------------
--spec route_and_send_answer(#client_message{}) -> ok | {ok, #server_message{}} |
+-spec route_and_send_answer(#client_message{},
+    connection_manager:return_address()) ->
+    ok | {ok, #server_message{}} |
     async_request_manager:delegate_ans() | {error, term()}.
 route_and_send_answer(#client_message{
-    message_id = Id,
+    message_id = MsgId,
     message_body = #ping{data = Data}
-}) ->
-    {ok, #server_message{message_id = Id, message_body = #pong{data = Data}}};
+}, _) ->
+    {ok, #server_message{
+        message_id = MsgId,
+        message_body = #pong{data = Data}
+    }};
+
 route_and_send_answer(#client_message{
-    message_id = Id,
+    message_id = MsgId,
     message_body = #get_protocol_version{}
-}) ->
-    {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
+}, _) ->
+    {ok, #server_message{
+        message_id = MsgId,
+        message_body = #protocol_version{}
+    }};
+
 route_and_send_answer(Msg = #client_message{
     message_body = FuseRequest = #fuse_request{
         fuse_request = #file_request{
             file_request = #storage_file_created{}
         }}
-}) ->
+}, _) ->
     ok = worker_proxy:cast(fslogic_worker,
-        {fuse_request, effective_session_id(Msg), FuseRequest}),
-    ok;
+        {fuse_request, effective_session_id(Msg), FuseRequest}
+    );
+
 route_and_send_answer(#client_message{
-    message_id = Id = #message_id{issuer = ProviderId},
+    message_id = #message_id{issuer = ProviderId} = MsgId,
     message_body = #generate_rtransfer_conn_secret{secret = PeerSecret}
-}) ->
-    MySecret = rtransfer_config:generate_secret(ProviderId, PeerSecret),
-    Response = #rtransfer_conn_secret{secret = MySecret},
-    {ok, #server_message{message_id = Id, message_body = Response}};
+}, _) ->
+    {ok, #server_message{
+        message_id = MsgId,
+        message_body = #rtransfer_conn_secret{
+            secret = rtransfer_config:generate_secret(ProviderId, PeerSecret)
+        }
+    }};
+
 route_and_send_answer(#client_message{
-    message_id = Id,
+    message_id = MsgId,
     message_body = #get_rtransfer_nodes_ips{}
-}) ->
+}, _) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
     IpsAndPorts = lists:map(fun(Node) ->
-        {{_,_,_,_} = IP, Port} = rpc:call(Node, rtransfer_config, get_local_ip_and_port, []),
+        {{_,_,_,_} = IP, Port} = rpc:call(
+            Node, rtransfer_config, get_local_ip_and_port, []
+        ),
         #ip_and_port{ip = IP, port = Port}
     end, Nodes),
-    Response = #rtransfer_nodes_ips{nodes = IpsAndPorts},
-    {ok, #server_message{message_id = Id, message_body = Response}};
+
+    {ok, #server_message{
+        message_id = MsgId,
+        message_body = #rtransfer_nodes_ips{nodes = IpsAndPorts}
+    }};
+
 route_and_send_answer(Msg = #client_message{
-    message_id = Id,
+    message_id = MsgId,
     message_body = #get_configuration{}
-}) ->
-    async_request_manager:route_and_supervise(fun() ->
+}, ReturnAddr) ->
+    connection_manager:route_and_supervise(fun() ->
         storage_req:get_configuration(effective_session_id(Msg))
-    end, Id);
+    end, MsgId, ReturnAddr);
+
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{
@@ -193,64 +217,80 @@ route_and_send_answer(Msg = #client_message{
             context_guid = FileGuid,
             file_request = Req
         }}
-}) when is_record(Req, open_file) orelse
+}, ReturnAddr) when is_record(Req, open_file) orelse
     is_record(Req, open_file_with_extended_info) orelse is_record(Req, release) ->
-    async_request_manager:delegate(fun() ->
+    connection_manager:delegate(fun() ->
         Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
-            {fuse_request, effective_session_id(Msg), FuseRequest}, Ref),
+            {fuse_request, effective_session_id(Msg), FuseRequest},
+            ReturnAddr, {Ref, Id}
+        ),
         {Pid, Ref}
-    end, Id);
+    end, Id, ReturnAddr);
+
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = FuseRequest = #fuse_request{}
-}) ->
-    async_request_manager:delegate(fun() ->
+}, ReturnAddr) ->
+    connection_manager:delegate(fun() ->
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor(fslogic_worker,
-            {fuse_request, effective_session_id(Msg), FuseRequest}, Ref),
+            {fuse_request, effective_session_id(Msg), FuseRequest},
+            ReturnAddr, {Ref, Id}
+        ),
         {Pid, Ref}
-    end, Id);
+    end, Id, ReturnAddr);
+
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProviderRequest = #provider_request{}
-}) ->
-    async_request_manager:delegate(fun() ->
+}, ReturnAddr) ->
+    connection_manager:delegate(fun() ->
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor(fslogic_worker,
-            {provider_request, effective_session_id(Msg), ProviderRequest}, Ref),
+            {provider_request, effective_session_id(Msg), ProviderRequest},
+            ReturnAddr, {Ref, Id}
+        ),
         {Pid, Ref}
-    end, Id);
+    end, Id, ReturnAddr);
+
 route_and_send_answer(#client_message{
     message_id = Id,
     message_body = Request = #get_remote_document{}
-}) ->
-    async_request_manager:route_and_supervise(fun() ->
+}, ReturnAddr) ->
+    connection_manager:route_and_supervise(fun() ->
         datastore_remote_driver:handle(Request)
-    end, Id);
+    end, Id, ReturnAddr);
+
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
-}) ->
-    async_request_manager:delegate(fun() ->
+}, ReturnAddr) ->
+    connection_manager:delegate(fun() ->
         Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor({fslogic_worker, Node},
-            {proxyio_request, effective_session_id(Msg), ProxyIORequest}, Ref),
+            {proxyio_request, effective_session_id(Msg), ProxyIORequest},
+            ReturnAddr, {Ref, Id}
+        ),
         {Pid, Ref}
-    end, Id);
+    end, Id, ReturnAddr);
+
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
     message_body = #dbsync_request{} = DBSyncRequest
-}) ->
-    async_request_manager:delegate(fun() ->
+}, ReturnAddr) ->
+    connection_manager:delegate(fun() ->
         Ref = make_ref(),
         Pid = worker_proxy:cast_and_monitor(dbsync_worker,
-            {dbsync_request, effective_session_id(Msg), DBSyncRequest}, Ref),
+            {dbsync_request, effective_session_id(Msg), DBSyncRequest},
+            ReturnAddr, {Ref, Id}
+        ),
         {Pid, Ref}
-    end, Id);
-route_and_send_answer(Msg) ->
+    end, Id, ReturnAddr);
+
+route_and_send_answer(Msg, _) ->
     event_router:route_message(Msg).
