@@ -1056,6 +1056,7 @@ end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_
 
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, false),
