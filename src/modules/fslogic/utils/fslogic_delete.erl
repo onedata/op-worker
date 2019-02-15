@@ -22,6 +22,9 @@
 -export([check_if_opened_and_remove/4, remove_opened_file/1, remove_file/4,
     remove_file_handles/1, remove_auxiliary_documents/1, delete_all_opened_files/0]).
 
+%% Test API
+-export([process_file_links/3]).
+
 -type delete_metadata_opts() :: boolean() | deletion_link.
 
 %%%===================================================================
@@ -155,6 +158,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
         true ->
             file_meta:delete(FileDoc);
         deletion_link ->
+            file_meta:delete_without_link(FileDoc), % do not match, document may not exist
             {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
             ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
             location_and_link_utils:remove_deletion_link(FileCtx5, ParentUuid),
