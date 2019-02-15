@@ -39,17 +39,17 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    pending_requests = #{} :: #{ref() => pid()},
-    unreported_requests = #{} :: #{ref() => pid()},
-    withheld_heartbeats = #{} :: #{ref() => pid()}
+    pending_requests = #{} :: #{reference() => pid()},
+    unreported_requests = #{} :: #{reference() => pid()},
+    withheld_heartbeats = #{} :: #{reference() => pid()}
 }).
 
 -type state() :: #state{}.
 -type server_message() :: #server_message{}.
 -type message() :: #client_message{} | server_message().
 
--type req_id() :: {ref(), message_id:id()}.
--type return_address() :: {Conn :: pid(), ConnManager :: pid(), session:id()}.
+-type req_id() :: {reference(), message_id:id()}.
+-type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
 
 -define(DEFAULT_PROCESSES_CHECK_INTERVAL, timer:seconds(10)).
 
@@ -141,56 +141,8 @@ send_async(SessionId, Msg) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Executes function that handles message and asynchronously wait for answer.
-%% @end
-%%--------------------------------------------------------------------
--spec route_and_supervise(fun(() -> {pid(), reference()}), message_id:id()) ->
-    delegate_ans() | {ok, #server_message{}}.
-route_and_supervise(Fun, Id, ReturnAddr) ->
-    Fun2 = fun() ->
-        Master = self(),
-        Ref = make_ref(),
-        Pid = spawn(fun() ->
-            try
-                Ans = Fun(),
-                respond(ReturnAddr, {Ref, Id}, Ans)
-            catch
-                _:E ->
-                    ?error_stacktrace("Route_and_supervise error: ~p for "
-                    "message id ~p", [E, Id]),
-                    Master ! {slave_ans, Ref, #processing_status{code = 'ERROR'}}
-            end
-        end),
-        {Pid, Ref}
-    end,
-    delegate(Fun2, Id, ReturnAddr).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Executes function that handles message and returns information needed for
-%% asynchronous waiting for answer.
-%% @end
-%%--------------------------------------------------------------------
--spec delegate(fun(() -> {pid(), reference()}), message_id:id()) ->
-    delegate_ans() | {ok, #server_message{}}.
-delegate(Fun, MsgId, {_, ConnManager, _}) ->
-    try
-        {Pid, Ref} = Fun(),
-        case is_pid(Pid) of
-            true ->
-                gen_server2:cast(ConnManager, {report_pending_req, Pid, Ref});
-            false ->
-                ?error("Router error: ~p for message id ~p", [Pid, MsgId]),
-                {ok, ?ERROR_MSG(MsgId)}
-        end
-    catch
-        _:E ->
-            ?error_stacktrace("Router error: ~p for message id ~p", [E, MsgId]),
-            {ok, ?ERROR_MSG(MsgId)}
-    end.
+report_pending_request(ReplyTo, Pid, Ref) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -198,7 +150,7 @@ delegate(Fun, MsgId, {_, ConnManager, _}) ->
 %% Sends response to peer.
 %% @end
 %%--------------------------------------------------------------------
--spec respond(return_address(), req_id(), term()) -> ok | {error, term()}.
+-spec respond(reply_to(), req_id(), term()) -> ok | {error, term()}.
 respond({Conn, ConnManager, SessionId}, {Ref, MsgId}, Ans) ->
     case withheld_heartbeats(ConnManager, Ref) of
         ok ->
@@ -247,19 +199,19 @@ prepare_response(MsgId, Ans) ->
     }.
 
 
--spec withheld_heartbeats(ConnManager :: pid(), ref()) ->
+-spec withheld_heartbeats(ConnManager :: pid(), reference()) ->
     ok | {error, term()}.
 withheld_heartbeats(ConnManager, Ref) ->
     call(ConnManager, {withheld_heartbeats, self(), Ref}).
 
 
--spec report_sending_response(ConnManager :: pid(), ref()) ->
+-spec report_sending_response(ConnManager :: pid(), reference()) ->
     ok | {error, term()}.
 report_sending_response(ConnManager, Ref) ->
     call(ConnManager, {response_sent, Ref}).
 
 
--spec call(ConnManager :: pid(), ref()) ->
+-spec call(ConnManager :: pid(), term()) ->
     ok | {error, term()}.
 call(ConnManager, Msg) ->
     try
