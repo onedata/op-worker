@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_random_connection/1, get_connections/1]).
+-export([get_random_connection/1, get_connections/1, get_connection_manager/1]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
 -export([ensure_connected/1]).
 
@@ -53,6 +53,21 @@ get_connections(SessId) ->
             {ok, Cons};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns connection manager with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connection_manager(session:id()) ->
+    {ok, Con :: pid()} | {error, Reason :: term()}.
+get_connection_manager(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{connection_manager = ConnManager}}} ->
+            {ok, ConnManager};
+        {error, _Reason} = Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------

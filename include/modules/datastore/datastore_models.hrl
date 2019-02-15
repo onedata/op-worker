@@ -215,6 +215,7 @@
     event_manager :: undefined | pid(),
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
+    connection_manager :: undefined | pid(),
     connections = [] :: [pid()],
     proxy_via :: oneprovider:id() | undefined,
     response_map = #{} :: maps:map(),
