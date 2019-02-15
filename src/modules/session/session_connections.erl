@@ -179,20 +179,19 @@ ensure_connected(SessId) ->
                 {ok, IPs} -> [list_to_binary(inet:ntoa(IP)) || IP <- IPs];
                 _ -> [Domain]
             end,
-            lists:foreach(
-                fun(Host) ->
-                    Port = https_listener:port(),
-                    critical_section:run([?MODULE, ProviderId, SessId], fun() ->
-                        % check once more to prevent races
-                        case get_random_connection(SessId, true) of
-                            {error, _} ->
-                                outgoing_connection:start(ProviderId, SessId,
-                                    Domain, Host, Port, ranch_ssl, timer:seconds(5));
-                            _ ->
-                                ensure_connected(SessId)
-                        end
-                    end)
-                end, Hosts),
+            lists:foreach(fun(Host) ->
+                Port = https_listener:port(),
+                critical_section:run([?MODULE, ProviderId, SessId], fun() ->
+                    % check once more to prevent races
+                    case get_random_connection(SessId, true) of
+                        {error, _} ->
+                            outgoing_connection:start(ProviderId, SessId,
+                                Domain, Host, Port, ranch_ssl, timer:seconds(5));
+                        _ ->
+                            ensure_connected(SessId)
+                    end
+                end)
+            end, Hosts),
             ok;
         {ok, Pid} ->
             case utils:process_info(Pid, initial_call) of

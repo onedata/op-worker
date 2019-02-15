@@ -166,6 +166,8 @@
 -define(MOCK_INVITE_USER_TOKEN, <<"mockInviteUserToken">>).
 -define(MOCK_INVITE_GROUP_TOKEN, <<"mockInviteGroupToken">>).
 -define(MOCK_INVITE_PROVIDER_TOKEN, <<"mockInviteProviderToken">>).
+-define(MOCK_IDP_ACCESS_TOKEN, <<"mockIdPAccessToken">>).
+-define(MOCK_IDP, <<"mockIdP">>).
 
 -define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     name = ?USER_NAME(__User),
