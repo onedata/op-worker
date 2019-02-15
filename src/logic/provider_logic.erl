@@ -41,6 +41,7 @@
 -export([resolve_ips/1, resolve_ips/2]).
 -export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
+-export([zone_get_offline_access_idps/0]).
 -export([assert_zone_compatibility/0]).
 -export([assert_provider_compatibility/3]).
 -export([fetch_oz_compatibility_config/1]).
@@ -629,6 +630,42 @@ zone_time_seconds() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the list of IdPs in Onezone that support offline access.
+%% NOTE: The Onezone response has the following format:
+%%  <<"supportedIdPs">> => [
+%%      #{
+%%          <<"id">> => <<"google">>,
+%%          <<"offlineAccess">> => false
+%%      },
+%%      #{
+%%          <<"id">> => <<"github">>,
+%%          <<"offlineAccess">> => true
+%%      }
+%%  ]
+%% @end
+%%--------------------------------------------------------------------
+-spec zone_get_offline_access_idps() -> {ok, [IdP :: binary()]} | {error, term()}.
+zone_get_offline_access_idps() ->
+    OzUrl = oneprovider:get_oz_url(),
+    URL = OzUrl ++ ?ZONE_CONFIGURATION_PATH,
+    DeprecatedURL = OzUrl ++ ?DEPRECATED_ZONE_CONFIGURATION_PATH,
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
+    case fetch_configuration(URL, DeprecatedURL, SslOpts) of
+        {ok, JsonMap} ->
+            SupportedIdPs = maps:get(<<"supportedIdPs">>, JsonMap, []),
+            {ok, lists:filtermap(fun(IdPConfig) ->
+                case maps:get(<<"offlineAccess">>, IdPConfig, false) of
+                    false -> false;
+                    true -> {true, maps:get(<<"id">>, IdPConfig)}
+                end
+            end, SupportedIdPs)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Contacts given provider and retrieves his identity macaroon, and then
 %% verifies it in Onezone.
 %% @end
@@ -819,7 +856,7 @@ fetch_oz_compatibility_config(OzUrl) ->
 %% @private
 -spec fetch_op_compatibility_config(
     Hostname :: binary(), SslOpts :: [http_client:ssl_opt()]) ->
-    {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {ok, OpVersion :: binary(), CompatibleOpVersions :: [binary()]} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 fetch_op_compatibility_config(Hostname, SslOpts) ->
@@ -835,10 +872,8 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Attempts to fetch the configuration page providing compatibility
-%% information.
-%% If the resource with default URL is not found, the older path
-%% is attempted.
+%% Performs request fetching compatibility information from
+%% Onezone or another Oneprovider.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_compatibility_config(
@@ -849,9 +884,38 @@ fetch_op_compatibility_config(Hostname, SslOpts) ->
     {error, term()}
     when URL :: string() | binary().
 fetch_compatibility_config(URL, DeprecatedURL, SslOpts) ->
-    case http_get_compatibility_config(URL, SslOpts) of
+    case fetch_configuration(URL, DeprecatedURL, SslOpts) of
+        {ok, JsonMap} ->
+            PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
+            CompatibleOpVersions = maps:get(
+                <<"compatibleOneproviderVersions">>, JsonMap, []
+            ),
+            {ok, PeerVersion, CompatibleOpVersions};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Attempts to fetch the configuration page providing compatibility
+%% information.
+%% If the resource with default URL is not found, the older path
+%% is attempted.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_configuration(
+    URL, DeprecatedURL :: URL, SslOpts :: [http_client:ssl_opt()]
+) ->
+    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}
+    when URL :: string() | binary().
+fetch_configuration(URL, DeprecatedURL, SslOpts) ->
+    case http_get_configuration(URL, SslOpts) of
         {error, {bad_response, 404, _}} ->
-            case http_get_compatibility_config(DeprecatedURL, SslOpts) of
+            case http_get_configuration(DeprecatedURL, SslOpts) of
                 {error, Error} -> {error, Error};
                 Success -> Success
             end;
@@ -867,21 +931,16 @@ fetch_compatibility_config(URL, DeprecatedURL, SslOpts) ->
 %% Onezone or another Oneprovider.
 %% @end
 %%--------------------------------------------------------------------
--spec http_get_compatibility_config(
+-spec http_get_configuration(
     URL :: string() | binary(), SslOpts :: [http_client:ssl_opt()]
 ) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-http_get_compatibility_config(URL, SslOpts) ->
+http_get_configuration(URL, SslOpts) ->
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
-            JsonMap = json_utils:decode(JsonBody),
-            PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
-            CompatibleOpVersions = maps:get(
-                <<"compatibleOneproviderVersions">>, JsonMap, []
-            ),
-            {ok, PeerVersion, CompatibleOpVersions};
+            {ok, json_utils:decode(JsonBody)};
         {ok, Code, _, Body} ->
             {error, {bad_response, Code, Body}};
         {error, Error} ->

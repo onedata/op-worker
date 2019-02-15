@@ -27,6 +27,7 @@
 -export([get/2, get_protected_data/2, get_shared_data/3]).
 -export([exists/2]).
 -export([get_name/2, get_name/3]).
+-export([acquire_idp_access_token/3]).
 -export([has_eff_group/2, has_eff_group/3]).
 -export([get_eff_spaces/2]).
 -export([has_eff_space/2, has_eff_space/3]).
@@ -154,6 +155,21 @@ get_name(Client, UserId, AuthHint) ->
     case get_shared_data(Client, UserId, AuthHint) of
         {ok, #document{value = #od_user{name = Name}}} ->
             {ok, Name};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+-spec acquire_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
+    {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | gs_protocol:error().
+acquire_idp_access_token(Client, UserId, IdP) ->
+    Res = gs_client_worker:request(Client, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}
+    }),
+    case Res of
+        {ok, #{<<"token">> := Token, <<"ttl">> := Ttl}} ->
+            {ok, {Token, Ttl}};
         {error, Reason} ->
             {error, Reason}
     end.
