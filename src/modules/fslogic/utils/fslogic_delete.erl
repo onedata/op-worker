@@ -144,6 +144,8 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
 
             fslogic_times:update_mtime_ctime(ParentCtx),
             {FD, FileCtx3};
+        deletion_link ->
+            file_ctx:get_file_doc_including_deleted(FileCtx);
         _ ->
             {undefined, FileCtx}
     end,
