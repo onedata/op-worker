@@ -116,8 +116,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
-    {Doc, FileCtx2} = create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}.
+    create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -125,6 +124,9 @@ create_delayed_storage_file(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+% TODO - co jesli uzytkownik nie ma praw do tworzenia plikow w katalogu, a wlasciciel pliku ma (tworzone po dbsync)
+% jesli zostawoimy roota to znow przy pierwszym tworzeniu moze sie utworzyc mimo wszystko
+% Problem - nie wiemy czy plik pochodzi z dbsync
 create_delayed_storage_file(FileCtx, UserCtx) ->
     {#document{
         key = FileLocationId,
@@ -134,6 +136,7 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
     case StorageFileCreated of
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            % TODO - moze zwykla sekcja krytyczna bo synchronizer zyje za dlugo!!!
             replica_synchronizer:apply(FileCtx, fun() ->
                 case location_and_link_utils:is_location_created(FileUuid, FileLocationId) of
                     true ->
@@ -144,7 +147,7 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
 
                         {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
                             FileUuid, FileLocationId, StorageFileId),
-                        {Doc, FileCtx4}
+                        {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx4, UserCtx)}
                 end
             end);
         true ->
@@ -176,7 +179,7 @@ create_storage_file(UserCtx, FileCtx) ->
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
-            files_to_chown:chown_or_schedule_chowning(ParentCtx),
+            files_to_chown:chown_or_schedule_chowning(ParentCtx, undefined),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         Other ->
             {Other, FileCtx3}
@@ -370,7 +373,7 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
     end,
     case ShouldChown of
         true ->
-            files_to_chown:chown_or_schedule_chowning(FileCtx);
+            files_to_chown:chown_or_schedule_chowning(FileCtx, undefined);
         false ->
             ok
     end,
