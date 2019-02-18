@@ -147,7 +147,7 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
 
                         {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
                             FileUuid, FileLocationId, StorageFileId),
-                        {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx4, UserCtx)}
+                        {Doc, FileCtx4}
                 end
             end);
         true ->
@@ -162,9 +162,13 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
 -spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
 create_storage_file(UserCtx, FileCtx) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
+    {#document{value = #file_meta{mode = Mode, owner = OwnerUserId}}, FileCtx2} =
         file_ctx:get_file_doc(FileCtx),
+    {Chown, SessId} = case user_ctx:get_user_id(UserCtx) =:= OwnerUserId of
+        true -> {false, user_ctx:get_session_id(UserCtx)};
+        _ -> {true, user_ctx:get_session_id(user_ctx:new(?ROOT_SESS_ID))}
+    end,
+
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
     {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
         {error, ?ENOENT} ->
@@ -179,12 +183,16 @@ create_storage_file(UserCtx, FileCtx) ->
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
-            files_to_chown:chown_or_schedule_chowning(ParentCtx, undefined),
+            files_to_chown:chown_or_schedule_chowning(ParentCtx),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         Other ->
             {Other, FileCtx3}
     end,
-    FinalCtx.
+
+    case Chown of
+        true -> files_to_chown:chown_or_schedule_chowning(FinalCtx);
+        _ -> FinalCtx
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -373,7 +381,7 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
     end,
     case ShouldChown of
         true ->
-            files_to_chown:chown_or_schedule_chowning(FileCtx, undefined);
+            files_to_chown:chown_or_schedule_chowning(FileCtx);
         false ->
             ok
     end,

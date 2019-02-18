@@ -66,7 +66,7 @@ open_race_test(Config) ->
                     user_ctx:new(?ROOT_SESS_ID), FileCtx2),
                 {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
                 timer:sleep(2000),
-                {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4, undefined)}
+                {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
             end,
             location_and_link_utils:create_file_location(FileCtx, CreateOnStorageFun)
         end),
@@ -465,7 +465,7 @@ create_open_race_test3(Config) ->
                     user_ctx:new(?ROOT_SESS_ID), FileCtx2),
                 {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
                 timer:sleep(5000),
-                {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4, undefined)}
+                {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
             end,
             location_and_link_utils:create_file_location(FileCtx, CreateOnStorageFun)
         end),

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chown_or_schedule_chowning/2, chown_file/1, chown_pending_files/1]).
+-export([chown_or_schedule_chowning/1, chown_file/1, chown_pending_files/1]).
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2]).
 
 %% datastore_model callbacks
@@ -42,22 +42,16 @@
 %% Otherwise, file is added to files awaiting owner change.
 %% @end
 %%--------------------------------------------------------------------
--spec chown_or_schedule_chowning(file_ctx:ctx(), user_ctx:ctx() | undefined) ->
-    file_ctx:ctx().
-chown_or_schedule_chowning(FileCtx, UserCtx) ->
+-spec chown_or_schedule_chowning(file_ctx:ctx()) -> file_ctx:ctx().
+chown_or_schedule_chowning(FileCtx) ->
     {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx2} =
         file_ctx:get_file_doc(FileCtx),
-    case UserCtx =/= undefined andalso user_ctx:get_user_id(UserCtx) =:= OwnerUserId of
+    case user_logic:exists(?ROOT_SESS_ID, OwnerUserId) of
         true ->
-            FileCtx2;
-        _ ->
-            case user_logic:exists(?ROOT_SESS_ID, OwnerUserId) of
-                true ->
-                    chown_file(FileCtx2);
-                false ->
-                    {ok, _} = add(FileCtx2, OwnerUserId),
-                    FileCtx2
-            end
+            chown_file(FileCtx2);
+        false ->
+            {ok, _} = add(FileCtx2, OwnerUserId),
+            FileCtx2
     end.
 
 %%--------------------------------------------------------------------
