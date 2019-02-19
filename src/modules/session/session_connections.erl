@@ -65,6 +65,8 @@ get_connections(SessId) ->
     {ok, Con :: pid()} | {error, Reason :: term()}.
 get_connection_manager(SessId) ->
     case get_effective_session(SessId) of
+        {ok, #session{connection_manager = undefined}} ->
+            {error, no_connection_manager};
         {ok, #session{connection_manager = ConnManager}} ->
             {ok, ConnManager};
         Error ->
@@ -82,6 +84,8 @@ get_random_conn_and_conn_manager(SessId) ->
     case get_effective_session(SessId) of
         {ok, #session{connections = []}} ->
             {error, empty_connection_pool};
+        {ok, #session{connection_manager = undefined}} ->
+            {error, no_connection_manager};
         {ok, #session{connections = Cons, connection_manager = ConnManager}} ->
             {ok, utils:random_element(Cons), ConnManager};
         Error ->
@@ -192,8 +196,10 @@ ensure_connected(SessId) ->
                         % check once more to prevent races
                         case get_random_connection(SessId) of
                             {error, _} ->
-                                outgoing_connection:start(ProviderId, SessId,
-                                    Domain, Host, Port, ranch_ssl, timer:seconds(5));
+                                connection:connect_to_provider(
+                                    ProviderId, SessId, Domain, Host, Port,
+                                    ranch_ssl, timer:seconds(5)
+                                );
                             _ ->
                                 ensure_connected(SessId)
                         end

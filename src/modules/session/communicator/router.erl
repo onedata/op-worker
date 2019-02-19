@@ -35,11 +35,6 @@
 -type message() :: client_message() | server_message().
 -type worker_ref() :: proc | module() | {module(), node()}.
 
--define(ERROR_MSG(__MSG_ID), #server_message{
-    message_id = __MSG_ID,
-    message_body = #processing_status{code = 'ERROR'}
-}).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -303,8 +298,8 @@ answer_or_delegate(Msg, _) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Delegates request together with reply info to specified worker.
-%% Once worker finishes the task it should send response to given address.
+%% Delegates handling of request to specified worker. When worker finishes
+%% it's work, he will send result using specified ReplyTo info.
 %% @end
 %%--------------------------------------------------------------------
 -spec delegate_request(worker_ref(), Req :: term(), message_id:id(),
@@ -318,7 +313,10 @@ delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
             ?error_stacktrace("Router error: ~p:~p for message id ~p", [
                 Type, Error, MsgId
             ]),
-            {ok, ?ERROR_MSG(MsgId)}
+            {ok, #server_message{
+                message_id = MsgId,
+                message_body = #processing_status{code = 'ERROR'}
+            }}
     end.
 
 
@@ -333,7 +331,6 @@ delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
     connection_manager:req_id(), connection_manager:reply_to()) ->
     ok | {error, term()}.
 delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
-    ?error("ROUTING: ~p", [ReqId]),
     Pid = spawn(fun() ->
         Response = try
             HandlerFun()
@@ -344,12 +341,11 @@ delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
                 ]),
                 #processing_status{code = 'ERROR'}
         end,
-        connection_manager:respond(ReplyTo, ReqId, Response)
+        connection_manager:respond(ReplyTo, ReqId, {ok, Response})
     end),
     connection_manager:report_pending_request(ReplyTo, Pid, ReqId);
 
 delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
-    ?error("ROUTING: ~p", [ReqId]),
     ReplyFun = fun(Response) ->
         connection_manager:respond(ReplyTo, ReqId, Response)
     end,

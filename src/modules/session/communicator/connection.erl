@@ -351,9 +351,10 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
     case handle_handshake(State, Data) of
-        {ok, NewState} ->
-            activate_socket(NewState, false),
-            {noreply, NewState#state{status = ready}, ?PROTO_CONNECTION_TIMEOUT};
+        {ok, State1} ->
+            State2 = State1#state{status = ready},
+            activate_socket(State2, false),
+            {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
             {stop, Reason, State}
     end;
@@ -779,9 +780,9 @@ route_message(#state{
             NewState = State#state{conn_manager = ConnManager},
             route_message(NewState, Msg, {self(), ConnManager, SessionId});
         Error ->
-            % Connection manager gets up asynchronously so it is
+            % Connection manager starts asynchronously so it is
             % possible that it hasn't started yet.
-            ?error_stacktrace("Message routing error - ~p:~p", [Error]),
+            ?error_stacktrace("Message routing error: ~p", [Error]),
             route_message(State, Msg, SessionId)
     end;
 route_message(#state{
@@ -791,14 +792,13 @@ route_message(#state{
     route_message(State, Msg, {self(), ConnManager, SessionId}).
 
 
+%% @private
 -spec route_message(state(), message(), connection_manager:reply_to()) ->
     {ok, state()} | {error, Reason :: term()}.
-%% @private
 route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
     case router:route_message(Msg, ReplyTo) of
         ok ->
             {ok, State};
-        % TODO think about sending it via higher layer.
         {ok, ServerMsg} ->
             case send_server_message(State, ServerMsg) of
                 {ok, _NewState} = Ans ->

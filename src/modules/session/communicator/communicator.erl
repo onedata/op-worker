@@ -299,12 +299,24 @@ complete_msg_id(#server_message{message_id = MsgId} = Msg, _Recipient) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Returns interval between checking of processes that handle requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_processes_check_interval() -> non_neg_integer().
+get_processes_check_interval() ->
+    application:get_env(?APP_NAME, router_processes_check_interval,
+        timer:seconds(10)
+    ).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Receives reply from other provider or client
 %% @end
 %%--------------------------------------------------------------------
 - spec receive_message(message()) -> {ok, message()} | {error, timeout}.
 receive_message(#client_message{message_id = MsgId} = Msg) ->
-    Timeout = 3 * async_request_manager:get_processes_check_interval(),
+    Timeout = 3 * get_processes_check_interval(),
     receive
         #server_message{message_id = MsgId,
             message_body = #processing_status{code = 'IN_PROGRESS'}} ->

@@ -440,20 +440,21 @@ await_response(#server_message{message_id = MsgId}) ->
 
 
 %% @private
--spec prepare_response(message_id:id(), {process_error, term()} | term()) ->
+-spec prepare_response(message_id:id(), {ok, term()} | term()) ->
     server_message().
-prepare_response(MsgId, {process_error, ErrorAns}) ->
+prepare_response(MsgId, {ok, Ans}) ->
+    #server_message{
+        message_id = MsgId,
+        message_body = Ans
+    };
+prepare_response(MsgId, ErrorAns) ->
     ?error("Error while handling request with id ~p due to ~p", [
         MsgId, ErrorAns
     ]),
     #server_message{
         message_id = MsgId,
         message_body = #processing_status{code = 'ERROR'}
-    };
-prepare_response(MsgId, {ok, Ans}) ->
-    #server_message{message_id = MsgId, message_body = Ans};
-prepare_response(MsgId, Ans) ->
-    #server_message{message_id = MsgId, message_body = Ans}.
+    }.
 
 
 %% @private
