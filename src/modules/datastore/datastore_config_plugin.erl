@@ -68,7 +68,8 @@ get_models() -> [
     replica_deletion_lock,
     index,
     autocleaning_run,
-    file_popularity_config
+    file_popularity_config,
+    idp_access_token
 ].
 
 %%--------------------------------------------------------------------

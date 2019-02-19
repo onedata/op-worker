@@ -28,7 +28,7 @@
 -export([exists/2]).
 -export([get_name/2, get_name/3]).
 -export([get_default_space/2]).
--export([acquire_idp_access_token/3]).
+-export([acquire_idp_access_token/3, acquire_idp_access_token/2]).
 -export([get_eff_groups/2, get_eff_spaces/2]).
 -export([get_eff_handle_services/2, get_eff_handles/2]).
 -export([set_default_space/3]).
@@ -176,6 +176,11 @@ get_default_space(Client, UserId) ->
             {error, Reason}
     end.
 
+
+-spec acquire_idp_access_token(binary(), binary()) ->
+    {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | gs_protocol:error().
+acquire_idp_access_token(OnedataAccessToken, OAuth2Idp) ->
+    acquire_idp_access_token(#macaroon_auth{macaroon = OnedataAccessToken}, ?SELF, OAuth2Idp).
 
 -spec acquire_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
     {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | gs_protocol:error().
