@@ -133,41 +133,46 @@ remove_auxiliary_documents(FileCtx) ->
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
     delete_metadata_opts()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
-    {FileDoc, FileCtx4} = case DeleteMetadata of
-        true ->
-            {FD = #document{value = #file_meta{
-                shares = Shares
-            }
-            }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-            ok = delete_shares(UserCtx, Shares),
+    replica_synchronizer:apply(FileCtx, fun() ->
+        {FileDoc, FileCtx4} = case DeleteMetadata of
+            true ->
+                {FD = #document{value = #file_meta{
+                    shares = Shares
+                }
+                }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+                {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+                ok = delete_shares(UserCtx, Shares),
 
-            fslogic_times:update_mtime_ctime(ParentCtx),
-            {FD, FileCtx3};
-        deletion_link ->
-            file_ctx:get_file_doc_including_deleted(FileCtx);
-        _ ->
-            {undefined, FileCtx}
-    end,
+                fslogic_times:update_mtime_ctime(ParentCtx),
+                {FD, FileCtx3};
+            deletion_link ->
+                file_ctx:get_file_doc_including_deleted(FileCtx);
+            _ ->
+                {undefined, FileCtx}
+        end,
 
-    ok = case RemoveStorageFile of
-        true ->
-            maybe_remove_file_on_storage(FileCtx4, UserCtx);
-        _ -> ok
-    end,
+        ok = case RemoveStorageFile of
+            true ->
+                maybe_remove_file_on_storage(FileCtx4, UserCtx);
+            _ -> ok
+        end,
 
-    case DeleteMetadata of
-        true ->
-            file_meta:delete(FileDoc);
-        deletion_link ->
-            file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-            {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
-            ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
-            location_and_link_utils:remove_deletion_link(FileCtx5, ParentUuid),
-            ok;
-        false ->
-            ok
-    end.
+        case DeleteMetadata of
+            true ->
+                file_meta:delete(FileDoc);
+            deletion_link ->
+                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
+                ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
+                location_and_link_utils:remove_deletion_link(FileCtx5, ParentUuid),
+                ok;
+            false ->
+                FileUuid = file_ctx:get_uuid_const(FileCtx4),
+                LocalLocationId = file_location:local_id(FileUuid),
+                fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
+                ok
+        end
+    end).
 
 %%%===================================================================
 %%% Internal functions

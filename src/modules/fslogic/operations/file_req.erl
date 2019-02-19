@@ -405,7 +405,9 @@ open_storage(FileCtx, SessId, Flag, false, undefined) ->
     open_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
 open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
     Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
-    rpc:call(Node, ?MODULE, open_storage_on_node, [FileCtx, SessId, Flag, HandleId]).
+    {ok, HandleId} = rpc:call(Node, ?MODULE, open_storage_on_node,
+        [FileCtx, SessId, Flag, HandleId]),
+    HandleId.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -414,13 +416,13 @@ open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_storage_on_node(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
-    handle_id()) -> storage_file_manager:handle_id().
+    handle_id()) -> {ok, storage_file_manager:handle_id()} | no_return().
 open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
     {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
     session_handles:add(SessId, HandleId, Handle),
-    HandleId.
+    {ok, HandleId}.
 
 %%--------------------------------------------------------------------
 %% @private
