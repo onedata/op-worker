@@ -107,6 +107,7 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
+    conn_manager = undefined :: undefined | pid(),
     verify_msg = true :: boolean()
 }).
 
@@ -769,18 +770,49 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 %% @private
 -spec route_message(state(), message()) ->
     {ok, state()} | {error, Reason :: term()}.
-route_message(State, Msg) ->
-    case router:route_message(Msg) of
+route_message(#state{
+    session_id = SessionId,
+    conn_manager = undefined
+} = State, Msg) ->
+    case session_connections:get_connection_manager(SessionId) of
+        {ok, ConnManager} ->
+            NewState = State#state{conn_manager = ConnManager},
+            route_message(NewState, Msg, {self(), ConnManager, SessionId});
+        Error ->
+            % Connection manager gets up asynchronously so it is
+            % possible that it hasn't started yet.
+            ?error_stacktrace("Message routing error - ~p:~p", [Error]),
+            route_message(State, Msg, SessionId)
+    end;
+route_message(#state{
+    session_id = SessionId,
+    conn_manager = ConnManager
+} = State, Msg) ->
+    route_message(State, Msg, {self(), ConnManager, SessionId}).
+
+
+-spec route_message(state(), message(), connection_manager:reply_to()) ->
+    {ok, state()} | {error, Reason :: term()}.
+%% @private
+route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
+    case router:route_message(Msg, ReplyTo) of
         ok ->
             {ok, State};
         % TODO think about sending it via higher layer.
         {ok, ServerMsg} ->
             case send_server_message(State, ServerMsg) of
+                {ok, _NewState} = Ans ->
+                    Ans;
                 % Serialization errors should not break ready connection
                 {error, serialization_failed} ->
                     {ok, State};
-                Result ->
-                    Result
+                Error ->
+                    % Before reporting error and closing connection
+                    % try to send msg via other connections
+                    connection_manager:send_sync(
+                        SessionId, ServerMsg, undefined, [self()]
+                    ),
+                    Error
             end;
         {error, Reason} ->
             ?error_stacktrace("Message ~p handling error: ~p", [Msg, Reason]),

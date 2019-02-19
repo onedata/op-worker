@@ -16,7 +16,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_random_connection/1, get_connections/1, get_connection_manager/1]).
+-export([
+    get_random_connection/1, get_connections/1,
+    get_connection_manager/1,
+    get_random_conn_and_conn_manager/1
+]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
 -export([ensure_connected/1]).
 
@@ -45,29 +49,59 @@ get_random_connection(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_connections(session:id()) -> {ok, [Conn :: pid()]} | {error, term()}.
 get_connections(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
-            ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
-            get_connections(ProxyViaSession);
-        {ok, #document{value = #session{connections = Cons}}} ->
+    case get_effective_session(SessId) of
+        {ok, #session{connections = Cons}} ->
             {ok, Cons};
-        {error, Reason} ->
-            {error, Reason}
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns connection manager with session.
+%% Returns connection manager for session.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_connection_manager(session:id()) ->
     {ok, Con :: pid()} | {error, Reason :: term()}.
 get_connection_manager(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{connection_manager = ConnManager}}} ->
+    case get_effective_session(SessId) of
+        {ok, #session{connection_manager = ConnManager}} ->
             {ok, ConnManager};
-        {error, _Reason} = Error ->
+        Error ->
             Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns connection manager for session and random connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_random_conn_and_conn_manager(session:id()) ->
+    {ok, Con :: pid(), ConnManager :: pid()} | {error, Reason :: term()}.
+get_random_conn_and_conn_manager(SessId) ->
+    case get_effective_session(SessId) of
+        {ok, #session{connections = []}} ->
+            {error, empty_connection_pool};
+        {ok, #session{connections = Cons, connection_manager = ConnManager}} ->
+            {ok, utils:random_element(Cons), ConnManager};
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns effective session, that is session, which is not proxied.
+%% @end
+%%--------------------------------------------------------------------
+get_effective_session(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
+            ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
+            get_effective_session(ProxyViaSession);
+        {ok, #document{value = Sess}} ->
+            {ok, Sess};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------

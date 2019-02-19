@@ -254,12 +254,12 @@ answer_or_delegate(Msg = #client_message{
     message_body = FuseRequest = #fuse_request{
         fuse_request = #file_request{
             context_guid = FileGuid,
-            file_request = Req
+            file_request = FileReq
         }}
 }, ReplyTo) when
-    is_record(Req, open_file) orelse
-    is_record(Req, open_file_with_extended_info) orelse
-    is_record(Req, release)
+    is_record(FileReq, open_file) orelse
+    is_record(FileReq, open_file_with_extended_info) orelse
+    is_record(FileReq, release)
 ->
     Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
@@ -311,7 +311,8 @@ answer_or_delegate(Msg, _) ->
     connection_manager:reply_to()) -> ok | {ok, server_message()}.
 delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
     try
-        delegate_request_insecure(WorkerRef, Req, MsgId, ReplyTo)
+        ReqId = connection_manager:assign_request_id(MsgId),
+        ok = delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo)
     catch
         Type:Error ->
             ?error_stacktrace("Router error: ~p:~p for message id ~p", [
@@ -325,37 +326,36 @@ delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
 %% @private
 %% @doc
 %% If worker_ref is `proc` then spawns new process to handle request.
-%% Otherwise delegates it to specified worker.
+%% Otherwise delegates it to specified worker via worker_proxy.
 %% @end
 %%--------------------------------------------------------------------
--spec delegate_request_insecure(worker_ref(), Req :: term(), message_id:id(),
-    connection_manager:reply_to()) -> ok | {ok, server_message()}.
-delegate_request_insecure(proc, HandlerFun, MsgId, ReplyTo) ->
-    Ref = make_ref(),
-    ReqId = {Ref, MsgId},
+-spec delegate_request_insecure(worker_ref(), Req :: term(),
+    connection_manager:req_id(), connection_manager:reply_to()) ->
+    ok | {error, term()}.
+delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
+    ?error("ROUTING: ~p", [ReqId]),
     Pid = spawn(fun() ->
         Response = try
             HandlerFun()
         catch
             Type:Error ->
-                ?error("Router local delegation error: ~p for message id ~p", [
-                    Type, Error, MsgId
+                ?error("Router local delegation error: ~p for request id ~p", [
+                    Type, Error, ReqId
                 ]),
                 #processing_status{code = 'ERROR'}
         end,
         connection_manager:respond(ReplyTo, ReqId, Response)
     end),
-    connection_manager:report_pending_request(ReplyTo, Pid, Ref);
+    connection_manager:report_pending_request(ReplyTo, Pid, ReqId);
 
-delegate_request_insecure(WorkerRef, Req, MsgId, ReplyTo) ->
-    Ref = make_ref(),
-    ReqId = {Ref, MsgId},
-    case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyTo, ReqId) of
+delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
+    ?error("ROUTING: ~p", [ReqId]),
+    ReplyFun = fun(Response) ->
+        connection_manager:respond(ReplyTo, ReqId, Response)
+    end,
+    case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
         Pid when is_pid(Pid) ->
-            connection_manager:report_pending_request(ReplyTo, Pid, Ref);
+            connection_manager:report_pending_request(ReplyTo, Pid, ReqId);
         Error ->
-            ?error("Router delegation error: ~p for message id ~p", [
-                Error, MsgId
-            ]),
-            {ok, ?ERROR_MSG(MsgId)}
+            Error
     end.

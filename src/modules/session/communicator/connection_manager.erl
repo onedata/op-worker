@@ -21,14 +21,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 -export([
     communicate/2,
-    send_sync/2, send_sync/3,
+    send_sync/2, send_sync/3, send_sync/4,
     send_async/2,
-    respond/3,
 
-    report_pending_request/3
+    assign_request_id/1,
+    report_pending_request/3,
+    respond/3
 ]).
 
 %% gen_server callbacks
@@ -38,12 +39,14 @@
     terminate/2, code_change/3
 ]).
 
--define(SERVER, ?MODULE).
-
 -record(state, {
-    pending_requests = #{} :: #{reference() => pid()},
-    unreported_requests = #{} :: #{reference() => pid()},
-    withheld_heartbeats = #{} :: #{reference() => pid()}
+    session_id :: session:id(),
+
+    pending_requests = #{} :: #{req_id() => pid() | {pid(), not_alive}},
+    unreported_requests = #{} :: #{req_id() => pid()},
+    withheld_heartbeats = #{} :: #{req_id() => pid() | {pid(), not_alive}},
+
+    heartbeat_timer = undefined :: undefined | reference()
 }).
 
 -type state() :: #state{}.
@@ -54,11 +57,17 @@
 -type req_id() :: {reference(), message_id:id()}.
 -type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
 
--define(DEFAULT_PROCESSES_CHECK_INTERVAL, timer:seconds(10)).
+-define(PROCESSES_CHECK_INTERVAL, application:get_env(
+    ?APP_NAME, router_processes_check_interval, timer:seconds(10)
+)).
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,
     message_body = #processing_status{code = 'IN_PROGRESS'}
+}).
+-define(ERROR_MSG(__MSG_ID), #server_message{
+    message_id = __MSG_ID,
+    message_body = #processing_status{code = 'ERROR'}
 }).
 
 %%%===================================================================
@@ -71,10 +80,10 @@
 %% Starts the server
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() ->
+-spec start_link(SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(SessId) ->
+    gen_server:start_link(?MODULE, [SessId], []).
 
 
 %%--------------------------------------------------------------------
@@ -87,7 +96,7 @@ start_link() ->
 communicate(SessionId, RawMsg) ->
     {ok, MsgId} = message_id:generate(self()),
     Msg = protocol_utils:set_msg_id(RawMsg, MsgId),
-    case send_sync_internal(SessionId, Msg) of
+    case send_sync_internal(SessionId, Msg, []) of
         ok ->
             await_response(Msg);
         Error ->
@@ -108,14 +117,27 @@ send_sync(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to peer.
+%% @equiv send_sync(SessionId, Msg, Recipient, []).
 %% @end
 %%--------------------------------------------------------------------
 -spec send_sync(session:id(), message(), Recipient :: undefined | pid()) ->
     ok | {ok, message_id:id()} | {error, Reason :: term()}.
 send_sync(SessionId, RawMsg, Recipient) ->
+    send_sync(SessionId, RawMsg, Recipient, []).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tries to send message to peer via any connection of specified session.
+%% In case of errors, tries to do it via other connections as well.
+%% In the end either message is sent or no more connections are available.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_sync(session:id(), message(), Recipient :: undefined | pid(),
+    [pid()]) -> ok | {ok, message_id:id()} | {error, Reason :: term()}.
+send_sync(SessionId, RawMsg, Recipient, ExcludedCons) ->
     {MsgId, Msg} = protocol_utils:maybe_set_msg_id(RawMsg, Recipient),
-    case {send_sync_internal(SessionId, Msg), MsgId} of
+    case {send_sync_internal(SessionId, Msg, ExcludedCons), MsgId} of
         {ok, undefined} ->
             ok;
         {ok, _} ->
@@ -127,8 +149,7 @@ send_sync(SessionId, RawMsg, Recipient) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Chooses one random connection for specified session and tries to
-%% send message via it.
+%% Schedules message to be send via random connection of specified session.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_async(session:id(), message()) -> ok.
@@ -143,18 +164,29 @@ send_async(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Informs connection manager about ongoing request (identifiable by
-%% specified ref) being handled by specified process.
+%% Assigns unique id for request with specified message id.
 %% @end
 %%--------------------------------------------------------------------
--spec report_pending_request(reply_to(), pid(), reference()) ->
+-spec assign_request_id(message_id:id()) -> req_id().
+assign_request_id(MsgId) ->
+    Ref = make_ref(),
+    {Ref, MsgId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Informs connection manager about ongoing request (identifiable by
+%% specified request id) being handled by specified process.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_pending_request(reply_to(), pid(), req_id()) ->
     ok | {error, term()}.
-report_pending_request({_, ConnManager, _}, Pid, Ref) ->
-    gen_server2:cast(ConnManager, {report_pending_req, Pid, Ref});
-report_pending_request(SessionId, Pid, Ref) ->
+report_pending_request({_, ConnManager, _}, Pid, ReqId) ->
+    gen_server2:cast(ConnManager, {report_pending_req, Pid, ReqId});
+report_pending_request(SessionId, Pid, ReqId) ->
     case session_connections:get_connection_manager(SessionId) of
         {ok, ConnManager} ->
-            gen_server2:cast(ConnManager, {report_pending_req, Pid, Ref});
+            gen_server2:cast(ConnManager, {report_pending_req, Pid, ReqId});
         Error ->
             Error
     end.
@@ -166,34 +198,25 @@ report_pending_request(SessionId, Pid, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec respond(reply_to(), req_id(), term()) -> ok | {error, term()}.
-respond({Conn, ConnManager, SessionId}, {Ref, MsgId}, Ans) ->
-    case withheld_heartbeats(ConnManager, Ref) of
+respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
+    case withheld_heartbeats(ConnManager, ReqId) of
         ok ->
             Response = prepare_response(MsgId, Ans),
             case respond_internal(Conn, SessionId, Response) of
                 ok ->
-                    report_sending_response(ConnManager, Ref);
+                    report_response_sent(ConnManager, ReqId);
                 Error ->
                     Error
             end;
         Error ->
             Error
     end;
-% TODO
-respond(SessionId, {Ref, MsgId}, Ans) ->
-    ok.
-
-
-respond_internal(Conn, SessionId, Response) ->
-    case connection:send_sync(Conn, Response) of
-        ok ->
-            ok;
-        {error, serialization_failed} = SerializationError ->
-            SerializationError;
-        {error, sending_msg_via_wrong_connection} = WrongConnError ->
-            WrongConnError;
-        _Error ->
-            send_sync_internal(SessionId, Response, [Conn])
+respond(SessionId, ReqId, Ans) ->
+    case session_connections:get_random_conn_and_conn_manager(SessionId) of
+        {ok, Conn, ConnManager} ->
+            respond({Conn, ConnManager, SessionId}, ReqId, Ans);
+        Error ->
+            Error
     end.
 
 
@@ -211,8 +234,13 @@ respond_internal(Conn, SessionId, Response) ->
 -spec init(Args :: term()) ->
     {ok, state()} | {ok, state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([]) ->
-    {ok, #state{}}.
+init([SessId]) ->
+    process_flag(trap_exit, true),
+    Self = self(),
+    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{connection_manager = Self}}
+    end),
+    {ok, #state{session_id = SessId}}.
 
 
 %%--------------------------------------------------------------------
@@ -228,27 +256,28 @@ init([]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({withheld_heartbeats, Pid, Ref}, _From, #state{
+handle_call({withheld_heartbeats, Pid, ReqId}, _From, #state{
     pending_requests = PendingReqs,
     unreported_requests = UnreportedReqs,
     withheld_heartbeats = WithheldHeartbeats
 } = State) ->
-    {NewPendingReqs, NewUnreportedReqs} = case maps:take(Ref, PendingReqs) of
-        {Pid, PendingReqs2} ->
+    {NewPendingReqs, NewUnreportedReqs} = case maps:take(ReqId, PendingReqs) of
+        {_Pid, PendingReqs2} ->
             {PendingReqs2, UnreportedReqs};
         error ->
-            {PendingReqs, UnreportedReqs#{Ref => Pid}}
+            {PendingReqs, UnreportedReqs#{ReqId => Pid}}
     end,
-    {reply, ok, State#state{
+    NewState = State#state{
         pending_requests = NewPendingReqs,
         unreported_requests = NewUnreportedReqs,
-        withheld_heartbeats = WithheldHeartbeats#{Ref => Pid}
-    }};
-handle_call({response_sent, Ref}, _From, #state{
+        withheld_heartbeats = WithheldHeartbeats#{ReqId => Pid}
+    },
+    {reply, ok, set_heartbeat_timer(NewState)};
+handle_call({response_sent, ReqId}, _From, #state{
     withheld_heartbeats = WithheldHeartbeats
 } = State) ->
     {reply, ok, State#state{
-        withheld_heartbeats = maps:remove(Ref, WithheldHeartbeats)
+        withheld_heartbeats = maps:remove(ReqId, WithheldHeartbeats)
     }};
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
@@ -265,15 +294,17 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({report_pending_req, Pid, Ref}, #state{
+handle_cast({report_pending_req, Pid, ReqId}, #state{
     pending_requests = PendingReqs,
     unreported_requests = UnreportedReqs
 } = State) ->
-    NewState = case maps:take(Ref, UnreportedReqs) of
+    NewState = case maps:take(ReqId, UnreportedReqs) of
         {Pid, NewUnreportedReqs} ->
             State#state{unreported_requests = NewUnreportedReqs};
         error ->
-            State#state{pending_requests = PendingReqs#{Ref => Pid}}
+            set_heartbeat_timer(State#state{
+                pending_requests = PendingReqs#{ReqId => Pid}
+            })
     end,
     {noreply, NewState};
 handle_cast(Request, State) ->
@@ -291,6 +322,30 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_info(heartbeat, #state{
+    pending_requests = PR,
+    withheld_heartbeats = WH
+} = State) when map_size(PR) == 0 andalso map_size(WH) == 0 ->
+    {noreply, State#state{heartbeat_timer = undefined}};
+handle_info(heartbeat, #state{
+    session_id = SessionId,
+    pending_requests = PR,
+    withheld_heartbeats = WH
+} = State) ->
+    case session_connections:get_connections(SessionId) of
+        {ok, Cons} ->
+            NewState = State#state{
+                pending_requests = check_processes(PR, Cons, true),
+                withheld_heartbeats = check_processes(WH, Cons, false),
+                heartbeat_timer = undefined
+            },
+            {noreply, set_heartbeat_timer(NewState)};
+        Error ->
+            ?error("Failed to send heartbeats due to: ~p", [Error]),
+            {noreply, set_heartbeat_timer(State#state{
+                heartbeat_timer = undefined
+            })}
+    end;
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -329,26 +384,15 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec send_sync_internal(session:id(), message()) -> ok | {error, term()}.
-send_sync_internal(SessionId, Msg) ->
-    send_sync_internal(SessionId, Msg, []).
-
-
-%% @private
 -spec send_sync_internal(session:id(), message(), ExcludedCons :: [pid()]) ->
     ok | {error, term()}.
 send_sync_internal(SessionId, Msg, ExcludedCons) ->
     case session_connections:get_connections(SessionId) of
         {ok, Cons} ->
-            send_in_loop(Msg, shuffle_connections(Cons -- ExcludedCons));
+            send_in_loop(Msg, utils:random_shuffle(Cons -- ExcludedCons));
         Error ->
             Error
     end.
-
-
-%% @private
-shuffle_connections(Cons) ->
-    [X || {_, X} <- lists:sort([{random:uniform(), Conn} || Conn <- Cons])].
 
 
 %% @private
@@ -366,8 +410,6 @@ send_in_loop(Msg, [Conn | Cons]) ->
         {error, sending_msg_via_wrong_connection} = WrongConnError ->
             WrongConnError;
         _Error ->
-            % TODO is necessary?
-            timer:sleep(?SEND_RETRY_DELAY),
             send_in_loop(Msg, Cons)
     end.
 
@@ -375,7 +417,7 @@ send_in_loop(Msg, [Conn | Cons]) ->
 %% @private
 -spec await_response(message()) -> {ok, message()} | {error, timeout}.
 await_response(#client_message{message_id = MsgId} = Msg) ->
-    Timeout = 3 * ?DEFAULT_PROCESSES_CHECK_INTERVAL,
+    Timeout = 3 * ?PROCESSES_CHECK_INTERVAL,
     receive
         #server_message{
             message_id = MsgId,
@@ -408,25 +450,38 @@ prepare_response(MsgId, {process_error, ErrorAns}) ->
         message_id = MsgId,
         message_body = #processing_status{code = 'ERROR'}
     };
+prepare_response(MsgId, {ok, Ans}) ->
+    #server_message{message_id = MsgId, message_body = Ans};
 prepare_response(MsgId, Ans) ->
-    #server_message{
-        message_id = MsgId,
-        message_body = Ans
-    }.
+    #server_message{message_id = MsgId, message_body = Ans}.
 
 
 %% @private
--spec withheld_heartbeats(ConnManager :: pid(), reference()) ->
+-spec withheld_heartbeats(ConnManager :: pid(), req_id()) ->
     ok | {error, term()}.
-withheld_heartbeats(ConnManager, Ref) ->
-    call_conn_manager(ConnManager, {withheld_heartbeats, self(), Ref}).
+withheld_heartbeats(ConnManager, ReqId) ->
+    call_conn_manager(ConnManager, {withheld_heartbeats, self(), ReqId}).
 
 
 %% @private
--spec report_sending_response(ConnManager :: pid(), reference()) ->
+respond_internal(Conn, SessionId, Response) ->
+    case connection:send_sync(Conn, Response) of
+        ok ->
+            ok;
+        {error, serialization_failed} = SerializationError ->
+            SerializationError;
+        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+            WrongConnError;
+        _Error ->
+            send_sync_internal(SessionId, Response, [Conn])
+    end.
+
+
+%% @private
+-spec report_response_sent(ConnManager :: pid(), req_id()) ->
     ok | {error, term()}.
-report_sending_response(ConnManager, Ref) ->
-    call_conn_manager(ConnManager, {response_sent, Ref}).
+report_response_sent(ConnManager, ReqId) ->
+    call_conn_manager(ConnManager, {response_sent, ReqId}).
 
 
 %% @private
@@ -453,3 +508,39 @@ call_conn_manager(ConnManager, Msg) ->
             ]),
             {error, Reason}
     end.
+
+
+check_processes(ProcessesMap, Cons, SendHeartbeats) ->
+    maps:fold(
+        fun
+            ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
+                ?error("ConnManager: process ~p connected with req_id ~p is not alive",
+                    [Pid, ReqId]
+                ),
+                send_in_loop(?ERROR_MSG(MsgId), Cons),
+                Acc;
+            ({_Ref, MsgId} = ReqId, Pid, Acc) ->
+                case SendHeartbeats of
+                    true ->
+                        send_in_loop(?HEARTBEAT_MSG(MsgId), Cons);
+                    false ->
+                        ok
+                end,
+                case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+                    true ->
+                        Acc#{ReqId => Pid};
+                    false ->
+                        % Wait with error for another heartbeat
+                        % (possible race heartbeat/answer)
+                        Acc#{ReqId => {Pid, not_alive}}
+                end
+        end,
+    ProcessesMap, #{}).
+
+
+%% @private
+set_heartbeat_timer(#state{heartbeat_timer = undefined} = State) ->
+    TimerRef = erlang:send_after(?PROCESSES_CHECK_INTERVAL, self(), heartbeat),
+    State#state{heartbeat_timer = TimerRef};
+set_heartbeat_timer(State) ->
+    State.

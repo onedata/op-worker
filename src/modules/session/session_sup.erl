@@ -70,11 +70,18 @@ init([SessId, SessType]) ->
             {ok, {SupFlags, [
                 event_manager_sup_spec(SessId)
             ]}};
+        provider_incoming ->
+            {ok, {SupFlags, [
+                session_watcher_spec(SessId, SessType),
+                connection_manager_spec(SessId),
+                event_manager_sup_spec(SessId)
+            ]}};
         _ ->
             case lists:member(SessType, SequencerEnabled) of
                 true ->
                     {ok, {SupFlags, [
                         session_watcher_spec(SessId, SessType),
+                        connection_manager_spec(SessId),
                         sequencer_manager_sup_spec(SessId),
                         event_manager_sup_spec(SessId)
                     ]}};
@@ -106,6 +113,24 @@ session_watcher_spec(SessId, SessType) ->
         shutdown => timer:seconds(10),
         type => worker,
         modules => [session_watcher]
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a supervisor child_spec for a connection manager child.
+%% @end
+%%--------------------------------------------------------------------
+-spec connection_manager_spec(SessId :: session:id()) ->
+    supervisor:child_spec().
+connection_manager_spec(SessId) ->
+    #{
+        id => connection_manager,
+        start => {connection_manager, start_link, [SessId]},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [connection_manager]
     }.
 
 %%--------------------------------------------------------------------
