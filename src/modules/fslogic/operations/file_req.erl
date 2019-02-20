@@ -150,9 +150,6 @@ release(UserCtx, FileCtx, HandleId) ->
         {ok, SfmHandle} ->
             ok = session_handles:remove(SessId, HandleId),
             ok = storage_file_manager:release(SfmHandle);
-        % TODO - wyjasnic czemu to tu jest
-        {error, link_not_found} ->
-            ok;
         {error, {not_found, _}} ->
             ok;
         {error, not_found} ->
@@ -186,6 +183,7 @@ release(UserCtx, FileCtx, HandleId) ->
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
+        % TODO - co jesli mode pliku nie pozwala na jego pisanie?
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
@@ -598,8 +596,6 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     ok = case session_handles:get(SessId, HandleId) of
         {ok, Handle} ->
             storage_file_manager:fsync(Handle, DataOnly);
-        {error, link_not_found} ->
-            ok;
         {error, {not_found, _}} ->
             ok;
         {error, not_found} ->
