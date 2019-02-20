@@ -25,14 +25,14 @@
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_delayed_storage_file/1, create_delayed_storage_file/2,
+    create_delayed_storage_file/1, create_delayed_storage_file/3,
     delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
 
 % For spawning
 -export([retry_dir_deletion/3]).
 
 % Test API
--export([create_storage_file/2]).
+-export([create_storage_file/3]).
 
 -define(CLEANUP_MAX_RETRIES_NUM, 10).
 -define(CLEANUP_DELAY, 5).
@@ -116,18 +116,18 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
-    create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)).
+    create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID), false).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+-spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> file_ctx:ctx().
 % TODO - co jesli uzytkownik nie ma praw do tworzenia plikow w katalogu, a wlasciciel pliku ma (tworzone po dbsync)
 % jesli zostawoimy roota to znow przy pierwszym tworzeniu moze sie utworzyc mimo wszystko
 % Problem - nie wiemy czy plik pochodzi z dbsync
-create_delayed_storage_file(FileCtx, UserCtx) ->
+create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -143,7 +143,7 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
                         true ->
                             Ans;
                         _ ->
-                            FileCtx3 = ?MODULE:create_storage_file(UserCtx, FileCtx2),
+                            FileCtx3 = ?MODULE:create_storage_file(UserCtx, FileCtx2, VerifyDeletionLink),
                             {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
 
                             {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
@@ -164,9 +164,9 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
 %% Create storage file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec create_storage_file(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     file_ctx:ctx().
-create_storage_file(UserCtx, FileCtx) ->
+create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
     {#document{value = #file_meta{mode = Mode, owner = OwnerUserId}}, FileCtx2} =
         file_ctx:get_file_doc(FileCtx),
     {Chown, SessId} = case user_ctx:get_user_id(UserCtx) =:= OwnerUserId of
@@ -180,17 +180,8 @@ create_storage_file(UserCtx, FileCtx) ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         {error, ?EEXIST} ->
-            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
-            {FileName, FileCtx5} = file_ctx:get_aliased_name(FileCtx4, UserCtx),
-            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
-                {error, not_found} ->
-                    % Try once again to prevent races
-                    storage_file_manager:create(SFMHandle, Mode);
-                {ok, _FileUuid} ->
-                    {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
-                    {ok, file_ctx:set_file_id(FileCtx5, StorageFileId)}
-            end;
-        {error, ?EACCES} ->
+            handle_eexists(VerifyDeletionLink, SFMHandle, Mode, FileCtx3, UserCtx);
+         {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
@@ -440,3 +431,31 @@ create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = S
         Error ->
             Error
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles eexists error on storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec handle_eexists(boolean(), storage_file_manager:handle(),
+    file_meta:posix_permissions(), user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
+    {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+    {ok, file_ctx:set_file_id(FileCtx, StorageFileId)}.
+%%    case VerifyDeletionLink of
+%%        false ->
+%%            {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+%%            {ok, file_ctx:set_file_id(FileCtx, StorageFileId)};
+%%        _ ->
+%%            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+%%            {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
+%%            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+%%                {error, not_found} ->
+%%                    % Try once again to prevent races
+%%                    storage_file_manager:create(SFMHandle, Mode);
+%%                {ok, _FileUuid} ->
+%%                    {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+%%                    {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)}
+%%            end
+%%    end.

@@ -186,7 +186,7 @@ release(UserCtx, FileCtx, HandleId) ->
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined),
+        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
         #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
@@ -354,7 +354,7 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag) ->
     no_return() | #fuse_response{}.
 open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     {HandleId, #file_location{provider_id = ProviderId, file_id = FileId, storage_id = StorageId}, _} =
-        open_file_internal(UserCtx, FileCtx, Flag, HandleId0),
+        open_file_internal(UserCtx, FileCtx, Flag, HandleId0, false),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened_extended{handle_id = HandleId,
@@ -372,14 +372,14 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_internal(user_ctx:ctx(),
-    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id()) ->
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean()) ->
     no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
-open_file_internal(UserCtx, FileCtx, Flag, HandleId0) ->
+open_file_internal(UserCtx, FileCtx, Flag, HandleId0, VerifyDeletionLink) ->
     SessId = user_ctx:get_session_id(UserCtx),
     check_and_register_open(FileCtx, SessId, HandleId0),
     try
         {FileLocation, FileCtx2} =
-            create_location(FileCtx, UserCtx),
+            create_location(FileCtx, UserCtx, VerifyDeletionLink),
         HandleId = open_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
         {HandleId, FileLocation, FileCtx2}
     catch
@@ -457,15 +457,16 @@ check_and_register_release(FileCtx, SessId, HandleId) ->
 %% Creates location and storage file if extended directIO is set.
 %% @end
 %%--------------------------------------------------------------------
--spec create_location(file_ctx:ctx(), user_ctx:ctx()) ->
+-spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean()) ->
     {file_location:record(), file_ctx:ctx()}.
-create_location(FileCtx, UserCtx) ->
+create_location(FileCtx, UserCtx, VerifyDeletionLink) ->
     ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
     case ExtDIO of
         true ->
             location_and_link_utils:get_new_file_location_doc(FileCtx, false, true);
         _ ->
-            {#document{value = FL}, FileCtx2} = sfm_utils:create_delayed_storage_file(FileCtx, UserCtx),
+            {#document{value = FL}, FileCtx2} =
+                sfm_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink),
             {FL, FileCtx2}
     end.
 

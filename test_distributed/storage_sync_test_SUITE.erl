@@ -173,9 +173,10 @@ create_file_import_race_test(Config) ->
         Ans = receive
                   create ->
                       try
-                          {ok, {_, CreateHandle}} = lfm_proxy:create_and_open(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
-                          {ok, _} = lfm_proxy:write(W1, CreateHandle, 0, ?WRITE_TEXT),
-                          ok = lfm_proxy:close(W1, CreateHandle)
+                          {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
+                          {ok, Handle} = lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, write),
+                          {ok, _} = lfm_proxy:write(W1, Handle, 0, ?WRITE_TEXT),
+                          ok = lfm_proxy:close(W1, Handle)
                       catch
                           E1:E2  ->
                               {E1, E2}
@@ -596,7 +597,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
 
     % replicate file to W1
     {ok, H3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G2}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W1, H3, 0, 100)),
+    ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W1, H3, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W1, H3),
 
 
