@@ -184,7 +184,7 @@ release(UserCtx, FileCtx, HandleId) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
@@ -268,7 +268,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 -spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
@@ -378,7 +378,6 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId0) ->
     SessId = user_ctx:get_session_id(UserCtx),
     check_and_register_open(FileCtx, SessId, HandleId0),
     try
-        check_open_delete_race(FileCtx),
         {FileLocation, FileCtx2} =
             create_location(FileCtx, UserCtx),
         HandleId = open_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
@@ -423,25 +422,6 @@ open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
     session_handles:add(SessId, HandleId, Handle),
     {ok, HandleId}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Verifies if file is deleted during the operation (race appeared).
-%% @end
-%%--------------------------------------------------------------------
--spec check_open_delete_race(file_ctx:ctx()) -> ok | no_return().
-check_open_delete_race(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case file_meta:get({uuid, FileUuid}) of
-        {ok, #document{value = #file_meta{deleted = Deleted}}} ->
-            case Deleted of
-                true -> throw({error, not_found});
-                _ -> ok
-            end;
-        {error, not_found} ->
-            throw({error, not_found})
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

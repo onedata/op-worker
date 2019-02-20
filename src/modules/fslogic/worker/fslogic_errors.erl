@@ -71,6 +71,11 @@ gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
 gen_status_message({badmatch, Error}) ->
     gen_status_message(Error);
+gen_status_message({badrpc, Error}) ->
+    gen_status_message(Error);
+% TODO - sprawdzic jaka moze byc skladnia
+gen_status_message({'EXIT', {{Error, _}, _}}) ->
+    gen_status_message(Error);
 gen_status_message({case_clause, Error}) ->
     gen_status_message(Error);
 gen_status_message(#fuse_response{status = Status}) ->
@@ -81,6 +86,8 @@ gen_status_message(not_found) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};
+gen_status_message(cancelled) ->
+    #status{code = ?ECANCELED, description = describe_error(?ECANCELED)};
 gen_status_message(<<"quota exceeded">>) ->
     #status{code = ?ENOSPC, description = describe_error(?ENOSPC)};
 gen_status_message({403, <<>>, <<>>}) ->

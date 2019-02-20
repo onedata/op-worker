@@ -138,16 +138,21 @@ create_delayed_storage_file(FileCtx, UserCtx) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             % TODO - moze zwykla sekcja krytyczna bo synchronizer zyje za dlugo!!!
             replica_synchronizer:apply(FileCtx, fun() ->
-                case location_and_link_utils:is_location_created(FileUuid, FileLocationId) of
-                    true ->
-                        Ans;
-                    _ ->
-                        FileCtx3 = create_storage_file(UserCtx, FileCtx2),
-                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                try
+                    case location_and_link_utils:is_location_created(FileUuid, FileLocationId) of
+                        true ->
+                            Ans;
+                        _ ->
+                            FileCtx3 = ?MODULE:create_storage_file(UserCtx, FileCtx2),
+                            {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
 
-                        {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
-                            FileUuid, FileLocationId, StorageFileId),
-                        {Doc, FileCtx4}
+                            {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
+                                FileUuid, FileLocationId, StorageFileId),
+                            {Doc, FileCtx4}
+                    end
+                catch
+                    _:{badmatch,{error, not_found}} ->
+                        {error, cancelled}
                 end
             end);
         true ->
@@ -175,9 +180,16 @@ create_storage_file(UserCtx, FileCtx) ->
             FileCtx4 = create_parent_dirs(FileCtx3),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         {error, ?EEXIST} ->
-            % TODO - Sprawdzamy deletion linka - jesli istnieje to nie tworzymy pliku
-            {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
-            {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)};
+            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
+            {FileName, FileCtx5} = file_ctx:get_aliased_name(FileCtx4, UserCtx),
+            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+                {error, not_found} ->
+                    % Try once again to prevent races
+                    storage_file_manager:create(SFMHandle, Mode);
+                {ok, _FileUuid} ->
+                    {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+                    {ok, file_ctx:set_file_id(FileCtx5, StorageFileId)}
+            end;
         {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir

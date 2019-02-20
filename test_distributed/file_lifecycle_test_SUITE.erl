@@ -26,13 +26,13 @@
 %% tests
 -export([
     open_race_test/1, make_open_race_test/1, make_open_race_test2/1, create_open_race_test/1,
-    create_open_race_test2/1, create_open_race_test3/1, create_delete_race_test/1,
+    create_open_race_test2/1, create_delete_race_test/1,
     rename_to_opened_file_test/1, create_file_existing_on_disk_test/1, open_delete_race_test/1
 ]).
 
 -define(TEST_CASES, [
     open_race_test, make_open_race_test, make_open_race_test2, create_open_race_test,
-    create_open_race_test2, create_open_race_test3, create_delete_race_test,
+    create_open_race_test2, create_delete_race_test,
     rename_to_opened_file_test, create_file_existing_on_disk_test, open_delete_race_test
 ]).
 
@@ -49,26 +49,14 @@ open_race_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Master = self(),
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
+    check_dir_init(W),
 
     test_utils:mock_new(W, sfm_utils, [passthrough]),
-    test_utils:mock_expect(W, sfm_utils, create_delayed_storage_file,
-        fun(FileCtx) ->
-            CreateOnStorageFun = fun(FileCtx2) ->
-                FileCtx3 = sfm_utils:create_storage_file(
-                    user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-                timer:sleep(2000),
-                {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
-            end,
-            location_and_link_utils:create_file_location(FileCtx, CreateOnStorageFun)
+    test_utils:mock_expect(W, sfm_utils, create_storage_file,
+        fun(UserCtx, FileCtx) ->
+            Ans = meck:passthrough([UserCtx, FileCtx]),
+            timer:sleep(2000),
+            Ans
         end),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -96,55 +84,52 @@ open_race_test(Config) ->
 
     {ok, Open1} = ?assertMatch({ok, _}, OpenAns1),
     {ok, Open2} = ?assertMatch({ok, _}, OpenAns2),
-    Context1 = rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2]),
-    Context2 = rpc:call(W, ets, lookup_element, [lfm_handles, Open2, 2]),
-    ?assertEqual(lfm_context:get_file_id(Context1), lfm_context:get_file_id(Context2)),
+    ?assertEqual(get_file_id(W, Open1), get_file_id(W, Open2)),
 
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(1, length(Dirs2) - Dirs1Length),
+    check_dir(W, 1),
     ok.
 
 make_open_race_test(Config) ->
+    make_open_race_test(Config, file_req).
+
+make_open_race_test2(Config) ->
+    make_open_race_test(Config, file_meta).
+
+make_open_race_test(Config, Mock) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Master = self(),
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
+    check_dir_init(W),
 
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, make_file,
-        fun(UserCtx, ParentFileCtx, Name, Mode) ->
-            FileCtx = file_req:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    case Mock of
+        file_req ->
+            test_utils:mock_new(W, file_req, [passthrough]),
+            test_utils:mock_expect(W, file_req, create_file_doc,
+                fun(UserCtx, ParentFileCtx, Name, Mode) ->
+                    Ans = meck:passthrough([UserCtx, ParentFileCtx, Name, Mode]),
 
-            Master ! {make_doc, self()},
-            ok = receive
-                file_opened -> ok
-            after
-                5000 -> timeout
-            end,
+                    Master ! {open_file, self()},
+                    ok = receive
+                             file_opened -> ok
+                         after
+                             5000 -> timeout
+                         end,
+                    Ans
+                end);
+        file_meta ->
+            test_utils:mock_new(W, file_meta, [passthrough]),
+            test_utils:mock_expect(W, file_meta, save,
+                fun(FileDoc) ->
+                    Master ! {open_file, self()},
+                    ok = receive
+                             file_opened -> ok
+                         after
+                             5000 -> timeout
+                         end,
 
-            {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-            fslogic_times:update_mtime_ctime(ParentFileCtx),
-            attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
-        end),
-
-    test_utils:mock_expect(W, file_req, open_file_with_extended_info,
-        fun(_UserCtx, FileCtx, _Flag) ->
-            {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-                storage_id = StorageId}}, _FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened_extended{handle_id = undefined,
-                    provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-            }
-        end),
+                    meck:passthrough([FileDoc])
+                end)
+    end,
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
@@ -153,14 +138,14 @@ make_open_race_test(Config) ->
         Master ! {create_ans, lfm_proxy:create(W, SessId1, FilePath, 8#777)}
     end),
 
-    MakeProc = receive
-        {make_doc, Proc} -> Proc
+    MockProc = receive
+        {open_file, Proc} -> Proc
     after
         5000 -> timeout
     end,
-    ?assert(is_pid(MakeProc)),
-    {ok, Open1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, read)),
-    MakeProc ! file_opened,
+    ?assert(is_pid(MockProc)),
+    OpenAns = lfm_proxy:open(W, SessId1, {path, FilePath}, read),
+    MockProc ! file_opened,
 
     CreateAns = receive
         {create_ans, A} -> A
@@ -169,220 +154,59 @@ make_open_race_test(Config) ->
     end,
     ?assertMatch({ok, _}, CreateAns),
 
-    {ok, Open2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, read)),
-    ?assertEqual(rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2]),
-        rpc:call(W, ets, lookup_element, [lfm_handles, Open2, 2])),
+    case Mock of
+        file_req ->
+            {ok, Open1} = ?assertMatch({ok, _}, OpenAns),
+            {ok, Open2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, read)),
+            ?assertEqual(get_file_id(W, Open1), get_file_id(W, Open2)),
+            check_dir(W, 1);
+        file_meta ->
+            ?assertMatch({error,enoent}, OpenAns),
+            check_dir(W, 0)
+    end,
 
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(1, length(Dirs2) - Dirs1Length),
-    ok.
-
-make_open_race_test2(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    Master = self(),
-
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
-
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_new(W, file_meta, [passthrough]),
-    test_utils:mock_expect(W, file_meta, save,
-        fun(FileDoc) ->
-            Master ! {make_doc, self()},
-            ok = receive
-                     file_opened -> ok
-                 after
-                     5000 -> timeout
-                 end,
-
-            meck:passthrough([FileDoc])
-        end),
-
-    test_utils:mock_expect(W, file_req, open_file_with_extended_info,
-        fun(_UserCtx, FileCtx, _Flag) ->
-            {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-                storage_id = StorageId}}, _FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened_extended{handle_id = undefined,
-                    provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-            }
-        end),
-
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-        ?config({user_id, <<"user1">>}, Config)},
-    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create(W, SessId1, FilePath, 8#777)}
-          end),
-
-    MakeProc = receive
-                   {make_doc, Proc} -> Proc
-               after
-                   5000 -> timeout
-               end,
-    ?assert(is_pid(MakeProc)),
-    ?assertMatch({error,enoent}, lfm_proxy:open(W, SessId1, {path, FilePath}, read)),
-    MakeProc ! file_opened,
-
-    CreateAns = receive
-                    {create_ans, A} -> A
-                after
-                    5000 -> timeout
-                end,
-    ?assertMatch({ok, _}, CreateAns),
-
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(0, length(Dirs2) - Dirs1Length),
     ok.
 
 create_open_race_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    Master = self(),
-
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
-
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, create_file,
-        fun(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-            FileCtx = file_req:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-
-            Master ! {make_doc, self()},
-            ok = receive
-                     file_opened -> ok
-                 after
-                     5000 -> timeout
-                 end,
-
-            FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-            {FileLocation, FileCtx3} =
-                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
-
-            #fuse_response{fuse_response = FileAttr} =
-                attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_created{
-                    handle_id = undefined,
-                    file_attr = FileAttr#file_attr{size = 0},
-                    file_location = FileLocation
-                }
-            }
-        end),
-
-    test_utils:mock_expect(W, file_req, open_file_with_extended_info,
-        fun(_UserCtx, FileCtx, _Flag) ->
-            {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-                storage_id = StorageId}}, _FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened_extended{handle_id = undefined,
-                    provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-            }
-        end),
-
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-        ?config({user_id, <<"user1">>}, Config)},
-    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
-          end),
-
-    MakeProc = receive
-                   {make_doc, Proc} -> Proc
-               after
-                   5000 -> timeout
-               end,
-    ?assert(is_pid(MakeProc)),
-    {ok, Open1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, rdwr)),
-    MakeProc ! file_opened,
-
-    CreateAns = receive
-                    {create_ans, A} -> A
-                after
-                    5000 -> timeout
-                end,
-    ?assertMatch({ok, _}, CreateAns),
-    {ok, {_, CreateHandle}} = CreateAns,
-
-    {ok, Open2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, rdwr)),
-
-    ?assertEqual(rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2]),
-        rpc:call(W, ets, lookup_element, [lfm_handles, Open2, 2])),
-    ?assertEqual(rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2]),
-        rpc:call(W, ets, lookup_element, [lfm_handles, CreateHandle, 2])),
-
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(1, length(Dirs2) - Dirs1Length),
-    ok.
+    create_open_race_test(Config, file_req).
 
 create_open_race_test2(Config) ->
+    create_open_race_test(Config, fslogic_times).
+
+create_open_race_test(Config, Mock) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Master = self(),
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
+    check_dir_init(W),
 
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, create_file,
-        fun(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-            FileCtx = file_req:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-            FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
+    case Mock of
+        file_req ->
+            test_utils:mock_new(W, file_req, [passthrough]),
+            test_utils:mock_expect(W, file_req, create_file_doc,
+                fun(UserCtx, ParentFileCtx, Name, Mode) ->
+                    Ans = meck:passthrough([UserCtx, ParentFileCtx, Name, Mode]),
 
-            Master ! {make_doc, self()},
-            ok = receive
-                     file_opened -> ok
-                 after
-                     5000 -> timeout
-                 end,
-
-            {FileLocation, FileCtx3} =
-                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
-
-            #fuse_response{fuse_response = FileAttr} =
-                attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_created{
-                    handle_id = undefined,
-                    file_attr = FileAttr#file_attr{size = 0},
-                    file_location = FileLocation
-                }
-            }
-        end),
-
-    test_utils:mock_expect(W, file_req, open_file_with_extended_info,
-        fun(_UserCtx, FileCtx, _Flag) ->
-            {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-                storage_id = StorageId}}, _FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened_extended{handle_id = undefined,
-                    provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-            }
-        end),
+                    Master ! {open_file, self()},
+                    ok = receive
+                             file_opened -> ok
+                         after
+                             5000 -> timeout
+                         end,
+                    Ans
+                end);
+        fslogic_times ->
+            test_utils:mock_new(W, fslogic_times, [passthrough]),
+            test_utils:mock_expect(W, fslogic_times, update_mtime_ctime,
+                fun(FileCtx) ->
+                    Master ! {open_file, self()},
+                    ok = receive
+                             file_opened -> ok
+                         after
+                             5000 -> timeout
+                         end,
+                    meck:passthrough([FileCtx])
+                end)
+    end,
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
@@ -391,14 +215,14 @@ create_open_race_test2(Config) ->
         Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
           end),
 
-    MakeProc = receive
-                   {make_doc, Proc} -> Proc
+    MockProc = receive
+                   {open_file, Proc} -> Proc
                after
                    5000 -> timeout
                end,
-    ?assert(is_pid(MakeProc)),
+    ?assert(is_pid(MockProc)),
     {ok, Open1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, rdwr)),
-    MakeProc ! file_opened,
+    MockProc ! file_opened,
 
     CreateAns = receive
                     {create_ans, A} -> A
@@ -410,151 +234,58 @@ create_open_race_test2(Config) ->
 
     {ok, Open2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, rdwr)),
 
-    ?assertEqual(rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2]),
-        rpc:call(W, ets, lookup_element, [lfm_handles, Open2, 2])),
-    ?assertEqual(rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2]),
-        rpc:call(W, ets, lookup_element, [lfm_handles, CreateHandle, 2])),
+    ?assertEqual(get_file_id(W, Open1), get_file_id(W, Open2)),
+    ?assertEqual(get_file_id(W, Open1), get_file_id(W, CreateHandle)),
 
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(1, length(Dirs2) - Dirs1Length),
-    ok.
-
-
-create_open_race_test3(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    Master = self(),
-
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
-
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, create_file,
-        fun(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-            FileCtx = file_req:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-            FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-
-            Master ! {make_doc, self()},
-            timer:sleep(2000),
-
-            {FileLocation, FileCtx3} =
-                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
-
-            #fuse_response{fuse_response = FileAttr} =
-                attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_created{
-                    handle_id = undefined,
-                    file_attr = FileAttr#file_attr{size = 0},
-                    file_location = FileLocation
-                }
-            }
-        end),
-
-    test_utils:mock_new(W, sfm_utils, [passthrough]),
-    test_utils:mock_expect(W, sfm_utils, create_delayed_storage_file,
-        fun(FileCtx) ->
-            CreateOnStorageFun = fun(FileCtx2) ->
-                FileCtx3 = sfm_utils:create_storage_file(
-                    user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-                timer:sleep(5000),
-                {StorageFileId, files_to_chown:chown_or_schedule_chowning(FileCtx4)}
-            end,
-            location_and_link_utils:create_file_location(FileCtx, CreateOnStorageFun)
-        end),
-
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-        ?config({user_id, <<"user1">>}, Config)},
-    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
-          end),
-
-    MakeProc = receive
-                   {make_doc, Proc} -> Proc
-               after
-                   5000 -> timeout
-               end,
-    ?assert(is_pid(MakeProc)),
-    {ok, Open1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, rdwr)),
-
-    CreateAns = receive
-                    {create_ans, A} -> A
-                after
-                    5000 -> timeout
-                end,
-    ?assertMatch({ok, _}, CreateAns),
-    {ok, {_, CreateHandle}} = CreateAns,
-
-    ?assertEqual(lfm_context:get_file_id(rpc:call(W, ets, lookup_element, [lfm_handles, Open1, 2])),
-        lfm_context:get_file_id(rpc:call(W, ets, lookup_element, [lfm_handles, CreateHandle, 2]))),
-
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(1, length(Dirs2) - Dirs1Length),
+    check_dir(W, 1),
     ok.
 
 create_delete_race_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Master = self(),
 
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, create_file,
-        fun(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-            FileCtx = file_req:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+        ?config({user_id, <<"user1">>}, Config)},
+    % Init storage dir
+    lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/", (generator:gen_name())/binary>>, 8#777),
+    check_dir_init(W),
 
-            Master ! {make_doc, self()},
+    test_utils:mock_new(W, file_req, [passthrough]),
+    test_utils:mock_expect(W, file_req, create_file_doc,
+        fun(UserCtx, ParentFileCtx, Name, Mode) ->
+            Ans = meck:passthrough([UserCtx, ParentFileCtx, Name, Mode]),
+
+            Master ! {unlink, self()},
             ok = receive
-                     file_opened -> ok
+                     file_unlinked -> ok
                  after
                      5000 -> timeout
                  end,
-
-            FileCtx2 = sfm_utils:create_storage_file(UserCtx, FileCtx),
-            {FileLocation, FileCtx3} =
-                location_and_link_utils:get_new_file_location_doc(FileCtx2, true, true),
-
-            #fuse_response{fuse_response = FileAttr} =
-                attr_req:get_file_attr_insecure(UserCtx, FileCtx3, false, false),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_created{
-                    handle_id = undefined,
-                    file_attr = FileAttr#file_attr{size = 0},
-                    file_location = FileLocation
-                }
-            }
+            Ans
         end),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-        ?config({user_id, <<"user1">>}, Config)},
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     spawn(fun() ->
         Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
           end),
 
-    MakeProc = receive
-                   {make_doc, Proc} -> Proc
+    MockProc = receive
+                   {unlink, Proc} -> Proc
                after
                    5000 -> timeout
                end,
-    ?assert(is_pid(MakeProc)),
+    ?assert(is_pid(MockProc)),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath})),
-    MakeProc ! file_opened,
+    MockProc ! file_unlinked,
 
     CreateAns = receive
                     {create_ans, A} -> A
                 after
                     5000 -> timeout
                 end,
-    ?assertMatch({ok, _}, CreateAns),
+    ?assertMatch({error, ecanceled}, CreateAns),
 
+    check_dir(W, 0),
     % TODO - sprawdzic czy nie zostaly smieciowe dokumenty typu file_location
     ok.
 
@@ -599,39 +330,26 @@ create_file_existing_on_disk_test(Config) ->
 
     {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
     #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
+    #{<<"mountPoint">> := MountPoint} = helper:get_args(Helpers),
     StoragePath = filename:join([MountPoint, "space_id1", binary_to_list(FileName)]),
 
     {ok, FD} = ?assertMatch({ok, _}, rpc:call(W, file, open, [StoragePath, [write]])),
     rpc:call(W, file, close, [FD]),
 
     FilePath = <<"/space_name1/", FileName/binary>>,
-    ?assertMatch({error, already_exists}, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)),
+    ?assertMatch({error, eexist}, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)),
     ok.
 
 open_delete_race_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Master = self(),
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
-    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
-    Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
+    check_dir_init(W),
 
     test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, open_file_with_extended_info,
-        fun(UserCtx, FileCtx, Flag) ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            {#document{value = #file_location{provider_id = ProviderId, file_id = FileId,
-                storage_id = StorageId}}, FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx),
-            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-            SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-            {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
+    test_utils:mock_expect(W, file_req, open_storage_on_node,
+        fun(FileCtx, SessId, Flag, HandleId) ->
+            Ans = meck:passthrough([FileCtx, SessId, Flag, HandleId]),
 
             Master ! {delete_file, self()},
             ok = receive
@@ -640,14 +358,7 @@ open_delete_race_test(Config) ->
                      5000 -> timeout
                  end,
 
-            HandleId = base64:encode(crypto:strong_rand_bytes(20)),
-            session_handles:add(SessId, HandleId, Handle),
-            ok = file_handles:register_open(FileCtx3, SessId, 1),
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_opened_extended{handle_id = HandleId,
-                    provider_id = ProviderId, file_id = FileId, storage_id = StorageId}
-            }
+            Ans
         end),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -674,8 +385,7 @@ open_delete_race_test(Config) ->
                 end,
     ?assertMatch({ok, _}, OpenAns),
 
-    {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
-    ?assertEqual(1, length(Dirs2) - Dirs1Length),
+    check_dir(W, 1),
     ok.
 
 %%%===================================================================
@@ -699,9 +409,31 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sfm_utils]).
+    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sfm_utils, fslogic_times]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+check_dir_init(W) ->
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
+    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
+    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
+
+    Size = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
+        {ok, Dirs} -> length(Dirs);
+        _ -> 0
+    end,
+
+    put(test_storage_space_path, StorageSpacePath),
+    put(test_dir_size, Size).
+
+check_dir(W, ExpectedSize) ->
+    case rpc:call(W, file, list_dir, [get(test_storage_space_path)]) of
+        {ok, Dirs} -> ?assertEqual(ExpectedSize, length(Dirs) - get(test_dir_size));
+        _ -> ?assertEqual(ExpectedSize, 0 - get(test_dir_size))
+    end.
+
+get_file_id(W, OpenAns) ->
+    lfm_context:get_file_id(rpc:call(W, ets, lookup_element, [lfm_handles, OpenAns, 2])).
