@@ -38,6 +38,7 @@
 %%--------------------------------------------------------------------
 -spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(),
     Silent :: boolean(), RemoteDelete :: boolean()) -> ok.
+% TODO VFS-5268 - prevent reimport connected with remote delete
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -46,7 +47,6 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
                      process_file_links(FileCtx, UserCtx, RemoteDelete),
                      ok = file_handles:mark_to_remove(FileCtx);
                  _ ->
-                     % TODO - ja zabezpieczyc synca przed reimportem (nie ma linka i file_meta)?
                      remove_file(FileCtx, UserCtx, true, not RemoteDelete)
              end,
         maybe_emit_event(FileCtx, UserCtx, Silent)
@@ -76,7 +76,7 @@ delete_all_opened_files() ->
         {ok, Docs} ->
             RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
                 Handle#file_handles.is_removed
-                                        end, Docs),
+            end, Docs),
 
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
             lists:foreach(fun(#document{key = FileUuid} = Doc) ->
@@ -89,11 +89,11 @@ delete_all_opened_files() ->
                         ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p",
                             [Doc, E1, E2])
                 end
-                          end, RemovedFiles),
+            end, RemovedFiles),
 
             lists:foreach(fun(#document{key = FileUuid}) ->
                 ok = file_handles:delete(FileUuid)
-                          end, Docs);
+            end, Docs);
         Error ->
             ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error])
     end.
@@ -133,13 +133,13 @@ remove_auxiliary_documents(FileCtx) ->
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
     delete_metadata_opts()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
+    % TODO VFS-5270
     replica_synchronizer:apply(FileCtx, fun() ->
         {FileDoc, FileCtx4} = case DeleteMetadata of
             true ->
                 {FD = #document{value = #file_meta{
                     shares = Shares
-                }
-                }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+                }}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
                 {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
                 ok = delete_shares(UserCtx, Shares),
 
@@ -157,19 +157,20 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
             _ -> ok
         end,
 
-        case DeleteMetadata of
-            true ->
-                file_meta:delete(FileDoc);
-            deletion_link ->
+        case {DeleteMetadata, RemoveStorageFile} of
+            {true, _} ->
+                ok = file_meta:delete(FileDoc);
+            {deletion_link, _} ->
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
                 {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
                 ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
                 location_and_link_utils:remove_deletion_link(FileCtx5, ParentUuid),
                 ok;
-            false ->
+            {_, true} ->
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 LocalLocationId = file_location:local_id(FileUuid),
-                fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
+                ok = fslogic_location_cache:delete_location(FileUuid, LocalLocationId);
+            _ ->
                 ok
         end
     end).

@@ -183,7 +183,7 @@ release(UserCtx, FileCtx, HandleId) ->
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        % TODO - co jesli mode pliku nie pozwala na jego pisanie?
+        % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 

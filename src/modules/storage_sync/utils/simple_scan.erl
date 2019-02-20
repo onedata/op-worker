@@ -163,7 +163,6 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                 {error, not_found} ->
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    % sprawdzic lokacje
                     sync_if_file_is_not_being_replicated(Job2, FileCtx, FileType);
                 {ok, _} ->
                     {processed, undefined, Job2}
@@ -392,8 +391,7 @@ maybe_sync_file_with_existing_metadata(Job, FileCtx) ->
             ErrorCode =:= ?ENOENT;
             ErrorCode =:= ?EAGAIN
         ->
-            % TODO - czy na pewno chcemy powtarzac przy tych bledach?
-%%            {processed, undefined, Job}
+            % TODO VFS-5273
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
             {LocalResult, FileCtx3, Job}
@@ -872,7 +870,7 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 -spec create_file_meta(file_meta:uuid() | undefined, file_meta:name(),
     file_meta:mode(), od_user:id(), undefined | od_group:id(), file_meta:size(),
     file_meta:uuid(), od_space:id(), boolean()) -> {ok, file_meta:uuid()}.
-% TODO - chyba mozna usunac argument CreateLinks
+% TODO VFS-5273 - Maybe delete CreateLinks argument
 create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, FileSize,
     ParentUuid, SpaceId, CreateLinks
 ) ->

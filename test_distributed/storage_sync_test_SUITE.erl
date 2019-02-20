@@ -171,22 +171,22 @@ create_file_import_race_test(Config) ->
     Master = self(),
     CreateProc = spawn(fun() ->
         Ans = receive
-                  create ->
-                      try
-                          {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
-                          {ok, Handle} = lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, write),
-                          {ok, _} = lfm_proxy:write(W1, Handle, 0, ?WRITE_TEXT),
-                          ok = lfm_proxy:close(W1, Handle)
-                      catch
-                          E1:E2  ->
-                              {E1, E2}
-                      end
-              after
-                  60000 ->
-                      timeout
-              end,
+            create ->
+                try
+                    {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
+                    {ok, Handle} = lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, write),
+                    {ok, _} = lfm_proxy:write(W1, Handle, 0, ?WRITE_TEXT),
+                    ok = lfm_proxy:close(W1, Handle)
+                catch
+                    E1:E2  ->
+                        {E1, E2}
+                end
+        after
+            60000 ->
+                timeout
+        end,
         Master ! {create_ans, Ans}
-                       end),
+    end),
 
     test_utils:mock_new(Workers, simple_scan, [passthrough]),
     test_utils:mock_expect(Workers, simple_scan, import_file,
@@ -196,8 +196,8 @@ create_file_import_race_test(Config) ->
             meck:passthrough([Job, FileUuid])
         end),
 
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, false),
+    StorageTestFilePath = storage_sync_test_base:storage_test_file_path(
+        W1MountPoint, ?SPACE_ID, ?TEST_FILE1, false),
     %% Create file on storage
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
@@ -262,19 +262,19 @@ close_file_import_race_test(Config) ->
     Master = self(),
     ActionProc = spawn(fun() ->
         Ans = receive
-                  do_action ->
-                      try
-                          ok = lfm_proxy:close(W1, CreateHandle)
-                      catch
-                          E1:E2  ->
-                              {E1, E2}
-                      end
-              after
-                  60000 ->
-                      timeout
-              end,
+            do_action ->
+                try
+                    ok = lfm_proxy:close(W1, CreateHandle)
+                catch
+                    E1:E2  ->
+                        {E1, E2}
+                end
+        after
+            60000 ->
+                timeout
+        end,
         Master ! {action_result, Ans}
-                       end),
+    end),
 
     test_utils:mock_new(Workers, location_and_link_utils, [passthrough]),
     test_utils:mock_expect(Workers, location_and_link_utils, try_to_resolve_child_deletion_link, fun

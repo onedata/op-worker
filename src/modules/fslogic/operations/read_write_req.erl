@@ -111,7 +111,7 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     try
         create_handle_helper(UserCtx, FileCtx, HandleId, rdwr)
     catch
-        ?EACCES ->
+        _:?EACCES ->
             create_handle_helper(UserCtx, FileCtx, HandleId, Operation)
     end.
 

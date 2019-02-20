@@ -287,11 +287,10 @@ create_delete_race_test(Config) ->
     ?assertMatch({error, ecanceled}, CreateAns),
 
     check_dir(W, 0),
-    % TODO - sprawdzic czy nie zostaly smieciowe dokumenty typu file_location
+    % TODO VFS-5274 - vewrify if all documents (e.g., file_location) are cleared
     ok.
 
 rename_to_opened_file_test(Config) ->
-    % TODO a jak plik renameowany jest otwarty?
     [W | _] = ?config(op_worker_nodes, Config),
 
     {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
@@ -311,15 +310,12 @@ rename_to_opened_file_test(Config) ->
     {ok, {_, Handle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, FilePath2, 8#777)),
     ?assertMatch(ok, lfm_proxy:close(W, Handle)),
 
-    % Co zrobic z move jak plik jest otwart?
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId1, {path, FilePath2}, FilePath)),
 
     {ok, Dirs2} = rpc:call(W, file, list_dir, [StorageSpacePath]),
     ?assertEqual(2, length(Dirs2) - Dirs1Length),
     ok.
 
-% TODO - zakazac tworzenia pliku bez tworzenia na dysku? a co z sync?
-% TODO - sync importuje plik jesli sie wstrzelimy z tworzeniem miedzy sprawdzanie a import
 create_file_existing_on_disk_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     FileName = generator:gen_name(),
@@ -368,7 +364,7 @@ open_delete_race_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#777)),
     spawn(fun() ->
         Master ! {open_ans, lfm_proxy:open(W, SessId1, {path, FilePath}, read)}
-          end),
+    end),
 
     MakeProc = receive
                    {delete_file, Proc} -> Proc
@@ -380,10 +376,10 @@ open_delete_race_test(Config) ->
     MakeProc ! file_deleted,
 
     OpenAns = receive
-                    {open_ans, A} -> A
-                after
-                    5000 -> timeout
-                end,
+                  {open_ans, A} -> A
+              after
+                  5000 -> timeout
+              end,
     ?assertMatch({ok, _}, OpenAns),
 
     check_dir(W, 1),

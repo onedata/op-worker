@@ -73,7 +73,7 @@ gen_status_message({badmatch, Error}) ->
     gen_status_message(Error);
 gen_status_message({badrpc, Error}) ->
     gen_status_message(Error);
-% TODO - sprawdzic jaka moze byc skladnia
+% TODO VFS-5269 - handle other types of processes crashes
 gen_status_message({'EXIT', {{Error, _}, _}}) ->
     gen_status_message(Error);
 gen_status_message({case_clause, Error}) ->

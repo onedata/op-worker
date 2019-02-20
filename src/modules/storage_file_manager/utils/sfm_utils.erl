@@ -87,18 +87,17 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
             ok
     end,
 
-    SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
-        FileUuid, Storage, SourceFileId, undefined),
-    TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
-        FileUuid, Storage, TargetFileId, undefined),
-
     case SourceFileId =/= TargetFileId of
         true ->
+            SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
+                FileUuid, Storage, SourceFileId, undefined),
+            TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
+                FileUuid, Storage, TargetFileId, undefined),
+
             case storage_file_manager:stat(TargetHandle) of
                 {ok, _} ->
                     ?warning("Moving file into existing one, source ~p, target ~p",
                         [SourceFileId, TargetFileId]),
-                    % TODO - move macro
                     NewTargetFileId = ?CONFLIOCTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
                     storage_file_manager:mv(SourceHandle, NewTargetFileId);
                 _ ->
@@ -123,10 +122,8 @@ create_delayed_storage_file(FileCtx) ->
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> file_ctx:ctx().
-% TODO - co jesli uzytkownik nie ma praw do tworzenia plikow w katalogu, a wlasciciel pliku ma (tworzone po dbsync)
-% jesli zostawoimy roota to znow przy pierwszym tworzeniu moze sie utworzyc mimo wszystko
-% Problem - nie wiemy czy plik pochodzi z dbsync
+-spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx(), boolean()) ->
+    {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
 create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink) ->
     {#document{
         key = FileLocationId,
@@ -136,7 +133,7 @@ create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink) ->
     case StorageFileCreated of
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            % TODO - moze zwykla sekcja krytyczna bo synchronizer zyje za dlugo!!!
+            % TODO VFS-5270
             replica_synchronizer:apply(FileCtx, fun() ->
                 try
                     case location_and_link_utils:is_location_created(FileUuid, FileLocationId) of
@@ -443,6 +440,7 @@ create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = S
 handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
     {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
     {ok, file_ctx:set_file_id(FileCtx, StorageFileId)}.
+    % TODO VFS-5271 - handle conflicting directories
 %%    case VerifyDeletionLink of
 %%        false ->
 %%            {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
