@@ -171,7 +171,7 @@ set_json_metadata_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON, [?INDEX11], ?PROVIDER_ID(Worker)).
 
@@ -184,7 +184,7 @@ modify_json_metadata_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON, [?INDEX11], ?PROVIDER_ID(Worker)),
 
@@ -202,7 +202,7 @@ delete_json_metadata_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON, [?INDEX11], ?PROVIDER_ID(Worker)),
 
@@ -219,7 +219,7 @@ delete_file_with_json_metadata_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON, [?INDEX11], ?PROVIDER_ID(Worker)),
 
@@ -232,7 +232,7 @@ modify_json_many_times(Config) ->
     Modifications = 10000,
     FileName = ?FILE_NAME,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ExpectedFinalJSON = lists:foldl(fun(I, _) ->
         Key = <<"key_", (integer_to_binary(I))/binary>>,
@@ -254,7 +254,7 @@ changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space(Config) -
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2), 8#600),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ?PROVIDER_ID(Worker)),
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER2, JSON1, [?INDEX21], ?PROVIDER_ID(Worker)).
@@ -269,7 +269,7 @@ changes_should_be_submitted_to_all_indices_subscribed_for_the_space(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2), 8#600),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER2, JSON1, [?INDEX21], ?PROVIDER_ID(Worker)),
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER2, JSON1, [?INDEX22], ?PROVIDER_ID(Worker)),
@@ -287,11 +287,11 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
     JSON2 = #{<<"color">> => <<"red">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4), 8#600),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+    {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON2, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ?PROVIDER_ID(Worker)),
@@ -312,11 +312,11 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     JSON2 = #{<<"color">> => <<"red">>},
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+    {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER3, JSON1, [?INDEX31], ProviderId1),
@@ -341,11 +341,11 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     JSON2 = #{<<"color">> => <<"red">>},
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+    {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER3, JSON1, [?INDEX31], ProviderId1),
@@ -380,7 +380,7 @@ submit_entry_failure_test(Config) ->
     HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1, ?INDEX11),
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ProviderId1),
@@ -391,7 +391,7 @@ submit_entry_failure_test(Config) ->
     JSON3 = #{<<"color">> => <<"green">>},
 
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID1), 8#600),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+    {ok, FileId2} = file_id:guid_to_objectid(Guid2),
 
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON3, []),
@@ -424,7 +424,7 @@ delete_entry_failure_test(Config) ->
     HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1, ?INDEX11),
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ProviderId1),

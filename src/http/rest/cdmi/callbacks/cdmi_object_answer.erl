@@ -32,7 +32,7 @@ prepare([], _State) ->
 prepare([<<"objectType">> | Tail], State) ->
     (prepare(Tail, State))#{<<"objectType">> => <<"application/cdmi-object">>};
 prepare([<<"objectID">> | Tail], #{guid := Guid} = State) ->
-    {ok, Id} = cdmi_id:guid_to_objectid(Guid),
+    {ok, Id} = file_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"objectID">> => Id};
 prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
     (prepare(Tail, State))#{<<"objectName">> => filename:basename(Path)};
@@ -46,7 +46,7 @@ prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, #file_attr{guid = Guid}} =
         onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
-    {ok, Id} = cdmi_id:guid_to_objectid(Guid),
+    {ok, Id} = file_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"parentID">> => Id};
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     (prepare(Tail, State))#{<<"capabilitiesURI">> => ?dataobject_capability_path};

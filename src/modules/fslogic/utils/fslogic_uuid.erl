@@ -17,19 +17,12 @@
 
 %% API
 -export([is_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1]).
--export([uuid_to_path/2]).
--export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1]).
+-export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
     space_dir_uuid_to_spaceid_no_error/1, spaceid_to_space_dir_guid/1]).
--export([uuid_to_share_guid/3, unpack_share_guid/1]).
--export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
-    guid_to_share_id/1, guid_to_space_id/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
--define(GUID_SEPARATOR, "#").
--define(GUID_PREFIX, "guid").
--define(SHARE_GUID_PREFIX, "shareGuid").
 
 %%%===================================================================
 %%% API
@@ -60,12 +53,12 @@ user_root_dir_uuid(UserId) ->
     <<?USER_ROOT_PREFIX, UserId/binary>>.
 
 %%--------------------------------------------------------------------
-%% @doc Returns Uuid of user's root directory.
+%% @doc Returns Guid of user's root directory.
 %% @end
 %%--------------------------------------------------------------------
 -spec user_root_dir_guid(UserId :: od_user:id()) -> fslogic_worker:file_guid().
 user_root_dir_guid(UserId) ->
-    uuid_to_guid(user_root_dir_uuid(UserId), undefined).
+    file_id:pack_guid(user_root_dir_uuid(UserId), undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,18 +78,6 @@ uuid_to_path(SessionId, FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% For given file Uuid and spaceId generates file's Guid.
-%% @end
-%%--------------------------------------------------------------------
--spec uuid_to_guid(file_meta:uuid(), od_space:id() | undefined) ->
-    fslogic_worker:file_guid().
-uuid_to_guid(FileUuid, SpaceId) ->
-    DefinedSpaceId = utils:ensure_defined(SpaceId, undefined, <<>>),
-    http_utils:base64url_encode(<<?GUID_PREFIX, ?GUID_SEPARATOR,
-        FileUuid/binary, ?GUID_SEPARATOR, DefinedSpaceId/binary>>).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% For given file Uuid generates file's Guid. SpaceId is calculated in process.
 %% @end
 %%--------------------------------------------------------------------
@@ -104,21 +85,11 @@ uuid_to_guid(FileUuid, SpaceId) ->
 uuid_to_guid(FileUuid) ->
     try uuid_to_space_id(FileUuid) of
         SpaceId ->
-            uuid_to_guid(FileUuid, SpaceId)
+            file_id:pack_guid(FileUuid, SpaceId)
     catch
         {not_a_space, _} ->
-            uuid_to_guid(FileUuid, undefined)
+            file_id:pack_guid(FileUuid, undefined)
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's Uuid for given file's Guid.
-%% @end
-%%--------------------------------------------------------------------
--spec guid_to_uuid(fslogic_worker:file_guid()) -> file_meta:uuid().
-guid_to_uuid(FileGuid) ->
-    {FileUuid, _} = unpack_guid(FileGuid),
-    FileUuid.
 
 %%--------------------------------------------------------------------
 %% @doc Convert SpaceId to uuid of file_meta document of this space directory.
@@ -132,7 +103,7 @@ spaceid_to_space_dir_uuid(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec spaceid_to_space_dir_guid(od_space:id()) -> fslogic_worker:file_guid().
 spaceid_to_space_dir_guid(SpaceId) ->
-    uuid_to_guid(spaceid_to_space_dir_uuid(SpaceId), SpaceId).
+    file_id:pack_guid(spaceid_to_space_dir_uuid(SpaceId), SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc Convert file_meta uuid of space directory to SpaceId
@@ -158,112 +129,9 @@ space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
         _:_ -> <<>>
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Convert Guid and share id to share guid (allowing for guest read)
-%% @end
-%%--------------------------------------------------------------------
--spec uuid_to_share_guid(file_meta:uuid(), od_space:id(), od_share:id() | undefined) ->
-    od_share:share_guid().
-uuid_to_share_guid(FileUuid, SpaceId, undefined) ->
-    uuid_to_guid(FileUuid, SpaceId);
-uuid_to_share_guid(FileUuid, SpaceId, ShareId) ->
-    DefinedSpaceId = utils:ensure_defined(SpaceId, undefined, <<>>),
-    http_utils:base64url_encode(<<?SHARE_GUID_PREFIX, ?GUID_SEPARATOR,  FileUuid/binary,
-        ?GUID_SEPARATOR, DefinedSpaceId/binary,
-        ?GUID_SEPARATOR, ShareId/binary
-    >>).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Convert Guid and share id to share guid (allowing for guest read)
-%% @end
-%%--------------------------------------------------------------------
--spec guid_to_share_guid(fslogic_worker:file_guid(), od_share:id()) ->
-    od_share:share_guid().
-guid_to_share_guid(Guid, ShareId) ->
-    {FileUuid, SpaceId} = unpack_guid(Guid),
-    uuid_to_share_guid(FileUuid, SpaceId, ShareId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Convert Share guid to Guid.
-%% @end
-%%--------------------------------------------------------------------
--spec share_guid_to_guid(od_share:share_guid()) -> fslogic_worker:file_guid().
-share_guid_to_guid(ShareGuid) ->
-    {FileUuid, SpaceId, _} = unpack_share_guid(ShareGuid),
-    uuid_to_guid(FileUuid, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's Uuid, its SpaceId and its ShareId for given file's share Guid.
-%% @end
-%%--------------------------------------------------------------------
--spec unpack_share_guid(od_share:share_guid()) ->
-    {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
-unpack_share_guid(ShareGuid) ->
-    try binary:split(http_utils:base64url_decode(ShareGuid), <<?GUID_SEPARATOR>>, [global]) of
-        [<<?SHARE_GUID_PREFIX>>, FileUuid, SpaceId, ShareId] ->
-            NonEmptySpaceId = utils:ensure_defined(SpaceId, <<>>, undefined),
-            {FileUuid, NonEmptySpaceId, ShareId};
-        [<<?GUID_PREFIX>>, FileUuid, SpaceId] ->
-            NonEmptySpaceId = utils:ensure_defined(SpaceId, <<>>, undefined),
-            {FileUuid, NonEmptySpaceId, undefined};
-        _ ->
-            {ShareGuid, undefined, undefined}
-    catch
-        _:_ ->
-            {ShareGuid, undefined, undefined}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Predicate checking if given Id is a share guid.
-%% @end
-%%--------------------------------------------------------------------
--spec is_share_guid(binary()) -> boolean().
-is_share_guid(Id) ->
-    case unpack_share_guid(Id) of
-        {_, _, undefined} -> false;
-        _ -> true
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get share id connected with given guid (returns undefined if guid is
-%% not of shared type).
-%% @end
-%%--------------------------------------------------------------------
--spec guid_to_share_id(od_share:share_guid()) -> od_share:id() | undefined.
-guid_to_share_id(Guid) ->
-    {_, _, ShareId} = unpack_share_guid(Guid),
-    ShareId.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get space id connected with given guid.
-%% @end
-%%--------------------------------------------------------------------
--spec guid_to_space_id(fslogic_worker:guid()) -> od_space:id() | undefined.
-guid_to_space_id(Guid) ->
-    {_FileUuid, SpaceId, _ShareId} = unpack_share_guid(Guid),
-    SpaceId.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's Uuid and its SpaceId for given file's Guid.
-%% @end
-%%--------------------------------------------------------------------
--spec unpack_guid(FileGuid :: fslogic_worker:file_guid()) ->
-    {file_meta:uuid(), od_space:id() | undefined}.
-unpack_guid(FileGuid) ->
-    {FileUuid, SpaceId, _ShareId} = unpack_share_guid(FileGuid),
-    {FileUuid, SpaceId}.
 
 %%--------------------------------------------------------------------
 %% @private

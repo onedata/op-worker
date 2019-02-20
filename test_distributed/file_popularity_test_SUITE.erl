@@ -115,7 +115,7 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
-    {ok, FileId} = cdmi_id:guid_to_objectid(G),
+    {ok, FileId} = file_id:guid_to_objectid(G),
     ?assertMatch({[FileId], #index_token{}},
         query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
 
@@ -290,9 +290,9 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     {ok, H33} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
     ok = lfm_proxy:close(W, H33),
 
-    {ok, FileId1} = cdmi_id:guid_to_objectid(G1),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(G2),
-    {ok, FileId3} = cdmi_id:guid_to_objectid(G3),
+    {ok, FileId1} = file_id:guid_to_objectid(G1),
+    {ok, FileId2} = file_id:guid_to_objectid(G2),
+    {ok, FileId3} = file_id:guid_to_objectid(G3),
 
     ?assertMatch({[FileId1, FileId2, FileId3], #index_token{}},
         query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
@@ -327,9 +327,9 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
     ok = lfm_proxy:close(W, H3),
 
-    {ok, FileId1} = cdmi_id:guid_to_objectid(G1),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(G2),
-    {ok, FileId3} = cdmi_id:guid_to_objectid(G3),
+    {ok, FileId1} = file_id:guid_to_objectid(G1),
+    {ok, FileId2} = file_id:guid_to_objectid(G2),
+    {ok, FileId3} = file_id:guid_to_objectid(G3),
 
     ?assertMatch({[FileId1, FileId2, FileId3], #index_token{}},
         query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
@@ -350,7 +350,7 @@ query_with_option_limit_should_return_limited_number_of_files(Config) ->
         FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
         {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
         open_and_close_file(W, SessId, G, N),
-        {ok, FileId} = cdmi_id:guid_to_objectid(G),
+        {ok, FileId} = file_id:guid_to_objectid(G),
         {FileId, N}
     end, lists:seq(1, NumberOfFiles)), % the resulting list will bo sorted ascending by number of opens
     Ids = [C || {C, _} <- IdsAndOpensNum],
@@ -412,7 +412,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     Popularity = popularity(Timestamp, LastOpenW, AvgOpen, AvgOpenW),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     open_and_close_file(W, ?SESSION(W, Config), G),
-    {ok, FileId} = cdmi_id:guid_to_objectid(G),
+    {ok, FileId} = file_id:guid_to_objectid(G),
     ?assertMatch({[FileId], #index_token{start_key = Popularity}},
         query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
 
@@ -432,7 +432,7 @@ iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
         FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
         {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
         open_and_close_file(W, SessId, G, N),
-        {ok, FileId} = cdmi_id:guid_to_objectid(G),
+        {ok, FileId} = file_id:guid_to_objectid(G),
         {FileId, N}
     end, lists:seq(1, NumberOfFiles)),
     Ids = [C || {C, _} <- IdsAndOpensNum],
@@ -516,7 +516,7 @@ popularity(LastOpen, LastOpenW, AvgOpen, AvgOpenW) ->
     LastOpen * LastOpenW + AvgOpen * AvgOpenW.
 
 change_last_open(Worker, FileGuid, NewLastOpen) ->
-    Uuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    Uuid = file_id:guid_to_uuid(FileGuid),
     rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
         {ok, FP#file_popularity{last_open = NewLastOpen}}
     end]).

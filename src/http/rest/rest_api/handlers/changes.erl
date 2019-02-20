@@ -434,7 +434,7 @@ send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs) ->
         Changes ->
             FileId =
                 try
-                    {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(
+                    {ok, Val} = file_id:guid_to_objectid(file_id:pack_guid(
                         FileUuid, SpaceId
                     )),
                     Val

@@ -91,7 +91,7 @@ query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
     ),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileId),
+    SpaceId = file_id:guid_to_space_id(FileId),
     % Distributions contain only the providers which has synchronized file
     % blocks, we need to mark other providers with "neverSynchronized" flag
     % to present that in GUI.

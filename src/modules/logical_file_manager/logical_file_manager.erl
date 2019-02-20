@@ -254,7 +254,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId) ->
     {ok, transfer:id()} | error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
     % Scheduling and target providers must support given space
     HasAccess = provider_logic:supports_space(SpaceId)
@@ -306,7 +306,7 @@ schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
     {ok, transfer:id()} | error_reply().
 schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
     SupportedByTarget = case TargetProviderId of
         undefined -> true;

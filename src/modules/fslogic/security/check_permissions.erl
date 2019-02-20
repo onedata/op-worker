@@ -62,7 +62,7 @@ execute(AccessDefinitions, Args = [#sfm_handle{
     share_id = ShareId
 } | _], Function) ->
     UserCtx = user_ctx:new(SessionId),
-    FileGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
+    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
     DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
     {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
     rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
@@ -161,7 +161,7 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
 -spec set_root_context_if_file_has_acl([#sfm_handle{} | term()]) ->
     [#sfm_handle{} | term()].
 set_root_context_if_file_has_acl(Args = [Handle = #sfm_handle{file_uuid = FileUuid} | RestOfArgs]) ->
-    case acl:exists(file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, undefined))) of %todo pass FileCtx from sfm_handle
+    case acl:exists(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, undefined))) of %todo pass FileCtx from sfm_handle
         true ->
             [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->

@@ -224,8 +224,8 @@ set_xattr_metadata(FileUuid, SpaceId, Name, Value, Create, Replace) ->
                 Other -> Other
             end;
         false ->
-            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-            {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+            {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
             Default = #custom_metadata{
                 space_id = SpaceId,
                 file_objectid = FileObjectId,

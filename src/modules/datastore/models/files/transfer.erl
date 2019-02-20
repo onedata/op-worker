@@ -145,11 +145,11 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
         _ -> scheduled
     end,
     ScheduleTime = provider_logic:zone_time_seconds(),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     ToCreate = #document{
         scope = SpaceId,
         value = #transfer{
-            file_uuid = fslogic_uuid:guid_to_uuid(FileGuid),
+            file_uuid = file_id:guid_to_uuid(FileGuid),
             space_id = SpaceId,
             user_id = UserId,
             path = FilePath,
@@ -240,7 +240,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
             } = Transfer,
 
             NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
-            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
                 EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
