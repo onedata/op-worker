@@ -51,12 +51,13 @@
     send_sync_test/1,
     send_async_test/1,
     communicate_test/1,
-    communicate_async_test/1
+    communicate_async_test/1,
 
-%%    timeouts_test/1,
-%%    client_keepalive_test/1,
-%%    socket_timeout_test/1,
-%%    closing_connection_should_cancel_all_session_transfers_test/1
+    client_keepalive_test/1,
+    heartbeats_test/1,
+
+    socket_timeout_test/1,
+    closing_last_connection_should_cancel_all_session_transfers_test/1
 ]).
 
 -define(NORMAL_CASES_NAMES, [
@@ -71,12 +72,13 @@
     send_sync_test,
     send_async_test,
     communicate_test,
-    communicate_async_test
+    communicate_async_test,
+
+    client_keepalive_test,
+%%    heartbeats_test,
 
 %%    socket_timeout_test,
-%%    timeouts_test,
-%%    client_keepalive_test,
-%%    closing_connection_should_cancel_all_session_transfers_test
+    closing_last_connection_should_cancel_all_session_transfers_test
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, []).
@@ -90,12 +92,16 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
                 Guard1 -> 1;
                 Guard2 -> 2;
                 __V ->
-                    erlang:error({assertMatch,
-                        [{module, ?MODULE},
+                    ct:pal("~p", [
+                        {assertMatch, [
+                            {module, ?MODULE},
                             {line, ?LINE},
                             {expression, (??Expr)},
                             {pattern, (??Guard1), (??Guard2)},
-                            {value, __V}]})
+                            {value, __V}
+                        ]}
+                    ]),
+                    erlang:error(assertMatch)
             end
         end)())
     end).
@@ -141,7 +147,7 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
 
     SessionId = crypto:strong_rand_bytes(10),
     % Create a couple of connections within the same session
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
     {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
     {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
     {ok, {Sock4, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
@@ -159,7 +165,6 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
     % Expect five responses for the ping, they should be received anyway
     % (from Sock1), given that the fallback mechanism works.
     lists:foreach(fun(_) ->
-        ssl:setopts(Sock1, [{active, once}]),
         ?assertMatch(#'ServerMessage'{
             message_body = {pong, #'Pong'{}}
         }, fuse_utils:receive_server_message())
@@ -195,7 +200,7 @@ fulfill_promises_after_connection_close_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
     {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
     {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
     {ok, {Sock4, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
@@ -218,7 +223,6 @@ fulfill_promises_after_connection_close_test(Config) ->
     % about pending requests. Even after connection close, the promises should
     % be handled and responses sent to other connection within the session.
     GatherResponses = fun Fun(Counter) ->
-        ssl:setopts(Sock1, [{active, once}]),
         case fuse_utils:receive_server_message() of
             #'ServerMessage'{
                 message_body = {processing_status, #'ProcessingStatus'{
@@ -284,16 +288,6 @@ fulfill_promises_after_connection_error_test(Config) ->
     unmock_ranch_ssl(Worker1),
     ok = ssl:close(Sock1),
     ok = ssl:close(Sock2).
-
-
-
-
-
-
-
-
-
-
 
 
 send_sync_test(Config) ->
@@ -387,98 +381,20 @@ communicate_async_test(Config) ->
     ok = ssl:close(Sock).
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-socket_timeout_test(Config) ->
+client_keepalive_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId = crypto:strong_rand_bytes(10),
 
-    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
+    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    % send keepalive msg and assert it will not end in decoding error
+    % on provider side (following communication should succeed)
+    ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
+    fuse_utils:ping(Sock),
+    ok = ssl:close(Sock).
 
-    % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
-    % receive & validate
-    ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"1">>}, fuse_utils:receive_server_message()),
 
-    lists:foreach(fun(MainNum) ->
-        timer:sleep(timer:seconds(20)),
-        {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
-
-        lists:foreach(fun(Num) ->
-            NumBin = integer_to_binary(Num),
-            % send
-            ok = ssl:send(Sock2, fuse_utils:generate_create_file_message(RootGuid, NumBin, NumBin))
-        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
-
-        AnsNums = lists:foldl(fun(_Num, Acc) ->
-            % receive & validate
-            M = fuse_utils:receive_server_message(),
-            ?assertMatch(#'ServerMessage'{message_body = {
-                fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-            }}, M),
-            #'ServerMessage'{message_id = NumBin} = M,
-            [NumBin | Acc]
-        end, [], lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
-
-        lists:foreach(fun(Num) ->
-            NumBin = integer_to_binary(Num),
-            ?assert(lists:member(NumBin, AnsNums))
-        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
-
-        lists:foreach(fun(Num) ->
-            LSBin = list_to_binary(integer_to_list(Num) ++ "ls"),
-            ok = ssl:send(Sock2, fuse_utils:generate_get_children_attrs_message(RootGuid, LSBin)),
-            % receive & validate
-            ?assertMatch(#'ServerMessage'{message_body = {
-                fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-            }, message_id = LSBin}, fuse_utils:receive_server_message())
-        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100))
-    end, lists:seq(1, 10)).
-
-timeouts_test(Config) ->
+heartbeats_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
@@ -488,19 +404,9 @@ timeouts_test(Config) ->
 
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
-    fsync_timeouts_test(Config, Sock, RootGuid).
+    fsync_timeouts_test(Config, Sock, RootGuid),
+    ok = ssl:close(Sock).
 
-client_keepalive_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-
-    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
-    initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
-    % send keepalive msg and assert it will not end in decoding error
-    % on provider side (following communication should succeed)
-    ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
-    create_timeouts_test(Config, Sock, RootGuid).
 
 create_timeouts_test(Config, Sock, RootGuid) ->
     % send
@@ -585,7 +491,48 @@ fsync_timeouts_test(Config, Sock, RootGuid) ->
     ).
 
 
-closing_connection_should_cancel_all_session_transfers_test(Config) ->
+socket_timeout_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+
+    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    initializer:remove_pending_messages(),
+
+    lists:foreach(fun(MainNum) ->
+        {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
+
+        lists:foreach(fun(Num) ->
+            NumBin = integer_to_binary(Num),
+            % send
+            ok = ssl:send(Sock2, fuse_utils:generate_create_file_message(RootGuid, NumBin, NumBin))
+        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        AnsNums = lists:foldl(fun(_Num, Acc) ->
+            % receive & validate
+            M = fuse_utils:receive_server_message(),
+            ?assertMatch(#'ServerMessage'{message_body = {
+                fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
+            }}, M),
+            #'ServerMessage'{message_id = NumBin} = M,
+            [NumBin | Acc]
+        end, [], lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        lists:foreach(fun(Num) ->
+            NumBin = integer_to_binary(Num),
+            ?assert(lists:member(NumBin, AnsNums))
+        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        lists:foreach(fun(_Num) ->
+            fuse_utils:ls(Sock2, RootGuid)
+        end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
+
+        timer:sleep(timer:seconds(15)),
+        ?assertMatch({error, closed}, ssl:send(Sock2, fuse_utils:generate_ping_message()))
+
+    end, lists:seq(1, 10)).
+
+
+closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
@@ -602,24 +549,17 @@ closing_connection_should_cancel_all_session_transfers_test(Config) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
     % when
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
-    ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"1">>}, fuse_utils:receive_server_message()),
-
-    FileGuid = get_guid(Worker1, SessionId, <<"/space_name1/f1">>),
+    {FileGuid, _HandleId} = fuse_utils:create_file(Sock, RootGuid, <<"f111">>),
+    _HandleId2 = fuse_utils:open(Sock, FileGuid),
     FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
-
-    ok = ssl:send(Sock, fuse_utils:generate_open_file_message(FileGuid, <<"2">>)),
-    ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"2">>}, fuse_utils:receive_server_message()),
 
     ok = ssl:close(Sock),
 
     % then
     timer:sleep(timer:seconds(60)),
 
+    % File was opened 2 times (create and following open) so cancel should
+    % also be called 2 times
     CallsNum = lists:sum(meck_get_num_calls([Worker1], Mod, Fun, '_')),
     ?assertMatch(2, CallsNum),
 
@@ -654,7 +594,8 @@ init_per_testcase(Case, Config) when
     Case =:= fallback_during_sending_response_because_of_connection_close_test;
     Case =:= fallback_during_sending_response_because_of_connection_error_test;
     Case =:= fulfill_promises_after_connection_close_test;
-    Case =:= fulfill_promises_after_connection_error_test ->
+    Case =:= fulfill_promises_after_connection_error_test
+->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
@@ -678,10 +619,7 @@ init_per_testcase(Case, Config) when
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(NewConfig);
 
-
-
-
-init_per_testcase(timeouts_test, Config) ->
+init_per_testcase(heartbeats_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     ssl:start(),
@@ -719,22 +657,19 @@ init_per_testcase(timeouts_test, Config) ->
     [{control_proc, CP_Pid} |
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
-init_per_testcase(client_keepalive_test, Config) ->
-    init_per_testcase(timeouts_test, Config);
-
-init_per_testcase(closing_connection_should_cancel_all_session_transfers_test, Config) ->
-    % Shorten ttl to force quicker client session removal
-    init_per_testcase(timeouts_test, [{fuse_session_ttl_seconds, 10} | Config]);
-
 init_per_testcase(socket_timeout_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME,
             proto_connection_timeout, timer:seconds(10))
     end, Workers),
-    init_per_testcase(timeouts_test, Config);
+    init_per_testcase(heartbeats_test, Config);
 
-init_per_testcase(default, Config) ->
+init_per_testcase(closing_last_connection_should_cancel_all_session_transfers_test, Config) ->
+    % Shorten ttl to force quicker client session removal
+    init_per_testcase(heartbeats_test, [{fuse_session_ttl_seconds, 10} | Config]);
+
+init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
@@ -743,64 +678,47 @@ init_per_testcase(default, Config) ->
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"auth-macaroon">>, <<"identity-macaroon">>
     ),
-    Config;
-
-init_per_testcase(_Case, Config) ->
-    init_per_testcase(default, Config).
-
-
-
-
-
-
-
-
-
+    Config.
 
 
 end_per_testcase(Case, Config) when
     Case =:= fallback_during_sending_response_because_of_connection_close_test;
     Case =:= fallback_during_sending_response_because_of_connection_error_test;
     Case =:= fulfill_promises_after_connection_close_test;
-    Case =:= fulfill_promises_after_connection_error_test ->
+    Case =:= fulfill_promises_after_connection_error_test
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router, guid_req]),
     ssl:stop(),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config);
 
-
-end_per_testcase(timeouts_test, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= heartbeats_test;
+    Case =:= closing_last_connection_should_cancel_all_session_transfers_test
+->
     Workers = ?config(op_worker_nodes, Config),
     CP_Pid = ?config(control_proc, Config),
     ssl:stop(),
     stop_control_proc(CP_Pid),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, helpers,
-        attr_req, fslogic_event_handler]),
+    test_utils:mock_validate_and_unload(Workers, [
+        user_identity, helpers, attr_req, fslogic_event_handler
+    ]),
     initializer:clean_test_users_and_spaces_no_validate(Config);
-
-end_per_testcase(client_keepalive_test, Config) ->
-    end_per_testcase(timeouts_test, Config);
 
 end_per_testcase(socket_timeout_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME,
-            proto_connection_timeout, timer:minutes(10))
+            proto_connection_timeout, timer:hours(24))
     end, Workers),
-    end_per_testcase(timeouts_test, Config);
+    end_per_testcase(heartbeats_test, Config);
 
-end_per_testcase(closing_connection_should_cancel_all_session_transfers_test, Config) ->
-    end_per_testcase(timeouts_test, Config);
-    
-end_per_testcase(default, Config) ->
+end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
     test_utils:mock_validate_and_unload(Workers, [user_identity]),
-    ssl:stop();
-
-end_per_testcase(_Case, Config) ->
-    end_per_testcase(default, Config).
+    ssl:stop().
 
 
 %%%===================================================================
@@ -841,7 +759,7 @@ prolong_msg_routing(Workers) ->
     test_utils:mock_new(Workers, router),
     test_utils:mock_expect(Workers, router, route_message,
         fun(Msg, ReplyTo) ->
-            timer:sleep(2000),
+            timer:sleep(5000),
             meck:passthrough([Msg, ReplyTo])
         end
     ).

@@ -100,6 +100,9 @@ communicate(SessionId, RawMsg) ->
         ok ->
             await_response(Msg);
         Error ->
+            ?error_stacktrace("Failed to communicate msg ~p to peer: ~p", [
+                Msg, SessionId
+            ]),
             Error
     end.
 
@@ -143,6 +146,9 @@ send_sync(SessionId, RawMsg, Recipient, ExcludedCons) ->
         {ok, _} ->
             {ok, MsgId};
         {Error, _} ->
+            ?error_stacktrace("Failed to send msg ~p to peer: ~p", [
+                Msg, SessionId
+            ]),
             Error
     end.
 
