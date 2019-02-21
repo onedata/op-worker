@@ -50,7 +50,7 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
--define(IPS_CACHE_TTL, application:get_env(?APP_NAME, provider_ips_cache_ttl, timer:minutes(10))).
+-define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
 %%%===================================================================
 %%% API
@@ -389,9 +389,10 @@ get_domain(SessionId, ProviderId) ->
 -spec get_nodes(od_provider:id()) -> {ok, [binary()]} | {error, term()}.
 get_nodes(ProviderId) ->
     ResolveNodes = fun() ->
-        case get_domain(?ROOT_SESS_ID, ProviderId) of
+        % Call by ?MODULE to allow for CT testing
+        case ?MODULE:get_domain(?ROOT_SESS_ID, ProviderId) of
             {ok, Domain} ->
-                {true, get_nodes(ProviderId, Domain), ?IPS_CACHE_TTL};
+                {true, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
             {error, _} = Error ->
                 Error
         end

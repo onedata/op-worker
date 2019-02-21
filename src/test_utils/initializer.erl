@@ -515,7 +515,8 @@ testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
 
 -spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
 node_get_mocked_space_user_privileges(SpaceId, UserId) ->
-    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() -> {false, privileges:space_admin()} end),
+    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() ->
+        {false, privileges:space_admin()} end),
     Privileges.
 
 -spec mock_share_logic(proplists:proplist()) -> ok.
@@ -541,7 +542,6 @@ mock_share_logic(Config) ->
 unmock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, share_logic).
-
 
 
 %%%===================================================================
@@ -1019,7 +1019,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                 {ok, #document{key = PID, value = #od_provider{
                     name = PID,
                     subdomain_delegation = false,
-                    domain = PID,
+                    domain = PID,  % domain is the same as Id
                     spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
                     longitude = 0.0,
                     latitude = 0.0
@@ -1037,7 +1037,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         {ok, Domain}
     end,
 
-    GetNodesFun = fun(?ROOT_SESS_ID, PID) ->
+    GetNodesFun = fun(PID) ->
         {ok, Domain} = GetDomainFun(?ROOT_SESS_ID, PID),
         % Simulate the fact some providers can be reached only by their domain
         case rand:uniform(2) of
@@ -1119,11 +1119,6 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_nodes, GetNodesFun),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, get_nodes,
-        fun(PID) ->
-            GetNodesFun(?ROOT_SESS_ID, PID)
-        end),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces, GetSpacesFun),
