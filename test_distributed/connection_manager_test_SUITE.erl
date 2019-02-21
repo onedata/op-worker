@@ -199,7 +199,7 @@ fulfill_promises_after_connection_close_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessionId = crypto:strong_rand_bytes(10),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
     {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
     {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
@@ -249,22 +249,21 @@ fulfill_promises_after_connection_close_test(Config) ->
 fulfill_promises_after_connection_error_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
     {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
 
     mock_ranch_ssl(?FUNCTION_NAME, Workers),
-    ssl:send(Sock1, create_resolve_guid_req(Path)),
+    ok = ssl:send(Sock2, create_resolve_guid_req(Path)),
 
     % Fuse requests are handled using promises - connection process holds info
     % about pending requests. Even after connection close, the promises should
     % be handled and responses sent to other connection within the session.
     GatherResponses = fun Fun(Counter) ->
-        ssl:setopts(Sock2, [{active, once}]),
         case fuse_utils:receive_server_message() of
             #'ServerMessage'{
                 message_body = {processing_status, #'ProcessingStatus'{
@@ -544,7 +543,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
     % when
-    {FileGuid, _HandleId} = fuse_utils:create_file(Sock, RootGuid, <<"f111">>),
+    {FileGuid, _HandleId} = fuse_utils:create_file(Sock, RootGuid, <<"clcscastt1">>),
     _HandleId2 = fuse_utils:open(Sock, FileGuid),
     FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
 

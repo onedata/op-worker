@@ -57,7 +57,7 @@
 -type req_id() :: {reference(), message_id:id()}.
 -type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
 
--define(PROCESSES_CHECK_INTERVAL, application:get_env(
+-define(WORKERS_CHECK_INTERVAL, application:get_env(
     ?APP_NAME, router_processes_check_interval, timer:seconds(10)
 )).
 
@@ -125,21 +125,21 @@ send_sync(SessionId, Msg) ->
 %%--------------------------------------------------------------------
 -spec send_sync(session:id(), message(), Recipient :: undefined | pid()) ->
     ok | {ok, message_id:id()} | {error, Reason :: term()}.
-send_sync(SessionId, RawMsg, Recipient) ->
-    send_sync(SessionId, RawMsg, Recipient, []).
+send_sync(SessionId, Msg, Recipient) ->
+    send_sync(SessionId, Msg, Recipient, []).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Tries to send message to peer via any connection of specified session.
-%% In case of errors, tries to do it via other connections as well.
-%% In the end either message is sent or no more connections are available.
+%% Tries to send message to peer. In case of errors on one session
+%% connection it tries another and so on until it succeed or
+%% no more valid connections are available.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_sync(session:id(), message(), Recipient :: undefined | pid(),
     [pid()]) -> ok | {ok, message_id:id()} | {error, Reason :: term()}.
-send_sync(SessionId, RawMsg, Recipient, ExcludedCons) ->
-    {MsgId, Msg} = protocol_utils:maybe_set_msg_id(RawMsg, Recipient),
+send_sync(SessionId, Msg0, Recipient, ExcludedCons) ->
+    {MsgId, Msg} = protocol_utils:maybe_set_msg_id(Msg0, Recipient),
     case {send_sync_internal(SessionId, Msg, ExcludedCons), MsgId} of
         {ok, undefined} ->
             ok;
@@ -170,7 +170,7 @@ send_async(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Assigns unique id for request with specified message id.
+%% Creates unique id for request with specified message id.
 %% @end
 %%--------------------------------------------------------------------
 -spec assign_request_id(message_id:id()) -> req_id().
@@ -212,6 +212,9 @@ respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
                 ok ->
                     report_response_sent(ConnManager, ReqId);
                 Error ->
+                    ?error_stacktrace("Failed to send response ~p to peer: ~p", [
+                        Response, SessionId
+                    ]),
                     Error
             end;
         Error ->
@@ -268,7 +271,7 @@ handle_call({withheld_heartbeats, Pid, ReqId}, _From, #state{
     withheld_heartbeats = WithheldHeartbeats
 } = State) ->
     {NewPendingReqs, NewUnreportedReqs} = case maps:take(ReqId, PendingReqs) of
-        {_Pid, PendingReqs2} ->
+        {_, PendingReqs2} ->
             {PendingReqs2, UnreportedReqs};
         error ->
             {PendingReqs, UnreportedReqs#{ReqId => Pid}}
@@ -338,20 +341,18 @@ handle_info(heartbeat, #state{
     pending_requests = PR,
     withheld_heartbeats = WH
 } = State) ->
-    case session_connections:get_connections(SessionId) of
+    NewState = case session_connections:get_connections(SessionId) of
         {ok, Cons} ->
-            NewState = State#state{
-                pending_requests = check_processes(PR, Cons, true),
-                withheld_heartbeats = check_processes(WH, Cons, false),
+            State#state{
+                pending_requests = check_workers_status(PR, Cons, true),
+                withheld_heartbeats = check_workers_status(WH, Cons, false),
                 heartbeat_timer = undefined
-            },
-            {noreply, set_heartbeat_timer(NewState)};
+            };
         Error ->
             ?error("Failed to send heartbeats due to: ~p", [Error]),
-            {noreply, set_heartbeat_timer(State#state{
-                heartbeat_timer = undefined
-            })}
-    end;
+            State#state{heartbeat_timer = undefined}
+    end,
+    {noreply, set_heartbeat_timer(NewState)};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -423,7 +424,7 @@ send_in_loop(Msg, [Conn | Cons]) ->
 %% @private
 -spec await_response(message()) -> {ok, message()} | {error, timeout}.
 await_response(#client_message{message_id = MsgId} = Msg) ->
-    Timeout = 3 * ?PROCESSES_CHECK_INTERVAL,
+    Timeout = 3 * ?WORKERS_CHECK_INTERVAL,
     receive
         #server_message{
             message_id = MsgId,
@@ -510,18 +511,31 @@ call_conn_manager(ConnManager, Msg) ->
             ?debug("Timeout of connection manager process ~p", [ConnManager]),
             {error, timeout};
         Type:Reason ->
-            ?error("Cannot call connection manager ~p due to: ~p", [
-                ConnManager, {Type, Reason}
+            ?error("Cannot call connection manager ~p due to ~p:~p", [
+                ConnManager, Type, Reason
             ]),
             {error, Reason}
     end.
 
 
-check_processes(ProcessesMap, Cons, SendHeartbeats) ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether workers/processes handling requests are still alive.
+%% If they are, optionally (SendHeartbeats flag) informs peer about
+%% ongoing requests processing by sending heartbeat messages.
+%% Otherwise (dead workers) schedules error messages to be send during
+%% next checkup. They are not send immediately to avoid race
+%% response/heartbeats.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_workers_status(Workers, [pid()], boolean()) -> Workers when
+    Workers :: #{req_id() => pid() | {pid(), not_alive}}.
+check_workers_status(Workers, Cons, SendHeartbeats) ->
     maps:fold(
         fun
             ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
-                ?error("ConnManager: process ~p connected with req_id ~p is not alive",
+                ?error("ConnManager: process ~p connected with req_id ~p is dead",
                     [Pid, ReqId]
                 ),
                 send_in_loop(?ERROR_MSG(MsgId), Cons),
@@ -537,17 +551,16 @@ check_processes(ProcessesMap, Cons, SendHeartbeats) ->
                     true ->
                         Acc#{ReqId => Pid};
                     false ->
-                        % Wait with error for another heartbeat
-                        % (possible race heartbeat/answer)
                         Acc#{ReqId => {Pid, not_alive}}
                 end
-        end,
-        #{}, ProcessesMap).
+        end, #{}, Workers
+    ).
 
 
 %% @private
+-spec set_heartbeat_timer(state()) -> state().
 set_heartbeat_timer(#state{heartbeat_timer = undefined} = State) ->
-    TimerRef = erlang:send_after(?PROCESSES_CHECK_INTERVAL, self(), heartbeat),
+    TimerRef = erlang:send_after(?WORKERS_CHECK_INTERVAL, self(), heartbeat),
     State#state{heartbeat_timer = TimerRef};
 set_heartbeat_timer(State) ->
     State.
