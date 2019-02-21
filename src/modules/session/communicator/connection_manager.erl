@@ -542,7 +542,7 @@ check_processes(ProcessesMap, Cons, SendHeartbeats) ->
                         Acc#{ReqId => {Pid, not_alive}}
                 end
         end,
-    ProcessesMap, #{}).
+        #{}, ProcessesMap).
 
 
 %% @private

@@ -75,7 +75,7 @@
     communicate_async_test,
 
     client_keepalive_test,
-%%    heartbeats_test,
+    heartbeats_test,
 
 %%    socket_timeout_test,
     closing_last_connection_should_cancel_all_session_transfers_test
@@ -409,16 +409,11 @@ heartbeats_test(Config) ->
 
 
 create_timeouts_test(Config, Sock, RootGuid) ->
-    % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"1">>, <<"f1">>)),
-    % receive & validate
-    ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"1">>}, fuse_utils:receive_server_message()),
+    fuse_utils:create_file(Sock, RootGuid, <<"ctt1">>),
 
     configure_cp(Config, helper_timeout),
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"2">>, <<"f2">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"2">>, <<"ctt2">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -432,7 +427,7 @@ create_timeouts_test(Config, Sock, RootGuid) ->
     ),
 
     configure_cp(Config, helper_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"3">>, <<"f3">>)),
+    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"3">>, <<"ctt3">>)),
     % receive & validate
     check_answer(fun() -> ?assertMatchTwo(
         #'ServerMessage'{message_body = {
@@ -556,7 +551,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     ok = ssl:close(Sock),
 
     % then
-    timer:sleep(timer:seconds(60)),
+    timer:sleep(timer:seconds(90)),
 
     % File was opened 2 times (create and following open) so cancel should
     % also be called 2 times
