@@ -1037,9 +1037,16 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         {ok, Domain}
     end,
 
-    ResolveIPsFun = fun(?ROOT_SESS_ID, PID) ->
+    GetNodesFun = fun(?ROOT_SESS_ID, PID) ->
         {ok, Domain} = GetDomainFun(?ROOT_SESS_ID, PID),
-        inet:getaddrs(binary_to_list(Domain), inet)
+        % Simulate the fact some providers can be reached only by their domain
+        case rand:uniform(2) of
+            1 ->
+                {ok, [Domain]};
+            2 ->
+                {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
+                {ok, [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms]}
+        end
     end,
 
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
@@ -1111,11 +1118,11 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
+    test_utils:mock_expect(AllWorkers, provider_logic, get_nodes, GetNodesFun),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips,
+    test_utils:mock_expect(AllWorkers, provider_logic, get_nodes,
         fun(PID) ->
-            ResolveIPsFun(?ROOT_SESS_ID, PID)
+            GetNodesFun(?ROOT_SESS_ID, PID)
         end),
 
 
@@ -1185,11 +1192,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                 URL = str_utils:format_bin("https://~s~s?nonce=~s", [
                     Hostname, ?NONCE_VERIFY_PATH, Nonce
                 ]),
-
-                CaCerts = oneprovider:trusted_ca_certs(),
-                SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
-                Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
-
+                Opts = [{ssl_options, provider_logic:provider_connection_ssl_opts(Hostname)}],
                 case http_client:get(URL, #{}, <<>>, Opts) of
                     {ok, 200, _, JSON} ->
                         case json_utils:decode(JSON) of
