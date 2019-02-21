@@ -214,8 +214,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
 
 
 end_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Config) ->
@@ -231,7 +230,6 @@ end_per_testcase(Case, Config) when
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
