@@ -129,16 +129,17 @@
     readdir_plus_should_work_with_token,
     readdir_plus_should_work_with_token2,
     readdir_should_work_with_token,
-    readdir_should_work_with_token2,
-    lfm_recreate_handle_test,
-    lfm_open_failure_test,
-    lfm_create_and_open_failure_test,
-    open_in_direct_mode_test,
-    lfm_copy_failure_test,
-    lfm_open_multiple_times,
-    lfm_open_multiple_users,
-    lfm_open_and_create_open_test,
-    lfm_copy_failure_multiple_users_test
+    readdir_should_work_with_token2
+%%    TODO: Turn on this tests after resolving VFS-5232
+%%    lfm_recreate_handle_test,
+%%    lfm_open_failure_test
+%%    lfm_create_and_open_failure_test,
+%%    open_in_direct_mode_test,
+%%    lfm_copy_failure_test,
+%%    lfm_open_multiple_times,
+%%    lfm_open_multiple_users,
+%%    lfm_open_and_create_open_test,
+%%    lfm_copy_failure_multiple_users_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -170,176 +171,146 @@ end).
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
 lfm_recreate_handle_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
 
+    %% remove handle before write to file so that handle has to be recreated
     Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
     HandleId = lfm_context:get_handle_id(Context),
     rpc:call(W, session_handles, remove, [SessId1, HandleId]),
 
+    %% try to write to file to confirm that handle has been recreated
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
-
     ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
     FileGuid = lfm_context:get_guid(Context),
-    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])).
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, CacheEntriesBefore, MemEntriesAfter, CacheEntriesAfter).
 
 lfm_open_failure_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register_open failure so that open file will fail
+    register_open_failure_mock(W),
 
-    {error, ?EAGAIN} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
     ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
 
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, CacheEntriesBefore, MemEntriesAfter, CacheEntriesAfter).
 
 lfm_create_and_open_failure_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     ParentGuid = get_guid(W, SessId1, <<"/space_name1">>),
 
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register open failure so that create_and_open file will fail
+    register_open_failure_mock(W),
 
-    {error, ?EAGAIN} = lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755)),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_read">>})),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 lfm_open_and_create_open_failure_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     ParentGuid = get_guid(W, SessId1, <<"/space_name1">>),
 
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register_open failure so that create_and_open and open file will fail
+    register_open_failure_mock(W),
 
-    {error, ?EAGAIN} = lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:create_and_open(W, SessId1, ParentGuid, <<"test_read">>, 8#755)),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_read">>})),
-%%    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
 
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
-    {error, ?EAGAIN} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
-%%    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
+    ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 lfm_open_multiple_times_failure_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
-    %% Everything goes ok
+    %% here all operations should succeed
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
-    {ok, 9} = lfm_proxy:write(W, Handle, 0, <<"test_data">>),
-    ok = lfm_proxy:close(W, Handle),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
-    %% This time an error occurs during opening file
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register_open failure so that open file will fail
+    register_open_failure_mock(W),
 
-    {error, ?EAGAIN} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
     ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
+
+    %% unload mock for register_open so that open will succeed again
     test_utils:mock_unload(W, file_handles),
 
-    %% And again everything goes ok
     {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
-    {ok, 11} = lfm_proxy:write(W, Handle2, 9, <<" test_data2">>),
-    {ok, <<"test_data test_data2">>} = lfm_proxy:read(W, Handle2, 0, 20),
-    ok = lfm_proxy:close(W, Handle2),
+    ?assertEqual({ok, 11}, lfm_proxy:write(W, Handle2, 9, <<" test_data2">>)),
+    ?assertEqual({ok, <<"test_data test_data2">>}, lfm_proxy:read(W, Handle2, 0, 20)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle2)),
 
     ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 lfm_open_failure_multiple_users_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
-
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>, 8#775),
 
-    %% User1 writes to file
+    %% here all operations should succeed
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
-    {ok, 9} = lfm_proxy:write(W, Handle, 0, <<"test_data">>),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
 
-    %% User2 fails to open file
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register_open failure so that open file will fail
+    register_open_failure_mock(W),
 
-    {error, ?EAGAIN} = lfm_proxy:open(W, SessId2, {path, <<"/space_name2/test_read">>}, rdwr),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId2, {path, <<"/space_name2/test_read">>}, rdwr)),
     ?assertEqual(0, get_session_file_handles_num(W, FileGuid, SessId2)),
 
-    %% User1 handle should still exists
+    %% check that user1 handle still exists
     ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
 
+    %% unload mock for register_open so that operations will succeed again
     test_utils:mock_unload(W, file_handles),
 
-    %% And again everything goes ok
-    {ok, 11} = lfm_proxy:write(W, Handle, 9, <<" test_data2">>),
-    {ok, <<"test_data test_data2">>} = lfm_proxy:read(W, Handle, 0, 20),
-    ok = lfm_proxy:close(W, Handle),
+    %% check that user1 can still use his handle
+    ?assertEqual({ok, 11}, lfm_proxy:write(W, Handle, 9, <<" test_data2">>)),
+    ?assertEqual({ok, <<"test_data test_data2">>}, lfm_proxy:read(W, Handle, 0, 20)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
     ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 lfm_open_in_direct_mode_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
+    %% force direct io mode
     test_utils:mock_new(W, user_ctx, [passthrough]),
     test_utils:mock_expect(W, user_ctx, is_direct_io,
         fun(_) ->
@@ -350,76 +321,60 @@ lfm_open_in_direct_mode_test(Config) ->
     Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
     HandleId = lfm_context:get_handle_id(Context),
     ?assertEqual({error, not_found}, rpc:call(W, session_handles, get, [SessId1, HandleId])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
+    ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
 
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 lfm_copy_failure_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register_open failure so that mv function will fail
+    register_open_failure_mock(W),
 
-    %% File has to be moved to different space in order to use copy / delete
-    {error, ?EAGAIN} = lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name2/test_read2">>),
+    %% file has to be moved to different space in order to use copy / delete
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name2/test_read2">>)),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 lfm_copy_failure_multiple_users_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {MemEntriesBefore, CacheEntriesBefore} = get_memory_and_disc_entries(W),
+    {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
-
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>, 8#775),
 
-    %% User1 writes to file using handle
+    %% user1 succeeds to write to file using handle
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
-    {ok, 9} = lfm_proxy:write(W, Handle, 0, <<"test_data">>),
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
 
-    test_utils:mock_new(W, file_handles, [passthrough]),
-    test_utils:mock_expect(W, file_handles, register_open,
-        fun(FileCtx, SessId, Count) ->
-            meck:passthrough([FileCtx, SessId, Count]),
-            throw(error)
-        end),
+    %% force register_open failure so that mv function will fail
+    register_open_failure_mock(W),
 
-    %% User2 fails to move file
-    {error, ?EAGAIN} = lfm_proxy:mv(W, SessId2, {guid, FileGuid}, <<"/space_name3/test_read2">>),
+    %% user2 fails to move file
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:mv(W, SessId2, {guid, FileGuid}, <<"/space_name3/test_read2">>)),
     ?assertEqual(0, get_session_file_handles_num(W, FileGuid, SessId2)),
     {ok, Docs} = rpc:call(W, file_handles, list, []),
     ?assertEqual(1, length(Docs)),
 
+    %% unload mock for register_open so that operations will succeed again
     test_utils:mock_unload(W, file_handles),
 
-    %% User1 handle should still exists
+    %% user1 handle should still exists
     ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
 
-    %% User1 can still write to file using his handle
-    {ok, 11} = lfm_proxy:write(W, Handle, 9, <<" test_data2">>),
-    {ok, <<"test_data test_data2">>} = lfm_proxy:read(W, Handle, 0, 20),
-    ok = lfm_proxy:close(W, Handle),
+    %% check that user1 can still write to file using his handle
+    ?assertEqual({ok, 11}, lfm_proxy:write(W, Handle, 9, <<" test_data2">>)),
+    ?assertEqual({ok, <<"test_data test_data2">>}, lfm_proxy:read(W, Handle, 0, 20)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
     ?assertEqual(false, rpc:call(W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])),
-    {MemEntriesAfter, CacheEntriesAfter} = get_memory_and_disc_entries(W),
-    MemRes = get_documents_diff(W, MemEntriesAfter, MemEntriesBefore),
-    CacheRes = get_documents_diff(W, CacheEntriesAfter, CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemRes, CacheRes]).
-
-
+    {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
+    print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter, CacheEntriesBefore, CacheEntriesAfter).
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 0),
@@ -1532,7 +1487,7 @@ file_popularity_should_have_correct_file_size(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
@@ -1590,46 +1545,29 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-get_memory_and_disc_entries(Worker) ->
-    MemEntries = get_pools_entries(Worker, memory),
-    DiscEntries = get_pools_entries(Worker, disc),
+register_open_failure_mock(Worker) ->
+    test_utils:mock_new(Worker, file_handles, [passthrough]),
+    test_utils:mock_expect(Worker, file_handles, register_open,
+        fun(FileCtx, SessId, Count) ->
+            meck:passthrough([FileCtx, SessId, Count]),
+            throw(error)
+        end).
+
+print_mem_and_disc_docs_diff(Worker, MemEntriesBefore, CacheEntriesBefore, MemEntriesAfter, CacheEntriesAfter) ->
+    MemDiff = pool_utils:get_documents_diff(Worker, MemEntriesAfter, MemEntriesBefore),
+    CacheDiff = pool_utils:get_documents_diff(Worker, CacheEntriesAfter, CacheEntriesBefore),
+    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemDiff, CacheDiff]).
+
+get_mem_and_disc_entries(Worker) ->
+    {MemEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, memory),
+    {DiscEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, disc),
     {MemEntries, DiscEntries}.
 
-
-get_pools_entries(Worker, PoolType) ->
-    Pools = rpc:call(Worker, datastore_multiplier, get_names, [PoolType]),
-    Entries = lists:map(fun(Pool) ->
-        PoolName = list_to_atom("datastore_cache_active_pool_" ++ atom_to_list(Pool)),
-        rpc:call(Worker, ets, foldl, [fun(Entry, Acc) -> Acc ++ [Entry] end, [], PoolName])
-                        end, Pools),
-    Entries.
-
-get_documents_diff(Worker, After, Before) ->
-    Ans = lists:flatten(lists:zipwith(fun(A,B) ->
-        Diff = A--B,
-        lists:map(fun({Key, Driver, DriverCtx}) ->
-            rpc:call(Worker, Driver, get, [DriverCtx, Key])
-                  end, [{Key, Driver, DriverCtx} || {_,Key,_,_,Driver, DriverCtx} <- Diff])
-                                      end, After, Before)),
-    lists:filter(fun
-                     ({ok, #document{value = #links_node{model = luma_cache}}}) -> false;
-                     ({ok, #document{value = #links_forest{model = luma_cache}}}) -> false;
-                     ({ok, #document{value = #links_node{model = task_pool}}}) -> false;
-                     ({ok, #document{value = #links_forest{model = task_pool}}}) -> false;
-                     ({ok, #document{value = #task_pool{}}}) -> false;
-                     ({ok, #document{value = #permissions_cache{}}}) -> false;
-                     ({ok, #document{value = #permissions_cache_helper{}}}) -> false;
-                     ({ok, #document{value = #permissions_cache_helper2{}}}) -> false;
-                     (_) -> true
-                 end, Ans).
-
 get_session_file_handles_num(W, FileGuid, SessionId) ->
-    {ok, Docs} = rpc:call(W, file_handles, list, []),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-    Doc = lists:keyfind(FileUuid, 2, Docs),
-    {document, FileUuid, FileHandles, _, _, _, _, _, _} = Doc,
-    {_, _, FileHandlesMap} = FileHandles,
-    case maps:find(SessionId, FileHandlesMap) of
+    {ok, [#document{key = FileUuid, value = FileHandlesRec} | _]} = rpc:call(W, file_handles, list, []),
+    Descriptors = FileHandlesRec#file_handles.descriptors,
+    case maps:find(SessionId, Descriptors) of
       {ok, HandlesNum} ->
         HandlesNum;
       error ->
