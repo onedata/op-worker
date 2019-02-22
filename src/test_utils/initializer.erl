@@ -1174,35 +1174,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        VerifyProviderIdentityFun),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_nonce,
-        fun(ProviderId, Nonce) ->
-            {ok, #document{value = #od_provider{
-                domain = Domain
-            }}} = GetProviderFun(?ROOT_SESS_ID, ProviderId),
-            [Worker | _] = get_same_domain_workers(Config, binary_to_atom(Domain, utf8)),
-            Hostname = ?GET_HOSTNAME(Worker),
-            try
-                URL = str_utils:format_bin("https://~s~s?nonce=~s", [
-                    Hostname, ?NONCE_VERIFY_PATH, Nonce
-                ]),
-                Opts = [{ssl_options, provider_logic:provider_connection_ssl_opts(Hostname)}],
-                case http_client:get(URL, #{}, <<>>, Opts) of
-                    {ok, 200, _, JSON} ->
-                        case json_utils:decode(JSON) of
-                            #{<<"status">> := <<"ok">>} -> ok;
-                            _ -> {error, invalid_nonce}
-                        end;
-                    {ok, Code, _, _} ->
-                        {error, {bad_http_code, Code}};
-                    {error, _} = Error ->
-                        Error
-                end
-            catch _:_ ->
-                {error, unauthorized}
-            end
-        end).
+        VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -741,7 +741,8 @@ verify_provider_identity(ProviderId, IdentityMacaroon) ->
     ok | {error, term()}.
 verify_provider_nonce(ProviderId, Nonce) ->
     try
-        {ok, Domain} = get_domain(ProviderId),
+        % Call by ?MODULE to allow for CT testing
+        {ok, Domain} = ?MODULE:get_domain(ProviderId),
         URL = str_utils:format_bin("https://~s~s?nonce=~s", [Domain, ?NONCE_VERIFY_PATH, Nonce]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, #{}, <<>>, SslOpts) of
