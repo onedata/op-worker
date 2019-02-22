@@ -408,8 +408,6 @@ heartbeats_test(Config) ->
 
 
 create_timeouts_test(Config, Sock, RootGuid) ->
-    fuse_utils:create_file(Sock, RootGuid, <<"ctt1">>),
-
     configure_cp(Config, helper_timeout),
     % send
     ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"2">>, <<"ctt2">>)),
@@ -440,14 +438,6 @@ create_timeouts_test(Config, Sock, RootGuid) ->
     ).
 
 ls_timeouts_test(Config, Sock, RootGuid) ->
-    % send
-    configure_cp(Config, ok),
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls1">>)),
-    % receive & validate
-    ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"ls1">>}, fuse_utils:receive_server_message()),
-
     configure_cp(Config, attr_delay),
     ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls2">>)),
     % receive & validate
@@ -463,13 +453,6 @@ ls_timeouts_test(Config, Sock, RootGuid) ->
     ).
 
 fsync_timeouts_test(Config, Sock, RootGuid) ->
-    configure_cp(Config, ok),
-    ok = ssl:send(Sock, fuse_utils:generate_fsync_message(RootGuid, <<"fs1">>)),
-    % receive & validate
-    ?assertMatch(#'ServerMessage'{message_body = {
-        fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"fs1">>}, fuse_utils:receive_server_message()),
-
     configure_cp(Config, events_delay),
     ok = ssl:send(Sock, fuse_utils:generate_fsync_message(RootGuid, <<"fs2">>)),
     % receive & validate
@@ -539,14 +522,13 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
         meck:passthrough([FileUuid, SessId])
     end),
 
-    % Create a couple of connections within the same session
     {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
     % when
-    {FileGuid, _HandleId} = fuse_utils:create_file(Sock, RootGuid, <<"clcscastt1">>),
-    _HandleId2 = fuse_utils:open(Sock, FileGuid),
+    fuse_utils:create_file(Sock, RootGuid, <<"f1">>),
+    FileGuid = get_guid(Worker1, SessionId, <<"/space_name1/f1">>),
     FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
-
+    fuse_utils:open(Sock, FileGuid),
     ok = ssl:close(Sock),
 
     % then
