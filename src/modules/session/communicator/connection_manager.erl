@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 -export([
     communicate/2,
     send_sync/2, send_sync/3, send_sync/4,
@@ -60,6 +60,7 @@
 -define(WORKERS_CHECK_INTERVAL, application:get_env(
     ?APP_NAME, router_processes_check_interval, timer:seconds(10)
 )).
+-define(KEEPALIVE_TIMEOUT, timer:seconds(30)).
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,
@@ -77,13 +78,14 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server
+%% Starts the server and optionally sets keepalive timeout (it should
+%% be done only for provider_outgoing sessions).
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id()) ->
+-spec start_link(SessId :: session:id(), SetKeepaliveTimeout :: boolean()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId) ->
-    gen_server:start_link(?MODULE, [SessId], []).
+start_link(SessId, SetKeepaliveTimeout) ->
+    gen_server:start_link(?MODULE, [SessId, SetKeepaliveTimeout], []).
 
 
 %%--------------------------------------------------------------------
@@ -243,12 +245,13 @@ respond(SessionId, ReqId, Ans) ->
 -spec init(Args :: term()) ->
     {ok, state()} | {ok, state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessId]) ->
+init([SessId, SetKeepaliveTimeout]) ->
     process_flag(trap_exit, true),
     Self = self(),
     {ok, _} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{connection_manager = Self}}
     end),
+    maybe_set_keepalive_timeout(SetKeepaliveTimeout),
     {ok, #state{session_id = SessId}}.
 
 
@@ -349,10 +352,23 @@ handle_info(heartbeat, #state{
                 heartbeat_timer = undefined
             };
         Error ->
-            ?error("Failed to send heartbeats due to: ~p", [Error]),
+            ?error("Failed to fetch connections to send heartbeats because "
+                   "of: ~p", [Error]),
             State#state{heartbeat_timer = undefined}
     end,
     {noreply, set_heartbeat_timer(NewState)};
+handle_info(keepalive, #state{session_id = SessionId} = State) ->
+    case session_connections:get_connections(SessionId) of
+        {ok, Cons} ->
+            lists:foreach(fun(Conn) -> 
+                connection:send_keepalive(Conn) 
+            end, Cons);
+        Error ->
+            ?error("Failed to fetch connection to send keepalives because "
+                   "of: ~p", [Error])
+    end,
+    maybe_set_keepalive_timeout(true),
+    {noreply, State};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -564,3 +580,12 @@ set_heartbeat_timer(#state{heartbeat_timer = undefined} = State) ->
     State#state{heartbeat_timer = TimerRef};
 set_heartbeat_timer(State) ->
     State.
+
+
+%% @private
+-spec maybe_set_keepalive_timeout(SetTimeout :: boolean()) ->
+    TimerRef :: reference().
+maybe_set_keepalive_timeout(true) ->
+    erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive);
+maybe_set_keepalive_timeout(false) ->
+    ok.

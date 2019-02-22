@@ -73,15 +73,16 @@ init([SessId, SessType]) ->
         provider_incoming ->
             {ok, {SupFlags, [
                 session_watcher_spec(SessId, SessType),
-                connection_manager_spec(SessId),
+                connection_manager_spec(SessId, false),
                 event_manager_sup_spec(SessId)
             ]}};
         _ ->
             case lists:member(SessType, SequencerEnabled) of
                 true ->
+                    SetKeepaliveTimeout = SessType =:= provider_outgoing,
                     {ok, {SupFlags, [
                         session_watcher_spec(SessId, SessType),
-                        connection_manager_spec(SessId),
+                        connection_manager_spec(SessId, SetKeepaliveTimeout),
                         sequencer_manager_sup_spec(SessId),
                         event_manager_sup_spec(SessId)
                     ]}};
@@ -121,12 +122,13 @@ session_watcher_spec(SessId, SessType) ->
 %% Creates a supervisor child_spec for a connection manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec connection_manager_spec(SessId :: session:id()) ->
-    supervisor:child_spec().
-connection_manager_spec(SessId) ->
+-spec connection_manager_spec(SessId :: session:id(),
+    SetKeepaliveTimeout :: boolean()) -> supervisor:child_spec().
+connection_manager_spec(SessId, SetKeepaliveTimeout) ->
+    StartLinkArgs = [SessId, SetKeepaliveTimeout],
     #{
         id => connection_manager,
-        start => {connection_manager, start_link, [SessId]},
+        start => {connection_manager, start_link, StartLinkArgs},
         restart => transient,
         shutdown => timer:seconds(10),
         type => worker,
