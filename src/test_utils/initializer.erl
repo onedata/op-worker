@@ -1039,11 +1039,13 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     GetNodesFun = fun(PID) ->
         {ok, Domain} = GetDomainFun(?ROOT_SESS_ID, PID),
-        % Simulate the fact some providers can be reached only by their domain
-        case rand:uniform(2) of
-            1 ->
+        % Simulate the fact the some providers can be reached only by their domain,
+        % but return the domain/IP consistently
+        AllProviders = lists:sort(maps:keys(ProvMap)),
+        case index_of(PID, AllProviders) rem 2 of
+            0 ->
                 {ok, [Domain]};
-            2 ->
+            1 ->
                 {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
                 {ok, [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms]}
         end
@@ -1233,3 +1235,12 @@ add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
     ?assertMatch({ok, _},
         rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
     ).
+
+
+-spec index_of(term(), [term()]) -> not_found | integer().
+index_of(Value, List) ->
+    WithIndices = lists:zip(List, lists:seq(1, length(List))),
+    case lists:keyfind(Value, 1, WithIndices) of
+        {Value, Index} -> Index;
+        false -> not_found
+    end.
