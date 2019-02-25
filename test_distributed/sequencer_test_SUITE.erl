@@ -277,7 +277,7 @@ client_message(SessId, StmId, SeqNum) ->
 -spec mock_communicator(Worker :: node()) -> ok.
 mock_communicator(Worker) ->
     Self = self(),
-    mock_communicator(Worker, fun(Msg, _, _) -> Self ! Msg, ok end).
+    mock_communicator(Worker, fun(_, Msg, _) -> Self ! Msg, ok end).
 
 %%--------------------------------------------------------------------
 %% @private

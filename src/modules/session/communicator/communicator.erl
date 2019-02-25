@@ -46,7 +46,7 @@
 %%--------------------------------------------------------------------
 -spec send_to_client(session:id(), generic_message()) -> asyn_ans().
 send_to_client(SessionId, Msg) ->
-    send_to_client(SessionId, Msg, false).
+    communicator:send_to_client(SessionId, Msg, false).
 
 
 %%--------------------------------------------------------------------
@@ -97,7 +97,7 @@ cast_to_provider(SessionId, Msg) ->
 %%--------------------------------------------------------------------
 -spec send_to_provider(session:id(), generic_message()) -> asyn_ans().
 send_to_provider(SessionId, Msg) ->
-    send_to_provider(SessionId, Msg, false).
+    communicator:send_to_provider(SessionId, Msg, false).
 
 
 %%--------------------------------------------------------------------
@@ -162,14 +162,14 @@ communicate_with_provider(SessionId, #client_message{} = Msg0, Recipient) ->
     case Msg of
         #client_message{message_stream = #message_stream{stream_id = StmId}}
             when is_integer(StmId) ->
-            case stream_to_provider(SessionId, Msg, StmId) of
+            case communicator:stream_to_provider(SessionId, Msg, StmId) of
                 ok ->
                     {ok, MsgId};
                 Error ->
                     Error
             end;
         _ ->
-            send_to_provider(SessionId, Msg, false)
+            communicator:send_to_provider(SessionId, Msg, false)
     end;
 communicate_with_provider(SessionId, Msg, Recipient) ->
     ClientMsg = #client_message{message_body = Msg},
