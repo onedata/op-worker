@@ -385,7 +385,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
-    communicator:communicate_with_provider(ClientMsg, Ref, RequestTranslator),
+    communicator:communicate_with_provider(Ref, ClientMsg, RequestTranslator),
     {noreply, State};
 
 handle_remotely(#event{} = Evt, ProviderId, State) ->
@@ -395,11 +395,15 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, Auth} = session:get_auth(SessId),
-    communicator:stream_to_provider(#client_message{
-        message_body = Request,
-        proxy_session_id = SessId,
-        proxy_session_auth = Auth
-    }, session_utils:get_provider_session_id(outgoing, ProviderId), StreamId),
+    communicator:stream_to_provider(
+        session_utils:get_provider_session_id(outgoing, ProviderId),
+        #client_message{
+            message_body = Request,
+            proxy_session_id = SessId,
+            proxy_session_auth = Auth
+        },
+        StreamId
+    ),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

@@ -452,10 +452,10 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
 -spec communicate(IsProxy :: boolean(), Message :: term(), session:id(),
     InfinityRetry :: boolean()) -> ok | {error, Reason :: term()}.
 communicate(false, Msg, SessionID, true) ->
-    communicator:send_to_client(Msg, SessionID, #{repeats => infinity});
+    communicator:send_to_client(SessionID, Msg, true);
 communicate(false, Msg, SessionID, _) ->
-    communicator:send_to_client(Msg, SessionID);
+    communicator:send_to_client(SessionID, Msg);
 communicate(true, Msg, SessionID, true) ->
-    communicator:send_to_provider(Msg, SessionID, #{repeats => infinity});
+    communicator:send_to_provider(SessionID, Msg, true);
 communicate(true, Msg, SessionID, _) ->
-    communicator:send_to_provider(Msg, SessionID).
+    communicator:send_to_provider(SessionID, Msg).

@@ -160,13 +160,13 @@ send_sync(SessionId, Msg0, Recipient, ExcludedCons) ->
 %% Schedules message to be send via random connection of specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec send_async(session:id(), message()) -> ok.
+-spec send_async(session:id(), message()) -> ok | {error, term()}.
 send_async(SessionId, Msg) ->
     case session_connections:get_random_connection(SessionId) of
         {ok, Conn} ->
             connection:send_async(Conn, Msg);
-        _Error ->
-            ok
+        Error ->
+            Error
     end.
 
 

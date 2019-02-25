@@ -90,11 +90,12 @@ get_async(#{
                 {error, not_found};
             _ ->
                 SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-                communicator:communicate_with_provider(#get_remote_document{
+                Msg = #get_remote_document{
                     model = Model,
                     key = Key,
                     routing_key = RoutingKey
-                }, SessId, self())
+                },
+                communicator:communicate_with_provider(SessId, Msg, self())
         end
     catch
         _:Reason ->

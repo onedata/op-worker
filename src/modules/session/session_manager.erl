@@ -244,6 +244,6 @@ start_session(Doc, SessType) ->
 %%--------------------------------------------------------------------
 -spec close_connections(Cons :: [pid()]) -> ok.
 close_connections(Cons) ->
-    lists:foreach(fun(Con) ->
-        Con ! disconnect
+    lists:foreach(fun(Conn) ->
+        connection:close(Conn)
     end, Cons).

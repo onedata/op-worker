@@ -538,6 +538,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                     SessionId, ProviderId, Domain, Host, Port,
                     Transport, Timeout
                 ),
+                ok = proc_lib:init_ack({ok, self()}),
                 protocol_utils:reset_reconnect_interval(ProviderId, Intervals),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
             catch
@@ -600,7 +601,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
 
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-    ok = proc_lib:init_ack({ok, self()}),
     self() ! {upgrade_protocol, Host},
 
     session_manager:reuse_or_create_provider_session(
