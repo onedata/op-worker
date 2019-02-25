@@ -118,8 +118,10 @@ get_protected_data(SessionId, ProviderId) ->
 
 -spec to_string(od_provider:id()) -> string().
 to_string(ProviderId) ->
-    {ok, Name} = provider_logic:get_name(ProviderId),
-    str_utils:format("'~ts' (~s)", [Name, ProviderId]).
+    case provider_logic:get_name(ProviderId) of
+        {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
+        _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -675,8 +677,8 @@ zone_time_seconds() ->
 -spec zone_get_offline_access_idps() -> {ok, [IdP :: binary()]} | {error, term()}.
 zone_get_offline_access_idps() ->
     case fetch_service_configuration(onezone) of
-        {ok, JsonMap} ->
-            SupportedIdPs = maps:get(<<"supportedIdPs">>, JsonMap, []),
+        {ok, Map} ->
+            SupportedIdPs = maps:get(<<"supportedIdPs">>, Map, []),
             {ok, lists:filtermap(fun(IdPConfig) ->
                 case maps:get(<<"offlineAccess">>, IdPConfig, false) of
                     false -> false;
@@ -756,7 +758,10 @@ verify_provider_nonce(ProviderId, Nonce) ->
             {error, _} = Error ->
                 Error
         end
-    catch _:_ ->
+    catch Type:Reason ->
+        ?debug_stacktrace("Cannot verify nonce for provider ~ts - nonce was '~s' - ~p:~p", [
+            to_string(ProviderId), Nonce, Type, Reason
+        ]),
         ?ERROR_UNAUTHORIZED
     end.
 
@@ -892,7 +897,7 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
 fetch_service_configuration(onezone) ->
@@ -925,7 +930,7 @@ fetch_service_configuration({oneprovider, Domain, Hostname}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_configuration(URL, DeprecatedURL :: URL, [http_client:ssl_opt()]) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}
     when URL :: binary().
