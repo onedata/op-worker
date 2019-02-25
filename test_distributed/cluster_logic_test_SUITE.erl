@@ -12,6 +12,8 @@
 -module(cluster_logic_test_SUITE).
 -author("Lukasz Opiola").
 
+-include_lib("ctool/include/test/performance.hrl").
+
 %% API
 -export([all/0]).
 -export([dummy_test/1]).
