@@ -27,7 +27,8 @@ helpers_test_() ->
         fun stop/1,
         [
             fun get_handle/0,
-            fun readdir/0
+            fun readdir/0,
+            fun refresh_params/0
         ]}.
 
 get_handle() ->
@@ -52,6 +53,48 @@ readdir() ->
 
     ?assertEqual({ok, BinaryResult}, NifResult).
 
+refresh_params() ->
+    %%% List contents of /tmp for comparison with helper output
+    {ok, Result} = file:list_dir(<<"/tmp">>),
+    BinaryResult = lists:map(fun list_to_binary/1, Result),
+
+    %%% First try to list contents of invalid mountpoint
+    {ok, Handle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"type">> => <<"posix">>,
+        <<"mountPoint">> => <<"/tmpInvalid">>
+    }),
+    {ok, Guard} = helpers_nif:readdir(Handle, <<"">>, 0, 100),
+    _ =
+        receive
+            {Guard, Res} ->
+                Res
+        after 1000 ->
+            {error, nif_timeout}
+        end,
+
+    %%% Now update the params with correct mountpoint and list again
+    {ok, Guard2} = helpers_nif:refresh_params(Handle, #{
+        <<"type">> => <<"posix">>,
+        <<"mountPoint">> => <<"/tmp">>
+    }),
+    _ =
+        receive
+            {Guard2, Res2} ->
+                Res2
+        after 1000 ->
+            {error, nif_timeout}
+        end,
+
+    {ok, Guard3} = helpers_nif:readdir(Handle, <<"">>, 0, 100),
+    NifResult =
+        receive
+            {Guard3, Res3} ->
+                Res3
+        after 1000 ->
+            {error, nif_timeout}
+        end,
+    ?assertEqual({ok, BinaryResult}, NifResult).
+
 start() ->
     prepare_environment(),
     ok = helpers_nif:init().
@@ -73,7 +116,7 @@ stop(_) ->
 prepare_environment() ->
     application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
     application:set_env(?APP_NAME, cephrados_helper_threads_number, 1),
-    application:set_env(?APP_NAME, posix_helper_threads_number, 1),
+    application:set_env(?APP_NAME, posix_helper_threads_number, 8),
     application:set_env(?APP_NAME, s3_helper_threads_number, 1),
     application:set_env(?APP_NAME, swift_helper_threads_number, 1),
     application:set_env(?APP_NAME, glusterfs_helper_threads_number, 1),
