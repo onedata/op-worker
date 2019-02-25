@@ -32,8 +32,9 @@
 
 -define(TEST_CASES, [
     open_race_test, make_open_race_test, make_open_race_test2, create_open_race_test,
-    create_open_race_test2, create_delete_race_test, rename_to_opened_file_test,
-%%    create_file_existing_on_disk_test, % fix test
+    create_open_race_test2, create_delete_race_test,
+%%    rename_to_opened_file_test, % TODO VFS-5290
+%%    create_file_existing_on_disk_test, % TODO VFS-5271
     open_delete_race_test
 ]).
 

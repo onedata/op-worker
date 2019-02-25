@@ -91,18 +91,20 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
         true ->
             SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
                 FileUuid, Storage, SourceFileId, undefined),
-            TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
-                FileUuid, Storage, TargetFileId, undefined),
-
-            case storage_file_manager:stat(TargetHandle) of
-                {ok, _} ->
-                    ?warning("Moving file into existing one, source ~p, target ~p",
-                        [SourceFileId, TargetFileId]),
-                    NewTargetFileId = ?CONFLIOCTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
-                    storage_file_manager:mv(SourceHandle, NewTargetFileId);
-                _ ->
-                    storage_file_manager:mv(SourceHandle, TargetFileId)
-            end;
+            storage_file_manager:mv(SourceHandle, TargetFileId);
+            % TODO VFS-5290 - solution resutls in problems with sed
+%%            TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
+%%                FileUuid, Storage, TargetFileId, undefined),
+%%
+%%            case storage_file_manager:stat(TargetHandle) of
+%%                {ok, _} ->
+%%                    ?warning("Moving file into existing one, source ~p, target ~p",
+%%                        [SourceFileId, TargetFileId]),
+%%                    NewTargetFileId = ?CONFLIOCTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
+%%                    storage_file_manager:mv(SourceHandle, NewTargetFileId);
+%%                _ ->
+%%                    storage_file_manager:mv(SourceHandle, TargetFileId)
+%%            end;
         false ->
             ok
     end.
