@@ -118,8 +118,8 @@ handle_provider_handshake(#provider_handshake_request{provider_id = ProviderId, 
         ok ->
             ok;
         Error ->
-            ?debug("Discarding provider connection (~s @ ~s) as its identity cannot be verified: ~p", [
-                ProviderId, inet_parse:ntoa(IpAddress), Error
+            ?debug("Discarding provider connection from ~ts @ ~s as its identity cannot be verified: ~p", [
+                provider_logic:to_string(ProviderId), inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_provider)
     end,
@@ -128,8 +128,8 @@ handle_provider_handshake(#provider_handshake_request{provider_id = ProviderId, 
         ok ->
             ok;
         Error1 ->
-            ?debug("Discarding provider connection (~s @ ~s) as its nonce cannot be verified: ~p", [
-                ProviderId, inet_parse:ntoa(IpAddress), Error1
+            ?debug("Discarding provider connection from ~ts @ ~s as its nonce cannot be verified: ~p", [
+                provider_logic:to_string(ProviderId), inet_parse:ntoa(IpAddress), Error1
             ]),
             throw(invalid_nonce)
     end,

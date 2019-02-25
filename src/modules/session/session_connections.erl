@@ -175,10 +175,7 @@ ensure_connected(SessId) ->
             end,
 
             {ok, Domain} = provider_logic:get_domain(ProviderId),
-            Hosts = case provider_logic:resolve_ips(ProviderId) of
-                {ok, IPs} -> [list_to_binary(inet:ntoa(IP)) || IP <- IPs];
-                _ -> [Domain]
-            end,
+            {ok, Hosts} = provider_logic:get_nodes(ProviderId),
             lists:foreach(fun(Host) ->
                 Port = https_listener:port(),
                 critical_section:run([?MODULE, ProviderId, SessId], fun() ->

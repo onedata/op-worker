@@ -30,12 +30,18 @@
 ]).
 
 -export([
-    incompatible_providers_should_not_connect/1
+    incompatible_providers_should_not_connect/1,
+    deprecated_configuration_endpoint_is_served/1,
+    configuration_endpoints_give_same_results/1,
+    provider_logic_should_correctly_resolve_nodes_to_connect/1
 ]).
 
 all() ->
     ?ALL([
-        incompatible_providers_should_not_connect
+        incompatible_providers_should_not_connect,
+        deprecated_configuration_endpoint_is_served,
+        configuration_endpoints_give_same_results,
+        provider_logic_should_correctly_resolve_nodes_to_connect
     ]).
 
 
@@ -52,20 +58,117 @@ incompatible_providers_should_not_connect(Config) ->
     % that connection failed
     timer:sleep(30 * 1000),
 
-    Workers = [P1, P2] = ?config(op_worker_nodes, Config),
+    % There are 2 providers and 3 nodes:
+    %   * P1 -> 1 node
+    %   * P2 -> 2 nodes
+    Nodes = ?config(op_worker_nodes, Config),
+    [Domain1, Domain2] = lists:usort([?GET_DOMAIN(N) || N <- Nodes]),
+    Nodes1 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain1],
+    Nodes2 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain2],
+    P1 = hd(Nodes1),
+    P2 = hd(Nodes2),
+
     ?assertMatch(false, connection_exists(P1, P2)),
     ?assertMatch(false, connection_exists(P2, P1)),
 
     {_AppId, _AppName, AppVersion} = lists:keyfind(
-        ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
+        ?APP_NAME, 1, rpc:call(hd(Nodes), application, loaded_applications, [])
     ),
-    rpc:multicall(Workers, application, set_env, [
+    rpc:multicall(Nodes, application, set_env, [
         ?APP_NAME, compatible_op_versions, [AppVersion]
     ]),
     ?assertMatch(true, connection_exists(P1, P2), 90),
     ?assertMatch(true, connection_exists(P2, P1), 90),
 
     ok.
+
+
+deprecated_configuration_endpoint_is_served(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Node) ->
+        ExpectedConfiguration = expected_configuration(Node),
+        URL = str_utils:format("https://~s/configuration/",
+            [maps:get(<<"domain">>, ExpectedConfiguration)]),
+        {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
+            http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertMatch(ExpectedConfiguration, json_utils:decode(Body))
+    end, Nodes).
+
+
+configuration_endpoints_give_same_results(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Node) ->
+        {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+        OldURL = str_utils:format("https://~s/configuration", [Domain]),
+        NewURL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [Domain]),
+
+        {_, _, _, OldBody} = ?assertMatch({ok, 200, _, _},
+            http_client:get(OldURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        {_, _, _, NewBody} = ?assertMatch({ok, 200, _, _},
+            http_client:get(NewURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertEqual(json_utils:decode(OldBody), json_utils:decode(NewBody))
+    end, Nodes).
+
+
+provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
+    % There are 2 providers and 3 nodes:
+    %   * P1 -> 1 node
+    %   * P2 -> 2 nodes
+    Nodes = ?config(op_worker_nodes, Config),
+    [Domain1Atom, Domain2Atom] = lists:usort([?GET_DOMAIN(N) || N <- Nodes]),
+    Domain1Bin = atom_to_binary(Domain1Atom, utf8),
+    Domain2Bin = atom_to_binary(Domain2Atom, utf8),
+    Nodes1 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain1Atom],
+    Nodes2 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain2Atom],
+    P1 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes1))),
+    P2 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes2))),
+    IPs1 = [node_ip(N) || N <- Nodes1],
+    IPs2 = [node_ip(N) || N <- Nodes2],
+    IPsBin1 = [ip_to_binary(IP) || IP <- IPs1],
+    IPsBin2 = [ip_to_binary(IP) || IP <- IPs2],
+
+    % I) provider is registered using an IP address
+    test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
+        case ProviderId of
+            P1 -> {ok, <<"172.17.0.10">>};
+            P2 -> {ok, <<"172.17.0.74">>}
+        end
+    end),
+    ?assertMatch({ok, [<<"172.17.0.10">>]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertMatch({ok, [<<"172.17.0.74">>]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
+
+    % II) provider is registered using a domain that resolves to IPs that host
+    % the same service
+    test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
+        case ProviderId of
+            P1 -> {ok, Domain1Bin};
+            P2 -> {ok, Domain2Bin}
+        end
+    end),
+    test_utils:mock_expect(Nodes, inet, getaddrs, fun(Domain, inet) ->
+        case list_to_atom(Domain) of
+            Domain1Atom -> {ok, IPs1};
+            Domain2Atom -> {ok, IPs2}
+        end
+    end),
+
+    ?assertMatch({ok, IPsBin1}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertMatch({ok, IPsBin2}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
+
+    % III) provider is registered using a domain, but the IPs that it resolves to
+    % do not point to the same service (e.g. when reverse proxy is used).
+    test_utils:mock_expect(Nodes, inet, getaddrs, fun(Domain, inet) ->
+        case list_to_atom(Domain) of
+            Domain1Atom -> {ok, [{192, 168, 200, 200}, {192, 168, 200, 201}]};
+            Domain2Atom -> {ok, [{192, 168, 200, 202}]}
+        end
+    end),
+
+    % in such case, provider should fall back to using domain for connections
+    ?assertMatch({ok, [Domain1Bin]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertMatch({ok, [Domain2Bin]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])).
 
 
 %%%===================================================================
@@ -87,15 +190,47 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+init_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, inet, [unstick, passthrough]),
+    ssl:start(),
+    hackney:start(),
+
+    % Disable caching of resolved nodes
+    rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl, -1]),
+
+    init_per_testcase(default, Config),
+    % get_nodes/1 is mocked in initializer - unmock
+    test_utils:mock_expect(Nodes, provider_logic, get_nodes, fun(ProviderId) ->
+        meck:passthrough([ProviderId])
+    end),
+    Config;
+
+init_per_testcase(Case, Config) when
+    Case == deprecated_configuration_endpoint_is_served;
+    Case == configuration_endpoints_give_same_results ->
+    ssl:start(),
+    hackney:start(),
+    init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
 
+
+end_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, [inet]),
+    end_per_testcase(default, Config);
+
+end_per_testcase(Case, Config) when
+    Case == deprecated_configuration_endpoint_is_served;
+    Case == configuration_endpoints_give_same_results ->
+    hackney:stop(),
+    ssl:stop(),
+    end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
 
@@ -120,3 +255,40 @@ get_provider_session_id(Worker, Type, ProviderId) ->
 
 session_exists(Provider, SessId) ->
     rpc:call(Provider, session, exists, [SessId]).
+
+
+-spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
+expected_configuration(Node) ->
+    {ok, CompOzVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oz_versions),
+    {ok, CompOpVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_op_versions),
+    {ok, CompOcVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oc_versions),
+    {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
+    {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+
+    #{
+        <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
+        <<"name">> => Name,
+        <<"domain">> => Domain,
+        <<"onezoneDomain">> => list_to_binary(rpc:call(Node, oneprovider, get_oz_domain, [])),
+        <<"version">> => rpc:call(Node, oneprovider, get_version, []),
+        <<"build">> => rpc:call(Node, oneprovider, get_build, []),
+        <<"compatibleOnezoneVersions">> => to_binaries(CompOzVersions),
+        <<"compatibleOneproviderVersions">> => to_binaries(CompOpVersions),
+        <<"compatibleOneclientVersions">> => to_binaries(CompOcVersions)
+    }.
+
+
+-spec to_binaries([string()]) -> [binary()].
+to_binaries(Strings) ->
+    [list_to_binary(S) || S <- Strings].
+
+
+-spec ip_to_binary(inet:ip4_address()) -> binary().
+ip_to_binary(IP) ->
+    list_to_binary(inet:ntoa(IP)).
+
+
+-spec node_ip(node()) -> inet:ip4_address().
+node_ip(Node) ->
+    {ok, [IP]} = inet:getaddrs(?GET_HOSTNAME(Node), inet),
+    IP.
