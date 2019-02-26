@@ -160,8 +160,15 @@
 -define(HARVESTER_ENTRY_TYPE_FIELD2(__Harvester), <<"entryTypeField2">>).
 -define(HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester), <<"defaultEntryType">>).
 -define(HARVESTER_DEFAULT_ENTRY_TYPE2(__Harvester), <<"defaultEntryType2">>).
--define(HARVESTER_ACCEPTED_ENTRY_TYPES(__Harvester), ["type1", "type2"]).
--define(HARVESTER_ACCEPTED_ENTRY_TYPES2(__Harvester), ["type21", "type22", "type23"]).
+-define(HARVESTER_ACCEPTED_ENTRY_TYPES(__Harvester), [
+    ?HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester),
+    ?HARVESTER_DEFAULT_ENTRY_TYPE2(__Harvester),
+    ?HARVESTER_ENTRY_TYPE_FIELD(__Harvester)
+]).
+-define(HARVESTER_ACCEPTED_ENTRY_TYPES2(__Harvester), [
+    ?HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester),
+    ?HARVESTER_ENTRY_TYPE_FIELD2(__Harvester)
+]).
 
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).

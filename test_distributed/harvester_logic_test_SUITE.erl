@@ -20,13 +20,13 @@
 -export([
     get_test/1,
     subscribe_test/1,
-    submit_entry_test/1,
+    harvest_test/1,
     delete_entry_test/1]).
 
 all() -> ?ALL([
     get_test,
     subscribe_test,
-    submit_entry_test,
+    harvest_test,
     delete_entry_test
 ]).
 
@@ -124,16 +124,20 @@ subscribe_test(Config) ->
 
     ok.
 
-submit_entry_test(Config) ->
+harvest_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     
     FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, #{}])),
+    tracer:start(Node),
+    tracer:trace_calls(harvester_logic, prepare_payload),
+    tracer:trace_calls(harvester_logic, submit_entry),
+
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, harvest, [?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, harvest, [?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.

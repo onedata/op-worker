@@ -195,12 +195,7 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = false
 }) when map_size(JSON) > 0 ->
-    case harvester_logic:prepare_payload(JSON, HarvesterId) of
-        {ok, Payload} ->
-            ok = harvester_logic:submit_entry(HarvesterId, FileId, Payload);
-        {error, Reason} ->
-            ?debug("Metadata of file ~p won't be harvested due to ~p.", [FileId, Reason])
-    end,
+    ok = harvester_logic:harvest(HarvesterId, FileId, JSON),
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
