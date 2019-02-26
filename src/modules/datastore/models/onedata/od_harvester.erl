@@ -103,6 +103,8 @@ get_ctx() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {spaces, [string]},
+        {entry_type_field, binary},
+        {default_entry_type, binary},
+        {accepted_entry_types, [binary]},
         {cache_state, #{atom => term}}
     ]}.

@@ -27,15 +27,17 @@
 
 %% tests
 -export([
-    set_xattr_test/1, modify_xattr_test/1,
-    delete_xattr_test/1, delete_file_with_xattr_test/1,
-    set_json_metadata_test/1, modify_json_metadata_test/1,
-    delete_json_metadata_test/1, delete_file_with_json_metadata_test/1,
-    set_rdf_metadata_test/1, modify_rdf_metadata_test/1,
-    delete_rdf_metadata_test/1, delete_file_with_rdf_metadata_test/1,
-    set_mixed_metadata_test/1, modify_mixed_metadata_test/1,
-    delete_mixed_metadata_test/1, delete_file_with_mixed_metadata_test/1,
-    set_many_xattrs_test/1,
+    set_json_metadata_test/1,
+    set_json_metadata_custom_accepted_type_field_test/1,
+    set_json_metadata_custom_not_accepted_type_field_test/1,
+    modify_json_metadata_test/1,
+    modify_json_metadata_custom_accepted_type_field_test/1,
+    modify_json_metadata_custom_not_accepted_type_field_test/1,
+    delete_json_metadata_test/1,
+    delete_json_metadata_custom_accepted_type_field_test/1,
+    delete_file_with_json_metadata_test/1,
+    delete_file_with_json_metadata_custom_accepted_type_field_test/1,
+    modify_json_many_times/1,
     changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space/1,
     changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester/1,
     each_provider_should_submit_only_local_changes_to_the_harvester/1,
@@ -46,23 +48,17 @@
 
 all() ->
     ?ALL([
-        set_xattr_test,
-        modify_xattr_test,
-        delete_xattr_test,
-        delete_file_with_xattr_test,
         set_json_metadata_test,
+        set_json_metadata_custom_accepted_type_field_test,
+        set_json_metadata_custom_not_accepted_type_field_test,
         modify_json_metadata_test,
+        modify_json_metadata_custom_accepted_type_field_test,
+        modify_json_metadata_custom_not_accepted_type_field_test,
         delete_json_metadata_test,
+        delete_json_metadata_custom_accepted_type_field_test,
         delete_file_with_json_metadata_test,
-        set_rdf_metadata_test,
-        modify_rdf_metadata_test,
-        delete_rdf_metadata_test,
-        delete_file_with_rdf_metadata_test,
-        set_mixed_metadata_test,
-        modify_mixed_metadata_test,
-        delete_mixed_metadata_test,
-        delete_file_with_mixed_metadata_test,
-        set_many_xattrs_test,
+        delete_file_with_json_metadata_custom_accepted_type_field_test,
+        modify_json_many_times,
         changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space,
         changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester,
         each_provider_should_submit_only_local_changes_to_the_harvester,
@@ -161,99 +157,20 @@ all() ->
 -define(assertNotReceivedDeleteEntry(ExpFileId, ExpHarvester, Timeout),
     ?assertNotReceivedEqual(?DELETE_ENTRY(ExpFileId, ExpHarvester), Timeout)).
 
+-define(TYPE_PAYLOAD(Type), <<(Type)/binary, "_payload">>).
+
+-define(CUSTOM_ENTRY_TYPE_FIELD, <<"CUSTOM_METADATA_TYPE_FIELD">>).
+
+-define(CUSTOM_ACCEPTED_ENTRY_TYPE, <<"CUSTOM_ACCEPTED_METADATA_TYPE">>).
+-define(CUSTOM_NOT_ACCEPTED_ENTRY_TYPE, <<"CUSTOM_NOT_ACCEPTED_METADATA_TYPE">>).
+
+-define(DEFAULT_ENTRY_TYPE, <<"DEFAULT_METADATA_TYPE">>).
+
+-define(ACCEPTED_ENTRY_TYPES, [?CUSTOM_ACCEPTED_ENTRY_TYPE, ?DEFAULT_ENTRY_TYPE]).
+
 %%%====================================================================
 %%% Test function
 %%%====================================================================
-
-set_xattr_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-    Name2 = ?XATTR_NAME,
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name2, value = Value2},
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{
-            Name => Value1,
-            Name2 => Value2
-        }
-    }).
-
-modify_xattr_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value1}
-    }),
-
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name, value = Value2},
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value2}
-    }).
-
-delete_xattr_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value1}
-    }),
-
-    ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{}).
-
-delete_file_with_xattr_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value1}
-    }),
-
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
-    ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
 
 set_json_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -267,7 +184,46 @@ set_json_metadata_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON
+    }).
+
+set_json_metadata_custom_accepted_type_field_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{
+        <<"color">> => <<"blue">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_ACCEPTED_ENTRY_TYPE
+    },
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> => ?CUSTOM_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_ACCEPTED_ENTRY_TYPE) => JSON
+    }).
+
+set_json_metadata_custom_not_accepted_type_field_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{
+        <<"color">> => <<"blue">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_NOT_ACCEPTED_ENTRY_TYPE
+    },
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> := ?CUSTOM_NOT_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_NOT_ACCEPTED_ENTRY_TYPE) := JSON
     }).
 
 modify_json_metadata_test(Config) ->
@@ -282,15 +238,80 @@ modify_json_metadata_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON
     }),
 
     JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON2
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON2
     }).
+
+modify_json_metadata_custom_accepted_type_field_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{
+        <<"color">> => <<"blue">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_ACCEPTED_ENTRY_TYPE
+    },
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> => ?CUSTOM_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_ACCEPTED_ENTRY_TYPE) => JSON
+    }),
+
+    JSON2 = #{
+        <<"color">> => <<"blue">>,
+        <<"size">> => <<"big">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_ACCEPTED_ENTRY_TYPE
+    },
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> => ?CUSTOM_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_ACCEPTED_ENTRY_TYPE) => JSON2
+    }).
+
+modify_json_metadata_custom_not_accepted_type_field_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #{
+        <<"color">> => <<"blue">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_ACCEPTED_ENTRY_TYPE
+    },
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> => ?CUSTOM_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_ACCEPTED_ENTRY_TYPE) => JSON
+    }),
+
+    JSON2 = #{
+        <<"color">> => <<"blue">>,
+        <<"size">> => <<"big">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_NOT_ACCEPTED_ENTRY_TYPE
+    },
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+
+    ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> := ?CUSTOM_NOT_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_NOT_ACCEPTED_ENTRY_TYPE) := JSON2
+    }).
+
 
 delete_json_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -304,12 +325,35 @@ delete_json_metadata_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON
     }),
 
     ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json),
+    ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
 
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{}).
+delete_json_metadata_custom_accepted_type_field_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    JSON = #
+        {<<"color">> => <<"blue">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_ACCEPTED_ENTRY_TYPE
+    },
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
+        <<"type">> => ?CUSTOM_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_ACCEPTED_ENTRY_TYPE) => JSON
+    }),
+
+    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json),
+    ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
+
 
 delete_file_with_json_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -323,263 +367,78 @@ delete_file_with_json_metadata_test(Config) ->
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON
     }),
 
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
     ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
 
-set_rdf_metadata_test(Config) ->
+delete_file_with_json_metadata_custom_accepted_type_field_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
     FileName = ?FILE_NAME,
-    RDF = <<"dummy rdf">>,
+    JSON = #{
+        <<"color">> => <<"blue">>,
+        ?CUSTOM_ENTRY_TYPE_FIELD => ?CUSTOM_ACCEPTED_ENTRY_TYPE
+    },
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"rdf">> => RDF
-    }).
-
-modify_rdf_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    RDF = <<"dummy rdf">>,
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"rdf">> => RDF
-    }),
-
-    RDF2 = <<"dummy rdf 2">>,
-
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"rdf">> => RDF2
-    }).
-
-delete_rdf_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    RDF = <<"dummy rdf">>,
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"rdf">> => RDF
-    }),
-
-    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{}).
-
-delete_file_with_rdf_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    RDF = <<"dummy rdf">>,
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"rdf">> => RDF
+        <<"type">> => ?CUSTOM_ACCEPTED_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?CUSTOM_ACCEPTED_ENTRY_TYPE) => JSON
     }),
 
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
     ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
 
-
-set_mixed_metadata_test(Config) ->
+modify_json_many_times(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-    JSON = #{<<"color">> => <<"blue">>},
-    RDF = <<"dummy rdf">>,
+    Modifications = 10000,
 
+    FileName = ?FILE_NAME,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
+    ExpectedFinalJSON = lists:foldl(fun(I, _) ->
+        Key = <<"key_", (integer_to_binary(I))/binary>>,
+        Value = <<"value_", (integer_to_binary(I))/binary>>,
+        JSON = #{Key => Value},
+        ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+        JSON
+    end, undefined, lists:seq(1, Modifications)),
+
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON,
-        <<"rdf">> => RDF,
-        <<"xattrs">> => #{Name => Value1}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => ExpectedFinalJSON
     }).
-
-modify_mixed_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-    JSON = #{<<"color">> => <<"blue">>},
-    RDF = <<"dummy rdf">>,
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON,
-        <<"rdf">> => RDF,
-        <<"xattrs">> => #{Name => Value1}
-    }),
-
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name, value = Value2},
-    Name3 = ?XATTR_NAME,
-    Value3 = ?XATTR_VAL,
-    Xattr3 = #xattr{name = Name3, value = Value3},
-    JSON2 = #{<<"size">> => <<"big">>, <<"color">> => <<"blue">>},
-    RDF2 = <<"dummy rdf 2">>,
-
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr3),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON2,
-        <<"rdf">> => RDF2,
-        <<"xattrs">> => #{
-            Name => Value2,
-            Name3 => Value3
-        }
-    }).
-
-delete_mixed_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-    JSON = #{<<"color">> => <<"blue">>},
-    RDF = <<"dummy rdf">>,
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON,
-        <<"rdf">> => RDF,
-        <<"xattrs">> => #{Name => Value1}
-    }),
-
-    % delete xattr and rdf metadata
-    ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name),
-    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON
-    }).
-
-delete_file_with_mixed_metadata_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-    JSON = #{<<"color">> => <<"blue">>},
-    RDF = <<"dummy rdf">>,
-
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"json">> => JSON,
-        <<"rdf">> => RDF,
-        <<"xattrs">> => #{Name => Value1}
-    }),
-
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
-    ?assertReceivedDeleteEntry(FileId, ?HARVESTER1).
-
-set_many_xattrs_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESS_ID(Worker),
-
-    XattrsToSetNum = 10000,
-
-    FileName = ?FILE_NAME,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
-    {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-
-    ExpectedDoc = lists:foldl(fun(_, AccIn = #{<<"xattrs">> := Xattrs}) ->
-        Name = ?XATTR_NAME,
-        Value = ?XATTR_VAL,
-        Xattr = #xattr{name = Name, value = Value},
-        ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
-        AccIn#{<<"xattrs">> => Xattrs#{Name => Value}}
-    end, #{<<"xattrs">> => #{}}, lists:seq(1, XattrsToSetNum)),
-
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, ExpectedDoc).
 
 changes_should_be_submitted_to_all_harvesters_subscribed_for_the_space(Config) ->
     % ?HARVESTER1 and ?HARVESTER2 are subscribed for ?SPACE_ID2
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
-
     FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
-    Name2 = ?XATTR_NAME,
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name2, value = Value2},
+
+    JSON1 = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2), 8#600),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{
-            Name => Value1,
-            Name2 => Value2
-        }
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER2, #{
-        <<"xattrs">> => #{
-            Name => Value1,
-            Name2 => Value2
-        }
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }).
 
 changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) ->
@@ -588,27 +447,27 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
     SessId = ?SESS_ID(Worker),
 
     FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON1 = #{<<"color">> => <<"blue">>},
+
     FileName2 = ?FILE_NAME,
-    Name2 = ?XATTR_NAME,
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name2, value = Value2},
+    JSON2 = #{<<"color">> => <<"red">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
+
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4), 8#600),
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON2, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value1}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }),
 
     ?assertReceivedSubmitEntry(FileId2, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name2 => Value2}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON2
     }).
 
 each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
@@ -618,28 +477,28 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     SessId2 = ?SESS_ID(WorkerP2),
 
     FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON1 = #{<<"color">> => <<"blue">>},
+
     FileName2 = ?FILE_NAME,
-    Name2 = ?XATTR_NAME,
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name2, value = Value2},
+    JSON2 = #{<<"color">> => <<"red">>},
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessId2, {guid, Guid2}, Xattr2),
+    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
+
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER3, #{
-        <<"xattrs">> => #{Name => Value1}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }),
 
     ?assertReceivedSubmitEntry(FileId2, ?HARVESTER3, #{
-        <<"xattrs">> => #{Name2 => Value2}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON2
     }),
 
     % calls to harvester_logic:create entry should not be duplicated
@@ -653,28 +512,28 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     SessId2 = ?SESS_ID(WorkerP2),
 
     FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON1 = #{<<"color">> => <<"blue">>},
+
     FileName2 = ?FILE_NAME,
-    Name2 = ?XATTR_NAME,
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name2, value = Value2},
+    JSON2 = #{<<"color">> => <<"red">>},
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
+
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
     {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessId2, {guid, Guid2}, Xattr2),
+    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER3, #{
-        <<"xattrs">> => #{Name => Value1}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }),
 
     ?assertReceivedSubmitEntry(FileId2, ?HARVESTER3, #{
-        <<"xattrs">> => #{Name2 => Value2}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON2
     }),
 
     % calls to harvester_logic:create entry should not be duplicated
@@ -696,9 +555,7 @@ restart_harvest_stream_on_submit_entry_failure_test(Config) ->
     SessId = ?SESS_ID(Worker),
 
     FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON1 = #{<<"color">> => <<"blue">>},
 
     HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1),
 
@@ -706,21 +563,23 @@ restart_harvest_stream_on_submit_entry_failure_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
+
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value1}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }),
 
     mock_harvester_logic_submit_entry_failure(Worker),
 
-    Value2 = ?XATTR_VAL,
-    Xattr2 = #xattr{name = Name, value = Value2},
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+    JSON2 = #{<<"color">> => <<"red">>},
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
 
     % change should not be submitted as connection to onezone failed
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> := #{Name := Value2}
+        <<"type">> := ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) := JSON2
     }),
 
     mock_harvester_logic_submit_entry(Worker),
@@ -731,12 +590,14 @@ restart_harvest_stream_on_submit_entry_failure_test(Config) ->
 
     % previously sent change should not be submitted
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> := #{Name := Value1}
+        <<"type">> := ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) := JSON1
     }),
 
     % missing change should be submitted
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value2}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON2
     }).
 
 restart_harvest_stream_on_delete_entry_failure_test(Config) ->
@@ -744,9 +605,7 @@ restart_harvest_stream_on_delete_entry_failure_test(Config) ->
     SessId = ?SESS_ID(Worker),
 
     FileName = ?FILE_NAME,
-    Name = ?XATTR_NAME,
-    Value1 = ?XATTR_VAL,
-    Xattr1 = #xattr{name = Name, value = Value1},
+    JSON1 = #{<<"color">> => <<"blue">>},
 
     HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1),
 
@@ -754,10 +613,11 @@ restart_harvest_stream_on_delete_entry_failure_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> => #{Name => Value1}
+        <<"type">> => ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) => JSON1
     }),
 
     mock_harvester_logic_delete_entry_failure(Worker),
@@ -775,7 +635,8 @@ restart_harvest_stream_on_delete_entry_failure_test(Config) ->
 
     % previously sent change should not be submitted
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, #{
-        <<"xattrs">> := #{Name := Value1}
+        <<"type">> := ?DEFAULT_ENTRY_TYPE,
+        ?TYPE_PAYLOAD(?DEFAULT_ENTRY_TYPE) := JSON1
     }),
 
     % missing change should be submitted
@@ -798,6 +659,7 @@ init_per_testcase(Case, Config) when
     ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, harvester_logic),
+    mock_harvester_logic_get(Workers),
     init_per_testcase(default, Config);
 
 init_per_testcase(default, Config) ->
@@ -812,6 +674,7 @@ init_per_testcase(_Case, Config) ->
     ok = test_utils:mock_new(Workers, harvester_logic),
     mock_harvester_logic_submit_entry(Workers),
     mock_harvester_logic_delete_entry(Workers),
+    mock_harvester_logic_get(Workers),
     init_per_testcase(default, Config).
 
 end_per_testcase(_Case, Config) ->
@@ -824,6 +687,17 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+mock_harvester_logic_get(Node) ->
+    ok = test_utils:mock_expect(Node, harvester_logic, get,
+        fun(_) ->
+            {ok, #document{value = #od_harvester{
+                entry_type_field = ?CUSTOM_ENTRY_TYPE_FIELD,
+                default_entry_type = ?DEFAULT_ENTRY_TYPE,
+                accepted_entry_types = ?ACCEPTED_ENTRY_TYPES
+            }}}
+        end
+    ).
 
 mock_harvester_logic_submit_entry(Node) ->
     Self = self(),
@@ -849,9 +723,7 @@ mock_harvester_logic_submit_entry_failure(Node) ->
 
 mock_harvester_logic_delete_entry_failure(Node) ->
     ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
-        fun(_HarvesterId, _FileId) ->
-            {error, test_error}
-        end).
+        fun(_HarvesterId, _FileId) -> {error, test_error} end).
 
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),

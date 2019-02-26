@@ -54,7 +54,6 @@
 -define(HANDLE_1, <<"handle1Id">>).
 -define(HANDLE_2, <<"handle2Id">>).
 -define(HARVESTER_1, <<"harvester1Id">>).
--define(HARVESTER_2, <<"harvester2Id">>).
 
 % User authorizations
 % Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
@@ -157,7 +156,13 @@
 -define(HANDLE_EFF_GROUPS_MATCHER(__Handle), ?GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS).
 
 % Mocked harvester data
--define(HARVESTER_SPACES(__Harvester), [?SPACE_1, ?SPACE_2]).
+-define(HARVESTER_ENTRY_TYPE_FIELD(__Harvester), <<"entryTypeField">>).
+-define(HARVESTER_ENTRY_TYPE_FIELD2(__Harvester), <<"entryTypeField2">>).
+-define(HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester), <<"defaultEntryType">>).
+-define(HARVESTER_DEFAULT_ENTRY_TYPE2(__Harvester), <<"defaultEntryType2">>).
+-define(HARVESTER_ACCEPTED_ENTRY_TYPES(__Harvester), ["type1", "type2"]).
+-define(HARVESTER_ACCEPTED_ENTRY_TYPES2(__Harvester), ["type21", "type22", "type23"]).
+
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
 -define(MOCK_JOINED_GROUP_ID, <<"mockJoinedGroupId">>).
@@ -304,7 +309,9 @@
 }}).
 
 -define(HARVESTER_PROTECTED_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
-    spaces = ?HARVESTER_SPACES(__Harvester)
+    entry_type_field = ?HARVESTER_ENTRY_TYPE_FIELD(__Harvester),
+    default_entry_type =  ?HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester),
+    accepted_entry_types = ?HARVESTER_ACCEPTED_ENTRY_TYPES(__Harvester)
 }}).
 
 
@@ -442,5 +449,7 @@ end).
 
 -define(HARVESTER_PROTECTED_DATA_VALUE(__HarvesterId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = protected}),
-    <<"spaces">> => ?HARVESTER_SPACES(__SpaceId)
+    <<"entryTypeField">> => ?HARVESTER_ENTRY_TYPE_FIELD(__HarvesterId),
+    <<"defaultEntryType">> => ?HARVESTER_DEFAULT_ENTRY_TYPE(__HarvesterId),
+    <<"acceptedEntryTypes">> => ?HARVESTER_ACCEPTED_ENTRY_TYPES(__HarvesterId)
 }).

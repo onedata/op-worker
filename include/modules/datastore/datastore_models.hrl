@@ -168,8 +168,9 @@
 }).
 
 -record(od_harvester, {
-    % Direct relations to other entities
-    spaces = [] :: entity_graph:relations(od_space:id()),
+    entry_type_field :: binary(),
+    default_entry_type :: binary(),
+    accepted_entry_types :: [binary()],
 
     cache_state = #{} :: cache_state()
 }).

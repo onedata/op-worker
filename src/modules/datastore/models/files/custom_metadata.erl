@@ -34,9 +34,10 @@
 -type name() :: binary().
 -type value() :: rdf() | jiffy:json_value().
 -type names() :: [name()].
--type doc() :: datastore_doc:doc(metadata()).
--type diff() :: datastore_doc:diff(metadata()).
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type metadata() :: #metadata{}.
+-type record() :: #custom_metadata{}.
 -type rdf() :: binary().
 -type view_id() :: binary().
 -type filter() :: [binary()].

@@ -39,6 +39,8 @@
 
 -define(MAX_NOT_PERSISTED_SEQ_GAP, 1000).
 
+-define(PAYLOAD_KEY(Type), <<Type/binary, "_payload">>).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -186,13 +188,21 @@ handle_change(State = #state{
     id = Id,
     harvester_id = HarvesterId,
     provider_id = ProviderId
-}, Doc = #document{
+}, #document{
     seq = Seq,
-    value = #custom_metadata{file_objectid = FileId},
+    value = #custom_metadata{
+        file_objectid = FileId,
+        value = #{<<"onedata_json">> := JSON}
+    },
     mutators = [ProviderId | _],
     deleted = false
-}) ->
-    ok = harvester_logic:submit_entry(HarvesterId, FileId, prepare_payload(Doc)),
+}) when map_size(JSON) > 0 ->
+    case prepare_payload(JSON, HarvesterId) of
+        undefined ->
+            ok;
+        Payload ->
+            ok = harvester_logic:submit_entry(HarvesterId, FileId, Payload)
+    end,
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
@@ -202,9 +212,12 @@ handle_change(State = #state{
 }, #document{
     seq = Seq,
     value = #custom_metadata{file_objectid = FileId},
-    mutators = [ProviderId | _],
-    deleted = true
+    mutators = [ProviderId | _]
 }) ->
+    % delete entry because one of the following happened:
+    %   * onedata_json key is missing
+    %   * onedata_json map is empty
+    %   * custom_metadata document has_been deleted
     ok = harvester_logic:delete_entry(HarvesterId, FileId),
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
@@ -215,16 +228,29 @@ handle_change(State = #state{id = Id, last_persisted_seq = LastSeq}, #document{s
 handle_change(State, _Doc) ->
     State.
 
--spec prepare_payload(datastore:document()) -> gs_protocol:data().
-prepare_payload(#document{value = #custom_metadata{value = Metadata}}) ->
-    Payload = json_utils:encode(maps:fold(fun
-        (<<"onedata_json">>, JSON, AccIn) ->
-            AccIn#{<<"json">> => JSON};
-        (<<"onedata_rdf">>, RDF, AccIn) ->
-            AccIn#{<<"rdf">> => RDF};
-        (Key, Value, AccIn = #{<<"xattrs">> := Xattrs}) ->
-            AccIn#{<<"xattrs">> => Xattrs#{Key => Value}};
-        (Key, Value, AccIn) ->
-            AccIn#{<<"xattrs">> => #{Key => Value}}
-    end, #{}, Metadata)),
-    #{<<"payload">> => Payload}.
+-spec prepare_payload(maps:map(), od_harvester:id()) -> gs_protocol:data() | undefined.
+prepare_payload(JSON, HarvesterId) ->
+    case get_and_validate_type(JSON, HarvesterId) of
+        undefined -> undefined;
+        Type ->
+            Payload = json_utils:encode(#{
+                <<"type">> => Type,
+                ?PAYLOAD_KEY(Type) => JSON
+            }),
+            #{<<"payload">> => Payload}
+    end.
+
+-spec get_and_validate_type(maps:map(), od_harvester:id()) -> binary() | undefined.
+get_and_validate_type(JSON, HarvesterId) ->
+    {ok, AcceptedEntryTypes} = harvester_logic:get_accepted_entry_types(HarvesterId),
+    Type = get_type(JSON, HarvesterId),
+    case lists:member(Type, AcceptedEntryTypes) of
+        true -> Type;
+        false -> undefined
+    end.
+
+-spec get_type(maps:map(), od_harvester:id()) -> binary() | undefined.
+get_type(JSON, HarvesterId) ->
+    {ok, EntryTypeField}= harvester_logic:get_entry_type_field(HarvesterId),
+    {ok, DefaultEntryType} = harvester_logic:get_default_entry_type(HarvesterId),
+    maps:get(EntryTypeField, JSON, DefaultEntryType).

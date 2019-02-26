@@ -217,7 +217,9 @@ translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = protecte
     #document{
         key = Id,
         value = #od_harvester{
-            spaces = maps:get(<<"spaces">>, Result)
+            entry_type_field = maps:get(<<"entryTypeField">>, Result),
+            default_entry_type = maps:get(<<"defaultEntryType">>, Result),
+            accepted_entry_types = maps:get(<<"acceptedEntryTypes">>, Result)
         }
     };
 
