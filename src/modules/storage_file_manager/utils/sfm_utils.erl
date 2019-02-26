@@ -100,7 +100,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%                {ok, _} ->
 %%                    ?warning("Moving file into existing one, source ~p, target ~p",
 %%                        [SourceFileId, TargetFileId]),
-%%                    NewTargetFileId = ?CONFLIOCTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
+%%                    NewTargetFileId = ?CONFLICTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
 %%                    storage_file_manager:mv(SourceHandle, NewTargetFileId);
 %%                _ ->
 %%                    storage_file_manager:mv(SourceHandle, TargetFileId)
@@ -420,7 +420,7 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
 -spec create_storage_file_with_suffix(storage_file_manager:handle(), 
     file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
 create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = SFMHandle, Mode) ->
-    NewName = ?CONFLIOCTING_STORAGE_FILE_NAME(FileId, Uuid),
+    NewName = ?CONFLICTING_STORAGE_FILE_NAME(FileId, Uuid),
     SFMHandle1 = SFMHandle#sfm_handle{file = NewName},
     
     ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),

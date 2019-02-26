@@ -490,6 +490,7 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
             when ID =/= undefined, SFC or Generate ->
             {ID, FileCtx};
         {_, FileCtx} ->
+            % Check if id should be generated
             {Continue, FileCtx2} = case Generate of
                 true -> {true, FileCtx};
                 _ -> is_dir(FileCtx)

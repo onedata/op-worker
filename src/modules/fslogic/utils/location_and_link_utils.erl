@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This provides functions operating on file_location and links
+%%% This module provides functions operating on file_location and links
 %%% (especially deletion links).
 %%% @end
 %%%--------------------------------------------------------------------

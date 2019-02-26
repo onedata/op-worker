@@ -24,7 +24,7 @@
 
 -define(CTX, (index:get_ctx())).
 -define(LINK_PREFIX, <<"INDEXES">>).
--define(INDEX_ID_TREE_ID_SEPARATOR, ?CONFLIOCTING_LOGICAL_FILE_SUFFIX_SEPARATOR).
+-define(INDEX_ID_TREE_ID_SEPARATOR, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR).
 
 
 -spec add_link(index:name(), index:id(), od_space:id()) -> ok | {error, term()}.

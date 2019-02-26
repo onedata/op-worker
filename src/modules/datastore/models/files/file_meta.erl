@@ -133,7 +133,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
             {ok, #link{}} ->
-                case ?MODULE:save(FileDoc3) of
+                case file_meta:save(FileDoc3) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
@@ -337,7 +337,7 @@ exists({path, Path}) ->
         {error, not_found} -> false
     end;
 exists(Key) ->
-    case ?MODULE:get(Key) of
+    case file_meta:get(Key) of
         {ok, _} -> true;
         {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
@@ -363,7 +363,7 @@ get_child(ParentUuid, Name) ->
 %%--------------------------------------------------------------------
 -spec get_child_uuid(uuid(), name()) -> {ok, uuid()} | {error, term()}.
 get_child_uuid(ParentUuid, Name) ->
-    Tokens = binary:split(Name, ?CONFLIOCTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
+    Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
             case get_child_uuid(ParentUuid, oneprovider:get_id(), Name) of

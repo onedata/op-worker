@@ -880,7 +880,7 @@ create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, FileSize,
         true ->
             case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
                 {error, already_exists} ->
-                    FileName2 = ?IMPORTED_CONFLIOCTING_FILE_NAME(FileName),
+                    FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
                     FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode),
                         Mode band 8#1777, OwnerId, GroupId, FileSize, ParentUuid, SpaceId),
                     file_meta:create({uuid, ParentUuid}, FileMetaDoc2);
@@ -1030,7 +1030,7 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
 
 -spec is_suffixed(file_meta:name()) -> {true, file_meta:uuid(), file_meta:name()} | false.
 is_suffixed(FileName) ->
-    Tokens = binary:split(FileName, ?CONFLIOCTING_STORAGE_FILE_SUFFIX_SEPARATOR, [global]),
+    Tokens = binary:split(FileName, ?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [FileName] ->
             false;

@@ -25,7 +25,7 @@
 %% Test API
 -export([process_file_links/3]).
 
--type delete_metadata_opts() :: boolean() | deletion_link.
+-type delete_filemeta_opts() :: boolean() | deletion_link.
 
 %%%===================================================================
 %%% API
@@ -42,13 +42,13 @@
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
-        ok = case file_handles:exists(FileUuid) of
-                 true ->
-                     process_file_links(FileCtx, UserCtx, RemoteDelete),
-                     ok = file_handles:mark_to_remove(FileCtx);
-                 _ ->
-                     remove_file(FileCtx, UserCtx, true, not RemoteDelete)
-             end,
+        case file_handles:exists(FileUuid) of
+            true ->
+                process_file_links(FileCtx, UserCtx, RemoteDelete),
+                ok = file_handles:mark_to_remove(FileCtx);
+            _ ->
+                ok = remove_file(FileCtx, UserCtx, true, not RemoteDelete)
+        end,
         maybe_emit_event(FileCtx, UserCtx, Silent)
     catch
         _:{badmatch, {error, not_found}} ->
@@ -131,11 +131,11 @@ remove_auxiliary_documents(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-    delete_metadata_opts()) -> ok.
-remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
+    delete_filemeta_opts()) -> ok.
+remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
     % TODO VFS-5270
     replica_synchronizer:apply(FileCtx, fun() ->
-        {FileDoc, FileCtx4} = case DeleteMetadata of
+        {FileDoc, FileCtx4} = case DeleteFileMeta of
             true ->
                 {FD = #document{value = #file_meta{
                     shares = Shares
@@ -157,7 +157,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMetadata) ->
             _ -> ok
         end,
 
-        case {DeleteMetadata, RemoveStorageFile} of
+        case {DeleteFileMeta, RemoveStorageFile} of
             {true, _} ->
                 ok = file_meta:delete(FileDoc);
             {deletion_link, _} ->
@@ -224,7 +224,7 @@ maybe_remove_file_on_storage(FileCtx, UserCtx) ->
         _:{badmatch, {error, ?ENOENT}} ->
             ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok;
-        _:{badmatch, {error, erofs}} ->
+        _:{badmatch, {error, ?EROFS}} ->
             ?warning_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
             ok
     end.

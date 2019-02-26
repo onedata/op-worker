@@ -1525,8 +1525,8 @@ wait_for_terminate(Pid) ->
 %% Deletes replica of file.
 %% Before deletion checks whether version of local replica is identical
 %% or lesser to allowed.
-%% NOTE!!! This function is not responsible whether given replica is
-%% unique
+%% NOTE!!! This function is not responsible for checking whether
+%% given replica is unique.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{})

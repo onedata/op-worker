@@ -24,7 +24,7 @@
     fsync/4, release/3, flush_event_queue/2]).
 
 %% Export for RPC
--export([open_storage_on_node/4]).
+-export([open_on_storage/4]).
 
 %% Test API
 -export([create_file_doc/4]).
@@ -379,7 +379,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink) ->
     try
         {FileLocation, FileCtx2} =
             create_location(FileCtx, UserCtx, VerifyDeletionLink),
-        HandleId = open_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
+        HandleId = open_on_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
         {HandleId, FileLocation, FileCtx2}
     catch
         E1:E2 ->
@@ -395,15 +395,15 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink) ->
 %% Opens a file on storage if needed. Chooses appropriate node.
 %% @end
 %%--------------------------------------------------------------------
--spec open_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
+-spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
     handle_id()) -> storage_file_manager:handle_id().
-open_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
+open_on_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
     ?NEW_HANDLE_ID;
-open_storage(FileCtx, SessId, Flag, false, undefined) ->
-    open_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
-open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
+open_on_storage(FileCtx, SessId, Flag, false, undefined) ->
+    open_on_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
+open_on_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
     Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
-    {ok, HandleId} = rpc:call(Node, ?MODULE, open_storage_on_node,
+    {ok, HandleId} = rpc:call(Node, ?MODULE, open_on_storage,
         [FileCtx, SessId, Flag, HandleId]),
     HandleId.
 
@@ -413,9 +413,9 @@ open_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
 %% Opens a file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec open_storage_on_node(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
+-spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
     handle_id()) -> {ok, storage_file_manager:handle_id()} | no_return().
-open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
+open_on_storage(FileCtx, SessId, Flag, HandleId) ->
     {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
     {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
