@@ -178,17 +178,6 @@ get(#document{value = #file_meta{}} = Doc) ->
     {ok, Doc};
 get({path, Path}) ->
     ?run(fslogic_path:resolve(Path));
-get(?ROOT_DIR_UUID) ->
-    {ok, #document{
-        key = ?ROOT_DIR_UUID,
-        value = #file_meta{
-            name = ?ROOT_DIR_NAME,
-            is_scope = true,
-            mode = 8#111,
-            owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
-        }
-    }};
 get(FileUuid) ->
     case get_including_deleted(FileUuid) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
@@ -205,6 +194,17 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
+get_including_deleted(?ROOT_DIR_UUID) ->
+    {ok, #document{
+        key = ?ROOT_DIR_UUID,
+        value = #file_meta{
+            name = ?ROOT_DIR_NAME,
+            is_scope = true,
+            mode = 8#111,
+            owner = ?ROOT_USER_ID,
+            parent_uuid = ?ROOT_DIR_UUID
+        }
+    }};
 get_including_deleted(FileUuid) ->
     datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
 

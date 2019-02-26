@@ -372,7 +372,8 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
 -spec open_file_internal(user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean()) ->
     no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
-open_file_internal(UserCtx, FileCtx, Flag, HandleId0, VerifyDeletionLink) ->
+open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink) ->
+    FileCtx = verify_file_exists(FileCtx0, HandleId0),
     SessId = user_ctx:get_session_id(UserCtx),
     check_and_register_open(FileCtx, SessId, HandleId0),
     try
@@ -424,16 +425,29 @@ open_storage_on_node(FileCtx, SessId, Flag, HandleId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Verifies handle file exists (only for newly opened files).
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_file_exists(file_ctx:ctx(), handle_id()) ->
+    file_ctx:ctx() | no_return().
+verify_file_exists(FileCtx, undefined) ->
+    {#document{}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    FileCtx2;
+verify_file_exists(FileCtx, _HandleId) ->
+    FileCtx.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Verifies handle id and registers it.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id()) ->
     ok | no_return().
-check_and_register_open(FileCtx, SessId, HandleId) ->
-    ok = case HandleId of
-             undefined -> file_handles:register_open(FileCtx, SessId, 1);
-             _ -> ok
-         end.
+check_and_register_open(FileCtx, SessId, undefined) ->
+    ok = file_handles:register_open(FileCtx, SessId, 1);
+check_and_register_open(_FileCtx, _SessId, _HandleId) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -443,11 +457,10 @@ check_and_register_open(FileCtx, SessId, HandleId) ->
 %%--------------------------------------------------------------------
 -spec check_and_register_release(file_ctx:ctx(), session:id(), handle_id()) ->
     ok | no_return().
-check_and_register_release(FileCtx, SessId, HandleId) ->
-    ok = case HandleId of
-             undefined -> file_handles:register_release(FileCtx, SessId, 1);
-             _ -> ok
-         end.
+check_and_register_release(FileCtx, SessId, undefined) ->
+    ok = file_handles:register_release(FileCtx, SessId, 1);
+check_and_register_release(_FileCtx, _SessId, _HandleId) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
