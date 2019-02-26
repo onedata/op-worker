@@ -102,8 +102,8 @@ communicate(SessionId, RawMsg) ->
         ok ->
             await_response(Msg);
         Error ->
-            ?error_stacktrace("Failed to communicate msg ~p to peer: ~p", [
-                Msg, SessionId
+            ?error_stacktrace("Failed to communicate msg ~p to peer ~p due to: ~p", [
+                Msg, SessionId, Error
             ]),
             Error
     end.
@@ -148,8 +148,8 @@ send_sync(SessionId, Msg0, Recipient, ExcludedCons) ->
         {ok, _} ->
             {ok, MsgId};
         {Error, _} ->
-            ?error_stacktrace("Failed to send msg ~p to peer: ~p", [
-                Msg, SessionId
+            ?error_stacktrace("Failed to send msg ~p to peer ~p due to: ~p", [
+                Msg, SessionId, Error
             ]),
             Error
     end.
@@ -214,8 +214,8 @@ respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
                 ok ->
                     report_response_sent(ConnManager, ReqId);
                 Error ->
-                    ?error_stacktrace("Failed to send response ~p to peer: ~p", [
-                        Response, SessionId
+                    ?error_stacktrace("Failed to send response ~p to peer ~p due to: ~p", [
+                        Response, SessionId, Error
                     ]),
                     Error
             end;
@@ -422,8 +422,6 @@ send_sync_internal(SessionId, Msg, ExcludedCons) ->
 -spec send_in_loop(message(), [pid()]) -> ok | {error, term()}.
 send_in_loop(_Msg, []) ->
     {error, no_connections};
-send_in_loop(Msg, [Conn]) ->
-    connection:send_sync(Conn, Msg);
 send_in_loop(Msg, [Conn | Cons]) ->
     case connection:send_sync(Conn, Msg) of
         ok ->

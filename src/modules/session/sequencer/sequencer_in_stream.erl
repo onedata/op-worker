@@ -189,15 +189,30 @@ handle_info(Info, StateName, State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
-| term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
-    session_id = SessId, sequencer_manager = SeqMan, is_proxy = IsProxy} = State) ->
+-spec(terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
+    StateName :: atom(), StateData :: term()) -> term()).
+terminate(Reason, StateName, #state{
+    stream_id = StmId,
+    sequence_number = SeqNum,
+    session_id = SessId,
+    sequencer_manager = SeqMan,
+    is_proxy = IsProxy
+} = State) ->
     ?log_terminate(Reason, {StateName, State}),
-    Msg = #message_acknowledgement{stream_id = StmId, sequence_number = SeqNum - 1},
-    case communicate(IsProxy, Msg, SessId, false) of
-        ok -> ok;
-        {error, _Reason2} -> SeqMan ! {send, Msg, SessId}
+    case SeqNum of
+        0 ->
+            ok;
+        _ ->
+            Msg = #message_acknowledgement{
+                stream_id = StmId,
+                sequence_number = SeqNum - 1
+            },
+            case communicate(IsProxy, Msg, SessId, false) of
+                ok ->
+                    ok;
+                {error, _Reason2} ->
+                    SeqMan ! {send, Msg, SessId}
+            end
     end,
     unregister_stream(State).
 

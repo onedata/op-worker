@@ -133,7 +133,6 @@ events_aggregation_manager_error_test2(Config) ->
                 _ ->
                     application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
                     throw(test_error)
-
             end;
         (Request, From, State) ->
             meck:passthrough([Request, From, State])

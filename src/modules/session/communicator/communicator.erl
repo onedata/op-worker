@@ -31,7 +31,6 @@
 -type message() :: #client_message{} | #server_message{}.
 -type generic_message() :: tuple().
 -type asyn_ans() :: ok | {ok | message_id:id()} | {error, Reason :: term()}.
--type sync_answer() :: ok | {ok, message()} | {error, Reason :: term()}.
 
 
 %%%===================================================================
@@ -156,7 +155,7 @@ communicate_with_provider(SessionId, Msg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate_with_provider(session:id(), generic_message(), pid()) ->
-    sync_answer().
+    {ok | message_id:id()} | {error, Reason :: term()}.
 communicate_with_provider(SessionId, #client_message{} = Msg0, Recipient) ->
     {MsgId, Msg} = protocol_utils:maybe_set_msg_id(Msg0, Recipient),
     case Msg of
