@@ -73,7 +73,7 @@ init_per_testcase(_Case, Config) ->
         ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
     ),
     ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
-    ZoneConfigurationURL = str_utils:format("https://~s~s", [
+    ZoneConfigurationURL = str_utils:format_bin("https://~s~s", [
         ZoneDomain, ?ZONE_CONFIGURATION_PATH
     ]),
     % Sleep a while before mocking http_client - otherwise meck's reloading
