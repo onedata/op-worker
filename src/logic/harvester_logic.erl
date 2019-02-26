@@ -25,10 +25,11 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -export([get/1]).
--export([get_entry_type_field/1, get_default_entry_type/1, get_accepted_entry_types/1]).
--export([submit_entry/3, delete_entry/2 ]).
+-export([submit_entry/3, delete_entry/2]).
+-export([prepare_payload/2]).
 
 -define(ENTRY(FileId), {entry, FileId}).
+-define(PAYLOAD_KEY(Type), <<Type/binary, "_payload">>).
 
 %%%===================================================================
 %%% API
@@ -46,34 +47,6 @@ get(HarvesterId) ->
         gri = #gri{type = od_harvester, id = HarvesterId, aspect = instance, scope = protected},
         subscribe = true
     }).
-
--spec get_entry_type_field(od_harvester:id()) -> {ok, binary()} | {error, term()}.
-get_entry_type_field(HarvesterId) ->
-    case harvester_logic:get(HarvesterId) of
-        {ok, #document{value = #od_harvester{entry_type_field = EntryTypeField}}} ->
-            {ok,EntryTypeField};
-        {error, _} = Error ->
-            Error
-    end.
-
--spec get_default_entry_type(od_harvester:id()) -> {ok, binary()} | {error, term()}.
-get_default_entry_type(HarvesterId) ->
-    case harvester_logic:get(HarvesterId) of
-        {ok, #document{value = #od_harvester{default_entry_type = DefaultEntryType}}} ->
-            {ok, DefaultEntryType};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_accepted_entry_types(od_harvester:id()) -> {ok, [binary()]} | {error, term()}.
-get_accepted_entry_types(HarvesterId) ->
-    case harvester_logic:get(HarvesterId) of
-        {ok, #document{value = #od_harvester{accepted_entry_types = AcceptedEntryTypes}}} ->
-            {ok, AcceptedEntryTypes};
-        {error, _} = Error ->
-            Error
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,3 +75,70 @@ delete_entry(HarvesterId, FileId) ->
         gri = #gri{type = od_harvester, id = HarvesterId, aspect = ?ENTRY(FileId),
             scope = private}
     }).
+
+-spec prepare_payload(maps:map(), od_harvester:id()) ->
+    {ok, gs_protocol:data()} | gs_protocol:error().
+prepare_payload(JSON, HarvesterId) ->
+    case get_and_validate_type(JSON, HarvesterId) of
+        {ok, Type} ->
+            Payload = json_utils:encode(#{
+                <<"type">> => Type,
+                ?PAYLOAD_KEY(Type) => JSON
+            }),
+            {ok, #{<<"payload">> => Payload}};
+        Error ->
+            Error
+    end.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec entry_type_field(od_harvester:id()) -> {ok, od_harvester:entry_type()} | {error, term()}.
+entry_type_field(HarvesterId) ->
+    case harvester_logic:get(HarvesterId) of
+        {ok, #document{value = #od_harvester{entry_type_field = EntryTypeField}}} ->
+            {ok,EntryTypeField};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec default_entry_type(od_harvester:id()) ->
+    {ok, undefined | od_harvester:entry_type()} | {error, term()}.
+default_entry_type(HarvesterId) ->
+    case harvester_logic:get(HarvesterId) of
+        {ok, #document{value = #od_harvester{default_entry_type = DefaultEntryType}}} ->
+            {ok, DefaultEntryType};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec accepted_entry_types(od_harvester:id()) ->
+    {ok, [od_harvester:entry_type()]} | {error, term()}.
+accepted_entry_types(HarvesterId) ->
+    case harvester_logic:get(HarvesterId) of
+        {ok, #document{value = #od_harvester{accepted_entry_types = AcceptedEntryTypes}}} ->
+            {ok, AcceptedEntryTypes};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec get_and_validate_type(maps:map(), od_harvester:id()) ->
+    {ok, od_harvester:entry_type()} | {error, term()}.
+get_and_validate_type(JSON, HarvesterId) ->
+    {ok, AcceptedEntryTypes} = accepted_entry_types(HarvesterId),
+    case get_type(JSON, HarvesterId) of
+        undefined ->
+            {error, undefined_type};
+        Type ->
+            case lists:member(Type, AcceptedEntryTypes) of
+                true -> {ok, Type};
+                false -> {error, type_not_accepted}
+            end
+    end.
+
+-spec get_type(maps:map(), od_harvester:id()) -> od_harvester:entry_type() | undefined.
+get_type(JSON, HarvesterId) ->
+    {ok, EntryTypeField} = entry_type_field(HarvesterId),
+    {ok, DefaultEntryType} = default_entry_type(HarvesterId),
+    maps:get(EntryTypeField, JSON, DefaultEntryType).

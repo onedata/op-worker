@@ -23,11 +23,11 @@
 -type record() :: #od_harvester{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
-
--type name() :: binary().
+-type entry_type_field() :: binary().
+-type entry_type() :: binary().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0]).
+-export_type([entry_type_field/0, entry_type/0]).
 
 -define(CTX, #{
     model => ?MODULE,

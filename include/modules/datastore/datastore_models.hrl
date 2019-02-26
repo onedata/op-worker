@@ -168,9 +168,9 @@
 }).
 
 -record(od_harvester, {
-    entry_type_field :: binary(),
-    default_entry_type :: binary(),
-    accepted_entry_types :: [binary()],
+    entry_type_field :: od_harvester:entry_type_field(),
+    default_entry_type :: undefined | od_harvester:entry_type(),
+    accepted_entry_types :: [od_harvester:entry_type()],
 
     cache_state = #{} :: cache_state()
 }).
