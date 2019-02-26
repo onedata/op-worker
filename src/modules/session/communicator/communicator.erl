@@ -144,7 +144,17 @@ stream_to_provider(SessionId, Msg, StmId) ->
     {ok, message()} | {error, Reason :: term()}.
 communicate_with_provider(SessionId, #client_message{} = Msg) ->
     session_connections:ensure_connected(SessionId),
-    connection_manager:communicate(SessionId, Msg);
+    % TODO retry is necessary because proc tries to send msg
+    % when conn is connecting (upgrading_protocol, performing_handshake)
+    case connection_manager:communicate(SessionId, Msg) of
+        {error, no_connections} ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            communicate_with_provider(SessionId, Msg);
+        {error, _Reason} = Error ->
+            Error;
+        Res ->
+            Res
+    end;
 communicate_with_provider(SessionId, Msg) ->
     communicate_with_provider(SessionId, #client_message{message_body = Msg}).
 
