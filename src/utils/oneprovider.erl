@@ -188,7 +188,7 @@ get_oz_url() ->
 -spec get_oz_version() -> binary().
 get_oz_version() ->
     GetOzVersion = fun() ->
-        {ok, OzVersion, _} = provider_logic:fetch_oz_compatibility_config(get_oz_url()),
+        {ok, OzVersion, _} = provider_logic:fetch_compatibility_config(onezone),
         {true, OzVersion, ?OZ_VERSION_CACHE_TTL}
     end,
     {ok, OzVersion} = simple_cache:get(cached_oz_version, GetOzVersion),
