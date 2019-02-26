@@ -31,7 +31,7 @@
 %%%           so that it can send and receive messages.
 %%%
 %%% More detailed transitions between statuses for each connection and
-%%% message flow is depicted on below diagram.
+%%% message flow is depicted on diagram below.
 %%%
 %%%              INCOMING              |              OUTGOING
 %%%                                    |
@@ -206,8 +206,8 @@ send_sync(Pid, Msg) ->
             ]),
             {error, timeout};
         Type:Reason ->
-            ?error("Connection ~p cannot send msg ~p due to: ~p", [
-                Pid, Msg, {Type, Reason}
+            ?error("Connection ~p cannot send msg ~p due to ~p:~p", [
+                Pid, Msg, Type, Reason
             ]),
             {error, Reason}
     end.
@@ -466,9 +466,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->
-        ?debug_stacktrace("Invalid protocol upgrade request - ~p:~p", [
-            Type, Reason
-        ]),
+        ?debug("Invalid protocol upgrade request - ~p:~p", [Type, Reason]),
         cowboy_req:reply(400, Req),
         {stop, Req}
     end.
@@ -718,7 +716,7 @@ handle_handshake_response(#state{
             {error, invalid_handshake_response}
     catch
         _:Error ->
-            ?error_stacktrace("Client message decoding error: ~p", [Error]),
+            ?error("Client handshake message decoding error: ~p", [Error]),
             {error, Error}
     end.
 
@@ -746,9 +744,7 @@ handle_client_message(#state{
         protocol_utils:maybe_create_proxy_session(PeerId, Msg),
         route_message(State, Msg)
     catch Type:Reason ->
-        ?error_stacktrace("Client message handling error - ~p:~p", [
-            Type, Reason
-        ]),
+        ?error("Client message handling error - ~p:~p", [Type, Reason]),
         {ok, State}
     end.
 
@@ -761,9 +757,7 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
         {ok, Msg} = serializer:deserialize_server_message(Data, SessId),
         route_message(State, Msg)
     catch Type:Error ->
-        ?error_stacktrace("Server message handling error - ~p:~p", [
-            Type, Error
-        ]),
+        ?error("Server message handling error - ~p:~p", [Type, Error]),
         {ok, State}
     end.
 
@@ -779,10 +773,9 @@ route_message(#state{
         {ok, ConnManager} ->
             NewState = State#state{conn_manager = ConnManager},
             route_message(NewState, Msg, {self(), ConnManager, SessionId});
-        Error ->
+        _Error ->
             % Connection manager starts asynchronously so it is
             % possible that it hasn't started yet.
-            ?error_stacktrace("Message routing error: ~p", [Error]),
             route_message(State, Msg, SessionId)
     end;
 route_message(#state{
