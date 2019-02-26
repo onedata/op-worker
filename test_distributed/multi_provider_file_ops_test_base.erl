@@ -1810,7 +1810,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     FileContent = <<"abc">>,
     storage_file_manager:unlink(SFMHandle1, size(FileContent)),
     ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
+    {ok, SFMHandle2} = storage_file_manager:open_insecure(SFMHandle1, write),
     SFMHandle3 = storage_file_manager:set_size(SFMHandle2),
     {ok, 3} = storage_file_manager:write(SFMHandle3, 0, FileContent),
     storage_file_manager:fsync(SFMHandle3, false),

@@ -29,6 +29,9 @@
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
 
+% Export for tests
+-export([open_insecure/2]).
+
 -type handle() :: #sfm_handle{}.
 -type handle_id() :: binary().
 -type error_reply() :: {error, term()}.

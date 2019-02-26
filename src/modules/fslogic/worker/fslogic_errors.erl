@@ -55,7 +55,7 @@ handle_error(Request, Type, Error) ->
             {MF, FA}
     end,
     case LogLevel of
-        debug -> ?error(MsgFormat, FormatArgs);
+        debug -> ?debug(MsgFormat, FormatArgs);
         error -> ?error(MsgFormat, FormatArgs)
     end,
     error_response(Request, Status).
