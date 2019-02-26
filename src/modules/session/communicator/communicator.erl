@@ -28,9 +28,9 @@
     communicate_with_provider/3
 ]).
 
+-type retries() :: non_neg_integer() | infinity.
 -type message() :: #client_message{} | #server_message{}.
 -type generic_message() :: tuple().
--type asyn_ans() :: ok | {ok | message_id:id()} | {error, Reason :: term()}.
 
 
 %%%===================================================================
@@ -40,32 +40,76 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to client with default options.
+%% @equiv send_to_client(SessionId, Msg, 1).
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_client(session:id(), generic_message()) -> asyn_ans().
+-spec send_to_client(session:id(), generic_message()) ->
+    ok | {ok | message_id:id()} | {error, Reason :: term()}.
 send_to_client(SessionId, Msg) ->
-    communicator:send_to_client(SessionId, Msg, false).
+    communicator:send_to_client(SessionId, Msg, 1).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to client.
+%% Sends message to client. In case of errors keeps retrying
+%% until either message is sent or no more retries are left.
+%% Exception to this is empty connection pool error,
+%% which fails call immediately.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_client(session:id(), generic_message(),
-    RetryUntilSend :: boolean()) -> asyn_ans().
-send_to_client(SessionId, #server_message{} = Msg, RetryUntilSend) ->
-    case {RetryUntilSend, connection_manager:send_sync(SessionId, Msg)} of
-        {true, {error, _Reason}} ->
+-spec send_to_client(session:id(), generic_message(), retries()) ->
+    ok | {ok | message_id:id()} | {error, Reason :: term()}.
+send_to_client(SessionId, #server_message{} = Msg, 0) ->
+    connection_manager:send_sync(SessionId, Msg);
+send_to_client(SessionId, #server_message{} = Msg, Retries) ->
+    case connection_manager:send_sync(SessionId, Msg) of
+        {error, no_connections} = EmptyConnectionPoolError ->
+            EmptyConnectionPoolError;
+        {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_client(SessionId, Msg, RetryUntilSend);
-        {_, Ans} ->
+            send_to_client(SessionId, Msg, retries_left(Retries));
+        Ans ->
             Ans
     end;
-send_to_client(SessionId, Msg, RetryUntilSend) ->
+send_to_client(SessionId, Msg, RetriesLeft) ->
     ServerMsg = #server_message{message_body = Msg},
-    send_to_client(SessionId, ServerMsg, RetryUntilSend).
+    send_to_client(SessionId, ServerMsg, RetriesLeft).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv send_to_provider(SessionId, Msg, 1).
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_provider(session:id(), generic_message()) ->
+    ok | {ok | message_id:id()} | {error, Reason :: term()}.
+send_to_provider(SessionId, Msg) ->
+    communicator:send_to_provider(SessionId, Msg, 1).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to peer provider. In case of errors keeps retrying
+%% until either message is sent or no more retries are left.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_provider(session:id(), generic_message(), retries()) ->
+    ok | {ok | message_id:id()} | {error, Reason :: term()}.
+send_to_provider(SessionId, #client_message{} = Msg, 0) ->
+    session_connections:ensure_connected(SessionId),
+    connection_manager:send_sync(SessionId, Msg);
+send_to_provider(SessionId, #client_message{} = Msg, Retries) ->
+    session_connections:ensure_connected(SessionId),
+    case connection_manager:send_sync(SessionId, Msg) of
+        {error, _Reason} ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            send_to_provider(SessionId, Msg, retries_left(Retries));
+        Ans ->
+            Ans
+    end;
+send_to_provider(SessionId, Msg, Retries) ->
+    ClientMsg = #client_message{message_body = Msg},
+    send_to_provider(SessionId, ClientMsg, Retries).
 
 
 %%--------------------------------------------------------------------
@@ -91,45 +135,11 @@ cast_to_provider(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to provider with default options. Does not wait for answer.
-%% @end
-%%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_message()) -> asyn_ans().
-send_to_provider(SessionId, Msg) ->
-    communicator:send_to_provider(SessionId, Msg, false).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends message to provider. Does not wait for answer.
-%% @end
-%%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_message(), boolean()) ->
-    asyn_ans().
-send_to_provider(SessionId, #client_message{} = Msg, RetryUntilSend) ->
-    session_connections:ensure_connected(SessionId),
-    case {RetryUntilSend, connection_manager:send_sync(SessionId, Msg)} of
-        {_, {error, no_connections}} ->
-            timer:sleep(?SEND_RETRY_DELAY),
-            send_to_provider(SessionId, Msg, RetryUntilSend);
-        {true, {error, _Reason}} ->
-            timer:sleep(?SEND_RETRY_DELAY),
-            send_to_provider(SessionId, Msg, RetryUntilSend);
-        {_, Ans} ->
-            Ans
-    end;
-send_to_provider(SessionId, Msg, RetryUntilSend) ->
-    ClientMsg = #client_message{message_body = Msg},
-    send_to_provider(SessionId, ClientMsg, RetryUntilSend).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Sends stream message to provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_to_provider(session:id(), generic_message(), sequencer:stream_id()) ->
-    asyn_ans().
+    ok | {ok | message_id:id()} | {error, Reason :: term()}.
 stream_to_provider(SessionId, Msg, StmId) ->
     session_connections:ensure_connected(SessionId),
     sequencer:send_message(Msg, StmId, SessionId).
@@ -178,7 +188,7 @@ communicate_with_provider(SessionId, #client_message{} = Msg0, Recipient) ->
                     Error
             end;
         _ ->
-            communicator:send_to_provider(SessionId, Msg, false)
+            communicator:send_to_provider(SessionId, Msg, 0)
     end;
 communicate_with_provider(SessionId, Msg, Recipient) ->
     ClientMsg = #client_message{message_body = Msg},
@@ -188,6 +198,12 @@ communicate_with_provider(SessionId, Msg, Recipient) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec retries_left(retries()) -> retries().
+retries_left(infinity) -> infinity;
+retries_left(Num) -> Num - 1.
 
 
 %%%%--------------------------------------------------------------------

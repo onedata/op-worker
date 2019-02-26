@@ -422,6 +422,8 @@ send_sync_internal(SessionId, Msg, ExcludedCons) ->
 -spec send_in_loop(message(), [pid()]) -> ok | {error, term()}.
 send_in_loop(_Msg, []) ->
     {error, no_connections};
+send_in_loop(Msg, [Conn]) ->
+    connection:send_sync(Conn, Msg);
 send_in_loop(Msg, [Conn | Cons]) ->
     case connection:send_sync(Conn, Msg) of
         ok ->
