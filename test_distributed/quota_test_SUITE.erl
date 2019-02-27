@@ -414,21 +414,22 @@ rename_bigger_then_quota_should_fail(Config) ->
 
 
 multiprovider_test(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, file1 = File1, file2 = File2} =
+    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     
     {ok, _} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     {ok, _} = create_file(P2, SessId(P2), f(<<"space3">>, File2)),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1, f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(10))),
+    ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(10))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P2, SessId(P2), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(30))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1, f(<<"space3">>, File1), 10, crypto:strong_rand_bytes(10))),
+    ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(<<"space3">>, File2), 10, crypto:strong_rand_bytes(10))),
+    ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 10, crypto:strong_rand_bytes(10))),
 
-    ?assertMatch(0, current_size(P2, <<"space_id3">>)),
+    ?assertMatch(10, current_size(P2, <<"space_id3">>)),
     ?assertMatch(20, current_size(P1, <<"space_id3">>)),
 
-    ?assertMatch(20, available_size(P2, <<"space_id3">>)),
+    ?assertMatch(10, available_size(P2, <<"space_id3">>)),
     ?assertMatch(0, available_size(P1, <<"space_id3">>)).
 
 
@@ -446,8 +447,8 @@ remove_file_on_remote_provider_should_unlock_space(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), f(<<"space3">>, File1)), ?ATTEMPTS),
     ?assertMatch(ok, unlink(P2, SessId(P2), f(<<"space3">>, File1))),
     ?assertMatch({error, enoent}, lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)), ?ATTEMPTS),
-    ?assertMatch(0, current_size(P2, <<"space_id3">>)),
-    ?assertMatch(0, current_size(P1, <<"space_id3">>)),
+    ?assertMatch(0, current_size(P2, <<"space_id3">>), ?ATTEMPTS),
+    ?assertMatch(0, current_size(P1, <<"space_id3">>), ?ATTEMPTS),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(20))).
 
 
@@ -467,7 +468,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}, #{<<"totalBlocksSize">> := 20}]}, 
         lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), 30),
-    
+
     ok = fsync(P2, SessId(P2), f(<<"space3">>, File1)),
     ?assertEqual(20, current_size(P1, <<"space_id3">>), ?ATTEMPTS),
     ?assertEqual(20, current_size(P2, <<"space_id3">>), ?ATTEMPTS),
