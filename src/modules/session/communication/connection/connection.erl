@@ -584,19 +584,16 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
             throw(cannot_verify_identity)
     end,
 
-    SslOpts = [
-        {cacerts, oneprovider:trusted_ca_certs()},
-        {secure, application:get_env(?APP_NAME, interprovider_connections_security, true)},
-        {hostname, Domain}
-    ],
-    provider_logic:assert_provider_compatibility(Host, ProviderId, SslOpts),
+    provider_logic:assert_provider_compatibility(ProviderId, Domain, Host),
 
     DomainAndIpInfo = case Domain of
         Host -> str_utils:format("@ ~s:~b", [Host, Port]);
-        _ -> str_utils:format("(~s) @ ~s:~b", [Domain, Host, Port])
+        _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
     end,
-    ?info("Connecting to provider '~s' ~s", [ProviderId, DomainAndIpInfo]),
-
+    ?info("Connecting to provider ~ts ~s", [
+        provider_logic:to_string(ProviderId), DomainAndIpInfo
+    ]),
+    SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
     self() ! {upgrade_protocol, Host},
@@ -701,17 +698,18 @@ handle_handshake_response(#state{
 } = State, Data) ->
     try serializer:deserialize_server_message(Data, SessId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
-            ?info("Successfully connected to provider '~s'", [ProviderId]),
+            ?info("Successfully connected to provider ~ts", [
+                provider_logic:to_string(ProviderId)
+            ]),
             {ok, State};
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
-            ?error("Handshake refused by provider '~s' due to ~p, closing connection.", [
-                ProviderId, Error
+            ?error("Handshake refused by provider ~ts due to ~p, closing connection.", [
+                provider_logic:to_string(ProviderId), Error
             ]),
             {error, {handshake_failed, Error}};
         _ ->
-            ?error("Received invalid handshake response from provider '~s', "
-                   "closing connection.", [
-                ProviderId
+            ?error("Received invalid handshake response from provider ~ts, closing connection.", [
+                provider_logic:to_string(ProviderId)
             ]),
             {error, invalid_handshake_response}
     catch

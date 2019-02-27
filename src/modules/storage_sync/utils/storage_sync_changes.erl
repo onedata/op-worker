@@ -134,6 +134,8 @@ count_file_attrs_hash(StorageFileCtx) ->
         throw:?ENOTSUP ->
             {<<"">>, StorageFileCtx2};
         throw:?ENOENT ->
+            {<<"">>, StorageFileCtx2};
+        throw:?ENODATA ->
             {<<"">>, StorageFileCtx2}
     end,
 

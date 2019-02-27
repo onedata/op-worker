@@ -101,8 +101,8 @@ fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
 %%--------------------------------------------------------------------
 -spec get_nodes(ProviderId :: binary()) -> rtransfer_link:address().
 get_nodes(ProviderId) ->
-    {ok, IPs} = provider_logic:resolve_ips(ProviderId),
-    [{IP, ?RTRANSFER_PORT} || IP <- IPs].
+    {ok, Nodes} = provider_logic:get_nodes(ProviderId),
+    [{Hostname, ?RTRANSFER_PORT} || Hostname <- Nodes].
 
 %%--------------------------------------------------------------------
 %% @doc

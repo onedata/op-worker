@@ -188,18 +188,14 @@ ensure_connected(SessId) ->
             end,
 
             {ok, Domain} = provider_logic:get_domain(ProviderId),
-            Hosts = case provider_logic:resolve_ips(ProviderId) of
-                {ok, IPs} -> [list_to_binary(inet:ntoa(IP)) || IP <- IPs];
-                _ -> [Domain]
-            end,
-            lists:foreach(
-                fun(Host) ->
-                    Port = https_listener:port(),
-                    critical_section:run([?MODULE, ProviderId, SessId], fun() ->
-                        % check once more to prevent races
-                        case get_random_connection(SessId) of
-                            {error, _} ->
-                                connection:connect_to_provider(
+            {ok, Hosts} = provider_logic:get_nodes(ProviderId),
+            lists:foreach(fun(Host) ->
+                Port = https_listener:port(),
+                critical_section:run([?MODULE, ProviderId, SessId], fun() ->
+                    % check once more to prevent races
+                    case get_random_connection(SessId) of
+                        {error, _} ->
+                            connection:connect_to_provider(
                                     ProviderId, SessId, Domain, Host, Port,
                                     ranch_ssl, timer:seconds(5)
                                 );
