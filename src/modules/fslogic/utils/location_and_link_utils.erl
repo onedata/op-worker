@@ -6,8 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module provides functions operating on file_location and links
-%%% (especially deletion links).
+%%% This module provides functions operating on file_location.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(location_and_link_utils).
@@ -15,15 +14,12 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
 %% API
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
 -export([create_imported_file_location/6, update_imported_file_location/2]).
--export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2,
-    add_deletion_link/2, remove_deletion_link/2]).
 
 %%%===================================================================
 %%% API
@@ -134,54 +130,6 @@ update_imported_file_location(FileCtx, StorageSize) ->
     ok = lfm_event_emitter:emit_file_written(
         FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% This function tries to resolve child with name FileName of
-%% directory associated with ParentCtx.
-%% @end
-%%-------------------------------------------------------------------
--spec try_to_resolve_child_link(file_meta:name(), file_ctx:ctx()) ->
-    {ok, file_meta:uuid()} | {error, term()}.
-try_to_resolve_child_link(FileName, ParentCtx) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    fslogic_path:to_uuid(ParentUuid, FileName).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function tries to resolve child's deletion_link
-%% @end
-%%-------------------------------------------------------------------
--spec try_to_resolve_child_deletion_link(file_meta:name(), file_ctx:ctx()) ->
-    {ok, file_meta:uuid()} | {error, term()}.
-try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    fslogic_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function adds a deletion_link for the file.
-%% @end
-%%-------------------------------------------------------------------
--spec add_deletion_link(file_ctx:ctx(), file_meta:uuid()) -> file_ctx:ctx().
-add_deletion_link(FileCtx, ParentUuid) ->
-    {DeletionLinkName, FileCtx2} = file_deletion_link_name(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx2),
-    Scope = file_ctx:get_space_id_const(FileCtx2),
-    ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
-    FileCtx2.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function remove a deletion_link for the file.
-%% @end
-%%-------------------------------------------------------------------
--spec remove_deletion_link(file_ctx:ctx(), file_meta:uuid()) -> file_ctx:ctx().
-remove_deletion_link(FileCtx, ParentUuid) ->
-    {DeletionLinkName, FileCtx2} = file_deletion_link_name(FileCtx),
-    Scope = file_ctx:get_space_id_const(FileCtx2),
-    ok = file_meta:delete_deletion_link(ParentUuid, Scope, DeletionLinkName),
-    FileCtx2.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -196,15 +144,3 @@ remove_deletion_link(FileCtx, ParentUuid) ->
 -spec create_file_blocks(non_neg_integer()) -> fslogic_blocks:blocks().
 create_file_blocks(0) -> [];
 create_file_blocks(Size) -> [#file_block{offset = 0, size = Size}].
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Utility function that returns deletion_link name for given file.
-%% @end
-%%-------------------------------------------------------------------
--spec file_deletion_link_name(file_ctx:ctx()) -> {file_meta:name(), file_ctx:ctx()}.
-file_deletion_link_name(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    BaseName = filename:basename(StorageFileId),
-    {?FILE_DELETION_LINK_NAME(BaseName), FileCtx2}.

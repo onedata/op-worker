@@ -164,7 +164,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
                 {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
                 ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
-                location_and_link_utils:remove_deletion_link(FileCtx5, ParentUuid),
+                link_utils:remove_deletion_link(FileCtx5, ParentUuid),
                 ok;
             {_, true} ->
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
@@ -190,7 +190,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
 process_file_links(FileCtx, UserCtx, KeepParentLink) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
-    FileCtx3 = location_and_link_utils:add_deletion_link(FileCtx2, ParentUuid),
+    FileCtx3 = link_utils:add_deletion_link(FileCtx2, ParentUuid),
     ok = case KeepParentLink of
              false ->
                  FileUuid = file_ctx:get_uuid_const(FileCtx3),

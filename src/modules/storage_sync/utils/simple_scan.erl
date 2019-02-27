@@ -137,9 +137,9 @@ maybe_sync_storage_file(Job = #space_strategy_job{
         false -> {false, undefined, FileName}
     end,
 
-    case location_and_link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
+    case link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
         {error, not_found} ->
-            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     case HasSuffix of
                         true ->
@@ -159,7 +159,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
             end;
         {ok, ResolvedUuid} ->
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
-            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+            case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),

@@ -276,8 +276,8 @@ close_file_import_race_test(Config) ->
         Master ! {action_result, Ans}
     end),
 
-    test_utils:mock_new(Workers, location_and_link_utils, [passthrough]),
-    test_utils:mock_expect(Workers, location_and_link_utils, try_to_resolve_child_deletion_link, fun
+    test_utils:mock_new(Workers, link_utils, [passthrough]),
+    test_utils:mock_expect(Workers, link_utils, try_to_resolve_child_deletion_link, fun
         (?TEST_FILE1, ParentCtx) ->
             ActionProc ! do_action,
             timer:sleep(5000),
@@ -1220,7 +1220,7 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:clean_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, location_and_link_utils]),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
 
