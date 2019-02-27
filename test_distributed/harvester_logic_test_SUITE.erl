@@ -130,15 +130,12 @@ harvest_test(Config) ->
     FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    tracer:start(Node),
-    tracer:trace_calls(harvester_logic, prepare_payload),
-    tracer:trace_calls(harvester_logic, submit_entry),
-
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, harvest, [?HARVESTER_1, FileId, #{}])),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, harvest, [?HARVESTER_1, FileId, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, #{}])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, #{}])),
+    % get result is cached now
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
 
@@ -170,8 +167,7 @@ init_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(_, Config) ->
-    logic_tests_common:invalidate_cache(Config, od_harvester, ?HARVESTER_1),
+end_per_testcase(_, _Config) ->
     ok.
 
 end_per_suite(Config) ->

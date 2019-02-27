@@ -195,7 +195,7 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = false
 }) when map_size(JSON) > 0 ->
-    ok = harvester_logic:harvest(HarvesterId, FileId, JSON),
+    ok = harvester_logic:submit_entry(HarvesterId, FileId, JSON),
     ok = harvest_stream_state:set_seq(Id, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{

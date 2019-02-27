@@ -157,7 +157,8 @@ invalidate_all_test_records(Config) ->
         {od_share, ?SHARE_1}, {od_share, ?SHARE_2},
         {od_provider, ?PROVIDER_1}, {od_provider, ?PROVIDER_2},
         {od_handle_service, ?HANDLE_SERVICE_1}, {od_handle_service, ?HANDLE_SERVICE_2},
-        {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2}
+        {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2},
+        {od_harvester, ?HARVESTER_1}
     ],
     lists:foreach(
         fun({Type, Id}) ->

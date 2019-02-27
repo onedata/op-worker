@@ -26,10 +26,11 @@
 
 -export([get/1]).
 -export([delete_entry/2]).
--export([harvest/3]).
-
-% exported for tests
 -export([submit_entry/3]).
+
+% exported for CT tests
+-export([submit_entry_internal/3]).
+
 
 -define(ENTRY(FileId), {entry, FileId}).
 -define(PAYLOAD_KEY(Type), <<Type/binary, "_payload">>).
@@ -64,34 +65,34 @@ delete_entry(HarvesterId, FileId) ->
             scope = private}
     }).
 
--spec harvest(od_harvester:id(), cdmi_id:objectid(), gs_protocol:json_map()) -> ok.
-harvest(HarvesterId, FileId, JSON) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Prepares payload and pushes entry with metadata for given
+%% HarvesterId and FileId to Onezone.
+%% @end
+%%--------------------------------------------------------------------
+-spec submit_entry(od_harvester:id(), cdmi_id:objectid(), gs_protocol:json_map()) -> ok.
+submit_entry(HarvesterId, FileId, JSON) ->
     case prepare_payload(HarvesterId, JSON) of
         {ok, Payload} ->
-            ok = harvester_logic:submit_entry(HarvesterId, FileId, Payload);
+            ok = harvester_logic:submit_entry_internal(HarvesterId, FileId, Payload);
         {error, Reason} ->
             ?debug("Metadata of file ~p won't be harvested due to ~p.", [FileId, Reason])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Pushes entry with metadata for given HarvesterId and FileId to Onezone.
-%% @end
-%%--------------------------------------------------------------------
--spec submit_entry(od_harvester:id(), cdmi_id:objectid(), gs_protocol:data()) ->
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec submit_entry_internal(od_harvester:id(), cdmi_id:objectid(), gs_protocol:data()) ->
     ok | gs_protocol:error().
-submit_entry(HarvesterId, FileId, Data) ->
+submit_entry_internal(HarvesterId, FileId, Data) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_harvester, id = HarvesterId,
             aspect = ?ENTRY(FileId), scope = private},
         data = Data
     }).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 -spec prepare_payload(od_harvester:id(), gs_protocol:json_map()) ->
     {ok, gs_protocol:data()} | gs_protocol:error().
@@ -114,8 +115,9 @@ prepare_payload(HarvesterId, JSON) ->
 
 -spec get_and_validate_type(od_harvester:record(), gs_protocol:json_map()) ->
     {ok, od_harvester:entry_type()} | {error, term()}.
-get_and_validate_type(Harvester, JSON) ->
-    {ok, AcceptedEntryTypes} = accepted_entry_types(Harvester),
+get_and_validate_type(Harvester = #od_harvester{
+    accepted_entry_types = AcceptedEntryTypes
+}, JSON) ->
     case get_type(Harvester, JSON) of
         undefined ->
             {error, undefined_type};
@@ -128,19 +130,8 @@ get_and_validate_type(Harvester, JSON) ->
 
 -spec get_type(od_harvester:record(), gs_protocol:json_map()) ->
     od_harvester:entry_type() | undefined.
-get_type(Harvester, JSON) ->
-    {ok, EntryTypeField} = entry_type_field(Harvester),
-    {ok, DefaultEntryType} = default_entry_type(Harvester),
+get_type(#od_harvester{
+    default_entry_type = DefaultEntryType,
+    entry_type_field = EntryTypeField
+}, JSON) ->
     maps:get(EntryTypeField, JSON, DefaultEntryType).
-
--spec entry_type_field(od_harvester:record()) -> {ok, od_harvester:entry_type()}.
-entry_type_field(#od_harvester{entry_type_field = EntryTypeField}) ->
-    {ok, EntryTypeField}.
-
--spec default_entry_type(od_harvester:record()) -> {ok, undefined | od_harvester:entry_type()}.
-default_entry_type(#od_harvester{default_entry_type = DefaultEntryType}) ->
-    {ok, DefaultEntryType}.
-
--spec accepted_entry_types(od_harvester:record()) -> {ok, [od_harvester:entry_type()]}.
-accepted_entry_types(#od_harvester{accepted_entry_types = AcceptedEntryTypes}) ->
-    {ok, AcceptedEntryTypes}.

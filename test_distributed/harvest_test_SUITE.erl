@@ -701,7 +701,7 @@ mock_harvester_logic_get(Node) ->
 
 mock_harvester_logic_submit_entry(Node) ->
     Self = self(),
-    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
+    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry_internal,
         fun(HarvesterId, FileId, Payload) ->
             Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, Payload),
             ok
@@ -718,7 +718,7 @@ mock_harvester_logic_delete_entry(Node) ->
     ).
 
 mock_harvester_logic_submit_entry_failure(Node) ->
-    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
+    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry_internal,
         fun(_HarvesterId, _FileId, _Payload) -> {error, test_error} end).
 
 mock_harvester_logic_delete_entry_failure(Node) ->
