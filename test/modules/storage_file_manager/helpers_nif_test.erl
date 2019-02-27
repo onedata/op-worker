@@ -60,7 +60,6 @@ refresh_params() ->
 
     %%% First try to list contents of invalid mountpoint
     {ok, Handle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
-        <<"type">> => <<"posix">>,
         <<"mountPoint">> => <<"/tmpInvalid">>
     }),
     {ok, Guard} = helpers_nif:readdir(Handle, <<"">>, 0, 100),
@@ -74,7 +73,6 @@ refresh_params() ->
 
     %%% Now update the params with correct mountpoint and list again
     {ok, Guard2} = helpers_nif:refresh_params(Handle, #{
-        <<"type">> => <<"posix">>,
         <<"mountPoint">> => <<"/tmp">>
     }),
     _ =

@@ -531,7 +531,8 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
 {
     handle_result(ctx,
-        helper->refreshParams(one::helpers::StorageHelperParams::create(args)));
+        helper->refreshParams(
+            one::helpers::StorageHelperParams::create(helper->name(), args)));
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -698,8 +699,8 @@ ERL_NIF_TERM refresh_helper_params(
     NifCTX ctx, file_handle_ptr handle, helper_args_t args)
 {
     handle_result(ctx,
-        handle->refreshHelperParams(
-            one::helpers::StorageHelperParams::create(args)));
+        handle->refreshHelperParams(one::helpers::StorageHelperParams::create(
+            handle->helper()->name(), args)));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
