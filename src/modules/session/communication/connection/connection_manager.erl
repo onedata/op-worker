@@ -165,8 +165,10 @@ send_async(SessionId, Msg) ->
     case session_connections:get_random_connection(SessionId) of
         {ok, Conn} ->
             connection:send_async(Conn, Msg);
-        Error ->
-            Error
+        {error, no_connections} = NoConnectionsError ->
+            NoConnectionsError;
+        _Error ->
+            ok
     end.
 
 

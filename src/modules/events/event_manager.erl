@@ -385,7 +385,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
-    communicator:communicate_with_provider(Ref, ClientMsg, RequestTranslator),
+    communicator:send_async_to_provider(Ref, ClientMsg, RequestTranslator),
     {noreply, State};
 
 handle_remotely(#event{} = Evt, ProviderId, State) ->

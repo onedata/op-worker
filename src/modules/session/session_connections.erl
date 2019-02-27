@@ -34,12 +34,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_random_connection(session:id()) ->
-    {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
+    {ok, Con :: pid()} | {error, Reason :: no_connections | term()}.
 get_random_connection(SessId) ->
     case get_connections(SessId) of
-        {ok, []} -> {error, empty_connection_pool};
-        {ok, Cons} -> {ok, utils:random_element(Cons)};
-        {error, Reason} -> {error, Reason}
+        {ok, []} ->
+            {error, no_connections};
+        {ok, Cons} ->
+            {ok, utils:random_element(Cons)};
+        {error, _Reason} = Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -83,7 +86,7 @@ get_connection_manager(SessId) ->
 get_random_conn_and_conn_manager(SessId) ->
     case get_effective_session(SessId) of
         {ok, #session{connections = []}} ->
-            {error, empty_connection_pool};
+            {error, no_connections};
         {ok, #session{connection_manager = undefined}} ->
             {error, no_connection_manager};
         {ok, #session{connections = Cons, connection_manager = ConnManager}} ->
