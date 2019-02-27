@@ -14,6 +14,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([delete/3]).

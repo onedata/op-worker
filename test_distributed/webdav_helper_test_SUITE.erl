@@ -95,7 +95,7 @@ create_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
+        {parameters, [?THR_NUM(1), ?OP_NUM(write, 1), ?OP_SIZE(write, 1)]},
         {description, "Multiple parallel write operations."},
         ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
         ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),

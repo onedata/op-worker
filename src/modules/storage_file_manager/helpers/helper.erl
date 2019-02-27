@@ -345,7 +345,9 @@ validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
 validate_user_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([
-        <<"credentialsType">>, {optional, <<"credentials">>}, {optional, <<"onedataAccessToken">>}
+        <<"credentialsType">>, {optional, <<"credentials">>},
+        {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
+        {optional, <<"accessTokenTTL">>}
     ], UserCtx);
 validate_user_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).

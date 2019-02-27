@@ -393,14 +393,14 @@ insecure_get_server_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_ba
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
 
-    test_utils:mock_assert_num_calls(Worker, luma, get_admin_ctx,
-        [?ROOT_SESS_ID, '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
+        ['_'], 1),
     
     % 2nd call should be served from cache
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
-    test_utils:mock_assert_num_calls(Worker, luma, get_admin_ctx,
-        [?ROOT_SESS_ID, '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
+        ['_'], 1),
     
     ?assertEqual({ok, AdminCtx}, Result).
 
@@ -415,16 +415,16 @@ insecure_get_server_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_in
     % 1st call should call get_admin_ctx
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
-    test_utils:mock_assert_num_calls(Worker, luma, get_admin_ctx,
-        [?ROOT_SESS_ID, '_'], 1),
+    test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
+        ['_'], 1),
 
     invalidate_luma_cache(Worker, StorageId),
 
     % 2nd call should call get_admin_ctx too
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
-    test_utils:mock_assert_num_calls(Worker, luma, get_admin_ctx,
-        [?ROOT_SESS_ID, '_'], 2),
+    test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
+        ['_'], 2),
 
     ?assertEqual({ok, AdminCtx}, Result).
 

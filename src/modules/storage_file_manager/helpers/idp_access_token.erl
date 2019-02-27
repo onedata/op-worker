@@ -21,6 +21,9 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
 
+%% exported for CT
+-export([acquire/3]).
+
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
@@ -85,7 +88,7 @@ key(UserId, IdP) ->
     {ok, {binary(), non_neg_integer()}} | error().
 acquire_and_cache(UserId, Auth, IdP) ->
     CurrentTime = time_utils:system_time_seconds(),
-    case acquire(UserId, Auth, IdP) of
+    case idp_access_token:acquire(UserId, Auth, IdP) of
         {ok, {Token, TTL}} ->
             Key = key(UserId, IdP),
             case cache(Key, Token, TTL, CurrentTime) of

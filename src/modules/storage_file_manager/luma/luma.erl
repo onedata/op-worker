@@ -62,7 +62,7 @@ get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
                     {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId,
                         StorageDoc, Helper]},
                     {fun maybe_generate_user_ctx/3, [UserId, SpaceId, HelperName]},
-                    {fun luma:get_admin_ctx/2, [?ROOT_USER_ID, Helper]}
+                    {fun luma:get_insecure_user_ctx/1, [Helper]}
                 ])
             end, HelperName),
             case Result of
@@ -170,7 +170,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
                             SpaceId, StorageDoc, Helper]},
                         {fun maybe_generate_user_ctx/4, [UserId, GroupId,
                         SpaceId, HelperName]},
-                        {fun luma:get_admin_ctx/2, [?ROOT_USER_ID, Helper]}
+                        {fun luma:get_insecure_user_ctx/1, [Helper]}
                     ])
                 end, HelperName
             ),
@@ -194,13 +194,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_admin_ctx(od_user:id(), storage:helper()) -> {ok, user_ctx()} | undefined.
-get_admin_ctx(?ROOT_USER_ID, #helper{name = HelperName, admin_ctx = AdminCtx})
-    when HelperName =:= ?POSIX_HELPER_NAME
-    orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
-    orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
-    ->
-    {ok, AdminCtx};
-get_admin_ctx(?ROOT_USER_ID, #helper{admin_ctx = AdminCtx, insecure = true}) ->
+get_admin_ctx(?ROOT_USER_ID, #helper{admin_ctx = AdminCtx}) ->
     {ok, AdminCtx};
 get_admin_ctx(_UserId, _Helper) ->
     undefined.
@@ -333,21 +327,31 @@ fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper = #helper{}) ->
             fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper, OAuth2IdP);
         {ok, []} ->
             ?error("Empty list of identity providers retrieved from Onezone"),
-            undefined;
+            {error, missing_identity_provider};
         {ok, _} ->
             ?error("Ambiguous list of identity providers retrieved from Onezone"),
-            undefined
+            {error, ambiguous_identity_provider}
     end.
 
 -spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), user_ctx(),
     helpers:helper(), binary()) -> {ok, user_ctx()} | {errro, term()}.
+fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
+    <<"onedataAccessToken">> := OnedataAccessToken
+}, _Helper, OAuth2IdP) ->
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:get(OnedataAccessToken, OAuth2IdP),
+    AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
+    {ok, AdminCtx2#{
+        <<"accessToken">> => IdPAccessToken,
+        <<"accessTokenTTL">> => integer_to_binary(TTL)
+    }};
 fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, #helper{
     insecure = false
 }, OAuth2IdP) ->
     {ok, {IdPAccessToken, TTL}} = idp_access_token:get(UserId, SessionId, OAuth2IdP),
-    {ok, UserCtx#{
+    UserCtx2 = maps:remove(<<"onedataAccessToken">>, UserCtx),
+    {ok, UserCtx2#{
         <<"accessToken">> => IdPAccessToken,
-        <<"accessTokenTTL">> => TTL
+        <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
 fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
     <<"onedataAccessToken">> := OnedataAccessToken
@@ -356,7 +360,7 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
-        <<"accessTokenTTL">> => TTL
+        <<"accessTokenTTL">> => integer_to_binary(TTL)
     }}.
 
 %%--------------------------------------------------------------------
@@ -369,8 +373,10 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
 -spec fetch_user_ctx(session:id(), od_user:id(), od_group:id() | undefined,
     od_space:id(), storage:doc(), storage:helper()) ->
     {ok, user_ctx()} | {error, Reason :: term()} | undefined.
-fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
+fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper = #helper{name = HelperName}) ->
     case fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) of
+        {ok, UserCtx} when HelperName =:= ?WEBDAV_HELPER_NAME ->
+            {ok, UserCtx};
         {ok, UserCtx} ->
             Result = luma_proxy:get_group_ctx(GroupId, SpaceId, StorageDoc, Helper),
             case Result of

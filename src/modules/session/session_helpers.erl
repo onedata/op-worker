@@ -15,6 +15,8 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 %% API
 -export([get_helper/3, delete_helpers/1]).

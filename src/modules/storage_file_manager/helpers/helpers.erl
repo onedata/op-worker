@@ -31,11 +31,6 @@
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
 
--record(file_handle, {
-    handle :: helpers_nif:file_handle(),
-    timeout :: timeout()
-}).
-
 -type file_id() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.

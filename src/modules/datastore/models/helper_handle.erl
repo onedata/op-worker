@@ -13,9 +13,11 @@
 -author("Konrad Zemek").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 %% API
--export([create/4, get/1, delete/1]).
+-export([create/4, get/1, delete/1, refresh_params/4]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -51,6 +53,23 @@ create(SessionId, UserId, SpaceId, StorageDoc) ->
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},
     datastore_model:create(?CTX, HelperDoc).
+
+-spec refresh_params(helpers:helper_handle() | helpers:file_handle(),
+    session:id(), od_space:id(), storage:doc()) -> ok.
+refresh_params(Handle, SessionId, SpaceId, StorageDoc) ->
+    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
+    HelperName = helper:get_name(Helper),
+    {ok, UserId} = session:get_user_id(SessionId),
+    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined,
+        SpaceId, StorageDoc, HelperName),
+    {ok, Helper2} = helper:set_user_ctx(Helper, UserCtx),
+    ArgsWithUserCtx = helper:get_args(Helper2),
+    case Handle of
+        #helper_handle{} ->
+            helpers:refresh_params(Handle, ArgsWithUserCtx);
+        #file_handle{} ->
+            helpers:refresh_helper_params(Handle, ArgsWithUserCtx)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

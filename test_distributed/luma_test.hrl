@@ -58,7 +58,6 @@ end).
 )).
 
 
-
 -define(POSIX_STORAGE_ID, <<"posixStorageId">>).
 
 -define(POSIX_HELPER, helper:new_posix_helper(
@@ -255,7 +254,7 @@ end).
     (helper:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS))#{
         <<"accessToken">> => ?IDP_ADMIN_TOKEN,
-        <<"accessTokenTTL">> => ?TTL
+        <<"accessTokenTTL">> => integer_to_binary(?TTL)
     }
 ).
 
@@ -267,7 +266,7 @@ end).
 -define(EXPECTED_WEBDAV_OAUTH2_USER_CTX,
     (?WEBDAV_OAUTH2_USER_CTX)#{
         <<"accessToken">> => ?IDP_USER_TOKEN,
-        <<"accessTokenTTL">> => ?TTL
+        <<"accessTokenTTL">> => integer_to_binary(?TTL)
     }
 ).
 
