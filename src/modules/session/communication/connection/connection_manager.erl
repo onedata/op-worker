@@ -7,6 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% TODO WRITEME
+%%              /
+%%       ,-----/---------------
+%%      /     /                /
+%%      `------> -------------’
+%%          /
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_manager).
@@ -57,10 +62,10 @@
 -type req_id() :: {reference(), message_id:id()}.
 -type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
 
--define(WORKERS_CHECK_INTERVAL, application:get_env(
+-define(WORKERS_STATUS_CHECK_INTERVAL, application:get_env(
     ?APP_NAME, router_processes_check_interval, timer:seconds(10)
 )).
--define(KEEPALIVE_TIMEOUT, timer:seconds(30)).
+-define(KEEPALIVE_TIMEOUT, timer:seconds(60)).
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,
@@ -90,7 +95,12 @@ start_link(SessId, SetKeepaliveTimeout) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to peer and awaits answer.
+%% Sends message to peer and awaits answer. If no answer or heartbeat is
+%% sent within 3 ?WORKERS_STATUS_CHECK_INTERVAL then timeout error
+%% is returned.
+%% In case of errors during sending tries other session connections
+%% until message is send or no more available connections remains.
+%% Exceptions to this are encoding errors which immediately fails call.
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(session:id(), message()) ->
@@ -122,9 +132,10 @@ send_sync(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Tries to send message to peer. In case of errors on one session
-%% connection it tries another and so on until it succeed or
-%% no more valid connections are available.
+%% Sends message to peer and awaits answer. In case of errors during
+%% sending tries other session connections until message is send or
+%% no more available connections remains.
+%% Exceptions to this are encoding errors which immediately fails call.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_sync(session:id(), message(), ExcludedCons :: [pid()]) ->
@@ -160,7 +171,7 @@ send_async(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates unique id for request with specified message id.
+%% Creates unique id for request using specified message id.
 %% @end
 %%--------------------------------------------------------------------
 -spec assign_request_id(message_id:id()) -> req_id().
@@ -171,8 +182,8 @@ assign_request_id(MsgId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Informs connection manager about ongoing request (identifiable by
-%% specified request id) being handled by specified process.
+%% Informs connection manager about pending request (identifiable by
+%% specified request id) being processed by specified process.
 %% @end
 %%--------------------------------------------------------------------
 -spec report_pending_request(reply_to(), pid(), req_id()) ->
@@ -428,7 +439,7 @@ send_in_loop(Msg, [Conn | Cons]) ->
 %% @private
 -spec await_response(message()) -> {ok, message()} | {error, timeout}.
 await_response(#client_message{message_id = MsgId} = Msg) ->
-    Timeout = 3 * ?WORKERS_CHECK_INTERVAL,
+    Timeout = 3 * ?WORKERS_STATUS_CHECK_INTERVAL,
     receive
         #server_message{
             message_id = MsgId,
@@ -572,7 +583,7 @@ set_msg_id(#server_message{} = Msg, MsgId) ->
 %% @private
 -spec set_heartbeat_timer(state()) -> state().
 set_heartbeat_timer(#state{heartbeat_timer = undefined} = State) ->
-    TimerRef = erlang:send_after(?WORKERS_CHECK_INTERVAL, self(), heartbeat),
+    TimerRef = erlang:send_after(?WORKERS_STATUS_CHECK_INTERVAL, self(), heartbeat),
     State#state{heartbeat_timer = TimerRef};
 set_heartbeat_timer(State) ->
     State.
