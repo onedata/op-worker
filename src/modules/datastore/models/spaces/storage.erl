@@ -20,7 +20,7 @@
 -export([new/2, new/4]).
 -export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, is_luma_enabled/1,
     get_luma_config/1, get_luma_config_map/1]).
--export([select_helper/2, update_helper/3, select/1, update_admin_ctx/2, update_luma_config/2]).
+-export([select_helper/2, update_helper/3, select/1]).
 -export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
 
 %% datastore_model callbacks
@@ -235,20 +235,6 @@ update_helper(StorageId, HelperName, NewArgs) ->
             {error, Reason} ->
                 {error, Reason}
         end
-    end).
-
--spec update_admin_ctx(storage:id(), maps:map()) -> {ok, id()} | {error, term()}.
-update_admin_ctx(StorageId, NewAdminCtx) ->
-    update(StorageId, fun(#storage{helpers = [Helper]} = Storage) ->
-        AdminCtx = Helper#helper.admin_ctx,
-        Helper2 = Helper#helper{admin_ctx = maps:merge(AdminCtx, NewAdminCtx)},
-        {ok, Storage#storage{helpers = [Helper2]}}
-    end).
-
--spec update_luma_config(id(), luma_config:config()) -> {ok, id()} | {error, term()}.
-update_luma_config(StorageId, LumaConfig) ->
-    update(StorageId, fun(Storage) ->
-        {ok, Storage#storage{luma_config = LumaConfig}}
     end).
 
 %%--------------------------------------------------------------------

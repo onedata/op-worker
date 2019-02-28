@@ -26,7 +26,8 @@
 %%%===================================================================
 
 -spec apply_and_maybe_handle_ekeyexpired(storage_file_manager:handle(),
-    fun(() -> ok | {ok, term()} | {error, term()}), helpers:helper_handle() | helpers:file_handle()) ->
+    fun(() -> ok | {ok, term()} | {error, term()}),
+    helpers:helper_handle() | helpers:file_handle()) ->
     ok | {ok, term()} | {error, term()}.
 apply_and_maybe_handle_ekeyexpired(#sfm_handle{
     session_id = SessionId,
@@ -38,7 +39,8 @@ apply_and_maybe_handle_ekeyexpired(#sfm_handle{
             {ok, Helper} = fslogic_storage:select_helper(Storage),
             case helper:get_name(Helper) of
                 ?WEBDAV_HELPER_NAME ->
-                    helper_handle:refresh_params(HelperOrFileHandle, SessionId, SpaceId, Storage),
+                    helper_handle:refresh_params(HelperOrFileHandle, SessionId,
+                        SpaceId, Storage),
                     Operation();
                 _ ->
                  Result

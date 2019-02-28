@@ -38,6 +38,7 @@
 -type params() :: #helper_params{}.
 -type user_ctx() :: #{binary() => binary() | integer()}.
 -type group_ctx() :: #{binary() => binary() | integer()}.
+-type optional_field() :: {optional, binary()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
@@ -162,7 +163,7 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx,
 %%--------------------------------------------------------------------
 -spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(),
     boolean(), helpers:storage_path_type()) -> helpers:helper().
-new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure,
+new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, _Insecure,
     StoragePathType) ->
     #helper{
         name = ?GLUSTERFS_HELPER_NAME,
@@ -203,7 +204,7 @@ new_webdav_helper(Endpoint, OptArgs, AdminCtx, Insecure,
 %%--------------------------------------------------------------------
 -spec new_nulldevice_helper(args(), user_ctx(), boolean(),
     helpers:storage_path_type()) -> helpers:helper().
-new_nulldevice_helper(OptArgs, AdminCtx, Insecure, StoragePathType) ->
+new_nulldevice_helper(OptArgs, AdminCtx, _Insecure, StoragePathType) ->
     #helper{
         name = ?NULL_DEVICE_HELPER_NAME,
         args = OptArgs,
@@ -550,7 +551,7 @@ translate_arg_name(Name) -> Name.
 %% fields and whether they have valid type.
 %% @end
 %%--------------------------------------------------------------------
--spec check_user_or_group_ctx_fields([binary() | {optional, binary()}],
+-spec check_user_or_group_ctx_fields([binary() | optional_field()],
     user_ctx() | group_ctx()) -> ok | {error, Reason :: term()}.
 check_user_or_group_ctx_fields([], UserCtx) ->
     case maps:size(UserCtx) of
@@ -568,8 +569,10 @@ check_user_or_group_ctx_fields([{optional, Field} | Fields], UserCtx) ->
         {ok, Value} when is_integer(Value) ->
             check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
         {ok, Value} ->
+            % Field has invalid type (other than integer/binary)
             {error, {invalid_field_value, Field, Value}};
         error ->
+            % Field is optional so ignore it
             check_user_or_group_ctx_fields(Fields, UserCtx)
     end;
 check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
@@ -581,6 +584,7 @@ check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
         {ok, Value} when is_integer(Value) ->
             check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
         {ok, Value} ->
+            % Field has invalid type (other than integer/binary)
             {error, {invalid_field_value, Field, Value}};
         error ->
             {error, {missing_field, Field}}

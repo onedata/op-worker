@@ -43,7 +43,7 @@
 -define(REFRESH_THRESHOLD, application:get_env(?APP_NAME,
     idp_access_token_refresh_threshold, 300)).
 
--define(SEPARATOR, <<"##">>).
+-define(KEY_SEPARATOR, <<"##">>).
 -define(EMPTY_USER_ID, <<"">>).
 
 %%%===================================================================
@@ -82,7 +82,7 @@ delete(UserId, Idp) ->
 
 -spec key(od_user:id(), idp()) -> key().
 key(UserId, IdP) ->
-    <<(UserId)/binary, (?SEPARATOR)/binary, (IdP)/binary>>.
+    <<(UserId)/binary, (?KEY_SEPARATOR)/binary, (IdP)/binary>>.
 
 -spec acquire_and_cache(od_user:id(), auth(), idp()) ->
     {ok, {binary(), non_neg_integer()}} | error().

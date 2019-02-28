@@ -383,11 +383,6 @@
     timeout = infinity :: timeout()
 }).
 
--record(file_handle, {
-    handle :: helpers_nif:file_handle(),
-    timeout :: timeout()
-}).
-
 %% Model for storing file's location data
 -record(file_location, {
     uuid :: file_meta:uuid(),

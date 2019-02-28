@@ -31,6 +31,11 @@
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
 
+-record(file_handle, {
+    handle :: helpers_nif:file_handle(),
+    timeout :: timeout()
+}).
+
 -type file_id() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.
@@ -73,10 +78,12 @@ get_helper_handle(Helper, UserCtx) ->
 %% Calls {@link helpers_nif:refresh_params/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_params(helper_handle(), maps:map()) ->
+-spec refresh_params(helper_handle() | file_handle(), maps:map()) ->
     ok | {error, Reason :: term()}.
-refresh_params(Handle, Args) ->
-    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]).
+refresh_params(#helper_handle{} = Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
+refresh_params(#file_handle{} = Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
 
 %%--------------------------------------------------------------------
 %% @doc

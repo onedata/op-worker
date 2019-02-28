@@ -13,7 +13,6 @@
 -author("Konrad Zemek").
 
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -64,12 +63,7 @@ refresh_params(Handle, SessionId, SpaceId, StorageDoc) ->
         SpaceId, StorageDoc, HelperName),
     {ok, Helper2} = helper:set_user_ctx(Helper, UserCtx),
     ArgsWithUserCtx = helper:get_args(Helper2),
-    case Handle of
-        #helper_handle{} ->
-            helpers:refresh_params(Handle, ArgsWithUserCtx);
-        #file_handle{} ->
-            helpers:refresh_helper_params(Handle, ArgsWithUserCtx)
-    end.
+    helpers:refresh_params(Handle, ArgsWithUserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
