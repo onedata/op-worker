@@ -800,9 +800,7 @@ route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
                 Error ->
                     % Before reporting error and closing connection
                     % try to send msg via other connections
-                    connection_manager:send_sync(
-                        SessionId, ServerMsg, undefined, [self()]
-                    ),
+                    connection_manager:send_sync(SessionId, ServerMsg, [self()]),
                     Error
             end;
         {error, Reason} ->

@@ -362,15 +362,16 @@ communicate_async_test(Config) ->
         code = ?OK,
         description = <<"desc">>
     },
-    ServerMsgInternal = #server_message{message_body = Status},
+    {ok, MsgId} = rpc:call(Worker1, message_id, generate, [self()]),
+    ServerMsgInternal = #server_message{
+        message_id = MsgId,
+        message_body = Status
+    },
 
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
     % when
-    {ok, MsgId} = ?assertMatch(
-        {ok, _},
-        send_sync_msg(Worker1, SessionId, ServerMsgInternal, self())
-    ),
+    ?assertMatch(ok, send_sync_msg(Worker1, SessionId, ServerMsgInternal)),
 
     % then
     ?assertReceivedMatch(#client_message{
@@ -753,16 +754,12 @@ create_resolve_guid_req(Path) ->
     FuseReq.
 
 
-send_sync_msg(Node, SessId, Msg) ->
-    send_sync_msg(Node, SessId, Msg, undefined).
+send_sync_msg(Node, SessionId, Msg) ->
+    rpc:call(Node, connection_manager, send_sync, [SessionId, Msg]).
 
 
-send_sync_msg(Node, SessId, Msg, Recipient) ->
-    rpc:call(Node, connection_manager, send_sync, [SessId, Msg, Recipient]).
-
-
-send_async_msg(Node, SessId, Msg) ->
-    rpc:call(Node, connection_manager, send_async, [SessId, Msg]).
+send_async_msg(Node, SessionId, Msg) ->
+    rpc:call(Node, connection_manager, send_async, [SessionId, Msg]).
 
 
 communicate(Node, SessionId, Msg) ->

@@ -282,8 +282,6 @@ ensure_sent(Msg, SessId) ->
     case communicator:send_to_client(SessId, Msg) of
         ok ->
             ok;
-        {ok, _} ->
-            ok;
         {error, Reason} ->
             ?error("Cannot send message ~p due to: ~p", [Msg, Reason]),
             erlang:send_after(?SEND_RETRY_DELAY, self(), {send, Msg, SessId}),

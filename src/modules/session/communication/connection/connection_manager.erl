@@ -24,7 +24,7 @@
 -export([start_link/2]).
 -export([
     communicate/2,
-    send_sync/2, send_sync/3, send_sync/4,
+    send_sync/2, send_sync/3,
     send_async/2,
 
     assign_request_id/1,
@@ -97,12 +97,12 @@ start_link(SessId, SetKeepaliveTimeout) ->
     {ok, message()} | {error, term()}.
 communicate(SessionId, RawMsg) ->
     {ok, MsgId} = message_id:generate(self()),
-    Msg = protocol_utils:set_msg_id(RawMsg, MsgId),
+    Msg = set_msg_id(RawMsg, MsgId),
     case send_sync_internal(SessionId, Msg, []) of
         ok ->
             await_response(Msg);
         Error ->
-            ?error_stacktrace("Failed to communicate msg ~p to peer ~p due to: ~p", [
+            ?error("Failed to communicate msg ~p to peer ~p due to: ~p", [
                 Msg, SessionId, Error
             ]),
             Error
@@ -111,24 +111,13 @@ communicate(SessionId, RawMsg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv send_sync(SessionId, Msg, undefined).
+%% @equiv send_sync(SessionId, Msg, []).
 %% @end
 %%--------------------------------------------------------------------
 -spec send_sync(session:id(), message()) ->
-    ok | {ok, message_id:id()} | {error, Reason :: term()}.
+    ok | {error, Reason :: term()}.
 send_sync(SessionId, Msg) ->
-    send_sync(SessionId, Msg, undefined).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv send_sync(SessionId, Msg, Recipient, []).
-%% @end
-%%--------------------------------------------------------------------
--spec send_sync(session:id(), message(), Recipient :: undefined | pid()) ->
-    ok | {ok, message_id:id()} | {error, Reason :: term()}.
-send_sync(SessionId, Msg, Recipient) ->
-    send_sync(SessionId, Msg, Recipient, []).
+    send_sync(SessionId, Msg, []).
 
 
 %%--------------------------------------------------------------------
@@ -138,17 +127,14 @@ send_sync(SessionId, Msg, Recipient) ->
 %% no more valid connections are available.
 %% @end
 %%--------------------------------------------------------------------
--spec send_sync(session:id(), message(), Recipient :: undefined | pid(),
-    [pid()]) -> ok | {ok, message_id:id()} | {error, Reason :: term()}.
-send_sync(SessionId, Msg0, Recipient, ExcludedCons) ->
-    {MsgId, Msg} = protocol_utils:maybe_set_msg_id(Msg0, Recipient),
-    case {send_sync_internal(SessionId, Msg, ExcludedCons), MsgId} of
-        {ok, undefined} ->
+-spec send_sync(session:id(), message(), ExcludedCons :: [pid()]) ->
+    ok | {error, Reason :: term()}.
+send_sync(SessionId, Msg, ExcludedCons) ->
+    case send_sync_internal(SessionId, Msg, ExcludedCons) of
+        ok ->
             ok;
-        {ok, _} ->
-            {ok, MsgId};
-        {Error, _} ->
-            ?error_stacktrace("Failed to send msg ~p to peer ~p due to: ~p", [
+        Error ->
+            ?error("Failed to send msg ~p to peer ~p due to: ~p", [
                 Msg, SessionId, Error
             ]),
             Error
@@ -216,7 +202,7 @@ respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
                 ok ->
                     report_response_sent(ConnManager, ReqId);
                 Error ->
-                    ?error_stacktrace("Failed to send response ~p to peer ~p due to: ~p", [
+                    ?error("Failed to send response ~p to peer ~p due to: ~p", [
                         Response, SessionId, Error
                     ]),
                     Error
@@ -573,6 +559,14 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
                 end
         end, #{}, Workers
     ).
+
+
+%% @private
+-spec set_msg_id(message(), message_id:id()) -> message().
+set_msg_id(#client_message{} = Msg, MsgId) ->
+    Msg#client_message{message_id = MsgId};
+set_msg_id(#server_message{} = Msg, MsgId) ->
+    Msg#server_message{message_id = MsgId}.
 
 
 %% @private

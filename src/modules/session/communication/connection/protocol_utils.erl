@@ -24,10 +24,6 @@
     maybe_create_proxy_session/2
 ]).
 -export([
-    set_msg_id/2,
-    maybe_set_msg_id/2
-]).
--export([
     get_next_reconnect/2,
     postpone_next_reconnect/2,
     reset_reconnect_interval/2
@@ -87,30 +83,6 @@ maybe_create_proxy_session(ProviderId, #client_message{
     ok;
 maybe_create_proxy_session(_, _) ->
     ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates message id and sets it to message if recipient is specified.
-%% Otherwise leaves old message id intact.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_set_msg_id(message(), Recipient :: undefined | pid()) ->
-    {NewMsgId :: undefined | message_id:id(), message()}.
-maybe_set_msg_id(#client_message{message_id = MsgId} = Msg, undefined) ->
-    {MsgId, Msg};
-maybe_set_msg_id(#server_message{message_id = MsgId} = Msg, undefined) ->
-    {MsgId, Msg};
-maybe_set_msg_id(Msg, Recipient) ->
-    {ok, MsgId} = message_id:generate(Recipient),
-    {MsgId, set_msg_id(Msg, MsgId)}.
-
-
--spec set_msg_id(message(), message_id:id()) -> message().
-set_msg_id(#client_message{} = Msg, MsgId) ->
-    Msg#client_message{message_id = MsgId};
-set_msg_id(#server_message{} = Msg, MsgId) ->
-    Msg#server_message{message_id = MsgId}.
 
 
 %%--------------------------------------------------------------------

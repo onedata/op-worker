@@ -52,14 +52,6 @@
 -define(PROCESS_REQUEST_RETRY_DELAY, timer:seconds(5)).
 -define(LOG_FAILED_ATTEMPTS_THRESHOLD, 3).
 
--define(fetch_ok(__Res),
-    case __Res of
-        ok -> ok;
-        {ok, _} -> ok;
-        _ -> __Res
-    end
-).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -304,7 +296,7 @@ process_request(#server_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = ?fetch_ok(communicator:send_to_client(SessId, NewMsg)),
+    ok = communicator:send_to_client(SessId, NewMsg),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)};
 
 process_request(#client_message{message_stream = MsgStm} = Msg, #state{
@@ -312,7 +304,7 @@ process_request(#client_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#client_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = ?fetch_ok(communicator:send_to_provider(SessId, NewMsg)),
+    ok = communicator:send_to_provider(SessId, NewMsg),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -363,13 +355,13 @@ resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
             NewMsg = Msg#server_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = ?fetch_ok(communicator:send_to_client(SessId, NewMsg)),
+            ok = communicator:send_to_client(SessId, NewMsg),
             resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         {value, #client_message{message_stream = MsgStm} = Msg} ->
             NewMsg = Msg#client_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = ?fetch_ok(communicator:send_to_provider(SessId, NewMsg)),
+            ok = communicator:send_to_provider(SessId, NewMsg),
             resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         empty ->
             {SeqNum, MsgsAcc}
@@ -392,7 +384,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
         {value, #server_message{message_stream = #message_stream{
             sequence_number = LowerSeqNum
         }} = Msg} ->
-            ok = ?fetch_ok(communicator:send_to_client(SessId, Msg)),
+            ok = communicator:send_to_client(SessId, Msg),
             resend_messages(LowerSeqNum + 1, UpperSeqNum, queue:drop(Msgs), StmId, SessId);
         {value, #server_message{message_stream = #message_stream{
             sequence_number = SeqNum

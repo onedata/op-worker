@@ -307,4 +307,3 @@ mock_router(Worker) ->
     test_utils:mock_expect(Worker, stream_router, make_message_direct, fun
         (Msg) -> Msg
     end).
-
