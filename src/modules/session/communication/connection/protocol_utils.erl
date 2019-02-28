@@ -53,15 +53,16 @@
 %%--------------------------------------------------------------------
 -spec fill_proxy_info(message(), session:id()) -> message().
 fill_proxy_info(Msg, SessionId) ->
-    {ok, #document{
-        value = #session{proxy_via = ProxyVia}
-    }} = session:get(SessionId),
-
-    case {Msg, is_binary(ProxyVia)} of
-        {#server_message{proxy_session_id = undefined}, true} ->
-            Msg#server_message{proxy_session_id = SessionId};
-        {#client_message{proxy_session_id = undefined}, true} ->
-            Msg#client_message{proxy_session_id = SessionId};
+    case session:get(SessionId) of
+        {ok, #document{value = #session{proxy_via = PV}}} when is_binary(PV) ->
+            case Msg of
+                #server_message{proxy_session_id = undefined} ->
+                    Msg#server_message{proxy_session_id = SessionId};
+                #client_message{proxy_session_id = undefined} ->
+                    Msg#client_message{proxy_session_id = SessionId};
+                _ ->
+                    Msg
+            end;
         _ ->
             Msg
     end.
