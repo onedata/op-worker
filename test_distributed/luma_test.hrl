@@ -21,6 +21,7 @@
 
 -define(SESS_ID, <<"sessionId">>).
 -define(USER_ID, <<"userId">>).
+-define(ADMIN_ID, <<"adminId">>).
 
 -define(SPACE_ID, <<"spaceId">>).
 -define(GROUP_ID, <<"groupId">>).
@@ -247,14 +248,18 @@ end).
 -define(WEBDAV_OAUTH2_USER_CREDENTIALS, <<"USER_OAUTH2">>).
 
 -define(WEBDAV_OAUTH2_ADMIN_CTX,
-    helper:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
-        ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS, ?OD_ACCESS_TOKEN)
+    (helper:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
+        ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS))#{
+        <<"onedataAccessToken">> => ?OD_ACCESS_TOKEN,
+        <<"adminId">> => ?ADMIN_ID
+    }
 ).
 -define(EXPECTED_WEBDAV_OAUTH2_ADMIN_CTX,
     (helper:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS))#{
         <<"accessToken">> => ?IDP_ADMIN_TOKEN,
-        <<"accessTokenTTL">> => integer_to_binary(?TTL)
+        <<"accessTokenTTL">> => integer_to_binary(?TTL),
+        <<"adminId">> => ?ADMIN_ID
     }
 ).
 

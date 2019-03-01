@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Jakub Kudzia
+%%% @Clientor Jakub Kudzia
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -16,81 +16,70 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([get/2, get/3, delete/1, delete/2]).
+-export([acquire/3, delete/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
-
-%% exported for CT
--export([acquire/3]).
 
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined
 }).
 
--type key() :: binary().
+-type id() :: binary().
 -type record() :: #idp_access_token{}.
 -type doc() :: datastore_doc:doc(record()).
 -type error() :: {error, term()}.
-
--type onedata_token() :: binary().
--type auth() :: session:id() | onedata_token().
+-type token() :: binary().
+-type expires() :: non_neg_integer().
 -type idp() :: binary().
 
+-export_type([token/0, expires/0]).
 
 -define(REFRESH_THRESHOLD, application:get_env(?APP_NAME,
     idp_access_token_refresh_threshold, 300)).
 
--define(KEY_SEPARATOR, <<"##">>).
--define(EMPTY_USER_ID, <<"">>).
+-define(ID_SEPARATOR, <<"##">>).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec get(onedata_token(), idp()) -> {ok, {binary(), non_neg_integer()}} | error().
-get(OnedataAccessToken, IdP) ->
-    get(?EMPTY_USER_ID, OnedataAccessToken, IdP).
-
--spec get(od_user:id(), auth(), idp()) -> {ok, {binary(), non_neg_integer()}} | error().
-get(UserId, Auth, IdP) ->
-    Key = key(UserId, IdP),
-    case datastore_model:get(?CTX, Key) of
-        {ok, Doc} ->
-            CurrentTime = time_utils:system_time_seconds(),
-            case should_refresh(Doc, CurrentTime) of
+-spec acquire(od_user:id(), gs_client_worker:client(), idp()) ->
+    {ok, {token(), expires()}} | error().
+acquire(UserId, Client, IdP) ->
+    Id = id(UserId, IdP),
+    case datastore_model:get(?CTX, Id) of
+        {ok, Doc = #document{value = #idp_access_token{token = Token}}} ->
+            case should_refresh(Doc) of
                 true ->
-                    acquire_and_cache(UserId, Auth, IdP);
+                    fetch_and_cache(UserId, Client, IdP);
                 false ->
-                    {ok, {get_token(Doc), get_current_ttl(Doc, CurrentTime)}}
+                    {ok, {Token, get_current_ttl(Doc)}}
             end;
         {error, not_found} ->
-            acquire_and_cache(UserId, Auth, IdP)
+            fetch_and_cache(UserId, Client, IdP)
     end.
 
-delete(IdP) ->
-    delete(?EMPTY_USER_ID, IdP).
-
 delete(UserId, Idp) ->
-    datastore_model:delete(?CTX, key(UserId, Idp)).
+    datastore_model:delete(?CTX, id(UserId, Idp)).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec key(od_user:id(), idp()) -> key().
-key(UserId, IdP) ->
-    <<(UserId)/binary, (?KEY_SEPARATOR)/binary, (IdP)/binary>>.
+-spec id(od_user:id(), idp()) -> id().
+id(UserId, IdP) ->
+    <<(UserId)/binary, (?ID_SEPARATOR)/binary, (IdP)/binary>>.
 
--spec acquire_and_cache(od_user:id(), auth(), idp()) ->
-    {ok, {binary(), non_neg_integer()}} | error().
-acquire_and_cache(UserId, Auth, IdP) ->
-    CurrentTime = time_utils:system_time_seconds(),
-    case idp_access_token:acquire(UserId, Auth, IdP) of
+-spec fetch_and_cache(od_user:id(), gs_client_worker:client(), idp()) ->
+    {ok, {token(), expires()}} | error().
+fetch_and_cache(UserId, Client, IdP) ->
+    % todo VFS-5298 maybe add critical section?
+    case user_logic:fetch_idp_access_token(Client, UserId, IdP) of
         {ok, {Token, TTL}} ->
-            Key = key(UserId, IdP),
-            case cache(Key, Token, TTL, CurrentTime) of
+            Id = id(UserId, IdP),
+            case cache(Id, Token, TTL) of
                 ok ->
                     {ok, {Token, TTL}};
                 Error->
@@ -100,45 +89,26 @@ acquire_and_cache(UserId, Auth, IdP) ->
             Error2
     end.
 
--spec acquire(od_user:id(), auth(), idp()) -> 
-    {ok, {binary(), non_neg_integer()}} | error().
-acquire(?EMPTY_USER_ID, OnedataAccessToken, IdP) ->
-    user_logic:acquire_idp_access_token(OnedataAccessToken, IdP);
-acquire(UserId, SessionId, IdP) ->
-    user_logic:acquire_idp_access_token(SessionId, UserId, IdP).
-
--spec cache(key(), binary(), non_neg_integer(), non_neg_integer()) ->
+-spec cache(id(), binary(), non_neg_integer()) ->
     ok | error().
-cache(Key, Token, TTL, CurrentTime) ->
-    ?extract_ok(save(#document{
-        key = Key,
+cache(Id, Token, TTL) ->
+    ?extract_ok(datastore_model:save(?CTX, #document{
+        key = Id,
         value = #idp_access_token{
             token = Token,
-            expiration_time = CurrentTime + TTL
+            expiration_time = time_utils:system_time_seconds() + TTL
         }
     })).
 
--spec save(doc()) -> {ok, doc()} | error().
-save(Doc) ->
-    datastore_model:save(?CTX, Doc).
+-spec should_refresh(doc()) -> boolean().
+should_refresh(Doc) ->
+    ?REFRESH_THRESHOLD > get_current_ttl(Doc).
 
--spec should_refresh(doc() | record(), non_neg_integer()) -> boolean().
-should_refresh(#document{value = IdPAccessToken}, CurrentTime) ->
-    should_refresh(IdPAccessToken, CurrentTime);
-should_refresh(#idp_access_token{expiration_time = ExpirationTime}, CurrentTime) ->
-    CurrentTime > (ExpirationTime - ?REFRESH_THRESHOLD).
-
--spec get_token(doc() | record()) -> binary().
-get_token(#document{value = IdPAccessToken}) ->
-    get_token(IdPAccessToken);
-get_token(#idp_access_token{token = Token})  ->
-    Token.
-
--spec get_current_ttl(doc() | record(), non_neg_integer()) -> non_neg_integer().
-get_current_ttl(#document{value = IdPAccessToken}, CurrentTime) ->
-    get_current_ttl(IdPAccessToken, CurrentTime);
-get_current_ttl(#idp_access_token{expiration_time = ExpirationTime }, CurrentTime)  ->
-    ExpirationTime - CurrentTime.
+-spec get_current_ttl(doc() | record()) -> non_neg_integer().
+get_current_ttl(#document{value = IdPAccessToken}) ->
+    get_current_ttl(IdPAccessToken);
+get_current_ttl(#idp_access_token{expiration_time = ExpirationTime })  ->
+    ExpirationTime - time_utils:system_time_seconds().
 
 %%%===================================================================
 %%% datastore_model callbacks

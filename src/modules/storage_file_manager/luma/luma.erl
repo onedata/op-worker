@@ -15,6 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -67,7 +68,7 @@ get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
             end, HelperName),
             case Result of
                 {ok, UserCtx} ->
-                    maybe_fill_in_oauth2_token(UserId, SessionId, UserCtx, Helper);
+                    add_helper_specific_fields(UserId, SessionId, UserCtx, Helper);
                 Error ->
                     Error
             end;
@@ -99,7 +100,7 @@ get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
             end, HelperName),
             case Result of
                 {ok, UserCtx} ->
-                    maybe_fill_in_oauth2_token(UserId, SessionId, UserCtx, Helper);
+                    add_helper_specific_fields(UserId, SessionId, UserCtx, Helper);
                 Error ->
                     Error
             end;
@@ -176,7 +177,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, HelperName)
             ),
             case Result of
                 {ok, UserCtx} ->
-                    maybe_fill_in_oauth2_token(UserId, SessionId, UserCtx, Helper);
+                    add_helper_specific_fields(UserId, SessionId, UserCtx, Helper);
                 Error ->
                     Error
             end;
@@ -304,14 +305,14 @@ fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) ->
             end
     end.
 
--spec maybe_fill_in_oauth2_token(od_user:id(), session:id(), user_ctx(),
+-spec add_helper_specific_fields(od_user:id(), session:id(), user_ctx(),
     helpers:helper()) -> {ok, user_ctx()} | {errro, term()}.
-maybe_fill_in_oauth2_token(UserId, SessionId, UserCtx = #{
+add_helper_specific_fields(UserId, SessionId, UserCtx = #{
     <<"credentialsType">> := <<"oauth2">>
 }, Helper = #helper{name = ?WEBDAV_HELPER_NAME}) %currently oauth2 is supported only for WebDav
     ->
     fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper);
-maybe_fill_in_oauth2_token(_UserId, _SessionId, UserCtx, _Helper) ->
+add_helper_specific_fields(_UserId, _SessionId, UserCtx, _Helper) ->
     {ok, UserCtx}.
 
 -spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), user_ctx(),
@@ -336,9 +337,12 @@ fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper = #helper{}) ->
 -spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), user_ctx(),
     helpers:helper(), binary()) -> {ok, user_ctx()} | {errro, term()}.
 fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
-    <<"onedataAccessToken">> := OnedataAccessToken
+    <<"onedataAccessToken">> := OnedataAccessToken,
+    <<"adminId">> := AdminId
 }, _Helper, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:get(OnedataAccessToken, OAuth2IdP),
+    {ok, {IdPAccessToken, TTL}} =
+        idp_access_token:acquire(AdminId,
+            #macaroon_auth{macaroon = OnedataAccessToken}, OAuth2IdP),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
@@ -347,16 +351,18 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
 fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, #helper{
     insecure = false
 }, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:get(UserId, SessionId, OAuth2IdP),
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(UserId, SessionId, OAuth2IdP),
     UserCtx2 = maps:remove(<<"onedataAccessToken">>, UserCtx),
     {ok, UserCtx2#{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
 fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
-    <<"onedataAccessToken">> := OnedataAccessToken
+    <<"onedataAccessToken">> := OnedataAccessToken,
+    <<"adminId">> := AdminId
 }, #helper{insecure = true}, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:get(OnedataAccessToken, OAuth2IdP),
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId,
+        #macaroon_auth{macaroon = OnedataAccessToken}, OAuth2IdP),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
@@ -373,10 +379,12 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
 -spec fetch_user_ctx(session:id(), od_user:id(), od_group:id() | undefined,
     od_space:id(), storage:doc(), storage:helper()) ->
     {ok, user_ctx()} | {error, Reason :: term()} | undefined.
-fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper = #helper{name = HelperName}) ->
+fetch_user_ctx(SessionId, UserId, _GroupId, SpaceId, StorageDoc,
+    Helper = #helper{name = ?WEBDAV_HELPER_NAME}
+) ->
+    fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper);
+fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageDoc, Helper) ->
     case fetch_user_ctx(SessionId, UserId, SpaceId, StorageDoc, Helper) of
-        {ok, UserCtx} when HelperName =:= ?WEBDAV_HELPER_NAME ->
-            {ok, UserCtx};
         {ok, UserCtx} ->
             Result = luma_proxy:get_group_ctx(GroupId, SpaceId, StorageDoc, Helper),
             case Result of

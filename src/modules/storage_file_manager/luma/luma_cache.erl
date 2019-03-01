@@ -248,25 +248,26 @@ decode_user_ctx(Encoded, HelperName)
     when HelperName =:= ?CEPH_HELPER_NAME
     orelse HelperName =:= ?CEPHRADOS_HELPER_NAME
     ->
-    [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
+    [UserName, Key] = decode(Encoded),
     #{<<"username">> => UserName, <<"key">> => Key};
 decode_user_ctx(Encoded, ?S3_HELPER_NAME) ->
-    [AccessKey, SecretKey] = binary:split(Encoded, ?SEP, [global]),
+    [AccessKey, SecretKey] = decode(Encoded),
     #{<<"accessKey">> => AccessKey, <<"secretKey">> => SecretKey};
 decode_user_ctx(Encoded, ?SWIFT_HELPER_NAME) ->
-    [UserName, Password] = binary:split(Encoded, ?SEP, [global]),
+    [UserName, Password] = decode(Encoded),
     #{<<"username">> => UserName, <<"password">> => Password};
 decode_user_ctx(Encoded, ?WEBDAV_HELPER_NAME) ->
-    [CredentialsType, Credentials, OnedataAccessToken] = binary:split(Encoded, ?SEP, [global]),
+    [CredentialsType, Credentials, OnedataAccessToken, AdminId] = decode(Encoded),
     UserCtx1 = #{<<"credentialsType">> => CredentialsType},
     UserCtx2 = add_if_not_empty(<<"credentials">>, Credentials, UserCtx1),
-    add_if_not_empty(<<"onedataAccessToken">>, OnedataAccessToken, UserCtx2);
+    UserCtx3 = add_if_not_empty(<<"onedataAccessToken">>, OnedataAccessToken, UserCtx2),
+    add_if_not_empty(<<"adminId">>, AdminId, UserCtx3);
 decode_user_ctx(Encoded, HelperName)
     when HelperName =:= ?POSIX_HELPER_NAME
     orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     ->
-    [Uid, Gid] = binary:split(Encoded, ?SEP, [global]),
+    [Uid, Gid] = decode(Encoded),
     #{<<"uid">> => Uid, <<"gid">> => Gid}.
 
 %%-------------------------------------------------------------------
@@ -293,10 +294,12 @@ encode_user_ctx(UserCtx = #{<<"credentialsType">> := CredentialsType},
     ?WEBDAV_HELPER_NAME
 ) ->
     % "credentials" field may not be present if "credentialsType" == 'none'
-    % "onedataAccessToken" field may not be present
     Credentials = maps:get(<<"credentials">>, UserCtx, <<"">>),
+    % "onedataAccessToken" field may not be present
     OnedataAccessToken = maps:get(<<"onedataAccessToken">>, UserCtx, <<"">>),
-    encode([CredentialsType, Credentials, OnedataAccessToken]);
+    % "adminId" field may not be present
+    AdminId = maps:get(<<"adminId">>, UserCtx, <<"">>),
+    encode([CredentialsType, Credentials, OnedataAccessToken, AdminId]);
 encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     HelperName =:= ?POSIX_HELPER_NAME orelse
         HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
@@ -304,25 +307,17 @@ encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     ->
     encode(Uid, Gid).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Encodes two binary values to save in cache.
-%% @end
-%%-------------------------------------------------------------------
 -spec encode(binary(), binary()) -> binary().
 encode(Value1, Value2) ->
     encode([Value1, Value2]).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Encodes binary values to save in cache.
-%% @end
-%%-------------------------------------------------------------------
 -spec encode([binary()]) -> binary().
 encode(Values) ->
     str_utils:join_binary(Values, ?SEP).
+
+-spec decode(binary()) -> [binary()].
+decode(EncodedValues) ->
+    binary:split(EncodedValues, ?SEP, [global]).
 
 %%-------------------------------------------------------------------
 %% @private

@@ -17,6 +17,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -28,107 +29,108 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 -export([
-    operation_performed_by_user_with_expired_token_should_fail_insecure_storage_test/1,
-    operation_performed_by_root_with_expired_token_should_fail_insecure_storage_test/1,
-    operation_performed_by_user_with_refreshed_token_should_succeed_insecure_storage_test/1,
-    operation_performed_by_root_with_refreshed_token_should_succeed_insecure_storage_test/1,
-    operation_performed_by_user_with_expired_token_should_fail_secure_storage_test/1,
-    operation_performed_by_root_with_expired_token_should_fail_secure_storage_test/1,
-    operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_test/1,
-    operation_performed_by_root_with_refreshed_token_should_succeed_secure_storage_test/1
+    user_operation_fails_with_expired_token_on_insecure_storage/1,
+    root_operation_fails_with_expired_token_on_insecure_storage/1,
+    user_operation_succeeds_with_refreshed_token_on_insecure_storage/1,
+    root_operation_succeeds_with_refreshed_token_on_insecure_storage/1,
+    user_operation_fails_with_expired_token_on_secure_storage/1,
+    root_operation_fails_with_expired_token_on_secure_storage/1,
+    user_operation_succeeds_with_refreshed_token_on_secure_storage/1,
+    root_operation_succeeds_with_refreshed_token_on_secure_storage/1
 ]).
 
 
 all() -> [
-    operation_performed_by_user_with_expired_token_should_fail_insecure_storage_test,
-    operation_performed_by_root_with_expired_token_should_fail_insecure_storage_test,
-    operation_performed_by_user_with_refreshed_token_should_succeed_insecure_storage_test,
-    operation_performed_by_root_with_refreshed_token_should_succeed_insecure_storage_test,
-    operation_performed_by_user_with_expired_token_should_fail_secure_storage_test,
-    operation_performed_by_root_with_expired_token_should_fail_secure_storage_test,
-    operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_test,
-    operation_performed_by_root_with_refreshed_token_should_succeed_secure_storage_test
+    user_operation_fails_with_expired_token_on_insecure_storage,
+    root_operation_fails_with_expired_token_on_insecure_storage,
+    user_operation_succeeds_with_refreshed_token_on_insecure_storage,
+    root_operation_succeeds_with_refreshed_token_on_insecure_storage,
+    user_operation_fails_with_expired_token_on_secure_storage,
+    root_operation_fails_with_expired_token_on_secure_storage,
+    user_operation_succeeds_with_refreshed_token_on_secure_storage,
+    root_operation_succeeds_with_refreshed_token_on_secure_storage
 ].
 
 -define(SPACE_ID, <<"space1">>).
--define(FILE_PATH(FileName), filename:join(["/", ?SPACE_ID, FileName])).
+-define(STORAGE_ID(Worker), begin
+    {ok, [__Storage]} = rpc:call(Worker, storage, list, []),
+    storage:get_id(__Storage)
+    end
+).
+-define(FILE_PATH, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
 -define(USER, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
 -define(SESSION(User, Worker, Config),
     ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
+-define(UUID, <<"dummyUuid">>).
+
 
 -define(USER_CREDENTIALS, <<"USER">>).
 -define(IDP_ACCESS_TOKEN, <<"IDP_ACCESS_TOKEN">>).
 -define(IDP, <<"IDP">>).
 -define(ONEDATA_ACCESS_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
+-define(ADMIN_ID, <<"ADMIN_ID">>).
+-define(ADMIN_AUTH, #macaroon_auth{macaroon = ?ONEDATA_ACCESS_TOKEN}).
 
--define(assertAcquireTokenCalls(Worker, Args, ExpNumCalls),
-    test_utils:mock_assert_num_calls(Worker, idp_access_token, acquire, Args, ExpNumCalls)).
+-define(getFetchTokenCalls(Worker, Args),
+    rpc:call(Worker, meck, num_calls, [user_logic, fetch_idp_access_token, Args])
+).
+
+-define(assertRefreshParamsCalls(W, Args, ExpNumCalls),
+    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, Args, ExpNumCalls)).
+
+-define(assertSetxattrCalls(W, Args, ExpNumCalls),
+    test_utils:mock_assert_num_calls(W, helpers, setxattr, Args, ExpNumCalls)).
 
 %%%===================================================================
 %%% Tests
 %%%===================================================================
 
-operation_performed_by_user_with_expired_token_should_fail_insecure_storage_test(Config) ->
+user_operation_fails_with_expired_token_on_insecure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
     operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config).
 
-operation_performed_by_root_with_expired_token_should_fail_insecure_storage_test(Config) ->
+root_operation_fails_with_expired_token_on_insecure_storage(Config) ->
     operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, Config).
 
-operation_performed_by_user_with_refreshed_token_should_succeed_insecure_storage_test(Config) ->
+user_operation_succeeds_with_refreshed_token_on_insecure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
     operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config).
 
-operation_performed_by_root_with_refreshed_token_should_succeed_insecure_storage_test(Config) ->
+root_operation_succeeds_with_refreshed_token_on_insecure_storage(Config) ->
     operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, Config).
 
-operation_performed_by_user_with_expired_token_should_fail_secure_storage_test(Config) ->
+user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    Uuid = <<"dummyUuid">>,
-    FileName = <<"dummyFile">>,
-    FilePath = ?FILE_PATH(FileName),
-    StorageId = storage_id(W),
+    StorageId = ?STORAGE_ID(W),
     TTL = 0,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    ok = test_utils:mock_new(W, helpers_fallback, [passthrough]),
-    ok = test_utils:mock_new(W, helpers, [passthrough]),
-    ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
-
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
-    mock_luma(W),
 
     % setxattr should return EKEYEXPIRED due to TTL=0
     ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
-
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
+    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
-    test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 2),
+    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
-    ?assertAcquireTokenCalls(W, [?USER, SessionId, ?IDP], 2).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP])).
 
-operation_performed_by_root_with_expired_token_should_fail_secure_storage_test(Config) ->
+root_operation_fails_with_expired_token_on_secure_storage(Config) ->
     operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, Config).
 
-operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_test(Config) ->
+user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    Uuid = <<"dummyUuid">>,
-    FileName = <<"dummyFile">>,
-    FilePath = filename:join(["/", ?SPACE_ID, FileName]),
-    StorageId = storage_id(W),
+    StorageId = ?STORAGE_ID(W),
     TTL = 5,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    test_utils:mock_new(W, helpers_fallback, [passthrough]),
-    test_utils:mock_new(W, helpers, [passthrough]),
-    ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
-
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
-    mock_luma(W),
 
     ?assertEqual(ok, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
 
@@ -137,15 +139,15 @@ operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_t
 
     % setxattr should succeed after retry with refreshed token
     ?assertEqual(ok, setxattr(W, SFMHandle, <<"K2">>, <<"V2">>)),
-
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
+    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
-    test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 3),
+    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
-    ?assertAcquireTokenCalls(W, [?USER, SessionId, ?IDP], 2).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP])).
 
-operation_performed_by_root_with_refreshed_token_should_succeed_secure_storage_test(Config) ->
+
+root_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, Config).
 
 %%%===================================================================
@@ -154,41 +156,30 @@ operation_performed_by_root_with_refreshed_token_should_succeed_secure_storage_t
 
 operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    Uuid = <<"dummyUuid">>,
-    FileName = <<"dummyFile">>,
-    FilePath = ?FILE_PATH(FileName),
-    StorageId = storage_id(W),
+    StorageId = ?STORAGE_ID(W),
     TTL = 0,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    ok = test_utils:mock_new(W, helpers_fallback, [passthrough]),
-    ok = test_utils:mock_new(W, helpers, [passthrough]),
-    ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
-
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
+
     % setxattr should return EKEYEXPIRED due to TTL=0
-
     ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
-
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
+    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
-    test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 2),
+    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
-    ?assertAcquireTokenCalls(W, ['_', ?ONEDATA_ACCESS_TOKEN, ?IDP], 2).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP])).
+
 
 operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    Uuid = <<"dummyUuid">>,
-    FileName = <<"dummyFile">>,
-    FilePath = filename:join(["/", ?SPACE_ID, FileName]),
-    StorageId = storage_id(W),
+    StorageId = ?STORAGE_ID(W),
     TTL = 5,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    test_utils:mock_new(W, helpers_fallback, [passthrough]),
-    test_utils:mock_new(W, helpers, [passthrough]),
-    ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
-
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
+
     ?assertEqual(ok, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
 
     %sleep longer than TTL to ensure that new token will be fetched
@@ -196,13 +187,13 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
 
     % setxattr should succeed after retry with refreshed token
     ?assertEqual(ok, setxattr(W, SFMHandle, <<"K2">>, <<"V2">>)),
-
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
+    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
-    test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 3),
+    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
-    ?assertAcquireTokenCalls(W, ['_', ?ONEDATA_ACCESS_TOKEN, ?IDP], 2).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP])).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -217,28 +208,33 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
 init_per_testcase(Case, Config) when
-    Case =:= operation_performed_by_user_with_expired_token_should_fail_insecure_storage_test;
-    Case =:= operation_performed_by_root_with_expired_token_should_fail_insecure_storage_test;
-    Case =:= operation_performed_by_user_with_refreshed_token_should_succeed_insecure_storage_test;
-    Case =:= operation_performed_by_root_with_refreshed_token_should_succeed_insecure_storage_test 
+    Case =:= user_operation_fails_with_expired_token_on_insecure_storage;
+    Case =:= root_operation_fails_with_expired_token_on_insecure_storage;
+    Case =:= user_operation_succeeds_with_refreshed_token_on_insecure_storage;
+    Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage 
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_insecure_storage(W, storage_id(W)),
+    enable_webdav_test_mode_insecure_storage(W, ?STORAGE_ID(W)),
+    test_utils:mock_new(W, helpers_fallback, [passthrough]),
+    test_utils:mock_new(W, helpers, [passthrough]),
     Config;
 
 init_per_testcase(Case, Config) when
-    Case =:= operation_performed_by_user_with_expired_token_should_fail_secure_storage_test;
-    Case =:= operation_performed_by_root_with_expired_token_should_fail_secure_storage_test;
-    Case =:= operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_test;
-    Case =:= operation_performed_by_root_with_refreshed_token_should_succeed_secure_storage_test
+    Case =:= user_operation_fails_with_expired_token_on_secure_storage;
+    Case =:= root_operation_fails_with_expired_token_on_secure_storage;
+    Case =:= user_operation_succeeds_with_refreshed_token_on_secure_storage;
+    Case =:= root_operation_succeeds_with_refreshed_token_on_secure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_secure_storage(W, storage_id(W)),
+    enable_webdav_test_mode_secure_storage(W, ?STORAGE_ID(W)),
+    test_utils:mock_new(W, helpers_fallback, [passthrough]),
+    test_utils:mock_new(W, helpers, [passthrough]),
+    mock_luma(W),
     Config.
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(W, [helpers_fallback, helpers, idp_access_token, luma_proxy]),
+    ok = test_utils:mock_unload(W, [helpers_fallback, helpers, luma_proxy]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.
@@ -263,15 +259,8 @@ mock_luma(Worker) ->
 
 
 mock_fetch_token(Worker, Token, TTL) ->
-    ok = test_utils:mock_expect(Worker, user_logic, acquire_idp_access_token,
-        fun (_, _) -> {ok, {Token, TTL}} end),
-
-    ok = test_utils:mock_expect(Worker, user_logic, acquire_idp_access_token,
+    ok = test_utils:mock_expect(Worker, user_logic, fetch_idp_access_token,
         fun (_, _, _) -> {ok, {Token, TTL}} end).
-
-storage_id(Worker) ->
-    {ok, [Storage]} = rpc:call(Worker, storage, list, []),
-    storage:get_id(Storage).
 
 storage_update(Worker, StorageId, UpdateFun) ->
     rpc:call(Worker, storage, update, [StorageId, UpdateFun]).
@@ -299,6 +288,7 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
                 <<"onedataAccessToken">> => ?ONEDATA_ACCESS_TOKEN,
+                <<"adminId">> => ?ADMIN_ID,
                 <<"credentials">> => <<"ADMIN">>
             },
             insecure = Insecure

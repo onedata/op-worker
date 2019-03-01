@@ -227,8 +227,8 @@
 
 % Model used to cache idp access tokens
 -record(idp_access_token, {
-    token :: binary(),
-    expiration_time :: non_neg_integer()
+    token :: idp_access_token:token(),
+    expiration_time :: idp_access_token:expires()
 }).
 
 %% File handle used by the module

@@ -892,11 +892,11 @@ end_per_suite(Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [idp_access_token, space_storage]),
-    test_utils:mock_expect(Worker,idp_access_token, get, fun(?OD_ACCESS_TOKEN, ?OAUTH2_IDP) ->
-        {ok, {?IDP_ADMIN_TOKEN, ?TTL}}
-    end),
-    test_utils:mock_expect(Worker,idp_access_token, get, fun(?USER_ID, ?SESS_ID, ?OAUTH2_IDP) ->
-        {ok, {?IDP_USER_TOKEN, ?TTL}}
+    test_utils:mock_expect(Worker, idp_access_token, acquire, fun
+        (?ADMIN_ID, #macaroon_auth{}, ?OAUTH2_IDP) ->
+            {ok, {?IDP_ADMIN_TOKEN, ?TTL}};
+        (?USER_ID, ?SESS_ID, ?OAUTH2_IDP) ->
+            {ok, {?IDP_USER_TOKEN, ?TTL}}
     end),
     ok = test_utils:mock_expect(Worker, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [<<"whatever">>]}}}

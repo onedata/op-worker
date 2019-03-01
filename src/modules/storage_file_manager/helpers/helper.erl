@@ -309,8 +309,10 @@ new_webdav_user_ctx(CredentialsType, Credentials) ->
 %%--------------------------------------------------------------------
 -spec new_webdav_user_ctx(binary(), binary(), binary()) -> user_ctx().
 new_webdav_user_ctx(CredentialsType, Credentials, OnedataAccessToken) ->
+    {ok, AdminId} = user_identity:get(OnedataAccessToken),
     (new_webdav_user_ctx(CredentialsType, Credentials))#{
-        <<"onedataAccessToken">> => OnedataAccessToken
+        <<"onedataAccessToken">> => OnedataAccessToken,
+        <<"adminId">> => AdminId
     }.
 
 %%--------------------------------------------------------------------
@@ -346,8 +348,10 @@ validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
 validate_user_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, UserCtx) ->
     % todo refactor VFS-5256
+    % todo change onedataAccessToken adminAccessToken (helpers, swagger, oneclient)
     check_user_or_group_ctx_fields([
         <<"credentialsType">>, {optional, <<"credentials">>},
+        {optional, <<"adminId">>},
         {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
         {optional, <<"accessTokenTTL">>}
     ], UserCtx);
