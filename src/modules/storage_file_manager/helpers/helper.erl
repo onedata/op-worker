@@ -345,6 +345,7 @@ validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
 validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
 validate_user_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, UserCtx) ->
+    % todo refactor VFS-5256
     check_user_or_group_ctx_fields([
         <<"credentialsType">>, {optional, <<"credentials">>},
         {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},

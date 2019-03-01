@@ -94,7 +94,7 @@ operation_performed_by_user_with_expired_token_should_fail_secure_storage_test(C
     StorageId = storage_id(W),
     TTL = 0,
     SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    ok = test_utils:mock_new(W, helper_handle, [passthrough]),
+    ok = test_utils:mock_new(W, helpers_fallback, [passthrough]),
     ok = test_utils:mock_new(W, helpers, [passthrough]),
     ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
 
@@ -105,7 +105,7 @@ operation_performed_by_user_with_expired_token_should_fail_secure_storage_test(C
     ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
 
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helper_handle, refresh_params, ['_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
     test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
@@ -123,7 +123,7 @@ operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_t
     StorageId = storage_id(W),
     TTL = 5,
     SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    test_utils:mock_new(W, helper_handle, [passthrough]),
+    test_utils:mock_new(W, helpers_fallback, [passthrough]),
     test_utils:mock_new(W, helpers, [passthrough]),
     ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
 
@@ -139,7 +139,7 @@ operation_performed_by_user_with_refreshed_token_should_succeed_secure_storage_t
     ?assertEqual(ok, setxattr(W, SFMHandle, <<"K2">>, <<"V2">>)),
 
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helper_handle, refresh_params, ['_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
     test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
@@ -160,7 +160,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     StorageId = storage_id(W),
     TTL = 0,
     SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    ok = test_utils:mock_new(W, helper_handle, [passthrough]),
+    ok = test_utils:mock_new(W, helpers_fallback, [passthrough]),
     ok = test_utils:mock_new(W, helpers, [passthrough]),
     ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
 
@@ -170,7 +170,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
 
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helper_handle, refresh_params, ['_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
     test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
@@ -184,7 +184,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     StorageId = storage_id(W),
     TTL = 5,
     SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, Uuid, StorageId, FilePath),
-    test_utils:mock_new(W, helper_handle, [passthrough]),
+    test_utils:mock_new(W, helpers_fallback, [passthrough]),
     test_utils:mock_new(W, helpers, [passthrough]),
     ok = test_utils:mock_new(W, idp_access_token, [passthrough]),
 
@@ -198,7 +198,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     ?assertEqual(ok, setxattr(W, SFMHandle, <<"K2">>, <<"V2">>)),
 
     % ensure that helper params were refreshed
-    test_utils:mock_assert_num_calls(W, helper_handle, refresh_params, ['_', '_', '_', '_'], 1),
+    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
     test_utils:mock_assert_num_calls(W, helpers, setxattr, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
@@ -238,7 +238,7 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(W, [helper_handle, helpers, idp_access_token, luma_proxy]),
+    ok = test_utils:mock_unload(W, [helpers_fallback, helpers, idp_access_token, luma_proxy]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.

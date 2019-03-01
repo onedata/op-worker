@@ -16,7 +16,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
-
 %% API
 -export([get_helper/3, delete_helpers/1]).
 %% Exported for execution delegation to other nodes

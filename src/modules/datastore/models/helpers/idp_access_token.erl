@@ -19,15 +19,14 @@
 -export([get/2, get/3, delete/1, delete/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0]).
 
 %% exported for CT
 -export([acquire/3]).
 
 -define(CTX, #{
     model => ?MODULE,
-    disc_driver => undefined,
-    generated_key => false
+    disc_driver => undefined
 }).
 
 -type key() :: binary().
@@ -153,16 +152,3 @@ get_current_ttl(#idp_access_token{expiration_time = ExpirationTime }, CurrentTim
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {token, string},
-        {expiration_time, integer}
-    ]}.
