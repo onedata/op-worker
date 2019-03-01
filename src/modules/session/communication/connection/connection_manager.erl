@@ -6,12 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
-%%              /
-%%       ,-----/---------------
-%%      /     /                /
-%%      `------> -------------’
-%%          /
+%%% This module encapsulates API for communication with given session but also
+%%% monitors processing of asynchronous requests and mediates when sending
+%%% responses.
+%%%
+%%% When connection receives more advanced request it delegates execution to
+%%% appropriate worker and notifies connection manager about pending request.
+%%% It is done using cast to avoid deadlock (connection manager may be trying
+%%% to send message via this connection).
+%%% While task is being handled by worker, connection manager periodically
+%%% checks his status. If it is still alive heartbeat message is being send
+%%% to client informing him that his request is still being processed.
+%%% In case it is dead, error message is send instead.
+%%% Once worker finishes it's task, it calls connection manager to withheld
+%%% sending heartbeats for this task and tries to send response via the same
+%%% connection the request came. If it is not possible, due to some errors,
+%%% it tries sending via other connections of client session. If all goes well
+%%% worker informs connection manager about successful sending of response.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_manager).
