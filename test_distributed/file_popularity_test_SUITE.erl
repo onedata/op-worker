@@ -143,6 +143,9 @@ avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default(Config) ->
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
 
+    % ensure that all files will have the same timestamp
+    mock_cluster_time_hours(W, current_timestamp_hours(W)),
+
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
 
@@ -266,6 +269,9 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     FilePath2 = ?FILE_PATH(FileName2),
     FilePath3 = ?FILE_PATH(FileName3),
 
+    % ensure that all files will have the same timestamp
+    mock_cluster_time_hours(W, current_timestamp_hours(W)),
+
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
     ok = lfm_proxy:close(W, H),
@@ -304,22 +310,22 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     Timestamp = current_timestamp_hours(W),
 
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
+    % pretend that G1 was opened for the last time 3 hours ago
+    mock_cluster_time_hours(W, Timestamp - 3),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
     ok = lfm_proxy:close(W, H),
-    % pretend that G1 was opened for the last time 3 hours ago
-    change_last_open(W, G1, Timestamp - 3),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
+    % pretend that G2 was opened for the last time 2 hours ago
+    mock_cluster_time_hours(W, Timestamp - 2),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
     ok = lfm_proxy:close(W, H2),
-    % pretend that G2 was opened for the last time 2 hours ago
-    change_last_open(W, G2, Timestamp - 2),
 
+    % pretend that G3 was opened for the last time 1 hours ago
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
+    mock_cluster_time_hours(W, Timestamp - 1),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
     ok = lfm_proxy:close(W, H3),
-    % pretend that G3 was opened for the last time 1 hours ago
-    change_last_open(W, G3, Timestamp - 1),
 
     {ok, FileId1} = cdmi_id:guid_to_objectid(G1),
     {ok, FileId2} = cdmi_id:guid_to_objectid(G2),
@@ -335,6 +341,9 @@ query_with_option_limit_should_return_limited_number_of_files(Config) ->
     Limit = 3,
     NumberOfFiles = 10,
     SessId = ?SESSION(W, Config),
+
+    % ensure that all files will have the same timestamp
+    mock_cluster_time_hours(W, current_timestamp_hours(W)),
 
     IdsAndOpensNum = lists:map(fun(N) ->
         % each file will be opened N times
@@ -379,6 +388,7 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     disable_file_popularity(W, ?SPACE_ID),
+    test_utils:mock_unload(W, file_popularity),
     clean_space(?SPACE_ID, Config),
     lfm_proxy:teardown(Config).
 
@@ -397,11 +407,11 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     Timestamp = current_timestamp_hours(W),
+    mock_cluster_time_hours(W, Timestamp),
     AvgOpen = 1 / 30,
     Popularity = popularity(Timestamp, LastOpenW, AvgOpen, AvgOpenW),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
-    ok = lfm_proxy:close(W, H),
+    open_and_close_file(W, ?SESSION(W, Config), G),
     {ok, FileId} = cdmi_id:guid_to_objectid(G),
     ?assertMatch({[FileId], #index_token{start_key = Popularity}},
         query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
@@ -413,6 +423,9 @@ iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
     FilePrefix = <<"file_">>,
     NumberOfFiles = 100,
     SessId = ?SESSION(W, Config),
+
+    % ensure that all files will have the same timestamp
+    mock_cluster_time_hours(W, current_timestamp_hours(W)),
 
     IdsAndOpensNum = lists:map(fun(N) ->
         % each file will be opened N times
@@ -513,3 +526,7 @@ filter_undefined_values(Map) ->
         (_, undefined) -> false;
         (_, _) -> true
     end, Map).
+
+mock_cluster_time_hours(Worker, Hours) ->
+    test_utils:mock_new(Worker, file_popularity),
+    ok = test_utils:mock_expect(Worker, file_popularity, cluster_time_hours, fun() -> Hours end).
