@@ -24,7 +24,6 @@
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
-% for tests
 
 %%%===================================================================
 %%% Types
@@ -216,11 +215,6 @@ init_report() ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
-
-
-%%%===================================================================
-%%% functions exported for tests
-%%%===================================================================
 
 %%%===================================================================
 %%% Internal functions

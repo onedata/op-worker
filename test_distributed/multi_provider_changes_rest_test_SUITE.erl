@@ -96,7 +96,8 @@ changes_stream_file_meta_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
+        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, Mode2),
+        timer:sleep(500),
         lfm_proxy:create(WorkerP1, SessionId, File2, Mode1)
     end),
 

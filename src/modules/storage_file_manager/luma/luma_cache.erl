@@ -244,27 +244,30 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId, _GroupOrSpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec decode_user_ctx(binary(), helper:name()) -> luma:user_ctx().
-decode_user_ctx(Encoded, ?CEPH_HELPER_NAME) ->
-    [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
-    #{<<"username">> => UserName, <<"key">> => Key};
-decode_user_ctx(Encoded, ?CEPHRADOS_HELPER_NAME) ->
-    [UserName, Key] = binary:split(Encoded, ?SEP, [global]),
+decode_user_ctx(Encoded, HelperName)
+    when HelperName =:= ?CEPH_HELPER_NAME
+    orelse HelperName =:= ?CEPHRADOS_HELPER_NAME
+    ->
+    [UserName, Key] = decode(Encoded),
     #{<<"username">> => UserName, <<"key">> => Key};
 decode_user_ctx(Encoded, ?S3_HELPER_NAME) ->
-    [AccessKey, SecretKey] = binary:split(Encoded, ?SEP, [global]),
+    [AccessKey, SecretKey] = decode(Encoded),
     #{<<"accessKey">> => AccessKey, <<"secretKey">> => SecretKey};
 decode_user_ctx(Encoded, ?SWIFT_HELPER_NAME) ->
-    [UserName, Password] = binary:split(Encoded, ?SEP, [global]),
+    [UserName, Password] = decode(Encoded),
     #{<<"username">> => UserName, <<"password">> => Password};
 decode_user_ctx(Encoded, ?WEBDAV_HELPER_NAME) ->
-    [CredentialsType, Credentials] = binary:split(Encoded, ?SEP, [global]),
-    #{<<"credentialsType">> => CredentialsType, <<"credentials">> => Credentials};
-decode_user_ctx(Encoded, HelperName) when
-    HelperName =:= ?POSIX_HELPER_NAME orelse
-        HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
-        HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    [CredentialsType, Credentials, OnedataAccessToken, AdminId] = decode(Encoded),
+    UserCtx1 = #{<<"credentialsType">> => CredentialsType},
+    UserCtx2 = add_if_not_empty(<<"credentials">>, Credentials, UserCtx1),
+    UserCtx3 = add_if_not_empty(<<"onedataAccessToken">>, OnedataAccessToken, UserCtx2),
+    add_if_not_empty(<<"adminId">>, AdminId, UserCtx3);
+decode_user_ctx(Encoded, HelperName)
+    when HelperName =:= ?POSIX_HELPER_NAME
+    orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
+    orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     ->
-    [Uid, Gid] = binary:split(Encoded, ?SEP, [global]),
+    [Uid, Gid] = decode(Encoded),
     #{<<"uid">> => Uid, <<"gid">> => Gid}.
 
 %%-------------------------------------------------------------------
@@ -274,13 +277,10 @@ decode_user_ctx(Encoded, HelperName) when
 %% @end
 %%-------------------------------------------------------------------
 -spec encode_user_ctx(luma:user_ctx(), helper:name()) -> binary().
-encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key},
-    ?CEPH_HELPER_NAME
-) ->
-    encode(UserName, Key);
-encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key},
-    ?CEPHRADOS_HELPER_NAME
-) ->
+encode_user_ctx(#{<<"username">> := UserName, <<"key">> := Key}, HelperName)
+    when HelperName =:= ?CEPH_HELPER_NAME
+    orelse HelperName =:= ?CEPHRADOS_HELPER_NAME
+    ->
     encode(UserName, Key);
 encode_user_ctx(#{<<"accessKey">> := AccessKey, <<"secretKey">> := SecretKey},
     ?S3_HELPER_NAME
@@ -290,15 +290,16 @@ encode_user_ctx(#{<<"username">> := UserName, <<"password">> := Password},
     ?SWIFT_HELPER_NAME
 ) ->
     encode(UserName, Password);
-encode_user_ctx(#{<<"credentialsType">> := CredentialsType, <<"credentials">> := Credentials},
-    ?WEBDAV_HELPER_NAME
-) ->
-    encode(CredentialsType, Credentials);
-encode_user_ctx(#{<<"credentialsType">> := CredentialsType = <<"none">>},
+encode_user_ctx(UserCtx = #{<<"credentialsType">> := CredentialsType},
     ?WEBDAV_HELPER_NAME
 ) ->
     % "credentials" field may not be present if "credentialsType" == 'none'
-    encode(CredentialsType, <<"">>);
+    Credentials = maps:get(<<"credentials">>, UserCtx, <<"">>),
+    % "onedataAccessToken" field may not be present
+    OnedataAccessToken = maps:get(<<"onedataAccessToken">>, UserCtx, <<"">>),
+    % "adminId" field may not be present
+    AdminId = maps:get(<<"adminId">>, UserCtx, <<"">>),
+    encode([CredentialsType, Credentials, OnedataAccessToken, AdminId]);
 encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     HelperName =:= ?POSIX_HELPER_NAME orelse
         HelperName =:= ?GLUSTERFS_HELPER_NAME orelse
@@ -306,15 +307,17 @@ encode_user_ctx(#{<<"uid">> := Uid, <<"gid">> := Gid}, HelperName) when
     ->
     encode(Uid, Gid).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Encodes two binary values to save in cache.
-%% @end
-%%-------------------------------------------------------------------
 -spec encode(binary(), binary()) -> binary().
 encode(Value1, Value2) ->
-    <<Value1/binary, ?SEP/binary, Value2/binary>>.
+    encode([Value1, Value2]).
+
+-spec encode([binary()]) -> binary().
+encode(Values) ->
+    str_utils:join_binary(Values, ?SEP).
+
+-spec decode(binary()) -> [binary()].
+decode(EncodedValues) ->
+    binary:split(EncodedValues, ?SEP, [global]).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -393,6 +396,9 @@ for_each(RootId, StorageId, Callback, Acc0) ->
 tree_root(RootPrefix, StorageId) ->
     <<RootPrefix/binary, StorageId/binary>>.
 
+-spec add_if_not_empty(binary(), binary(), maps:map()) -> maps:map().
+add_if_not_empty(_Key, <<"">>, Map) -> Map;
+add_if_not_empty(Key, Value, Map) -> Map#{Key => Value}.
 
 %%%===================================================================
 %%% datastore_model callbacks
