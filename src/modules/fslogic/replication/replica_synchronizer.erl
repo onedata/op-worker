@@ -692,22 +692,29 @@ handle_info({Ref, complete, {ok, _} = _Status}, State) ->
     {noreply, State5, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
-    {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
-        disassociate_ref(FailedRef, State),
+    try
+        {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
+            disassociate_ref(FailedRef, State),
 
-    case Block of
-        undefined ->
-            ?error("Failed transfer ~p not found in state", [FailedRef]),
-            {noreply, State1};
-        _ ->
-            NewTransfers = start_transfers([Block], undefined, State1, Priority),
-            ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
-                FailedRef, Block, NewTransfers
-            ]),
-            {_, NewRefs, _} = lists:unzip3(NewTransfers),
-            State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
-            State3 = add_in_progress(NewTransfers, State2),
-            {noreply, State3}
+        case Block of
+            undefined ->
+                ?error("Failed transfer ~p not found in state", [FailedRef]),
+                {noreply, State1};
+            _ ->
+                NewTransfers = start_transfers([Block], undefined, State1, Priority),
+                ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
+                    FailedRef, Block, NewTransfers
+                ]),
+                {_, NewRefs, _} = lists:unzip3(NewTransfers),
+                State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
+                State3 = add_in_progress(NewTransfers, State2),
+                {noreply, State3}
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Unable to restart transfer due to error ~p:~p",
+                [E1, E2]),
+            handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
 handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, State) ->
