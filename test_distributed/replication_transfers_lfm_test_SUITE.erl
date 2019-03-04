@@ -60,7 +60,8 @@
     schedule_replication_of_100_regular_files_by_index_with_batch_1000/1,
     schedule_replication_of_100_regular_files_by_index_with_batch_100/1,
     schedule_replication_of_100_regular_files_by_index_with_batch_10/1,
-    file_removed_during_replication/1
+    file_removed_during_replication/1,
+    rtransfer_works_between_providers_with_different_ports/1
 ]).
 
 all() -> [
@@ -102,7 +103,8 @@ all() -> [
     schedule_replication_of_100_regular_files_by_index_with_batch_1000,
     schedule_replication_of_100_regular_files_by_index_with_batch_100,
     schedule_replication_of_100_regular_files_by_index_with_batch_10,
-    file_removed_during_replication
+    file_removed_during_replication,
+    rtransfer_works_between_providers_with_different_ports
 ].
 
 %%%===================================================================
@@ -226,9 +228,11 @@ schedule_replication_of_100_regular_files_by_index_with_batch_10(Config) ->
     %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 10
     replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, lfm).
 
-
 file_removed_during_replication(Config) ->
     replication_transfers_test_base:file_removed_during_replication(Config, lfm, guid).
+
+rtransfer_works_between_providers_with_different_ports(Config) ->
+    replication_transfers_test_base:rtransfer_works_between_providers_with_different_ports(Config, lfm).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
