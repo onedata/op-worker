@@ -28,7 +28,7 @@
 -export([exists/2]).
 -export([get_name/2, get_name/3]).
 -export([get_default_space/2]).
--export([acquire_idp_access_token/3]).
+-export([fetch_idp_access_token/3]).
 -export([get_eff_groups/2, get_eff_spaces/2]).
 -export([get_eff_handle_services/2, get_eff_handles/2]).
 -export([set_default_space/3]).
@@ -177,9 +177,9 @@ get_default_space(Client, UserId) ->
     end.
 
 
--spec acquire_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
-    {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | gs_protocol:error().
-acquire_idp_access_token(Client, UserId, IdP) ->
+-spec fetch_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
+    {ok, {AccessToken :: idp_access_token:token(), Ttl :: non_neg_integer()}} | gs_protocol:error().
+fetch_idp_access_token(Client, UserId, IdP) ->
     Res = gs_client_worker:request(Client, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}
