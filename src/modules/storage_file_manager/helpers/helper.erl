@@ -308,6 +308,8 @@ new_webdav_user_ctx(CredentialsType, Credentials) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_webdav_user_ctx(binary(), binary(), binary()) -> user_ctx().
+new_webdav_user_ctx(CredentialsType, Credentials, <<>>) ->
+    new_webdav_user_ctx(CredentialsType, Credentials);
 new_webdav_user_ctx(CredentialsType, Credentials, OnedataAccessToken) ->
     {ok, AdminId} = user_identity:get(OnedataAccessToken),
     (new_webdav_user_ctx(CredentialsType, Credentials))#{
