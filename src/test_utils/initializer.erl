@@ -775,7 +775,7 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, user_logic),
+    test_utils:mock_new(Workers, user_logic, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{

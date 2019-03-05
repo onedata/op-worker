@@ -17,14 +17,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, fetch/1, get_or_fetch/1, delete/1]).
+-export([get/1, fetch/1, get_or_fetch/1, delete/1, get_user_id/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
 
 -type record() :: #user_identity{}.
 -type doc() :: datastore_doc:doc(record()).
--type credentials() :: #macaroon_auth{}.
+-type credentials() :: #macaroon_auth{} | binary().
 -export_type([credentials/0]).
 
 -define(CTX, #{
@@ -43,8 +43,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(credentials()) -> {ok, doc()} | {error, term()}.
-get(Auth) ->
-    datastore_model:get(?CTX, term_to_binary(Auth)).
+get(Credentials) ->
+    datastore_model:get(?CTX, term_to_binary(to_auth(Credentials))).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,7 +52,8 @@ get(Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(credentials()) -> {ok, doc()} | {error, term()}.
-fetch(Auth) ->
+fetch(Credentials) ->
+    Auth = to_auth(Credentials),
     try
         case user_logic:get_by_auth(Auth) of
             {ok, #document{key = UserId}} ->
@@ -81,7 +82,8 @@ fetch(Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(credentials()) -> {ok, doc()} | {error, term()}.
-get_or_fetch(Auth) ->
+get_or_fetch(Credentials) ->
+    Auth = to_auth(Credentials),
     case datastore_model:get(?CTX, term_to_binary(Auth)) of
         {ok, Doc} -> {ok, Doc};
         {error, not_found} -> fetch(Auth);
@@ -94,8 +96,29 @@ get_or_fetch(Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(credentials()) -> ok | {error, term()}.
-delete(Auth) ->
-    datastore_model:delete(?CTX, term_to_binary(Auth)).
+delete(Credentials) ->
+    datastore_model:delete(?CTX, term_to_binary(to_auth(Credentials))).
+
+
+-spec get_user_id(credentials()) -> {ok, od_user:id()} | {error, term()}.
+get_user_id(Credentials) ->
+    case user_identity:get(to_auth(Credentials)) of
+        {ok, #document{value = #user_identity{user_id = UserId}}} ->
+            {ok, UserId};
+        Error ->
+            Error
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec to_auth(credentials()) -> #macaroon_auth{}.
+to_auth(Auth = #macaroon_auth{}) ->
+    Auth;
+to_auth(Macaroon) when is_binary(Macaroon) ->
+    #macaroon_auth{macaroon = Macaroon}.
+
 
 %%%===================================================================
 %%% datastore_model callbacks

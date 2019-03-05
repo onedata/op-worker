@@ -82,9 +82,9 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
             {ok, StorageDoc2} = storage:get(StorageId),
             case luma:get_client_user_ctx(SessionId, UserId, SpaceId,
                 StorageDoc2, HelperName) of
-                {ok, ClientStorageUserUserCtx} ->
+                {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper,
-                        ClientStorageUserUserCtx),
+                        ClientStorageUserCtx),
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = HelperParams};
@@ -120,10 +120,10 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     HelperName = helper:get_name(Helper),
 
     case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
-        {ok, ClientStorageUserUserCtx} ->
-            {ok, ServerStorageUserUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
+        {ok, ClientStorageUserCtx} ->
+            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
                 StorageDoc, HelperName),
-            HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
+            HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
 
             {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
             Dirname = filename:dirname(RawStoragePath),
@@ -131,10 +131,10 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             {Size, _} = file_ctx:get_file_size(FileCtx3),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
-            FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),
+            FileContent = storage_detector:create_test_file(Helper, ServerStorageUserCtx, TestFileId),
 
             spawn(storage_req, remove_storage_test_file, [
-                Helper, ServerStorageUserUserCtx, TestFileId, Size, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                Helper, ServerStorageUserCtx, TestFileId, Size, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
 
             #fuse_response{
                 status = #status{code = ?OK},
