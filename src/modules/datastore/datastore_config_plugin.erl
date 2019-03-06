@@ -53,7 +53,6 @@ get_models() -> [
     times,
     helper_handle,
     space_strategies,
-    file_force_proxy,
     luma_cache,
     file_popularity,
     space_transfer_stats,

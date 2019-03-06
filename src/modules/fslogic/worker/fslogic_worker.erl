@@ -112,6 +112,7 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
+    fslogic_delete:delete_all_opened_files(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
