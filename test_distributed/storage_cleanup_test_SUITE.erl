@@ -386,7 +386,10 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
         {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
         List
     end,
-    {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
+    StorageFiles= case list_dir(Worker1, StorageSpacePathW1) of
+        {ok, Files} -> Files;
+        {error, _} -> []
+    end,
     ListStorageDir = fun() ->
         {ok, List} = list_dir(Worker1, StorageSpacePathW1),
         lists:sort(List -- StorageFiles)
