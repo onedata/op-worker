@@ -17,7 +17,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, fetch/1, get_or_fetch/1, delete/1, get_user_id/1]).
+-export([get/1, fetch/1, get_or_fetch/1, delete/1, get_user_id/1,
+    get_or_fetch_user_id/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -102,7 +103,16 @@ delete(Credentials) ->
 
 -spec get_user_id(credentials()) -> {ok, od_user:id()} | {error, term()}.
 get_user_id(Credentials) ->
-    case user_identity:get(to_auth(Credentials)) of
+    case user_identity:get(Credentials) of
+        {ok, #document{value = #user_identity{user_id = UserId}}} ->
+            {ok, UserId};
+        Error ->
+            Error
+    end.
+
+-spec get_or_fetch_user_id(credentials()) -> {ok, od_user:id()} | {error, term()}.
+get_or_fetch_user_id(Credentials) ->
+    case get_or_fetch(Credentials) of
         {ok, #document{value = #user_identity{user_id = UserId}}} ->
             {ok, UserId};
         Error ->

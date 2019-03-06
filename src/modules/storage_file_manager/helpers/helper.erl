@@ -311,7 +311,7 @@ new_webdav_user_ctx(CredentialsType, Credentials) ->
 new_webdav_user_ctx(CredentialsType, Credentials, <<>>) ->
     new_webdav_user_ctx(CredentialsType, Credentials);
 new_webdav_user_ctx(CredentialsType, Credentials, OnedataAccessToken) ->
-    {ok, AdminId} = user_identity:get(OnedataAccessToken),
+    {ok, AdminId} = user_identity:get_or_fetch_user_id(OnedataAccessToken),
     (new_webdav_user_ctx(CredentialsType, Credentials))#{
         <<"onedataAccessToken">> => OnedataAccessToken,
         <<"adminId">> => AdminId
