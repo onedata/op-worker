@@ -467,10 +467,10 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
 -spec communicate(IsProxy :: boolean(), Message :: term(), session:id(),
     InfinityRetry :: boolean()) -> ok | {error, Reason :: term()}.
 communicate(false, Msg, SessionID, true) ->
-    communicator:send_to_client(SessionID, Msg, infinity);
+    communicator:send_to_oneclient(SessionID, Msg, infinity);
 communicate(false, Msg, SessionID, _) ->
-    communicator:send_to_client(SessionID, Msg);
+    communicator:send_to_oneclient(SessionID, Msg);
 communicate(true, Msg, SessionID, true) ->
-    communicator:send_to_provider(SessionID, Msg, infinity);
+    communicator:send_to_provider(SessionID, Msg, undefined, infinity);
 communicate(true, Msg, SessionID, _) ->
     communicator:send_to_provider(SessionID, Msg).

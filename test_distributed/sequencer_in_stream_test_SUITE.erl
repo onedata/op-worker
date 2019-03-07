@@ -258,7 +258,7 @@ set_sequencer_in_stream_timeouts(Worker) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, [communicator]),
-    test_utils:mock_expect(Worker, communicator, send_to_client, fun
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
         (_, Msg, _) -> Self ! Msg, ok
     end).
 

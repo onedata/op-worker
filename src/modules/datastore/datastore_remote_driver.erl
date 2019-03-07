@@ -95,7 +95,7 @@ get_async(#{
                     key = Key,
                     routing_key = RoutingKey
                 },
-                communicator:send_async_to_provider(SessId, Msg, self())
+                communicator:send_to_provider(SessId, Msg, self())
         end
     catch
         _:Reason ->

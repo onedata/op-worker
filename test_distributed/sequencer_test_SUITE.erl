@@ -288,7 +288,7 @@ mock_communicator(Worker) ->
 -spec mock_communicator(Worker :: node(), MockFun :: fun()) -> ok.
 mock_communicator(Worker, MockFun) ->
     test_utils:mock_new(Worker, [communicator]),
-    test_utils:mock_expect(Worker, communicator, send_to_client, MockFun).
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, MockFun).
 
 %%--------------------------------------------------------------------
 %% @private

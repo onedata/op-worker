@@ -48,10 +48,9 @@
     fulfill_promises_after_connection_close_test/1,
     fulfill_promises_after_connection_error_test/1,
 
-    send_sync_test/1,
+    send_test/1,
     send_async_test/1,
     communicate_test/1,
-    communicate_async_test/1,
 
     client_keepalive_test/1,
     heartbeats_test/1,
@@ -69,10 +68,9 @@
     fulfill_promises_after_connection_close_test,
     fulfill_promises_after_connection_error_test,
 
-    send_sync_test,
+    send_test,
     send_async_test,
     communicate_test,
-    communicate_async_test,
 
     client_keepalive_test,
     heartbeats_test,
@@ -289,7 +287,7 @@ fulfill_promises_after_connection_error_test(Config) ->
     ok = ssl:close(Sock2).
 
 
-send_sync_test(Config) ->
+send_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
@@ -319,43 +317,6 @@ send_sync_test(Config) ->
 
 
 send_async_test(Config) ->
-    Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
-
-    SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
-
-    % In case of errors sending via other connection is not tried
-    mock_ranch_ssl(?FUNCTION_NAME, Workers),
-    ServerMsgInternal = #server_message{message_body = #status{
-        code = ?OK,
-        description = <<"desc">>
-    }},
-    send_async_msg(Worker1, SessionId, ServerMsgInternal),
-
-    ?assertEqual({error, timeout}, fuse_utils:receive_server_message()),
-
-    unmock_ranch_ssl(Worker1),
-    ok = ssl:close(Sock1),
-    ok = ssl:close(Sock2).
-
-
-communicate_test(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Status = #status{code = ?OK, description = <<"desc">>},
-    ServerMsgInternal = #server_message{message_body = Status},
-
-    % when
-    {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
-    CommunicateResult = communicate(Worker1, SessionId, ServerMsgInternal),
-
-    % then
-    ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
-    ok = ssl:close(Sock).
-
-
-communicate_async_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Status = #status{
@@ -378,6 +339,21 @@ communicate_async_test(Config) ->
         message_id = MsgId, message_body = Status
     }, ?TIMEOUT),
 
+    ok = ssl:close(Sock).
+
+
+communicate_test(Config) ->
+    % given
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    Status = #status{code = ?OK, description = <<"desc">>},
+    ServerMsgInternal = #server_message{message_body = Status},
+
+    % when
+    {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
+    CommunicateResult = communicate(Worker1, SessionId, ServerMsgInternal),
+
+    % then
+    ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
     ok = ssl:close(Sock).
 
 
@@ -755,11 +731,7 @@ create_resolve_guid_req(Path) ->
 
 
 send_sync_msg(Node, SessionId, Msg) ->
-    rpc:call(Node, connection_manager, send_sync, [SessionId, Msg]).
-
-
-send_async_msg(Node, SessionId, Msg) ->
-    rpc:call(Node, connection_manager, send_async, [SessionId, Msg]).
+    rpc:call(Node, connection_manager, send, [SessionId, Msg]).
 
 
 communicate(Node, SessionId, Msg) ->

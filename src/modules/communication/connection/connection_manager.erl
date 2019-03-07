@@ -40,8 +40,7 @@
 -export([start_link/2]).
 -export([
     communicate/2,
-    send_sync/2, send_sync/3,
-    send_async/2,
+    send/2, send/3,
 
     assign_request_id/1,
     report_pending_request/3,
@@ -119,7 +118,7 @@ start_link(SessId, SetKeepaliveTimeout) ->
 communicate(SessionId, RawMsg) ->
     {ok, MsgId} = message_id:generate(self()),
     Msg = set_msg_id(RawMsg, MsgId),
-    case send_sync_internal(SessionId, Msg, []) of
+    case send_msg_internal(SessionId, Msg, []) of
         ok ->
             await_response(Msg);
         Error ->
@@ -135,24 +134,24 @@ communicate(SessionId, RawMsg) ->
 %% @equiv send_sync(SessionId, Msg, []).
 %% @end
 %%--------------------------------------------------------------------
--spec send_sync(session:id(), message()) ->
+-spec send(session:id(), message()) ->
     ok | {error, Reason :: term()}.
-send_sync(SessionId, Msg) ->
-    send_sync(SessionId, Msg, []).
+send(SessionId, Msg) ->
+    send(SessionId, Msg, []).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to peer and awaits answer. In case of errors during
-%% sending tries other session connections until message is send or
-%% no more available connections remains.
+%% Sends message to peer. In case of errors during sending tries other
+%% session connections until message is send or no more available
+%% connections remains.
 %% Exceptions to this are encoding errors which immediately fails call.
 %% @end
 %%--------------------------------------------------------------------
--spec send_sync(session:id(), message(), ExcludedCons :: [pid()]) ->
+-spec send(session:id(), message(), ExcludedCons :: [pid()]) ->
     ok | {error, Reason :: term()}.
-send_sync(SessionId, Msg, ExcludedCons) ->
-    case send_sync_internal(SessionId, Msg, ExcludedCons) of
+send(SessionId, Msg, ExcludedCons) ->
+    case send_msg_internal(SessionId, Msg, ExcludedCons) of
         ok ->
             ok;
         Error ->
@@ -160,23 +159,6 @@ send_sync(SessionId, Msg, ExcludedCons) ->
                 Msg, SessionId, Error
             ]),
             Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules message to be send via random connection of specified session.
-%% @end
-%%--------------------------------------------------------------------
--spec send_async(session:id(), message()) -> ok | {error, term()}.
-send_async(SessionId, Msg) ->
-    case session_connections:get_random_connection(SessionId) of
-        {ok, Conn} ->
-            connection:send_async(Conn, Msg);
-        {error, no_connections} = NoConnectionsError ->
-            NoConnectionsError;
-        _Error ->
-            ok
     end.
 
 
@@ -417,9 +399,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec send_sync_internal(session:id(), message(), ExcludedCons :: [pid()]) ->
+-spec send_msg_internal(session:id(), message(), ExcludedCons :: [pid()]) ->
     ok | {error, term()}.
-send_sync_internal(SessionId, Msg, ExcludedCons) ->
+send_msg_internal(SessionId, Msg, ExcludedCons) ->
     case session_connections:get_connections(SessionId) of
         {ok, Cons} ->
             send_in_loop(Msg, utils:random_shuffle(Cons -- ExcludedCons));
@@ -433,9 +415,9 @@ send_sync_internal(SessionId, Msg, ExcludedCons) ->
 send_in_loop(_Msg, []) ->
     {error, no_connections};
 send_in_loop(Msg, [Conn]) ->
-    connection:send_sync(Conn, Msg);
+    connection:send_msg(Conn, Msg);
 send_in_loop(Msg, [Conn | Cons]) ->
-    case connection:send_sync(Conn, Msg) of
+    case connection:send_msg(Conn, Msg) of
         ok ->
             ok;
         {error, serialization_failed} = SerializationError ->
@@ -499,7 +481,7 @@ withheld_heartbeats(ConnManager, ReqId) ->
 
 %% @private
 respond_internal(Conn, SessionId, Response) ->
-    case connection:send_sync(Conn, Response) of
+    case connection:send_msg(Conn, Response) of
         ok ->
             ok;
         {error, serialization_failed} = SerializationError ->
@@ -507,7 +489,7 @@ respond_internal(Conn, SessionId, Response) ->
         {error, sending_msg_via_wrong_connection} = WrongConnError ->
             WrongConnError;
         _Error ->
-            send_sync_internal(SessionId, Response, [Conn])
+            send_msg_internal(SessionId, Response, [Conn])
     end.
 
 

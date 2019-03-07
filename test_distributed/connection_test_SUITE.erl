@@ -744,7 +744,7 @@ send_sync_msg(Node, SessId, Msg) ->
     {ok, #document{value = #session{
         connections = [Conn | _]
     }}} = rpc:call(Node, session, get, [SessId]),
-    rpc:call(Node, connection, send_sync, [Conn, Msg]).
+    rpc:call(Node, connection, send_msg, [Conn, Msg]).
 
 
 mock_identity(Workers) ->

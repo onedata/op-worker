@@ -133,7 +133,7 @@
 -export([
     connect_to_provider/7,
     close/1,
-    send_sync/2, send_async/2,
+    send_msg/2,
     send_keepalive/1
 ]).
 
@@ -187,8 +187,8 @@ close(Pid) ->
 %% eventual errors while serializing/sending.
 %% @end
 %%-------------------------------------------------------------------
--spec send_sync(pid(), message()) -> ok | {error, term()}.
-send_sync(Pid, Msg) ->
+-spec send_msg(pid(), message()) -> ok | {error, term()}.
+send_msg(Pid, Msg) ->
     try
         gen_server2:call(Pid, {send_msg, Msg})
     catch
@@ -211,16 +211,6 @@ send_sync(Pid, Msg) ->
             ]),
             {error, Reason}
     end.
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Schedules message to be sent.
-%% @end
-%%-------------------------------------------------------------------
--spec send_async(pid(), message()) -> ok.
-send_async(Pid, Msg) ->
-    gen_server2:cast(Pid, {send_msg, Msg}).
 
 
 %%-------------------------------------------------------------------
@@ -301,20 +291,6 @@ handle_cast(send_keepalive, State) ->
         Error ->
             {stop, Error, State}
     end;
-handle_cast({send_msg, Msg}, #state{status = ready} = State) ->
-    case send_message(State, Msg) of
-        {ok, NewState} ->
-            {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
-        {error, serialization_failed} ->
-            {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
-        {error, sending_msg_via_wrong_connection} ->
-            {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
-        Error ->
-            {stop, Error, State}
-    end;
-handle_cast({send_msg, _Msg}, #state{socket = Socket} = State) ->
-    ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
-    {noreply, State, ?PROTO_CONNECTION_TIMEOUT};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -800,7 +776,7 @@ route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
                 Error ->
                     % Before reporting error and closing connection
                     % try to send msg via other connections
-                    connection_manager:send_sync(SessionId, ServerMsg, [self()]),
+                    connection_manager:send(SessionId, ServerMsg, [self()]),
                     Error
             end;
         {error, Reason} ->
