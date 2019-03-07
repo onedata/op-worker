@@ -121,6 +121,11 @@ communicate(SessionId, RawMsg) ->
     case send_msg_internal(SessionId, Msg, []) of
         ok ->
             await_response(Msg);
+        {error, no_connections} = NoConsError ->
+            ?debug("Failed to communicate with peer ~p due to no connections", [
+                SessionId
+            ]),
+            NoConsError;
         Error ->
             ?error("Failed to communicate msg ~p to peer ~p due to: ~p", [
                 Msg, SessionId, Error
@@ -154,6 +159,11 @@ send(SessionId, Msg, ExcludedCons) ->
     case send_msg_internal(SessionId, Msg, ExcludedCons) of
         ok ->
             ok;
+        {error, no_connections} = NoConsError ->
+            ?debug("Failed to send msg to ~p due to no connections", [
+                SessionId
+            ]),
+            NoConsError;
         Error ->
             ?error("Failed to send msg ~p to peer ~p due to: ~p", [
                 Msg, SessionId, Error
@@ -205,6 +215,11 @@ respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
             case respond_internal(Conn, SessionId, Response) of
                 ok ->
                     report_response_sent(ConnManager, ReqId);
+                {error, no_connections} = NoConsError ->
+                    ?debug("Failed to send response to ~p due to no connections", [
+                        SessionId
+                    ]),
+                    NoConsError;
                 Error ->
                     ?error("Failed to send response ~p to peer ~p due to: ~p", [
                         Response, SessionId, Error

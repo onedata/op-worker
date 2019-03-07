@@ -22,9 +22,10 @@
 
     send_to_provider/2, send_to_provider/3, send_to_provider/4,
     communicate_with_provider/2, communicate_with_provider/3,
-    stream_to_provider/3
+    stream_to_provider/4
 ]).
 
+-type recipient() :: undefined | pid().
 -type retries() :: non_neg_integer() | infinity.
 -type generic_msg() :: tuple().
 -type client_msg() :: #client_message{}.
@@ -39,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv send_to_client(SessionId, Msg, 1).
+%% @equiv send_to_oneclient(SessionId, Msg, 1).
 %% @end
 %%--------------------------------------------------------------------
 -spec send_to_oneclient(session:id(), generic_msg()) ->
@@ -94,23 +95,16 @@ send_to_provider(SessionId, Msg, Recipient) ->
 %% until either message is sent or no more retries are left.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_msg(), undefined | pid(), retries()) ->
+-spec send_to_provider(session:id(), generic_msg(), recipient(), retries()) ->
     ok | {ok | message_id:id()} | {error, Reason :: term()}.
 send_to_provider(SessionId, #client_message{} = Msg0, Recipient, Retries) ->
     {MsgId, Msg} = maybe_set_msg_id(Msg0, Recipient),
     MsgWithProxyInfo = protocol_utils:fill_proxy_info(Msg, SessionId),
-    Res = case Msg of
-        #client_message{message_stream = #message_stream{
-            stream_id = StmId
-        }} when is_integer(StmId) ->
-            stream_to_provider(SessionId, MsgWithProxyInfo, StmId);
-        _ ->
-            send_to_provider_internal(SessionId, MsgWithProxyInfo, Retries)
-    end,
-    case {Res, MsgId} of
+    Res = send_to_provider_internal(SessionId, MsgWithProxyInfo, Retries),
+    case {Res, Recipient} of
         {ok, undefined} ->
             ok;
-        {ok, MsgId} ->
+        {ok, _} ->
             {ok, MsgId};
         {Error, _} ->
             Error
@@ -152,14 +146,22 @@ communicate_with_provider(SessionId, Msg, Retries) ->
 %% Sends stream message to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_to_provider(session:id(), generic_msg(), sequencer:stream_id()) ->
-    ok | {error, Reason :: term()}.
-stream_to_provider(SessionId, #client_message{} = Msg, StmId) ->
+-spec stream_to_provider(session:id(), generic_msg(), sequencer:stream_id(),
+    recipient()) -> ok | {ok | message_id:id()} | {error, Reason :: term()}.
+stream_to_provider(SessionId, #client_message{} = Msg0, StreamId, Recipient) ->
     session_connections:ensure_connected(SessionId),
-    sequencer:send_message(Msg, StmId, SessionId);
-stream_to_provider(SessionId, Msg, StmId) ->
+    {MsgId, Msg} = maybe_set_msg_id(Msg0, Recipient),
+    case {sequencer:send_message(Msg, StreamId, SessionId), Recipient} of
+        {ok, undefined} ->
+            ok;
+        {ok, _} ->
+            {ok, MsgId};
+        Error ->
+            Error
+    end;
+stream_to_provider(SessionId, Msg, StreamId, Recipient) ->
     ClientMsg = #client_message{message_body = Msg},
-    stream_to_provider(SessionId, ClientMsg, StmId).
+    stream_to_provider(SessionId, ClientMsg, StreamId, Recipient).
 
 
 %%%===================================================================
@@ -226,7 +228,7 @@ retries_left(Num) -> Num - 1.
 
 
 %% @private
--spec maybe_set_msg_id(msg(), undefined | pid()) ->
+-spec maybe_set_msg_id(msg(), recipient()) ->
     {undefined | message_id:id(), msg()}.
 maybe_set_msg_id(#client_message{message_id = undefined} = Msg, undefined) ->
     {undefined, Msg};

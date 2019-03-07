@@ -367,10 +367,9 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
     #flush_events{context = Context, notify = Notify} = Request,
     #state{session_id = SessId} = State,
     {ok, Auth} = session:get_auth(SessId),
+    StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
-        message_stream = #message_stream{
-            stream_id = sequencer:term_to_stream_id(Context)
-        },
+        message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
         proxy_session_id = SessId,
         proxy_session_auth = Auth
@@ -385,7 +384,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
-    communicator:send_to_provider(Ref, ClientMsg, RequestTranslator),
+    communicator:stream_to_provider(Ref, ClientMsg, StreamId, RequestTranslator),
     {noreply, State};
 
 handle_remotely(#event{} = Evt, ProviderId, State) ->
@@ -402,7 +401,7 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
             proxy_session_id = SessId,
             proxy_session_auth = Auth
         },
-        StreamId
+        StreamId, undefined
     ),
     {noreply, State}.
 
