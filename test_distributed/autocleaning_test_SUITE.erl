@@ -241,12 +241,12 @@ autocleaning_should_not_evict_file_replica_if_it_has_never_been_opened(Config) -
     }),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
 
     ?assertMatch({ok, #{
-        released_bytes := 0,
+        released_bytes := Size,
         bytes_to_release := Size,
-        files_number := 0
+        files_number := 1
     }}, get_run_report(W1, ARId)).
 
 autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Config) ->
@@ -272,17 +272,16 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     ExtraFileSize = 1,
     EG = write_file(W2, SessId2, ?FILE_PATH(ExtraFile), ExtraFileSize),
 
+    enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
         ?assertDistribution(W1, SessId, ?DIST(DomainP2, FileSize), G),
         schedule_file_replication(W1, SessId, G, DomainP1)
     end, Guids),
 
-
     lists:foreach(fun(G) ->
         ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [FileSize, FileSize]), G)
     end, Guids),
 
-    enable_file_popularity(W1, ?SPACE_ID),
     configure_autocleaning(W1, ?SPACE_ID, #{
         enabled => true,
         target => Target,
@@ -290,10 +289,6 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
         rules => #{enabled => false}
     }),
 
-    % open each file so that it will be visible in the view
-    lists:foreach(fun(G) ->
-        read_file(W1, SessId, G, FileSize)
-    end, Guids),
     ?assertFilesInView(W1, ?SPACE_ID, Guids),
     ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % this sleep is necessary to ensure that autocleaning_check will be
@@ -301,7 +296,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     timer:sleep(timer:seconds(1)),
     read_file(W1, SessId, EG, ExtraFileSize),
 
-    {ok, [ARId]} = ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertEqual(true, current_size(W1, ?SPACE_ID) =< Target, ?ATTEMPTS).
 
@@ -549,7 +544,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
     }},
 
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
-    {ok, [ARId]} = ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertMatch({ok, #{
@@ -622,7 +617,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
-    {ok, [ARId]} = ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertMatch({ok, #{
