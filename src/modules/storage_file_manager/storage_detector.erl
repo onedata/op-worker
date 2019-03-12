@@ -13,10 +13,12 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+
 
 %% API
 -export([generate_file_id/0, create_test_file/3, read_test_file/3,
-    update_test_file/3, remove_test_file/4]).
+    update_test_file/3, remove_test_file/4, verify_test_file/4, verify_storage_on_all_nodes/1]).
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
     storage_test_file_name_size, 32)).
@@ -68,6 +70,21 @@ read_test_file(Helper, UserCtx, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Verifies content of storage test file.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
+    Content :: binary()) -> ok | {error, term()}.
+verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
+    case read_test_file(Helper, UserCtx, FileId) of
+        ExpectedFileContent ->
+            ok;
+        UnexpectedFileContent ->
+            {error, {storage_test_file, {ExpectedFileContent, UnexpectedFileContent}}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Updates and returns content of a storage test file.
 %% @end
 %%--------------------------------------------------------------------
@@ -96,6 +113,26 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
     end,
     ok.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Verifies whether storage is accessible for all nodes in the cluster
+%% @end
+%%-------------------------------------------------------------------
+-spec verify_storage_on_all_nodes(helpers:helper()) -> ok | {error, term()}.
+verify_storage_on_all_nodes(Helper) ->
+    {ok, AdminCtx} = luma:get_admin_ctx(?ROOT_USER_ID, Helper),
+    {ok, AdminCtx2} = luma:add_helper_specific_fields(?ROOT_USER_ID,
+        ?ROOT_SESS_ID, AdminCtx, Helper),
+    {ok, [Node | Nodes]} = node_manager:get_cluster_nodes(),
+    FileId = generate_file_id(),
+    FileContent = create_test_file(Node, Helper, AdminCtx2, FileId),
+    case verify_storage_internal(Helper, AdminCtx2, Nodes, FileId, FileContent) of
+        {ok, {FileId, FileContent}} ->
+            verify_test_file(Node, Helper, AdminCtx2, FileId, FileContent);
+        Error ->
+            Error
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -112,3 +149,28 @@ random_ascii_lowercase_sequence(Length) ->
     lists:foldl(fun(_, Acc) ->
         <<Acc/binary, (rand:uniform(26) + 96)>>
     end, <<>>, lists:seq(1, Length)).
+
+-spec verify_storage_internal(helpers:helper(), helpers:user_ctx(), [node()],
+    helpers:file_id(), Content :: binary()) ->
+    {ok, {helpers:file_id(), binary()}} | {error, term()}.
+verify_storage_internal(_Helper, _AdminCtx, [], FileId, FileContent) ->
+    {ok, {FileId, FileContent}};
+verify_storage_internal(Helper, AdminCtx, [Node | Nodes], FileId, ExpectedFileContent) ->
+    case verify_test_file(Node, Helper, AdminCtx, FileId, ExpectedFileContent) of
+        ok ->
+            FileId2 = generate_file_id(),
+            FileContent = create_test_file(Node, Helper, AdminCtx, FileId),
+            verify_storage_internal(Helper, AdminCtx, Nodes, FileId2, FileContent);
+        Error ->
+            Error
+    end.
+
+-spec create_test_file(node(), helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+    Content :: binary().
+create_test_file(Node, Helper, UserCtx, FileId) ->
+    rpc:call(Node, ?MODULE, create_test_file, [Helper, UserCtx, FileId]).
+
+-spec verify_test_file(node(), helpers:helper(), helpers:user_ctx(),
+    helpers:file_id(), Content :: binary()) -> ok | {error, term()}.
+verify_test_file(Node, Helper, UserCtx, FileId, ExpectedFileContent) ->
+    rpc:call(Node, ?MODULE, verify_test_file, [Helper, UserCtx, FileId, ExpectedFileContent]).
