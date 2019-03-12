@@ -17,7 +17,7 @@
 -include("proto/common/handshake_messages.hrl").
 
 -record(client_message, {
-    message_id :: undefined | message_id:id(),
+    message_id :: undefined | clproto_message_id:id(),
     session_id :: undefined | session:id(),
     proxy_session_id :: undefined | session:id(),
     proxy_session_auth :: undefined | #macaroon_auth{},

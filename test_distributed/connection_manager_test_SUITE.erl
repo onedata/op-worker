@@ -323,7 +323,7 @@ send_async_test(Config) ->
         code = ?OK,
         description = <<"desc">>
     },
-    {ok, MsgId} = rpc:call(Worker1, message_id, generate, [self()]),
+    {ok, MsgId} = rpc:call(Worker1, clproto_message_id, generate, [self()]),
     ServerMsgInternal = #server_message{
         message_id = MsgId,
         message_body = Status
@@ -534,7 +534,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
 
 
 init_per_suite(Config) ->
-    serializer:load_msg_defs(),
+    clproto_serializer:load_msg_defs(),
     Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
@@ -719,7 +719,7 @@ prolong_msg_routing(Workers) ->
 
 
 create_resolve_guid_req(Path) ->
-    {ok, FuseReq} = serializer:serialize_client_message(#client_message{
+    {ok, FuseReq} = clproto_serializer:serialize_client_message(#client_message{
         message_id = #message_id{id = crypto:strong_rand_bytes(5)},
         message_body = #fuse_request{
             fuse_request = #resolve_guid{

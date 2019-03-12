@@ -9,7 +9,7 @@
 %%% Module handling translations between protobuf and internal protocol.
 %%% @end
 %%%-------------------------------------------------------------------
--module(translator).
+-module(clproto_translator).
 -author("Tomasz Lichon").
 -author("Rafal Slota").
 

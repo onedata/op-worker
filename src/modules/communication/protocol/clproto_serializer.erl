@@ -10,7 +10,7 @@
 %%% messages.
 %%% @end
 %%%-------------------------------------------------------------------
--module(serializer).
+-module(clproto_serializer).
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/client_messages.hrl").
@@ -44,7 +44,7 @@ load_msg_defs() ->
 %% Deserializes protobuf binary data to client message.
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_client_message(binary(), SessionId :: undefined | session:id()) ->
+-spec deserialize_client_message(binary(), undefined | session:id()) ->
     {ok, #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
     DecodedMsg = messages:decode_msg(Message, 'ClientMessage'),
@@ -57,14 +57,14 @@ deserialize_client_message(Message, SessionId) ->
         proxy_session_macaroon = PToken
     } = DecodedMsg,
 
-    {ok, DecodedId} = message_id:decode(MsgId),
+    {ok, DecodedId} = clproto_message_id:decode(MsgId),
     {ok, #client_message{
         message_id = DecodedId,
-        message_stream = translator:translate_from_protobuf(MsgStm),
+        message_stream = clproto_translator:translate_from_protobuf(MsgStm),
         session_id = SessionId,
         proxy_session_id = PSessID,
-        proxy_session_auth = translator:translate_from_protobuf(PToken),
-        message_body = translator:translate_from_protobuf(MsgBody)
+        proxy_session_auth = clproto_translator:translate_from_protobuf(PToken),
+        message_body = clproto_translator:translate_from_protobuf(MsgBody)
     }}.
 
 
@@ -73,7 +73,7 @@ deserialize_client_message(Message, SessionId) ->
 %% Deserializes protobuf binary data to server message.
 %% @end
 %%--------------------------------------------------------------------
--spec deserialize_server_message(binary(), SessionId :: undefined | session:id()) ->
+-spec deserialize_server_message(binary(), undefined | session:id()) ->
     {ok, #server_message{}} | no_return().
 deserialize_server_message(Message, SessionId) ->
     DecodedMsg = messages:decode_msg(Message, 'ServerMessage'),
@@ -85,11 +85,11 @@ deserialize_server_message(Message, SessionId) ->
         proxy_session_id = ProxySessionId
     } = DecodedMsg,
 
-    {ok, DecodedId} = message_id:decode(MsgId),
+    {ok, DecodedId} = clproto_message_id:decode(MsgId),
     {ok, #server_message{
         message_id = DecodedId,
-        message_stream = translator:translate_from_protobuf(MsgStm),
-        message_body = translator:translate_from_protobuf(MsgBody),
+        message_stream = clproto_translator:translate_from_protobuf(MsgStm),
+        message_body = clproto_translator:translate_from_protobuf(MsgBody),
         proxy_session_id = utils:ensure_defined(
             ProxySessionId, undefined, SessionId
         )
@@ -110,11 +110,11 @@ serialize_server_message(#server_message{
     proxy_session_id = SessionId
 }, VerifyMsg) ->
 
-    {ok, EncodedId} = message_id:encode(MsgId),
+    {ok, EncodedId} = clproto_message_id:encode(MsgId),
     ServerMessage = #'ServerMessage'{
         message_id = EncodedId,
-        message_stream = translator:translate_to_protobuf(MsgStm),
-        message_body = translator:translate_to_protobuf(MsgBody),
+        message_stream = clproto_translator:translate_to_protobuf(MsgStm),
+        message_body = clproto_translator:translate_to_protobuf(MsgBody),
         proxy_session_id = SessionId
     },
 
@@ -148,13 +148,13 @@ serialize_client_message(#client_message{
     message_body = MsgBody
 }, VerifyMsg) ->
 
-    {ok, EncodedId} = message_id:encode(MsgId),
+    {ok, EncodedId} = clproto_message_id:encode(MsgId),
     ClientMessage = #'ClientMessage'{
         message_id = EncodedId,
-        message_stream = translator:translate_to_protobuf(MsgStm),
-        message_body = translator:translate_to_protobuf(MsgBody),
+        message_stream = clproto_translator:translate_to_protobuf(MsgStm),
+        message_body = clproto_translator:translate_to_protobuf(MsgBody),
         proxy_session_id = PSessID,
-        proxy_session_macaroon = translator:translate_to_protobuf(Auth)
+        proxy_session_macaroon = clproto_translator:translate_to_protobuf(Auth)
     },
 
     case VerifyMsg of

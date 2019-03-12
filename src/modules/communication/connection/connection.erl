@@ -308,7 +308,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({upgrade_protocol, Hostname}, State) ->
-    case socket_send(State, protocol_utils:protocol_upgrade_request(Hostname)) of
+    UpgradeReq = connection_utils:protocol_upgrade_request(Hostname),
+    case socket_send(State, UpgradeReq) of
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, Reason} ->
@@ -426,7 +427,7 @@ upgrade(Req, Env, Handler, HandlerState) ->
 -spec upgrade(cowboy_req:req(), cowboy_middleware:env(), module(), any(), any()) ->
     {ok, cowboy_req:req(), cowboy_middleware:env()} | {stop, cowboy_req:req()}.
 upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
-    try protocol_utils:process_protocol_upgrade_request(Req) of
+    try connection_utils:process_protocol_upgrade_request(Req) of
         ok ->
             Headers = cowboy_req:response_headers(#{
                 <<"connection">> => <<"Upgrade">>,
@@ -500,7 +501,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     % retries; needed to implement backoff algorithm
     Intervals = application:get_env(?APP_NAME, providers_reconnect_intervals, #{}),
     ProviderId = session_utils:session_id_to_provider_id(SessionId),
-    NextReconnect = protocol_utils:get_next_reconnect(ProviderId, Intervals),
+    NextReconnect = connection_utils:get_next_reconnect(ProviderId, Intervals),
     case time_utils:cluster_time_seconds() >= NextReconnect of
         false ->
             ?debug("Discarding connection request to provider(~p) as the "
@@ -513,17 +514,17 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                     Transport, Timeout
                 ),
                 ok = proc_lib:init_ack({ok, self()}),
-                protocol_utils:reset_reconnect_interval(ProviderId, Intervals),
+                connection_utils:reset_reconnect_interval(ProviderId, Intervals),
                 gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
             catch
                 throw:incompatible_peer_op_version ->
-                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
+                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal);
                 throw:cannot_check_peer_op_version ->
-                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
+                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal);
                 throw:cannot_verify_identity ->
-                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
+                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal);
                 exit:normal ->
                     ?info("Connection to peer provider(~p) closed", [ProviderId]),
@@ -533,7 +534,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
                              "Next retry not sooner than ~p.", [
                         ProviderId, Type, Reason, NextReconnect
                     ]),
-                    protocol_utils:postpone_next_reconnect(ProviderId, Intervals),
+                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
                     exit(normal)
             end
     end.
@@ -613,12 +614,12 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
 -spec handle_protocol_upgrade_response(state(), Data :: binary()) ->
     {ok, state()} | {error, Reason :: term()}.
 handle_protocol_upgrade_response(State, Data) ->
-    case protocol_utils:verify_protocol_upgrade_response(Data) of
+    case connection_utils:verify_protocol_upgrade_response(Data) of
         false ->
             ?error("Received invalid protocol upgrade response: ~p", [Data]),
             {error, invalid_protocol_upgrade_response};
         true ->
-            {ok, MsgId} = message_id:generate(self()),
+            {ok, MsgId} = clproto_message_id:generate(self()),
             {ok, Nonce} = authorization_nonce:create(),
             ClientMsg = #client_message{
                 message_id = MsgId,
@@ -648,9 +649,9 @@ handle_handshake(#state{type = outgoing} = State, Data) ->
 handle_handshake_request(#state{socket = Socket} = State, Data) ->
     try
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
-        {ok, Msg} = serializer:deserialize_client_message(Data, undefined),
+        {ok, Msg} = clproto_serializer:deserialize_client_message(Data, undefined),
 
-        {PeerId, SessionId} = protocol_auth:handle_handshake(
+        {PeerId, SessionId} = connection_auth:handle_handshake(
             Msg#client_message.message_body, IpAddress
         ),
         NewState = State#state{peer_id = PeerId, session_id = SessionId},
@@ -660,7 +661,7 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
         })
     catch Type:Reason ->
         ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
-        send_server_message(State, protocol_auth:get_handshake_error(Reason)),
+        send_server_message(State, connection_auth:get_handshake_error(Reason)),
         {error, Reason}
     end.
 
@@ -672,7 +673,7 @@ handle_handshake_response(#state{
     session_id = SessId,
     peer_id = ProviderId
 } = State, Data) ->
-    try serializer:deserialize_server_message(Data, SessId) of
+    try clproto_serializer:deserialize_server_message(Data, SessId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider ~ts", [
                 provider_logic:to_string(ProviderId)
@@ -714,8 +715,8 @@ handle_client_message(#state{
     session_id = SessId
 } = State, Data) ->
     try
-        {ok, Msg} = serializer:deserialize_client_message(Data, SessId),
-        protocol_utils:maybe_create_proxy_session(PeerId, Msg),
+        {ok, Msg} = clproto_serializer:deserialize_client_message(Data, SessId),
+        connection_utils:maybe_create_proxy_session(PeerId, Msg),
         route_message(State, Msg)
     catch Type:Reason ->
         ?error("Client message handling error - ~p:~p", [Type, Reason]),
@@ -728,7 +729,7 @@ handle_client_message(#state{
     {ok, state()} | {error, Reason :: term()}.
 handle_server_message(#state{session_id = SessId} = State, Data) ->
     try
-        {ok, Msg} = serializer:deserialize_server_message(Data, SessId),
+        {ok, Msg} = clproto_serializer:deserialize_server_message(Data, SessId),
         route_message(State, Msg)
     catch Type:Error ->
         ?error("Server message handling error - ~p:~p", [Type, Error]),
@@ -804,7 +805,7 @@ send_message(#state{type = ConnType}, Msg) ->
     {ok, state()} | {error, Reason :: term()}.
 send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     try
-        {ok, Data} = serializer:serialize_client_message(ClientMsg, VerifyMsg),
+        {ok, Data} = clproto_serializer:serialize_client_message(ClientMsg, VerifyMsg),
         socket_send(State, Data)
     catch
         _:Reason ->
@@ -820,7 +821,7 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     {ok, state()} | {error, Reason :: term()}.
 send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     try
-        {ok, Data} = serializer:serialize_server_message(ServerMsg, VerifyMsg),
+        {ok, Data} = clproto_serializer:serialize_server_message(ServerMsg, VerifyMsg),
         socket_send(State, Data)
     catch
         _:Reason ->

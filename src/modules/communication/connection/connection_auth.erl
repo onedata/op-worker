@@ -9,7 +9,7 @@
 %%% Client and provider authentication library.
 %%% @end
 %%%-------------------------------------------------------------------
--module(protocol_auth).
+-module(connection_auth).
 -author("Tomasz Lichon").
 -author("Michal Wrzeszcz").
 
@@ -73,7 +73,7 @@ get_handshake_error({badmatch, {error, Error}}) ->
 get_handshake_error({Code, Error, _Description}) when is_integer(Code) ->
     #server_message{
         message_body = #handshake_response{
-            status = translator:translate_handshake_error(Error)
+            status = clproto_translator:translate_handshake_error(Error)
         }
     };
 get_handshake_error(_) ->

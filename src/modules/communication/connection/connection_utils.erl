@@ -9,7 +9,7 @@
 %%% Module providing various utility function for connection/communicator.
 %%% @end
 %%%-------------------------------------------------------------------
--module(protocol_utils).
+-module(connection_utils).
 -author("Tomasz Lichon").
 
 -include("http/gui_paths.hrl").

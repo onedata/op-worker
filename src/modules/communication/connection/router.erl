@@ -302,7 +302,7 @@ answer_or_delegate(Msg, _) ->
 %% it's work, he will send result using specified ReplyTo info.
 %% @end
 %%--------------------------------------------------------------------
--spec delegate_request(worker_ref(), Req :: term(), message_id:id(),
+-spec delegate_request(worker_ref(), Req :: term(), clproto_message_id:id(),
     connection_manager:reply_to()) -> ok | {ok, server_message()}.
 delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
     try

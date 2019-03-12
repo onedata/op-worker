@@ -69,7 +69,7 @@
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
 
--type req_id() :: {reference(), message_id:id()}.
+-type req_id() :: {reference(), clproto_message_id:id()}.
 -type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
 
 -define(WORKERS_STATUS_CHECK_INTERVAL, application:get_env(
@@ -116,7 +116,7 @@ start_link(SessId, SetKeepaliveTimeout) ->
 -spec communicate(session:id(), message()) ->
     {ok, message()} | {error, term()}.
 communicate(SessionId, RawMsg) ->
-    {ok, MsgId} = message_id:generate(self()),
+    {ok, MsgId} = clproto_message_id:generate(self()),
     Msg = set_msg_id(RawMsg, MsgId),
     case send_msg_internal(SessionId, Msg, []) of
         ok ->
@@ -177,7 +177,7 @@ send(SessionId, Msg, ExcludedCons) ->
 %% Creates unique id for request using specified message id.
 %% @end
 %%--------------------------------------------------------------------
--spec assign_request_id(message_id:id()) -> req_id().
+-spec assign_request_id(clproto_message_id:id()) -> req_id().
 assign_request_id(MsgId) ->
     Ref = make_ref(),
     {Ref, MsgId}.
@@ -470,7 +470,7 @@ await_response(#server_message{message_id = MsgId}) ->
 
 
 %% @private
--spec prepare_response(message_id:id(), {ok, term()} | term()) ->
+-spec prepare_response(clproto_message_id:id(), {ok, term()} | term()) ->
     server_message().
 prepare_response(MsgId, {ok, Ans}) ->
     #server_message{
@@ -581,7 +581,7 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
 
 
 %% @private
--spec set_msg_id(message(), message_id:id()) -> message().
+-spec set_msg_id(message(), clproto_message_id:id()) -> message().
 set_msg_id(#client_message{} = Msg, MsgId) ->
     Msg#client_message{message_id = MsgId};
 set_msg_id(#server_message{} = Msg, MsgId) ->

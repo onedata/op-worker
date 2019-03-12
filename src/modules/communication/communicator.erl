@@ -60,7 +60,7 @@ send_to_oneclient(SessionId, Msg) ->
 -spec send_to_oneclient(session:id(), generic_msg(), retries()) ->
     ok | {error, Reason :: term()}.
 send_to_oneclient(SessionId, #server_message{} = Msg, Retries) ->
-    MsgWithProxyInfo = protocol_utils:fill_proxy_info(Msg, SessionId),
+    MsgWithProxyInfo = connection_utils:fill_proxy_info(Msg, SessionId),
     send_to_oneclient_internal(SessionId, MsgWithProxyInfo, Retries);
 send_to_oneclient(SessionId, Msg, RetriesLeft) ->
     ServerMsg = #server_message{message_body = Msg},
@@ -73,7 +73,7 @@ send_to_oneclient(SessionId, Msg, RetriesLeft) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_to_provider(session:id(), generic_msg()) ->
-    ok | {ok | message_id:id()} | {error, Reason :: term()}.
+    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
 send_to_provider(SessionId, Msg) ->
     send_to_provider(SessionId, Msg, undefined).
 
@@ -84,7 +84,7 @@ send_to_provider(SessionId, Msg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_to_provider(session:id(), generic_msg(), undefined | pid()) ->
-    ok | {ok | message_id:id()} | {error, Reason :: term()}.
+    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
 send_to_provider(SessionId, Msg, Recipient) ->
     send_to_provider(SessionId, Msg, Recipient, 1).
 
@@ -96,10 +96,10 @@ send_to_provider(SessionId, Msg, Recipient) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_to_provider(session:id(), generic_msg(), recipient(), retries()) ->
-    ok | {ok | message_id:id()} | {error, Reason :: term()}.
+    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
 send_to_provider(SessionId, #client_message{} = Msg0, Recipient, Retries) ->
     {MsgId, Msg} = maybe_set_msg_id(Msg0, Recipient),
-    MsgWithProxyInfo = protocol_utils:fill_proxy_info(Msg, SessionId),
+    MsgWithProxyInfo = connection_utils:fill_proxy_info(Msg, SessionId),
     Res = send_to_provider_internal(SessionId, MsgWithProxyInfo, Retries),
     case {Res, Recipient} of
         {ok, undefined} ->
@@ -134,7 +134,7 @@ communicate_with_provider(SessionId, Msg) ->
 -spec communicate_with_provider(session:id(), generic_msg(), retries()) ->
     {ok, msg()} | {error, Reason :: term()}.
 communicate_with_provider(SessionId, #client_message{} = Msg, Retries) ->
-    MsgWithProxyInfo = protocol_utils:fill_proxy_info(Msg, SessionId),
+    MsgWithProxyInfo = connection_utils:fill_proxy_info(Msg, SessionId),
     communicate_with_provider_internal(SessionId, MsgWithProxyInfo, Retries);
 communicate_with_provider(SessionId, Msg, Retries) ->
     ClientMsg = #client_message{message_body = Msg},
@@ -147,7 +147,7 @@ communicate_with_provider(SessionId, Msg, Retries) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_to_provider(session:id(), generic_msg(), sequencer:stream_id(),
-    recipient()) -> ok | {ok | message_id:id()} | {error, Reason :: term()}.
+    recipient()) -> ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
 stream_to_provider(SessionId, #client_message{} = Msg0, StreamId, Recipient) ->
     session_connections:ensure_connected(SessionId),
     {MsgId, Msg} = maybe_set_msg_id(Msg0, Recipient),
@@ -229,11 +229,11 @@ retries_left(Num) -> Num - 1.
 
 %% @private
 -spec maybe_set_msg_id(msg(), recipient()) ->
-    {undefined | message_id:id(), msg()}.
+    {undefined | clproto_message_id:id(), msg()}.
 maybe_set_msg_id(#client_message{message_id = undefined} = Msg, undefined) ->
     {undefined, Msg};
 maybe_set_msg_id(#client_message{message_id = undefined} = Msg, Recipient) ->
-    {ok, MsgId} = message_id:generate(Recipient),
+    {ok, MsgId} = clproto_message_id:generate(Recipient),
     {MsgId, Msg#client_message{message_id = MsgId}};
 maybe_set_msg_id(#client_message{message_id = MsgId} = Msg, _Recipient) ->
     {MsgId, Msg}.

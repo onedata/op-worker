@@ -17,7 +17,7 @@
 -include("message_id.hrl").
 
 -record(server_message, {
-    message_id :: undefined | message_id:id(),
+    message_id :: undefined | clproto_message_id:id(),
     message_stream :: undefined | #message_stream{},
     message_body :: tuple(),
     proxy_session_id :: undefined | session:id()

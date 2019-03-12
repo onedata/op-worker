@@ -9,7 +9,7 @@
 %%% Module providing various utility functions for handling message_id.
 %%% @end
 %%%-------------------------------------------------------------------
--module(message_id).
+-module(clproto_message_id).
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/message_id.hrl").

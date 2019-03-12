@@ -93,7 +93,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     transfer:init(),
-    serializer:load_msg_defs(),
+    clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),

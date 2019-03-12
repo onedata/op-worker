@@ -30,7 +30,7 @@
                  source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
--type future() :: {ok, message_id:id()} | {error, term()}.
+-type future() :: {ok, clproto_message_id:id()} | {error, term()}.
 
 
 %%%===================================================================

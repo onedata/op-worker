@@ -757,23 +757,23 @@ mock_identity(Workers) ->
 
 
 mock_client_msg_decoding(Node) ->
-    test_utils:mock_new(Node, serializer, [passthrough]),
+    test_utils:mock_new(Node, clproto_serializer, [passthrough]),
 
-    test_utils:mock_expect(Node, serializer, deserialize_client_message, fun(_, _) ->
+    test_utils:mock_expect(Node, clproto_serializer, deserialize_client_message, fun(_, _) ->
         throw(inproper_msg)
     end).
 
 
 mock_server_msg_encoding(Node) ->
-    test_utils:mock_new(Node, serializer, [passthrough]),
+    test_utils:mock_new(Node, clproto_serializer, [passthrough]),
 
-    test_utils:mock_expect(Node, serializer, serialize_server_message, fun(_, _) ->
+    test_utils:mock_expect(Node, clproto_serializer, serialize_server_message, fun(_, _) ->
         throw(inproper_msg)
     end).
 
 
 unmock_serializer(Node) ->
-    test_utils:mock_unload(Node, [serializer]).
+    test_utils:mock_unload(Node, [clproto_serializer]).
 
 
 mock_route_msg(Node) ->
