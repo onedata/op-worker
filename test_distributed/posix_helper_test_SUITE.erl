@@ -277,8 +277,8 @@ gen_filename() ->
         (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
 helper_handle_server(Config) ->
-    UserCtx = helper:new_posix_user_ctx(0, 0),
-    Helper = helper:new_posix_helper(?path(Config, ""), #{}, UserCtx,
+    {ok, UserCtx} = helper:new_posix_user_ctx(0, 0),
+    {ok, Helper} = helper:new_posix_helper(?path(Config, ""), #{}, UserCtx,
       ?CANONICAL_STORAGE_PATH),
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     helper_handle_server(Config, Handle).
