@@ -28,7 +28,8 @@
 
 -export([
     invalid_request_should_fail/1,
-    changes_stream_file_meta_test/1,
+    changes_stream_file_meta_create_test/1,
+    changes_stream_file_meta_change_test/1,
     changes_stream_xattr_test/1,
     changes_stream_json_metadata_test/1,
     changes_stream_times_test/1,
@@ -41,7 +42,8 @@
 all() ->
     ?ALL([
         invalid_request_should_fail,
-        changes_stream_file_meta_test,
+        changes_stream_file_meta_create_test,
+        changes_stream_file_meta_change_test,
         changes_stream_xattr_test,
         changes_stream_json_metadata_test,
         changes_stream_times_test,
@@ -77,56 +79,77 @@ invalid_request_should_fail(Config) ->
     ]).
 
 
-changes_stream_file_meta_test(Config) ->
+changes_stream_file_meta_create_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
-    Name1 = <<"file1_csfmt">>,
-    File1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(Name1)])),
-    Name2 = <<"file2_csfmt">>,
-    File2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(Name2)])),
-
-    Mode1 = 8#700,
-    Mode2 = 8#777,
-
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File1, Mode1),
+    FileName = <<"file2_csfmt">>,
+    FilePath = list_to_binary(filename:join([
+        "/", binary_to_list(SpaceName), binary_to_list(FileName)
+    ])),
+    FileMode = 8#700,
 
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, Mode2),
-        timer:sleep(500),
-        lfm_proxy:create(WorkerP1, SessionId, File2, Mode1)
+        lfm_proxy:create(WorkerP1, SessionId, FilePath, FileMode)
     end),
 
     Json = #{<<"fileMeta">> => #{
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
     }},
     {ok, Changes} = get_changes(Config, WorkerP1, SpaceId, Json),
-    ?assert(length(Changes) >= 2),
+    ?assert(length(Changes) >= 1),
 
-    [LastChange, PreLastChange | _] = Changes,
+    [LastChange | _] = Changes,
     ?assertMatch(#{<<"fileMeta">> := #{
         <<"changed">> := true,
         <<"fields">> := #{
-            <<"name">> := Name2,
+            <<"name">> := FileName,
             <<"owner">> := UserId,
-            <<"mode">> := Mode1
+            <<"mode">> := FileMode
         }
-    }}, LastChange),
+    }}, LastChange).
 
+
+changes_stream_file_meta_change_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+
+    FileName = <<"file1_csfmt">>,
+    FilePath = list_to_binary(filename:join([
+        "/", binary_to_list(SpaceName), binary_to_list(FileName)
+    ])),
+    Mode1 = 8#700,
+    Mode2 = 8#777,
+
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, Mode1),
+
+    % when
+    spawn(fun() ->
+        timer:sleep(500),
+        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, Mode2)
+    end),
+
+    Json = #{<<"fileMeta">> => #{
+        <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
+    }},
+    {ok, Changes} = get_changes(Config, WorkerP1, SpaceId, Json),
+    ?assert(length(Changes) >= 1),
+
+    [LastChange | _] = Changes,
     ?assertMatch(#{<<"fileMeta">> := #{
         <<"changed">> := true,
         <<"fields">> := #{
-            <<"name">> := Name1,
+            <<"name">> := FileName,
             <<"owner">> := UserId,
             <<"mode">> := Mode2
         }
-    }}, PreLastChange),
-
-    ?assert(maps:get(<<"seq">>, LastChange) > maps:get(<<"seq">>, PreLastChange)).
+    }}, LastChange).
 
 
 changes_stream_xattr_test(Config) ->
