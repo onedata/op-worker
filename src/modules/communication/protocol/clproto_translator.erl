@@ -1610,7 +1610,7 @@ translate_to_protobuf(#file_location{
         space_id = SpaceId,
         storage_id = StorageId,
         file_id = FileId,
-        version = version_vector:get_local_version(Record),
+        version = version_vector:get_provider_version(Record),
         blocks = lists:map(fun(#file_block{offset = Offset, size = Size}) ->
             #'FileBlock'{
                 offset = Offset,

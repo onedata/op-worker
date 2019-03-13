@@ -246,22 +246,6 @@ answer_or_delegate(#client_message{
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
-    message_body = FuseRequest = #fuse_request{
-        fuse_request = #file_request{
-            context_guid = FileGuid,
-            file_request = FileReq
-        }}
-}, ReplyTo) when
-    is_record(FileReq, open_file) orelse
-    is_record(FileReq, open_file_with_extended_info) orelse
-    is_record(FileReq, release)
-->
-    Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
-    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    delegate_request({fslogic_worker, Node}, Req, MsgId, ReplyTo);
-
-answer_or_delegate(Msg = #client_message{
-    message_id = MsgId,
     message_body = FuseRequest = #fuse_request{}
 }, ReplyTo) ->
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
@@ -280,7 +264,7 @@ answer_or_delegate(Msg = #client_message{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
 }, ReplyTo) ->
-    Node = consistent_hasing:get_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+    Node = read_write_req:get_proxyio_node(fslogic_uuid:guid_to_uuid(FileGuid)),
     Req = {proxyio_request, effective_session_id(Msg), ProxyIORequest},
     delegate_request({fslogic_worker, Node}, Req, Id, ReplyTo);
 

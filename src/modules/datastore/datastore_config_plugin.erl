@@ -53,7 +53,6 @@ get_models() -> [
     times,
     helper_handle,
     space_strategies,
-    file_force_proxy,
     luma_cache,
     file_popularity,
     space_transfer_stats,
@@ -68,7 +67,8 @@ get_models() -> [
     replica_deletion_lock,
     index,
     autocleaning_run,
-    file_popularity_config
+    file_popularity_config,
+    idp_access_token
 ].
 
 %%--------------------------------------------------------------------

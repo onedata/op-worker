@@ -53,7 +53,8 @@
     scheduling_replication_by_empty_index_should_succeed/2,
     scheduling_replication_by_not_existing_key_in_index_should_succeed/2,
     schedule_replication_of_100_regular_files_by_index/2,
-    file_removed_during_replication/3]).
+    file_removed_during_replication/3,
+    rtransfer_works_between_providers_with_different_ports/2]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -1806,6 +1807,63 @@ file_removed_during_replication(Config, Type, FileKeyType) ->
     ).
 
 
+rtransfer_works_between_providers_with_different_ports(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    % Replication from p1 to p2
+    TransferTestSpec = #transfer_test_spec{
+        setup = Setup = #setup{
+            setup_node = WorkerP1,
+            assertion_nodes = [WorkerP2],
+            files_structure = [{0, 1}],
+            distribution = [
+                #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+            ]
+        },
+        scenario = Scenario = #scenario{
+            type = Type,
+            schedule_node = WorkerP1,
+            replicating_nodes = [WorkerP2],
+            function = fun transfers_test_mechanism:replicate_each_file_separately/2
+        },
+        expected = #expected{
+            expected_transfer = #{
+                replication_status => completed,
+                files_to_process => 1,
+                files_processed => 1,
+                files_replicated => 1,
+                bytes_replicated => ?DEFAULT_SIZE
+            },
+            distribution = [
+                #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+            ],
+            assertion_nodes = [WorkerP1, WorkerP2]
+        }
+    },
+    
+    Config1 = transfers_test_mechanism:run_test(Config, TransferTestSpec),
+    Config2 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config1),
+
+    % Replication from p2 to p1
+    TransferTestSpec2 = TransferTestSpec#transfer_test_spec{
+        setup = Setup#setup{
+            setup_node = WorkerP2,
+            assertion_nodes = [WorkerP1],
+            distribution = [
+                #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+            ]
+        },
+        scenario = Scenario#scenario{
+            schedule_node = WorkerP2,
+            replicating_nodes = [WorkerP1]
+        }
+    },
+    transfers_test_mechanism:run_test(Config2, TransferTestSpec2).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1856,6 +1914,18 @@ init_per_testcase(file_removed_during_replication, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
     [{space_id, <<"space4">>} | Config];
+
+init_per_testcase(rtransfer_works_between_providers_with_different_ports, Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    {ok, C} = rpc:call(Worker1, application, get_env, [rtransfer_link, transfer]),
+    C1 = lists:keyreplace(server_port, 1, C, {server_port, 30000}),
+    rpc:call(Worker1, application, set_env, [rtransfer_link, transfer, C1]),
+    
+    ProviderId1 = rpc:call(Worker1, oneprovider, get_id, []),
+    rpc:call(Worker2, simple_cache, clear, [{rtransfer_port, ProviderId1}]),
+    rpc:call(Worker1, rtransfer_config, restart_link, []),
+    
+    init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),

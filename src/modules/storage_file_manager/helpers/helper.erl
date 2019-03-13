@@ -26,8 +26,8 @@
     new_webdav_helper/5, new_nulldevice_helper/4]).
 -export([new_ceph_user_ctx/2,new_cephrados_user_ctx/2,  new_posix_user_ctx/2,
     new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
-    new_webdav_user_ctx/2, new_nulldevice_user_ctx/2, validate_user_ctx/2,
-    validate_group_ctx/2]).
+    new_webdav_user_ctx/2, new_webdav_user_ctx/3, new_nulldevice_user_ctx/2,
+    validate_user_ctx/2, validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
@@ -38,6 +38,7 @@
 -type params() :: #helper_params{}.
 -type user_ctx() :: #{binary() => binary() | integer()}.
 -type group_ctx() :: #{binary() => binary() | integer()}.
+-type optional_field() :: {optional, binary()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
@@ -162,7 +163,7 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx,
 %%--------------------------------------------------------------------
 -spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(),
     boolean(), helpers:storage_path_type()) -> helpers:helper().
-new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure,
+new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, _Insecure,
     StoragePathType) ->
     #helper{
         name = ?GLUSTERFS_HELPER_NAME,
@@ -171,7 +172,7 @@ new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure,
             <<"hostname">> => Hostname
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure,
+        insecure = false,   % todo remove Insecure arg VFS-5256
         extended_direct_io = true,
         storage_path_type = StoragePathType
     }.
@@ -203,12 +204,12 @@ new_webdav_helper(Endpoint, OptArgs, AdminCtx, Insecure,
 %%--------------------------------------------------------------------
 -spec new_nulldevice_helper(args(), user_ctx(), boolean(),
     helpers:storage_path_type()) -> helpers:helper().
-new_nulldevice_helper(OptArgs, AdminCtx, Insecure, StoragePathType) ->
+new_nulldevice_helper(OptArgs, AdminCtx, _Insecure, StoragePathType) ->
     #helper{
         name = ?NULL_DEVICE_HELPER_NAME,
         args = OptArgs,
         admin_ctx = AdminCtx,
-        insecure = Insecure,
+        insecure = false,   % todo remove Insecure arg VFS-5256
         storage_path_type = StoragePathType
     }.
 
@@ -290,10 +291,30 @@ new_glusterfs_user_ctx(Uid, Gid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_webdav_user_ctx(binary(), binary()) -> user_ctx().
+new_webdav_user_ctx(CredentialsType = <<"none">>, _Credentials) ->
+    #{
+        <<"credentialsType">> => CredentialsType
+    };
 new_webdav_user_ctx(CredentialsType, Credentials) ->
     #{
         <<"credentialsType">> => CredentialsType,
         <<"credentials">> => Credentials
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs WebDAV storage helper user context record.
+%% This function is used by Onepanel to construct admin user_ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_user_ctx(binary(), binary(), binary()) -> user_ctx().
+new_webdav_user_ctx(CredentialsType, Credentials, <<>>) ->
+    new_webdav_user_ctx(CredentialsType, Credentials);
+new_webdav_user_ctx(CredentialsType, Credentials, OnedataAccessToken) ->
+    {ok, AdminId} = user_identity:get_or_fetch_user_id(OnedataAccessToken),
+    (new_webdav_user_ctx(CredentialsType, Credentials))#{
+        <<"onedataAccessToken">> => OnedataAccessToken,
+        <<"adminId">> => AdminId
     }.
 
 %%--------------------------------------------------------------------
@@ -328,7 +349,14 @@ validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
 validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
 validate_user_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, UserCtx) ->
-    check_user_or_group_ctx_fields([<<"credentialsType">>, <<"credentials">>], UserCtx);
+    % todo refactor VFS-5256
+    % todo change onedataAccessToken adminAccessToken (helpers, swagger, oneclient)
+    check_user_or_group_ctx_fields([
+        <<"credentialsType">>, {optional, <<"credentials">>},
+        {optional, <<"adminId">>},
+        {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
+        {optional, <<"accessTokenTTL">>}
+    ], UserCtx);
 validate_user_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, UserCtx) ->
     check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
 
@@ -345,7 +373,7 @@ validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
-validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, GroupCtx) ->
+validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
     ok;
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
     {error, {group_ctx_not_supported, HelperName}}.
@@ -526,16 +554,33 @@ translate_arg_name(Name) -> Name.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether user/group context map contains only provided fields and they
-%% have valid type.
+%% Checks whether user/group context map contains only provided/optional
+%% fields and whether they have valid type.
 %% @end
 %%--------------------------------------------------------------------
--spec check_user_or_group_ctx_fields([binary()], user_ctx() | group_ctx()) ->
-    ok | {error, Reason :: term()}.
+-spec check_user_or_group_ctx_fields([binary() | optional_field()],
+    user_ctx() | group_ctx()) -> ok | {error, Reason :: term()}.
 check_user_or_group_ctx_fields([], UserCtx) ->
     case maps:size(UserCtx) of
         0 -> ok;
         _ -> {error, {invalid_additional_fields, UserCtx}}
+    end;
+check_user_or_group_ctx_fields([{optional, Field} | Fields], UserCtx) ->
+    case maps:find(Field, UserCtx) of
+        {ok, <<"null">>} ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, null} ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, <<_/binary>>} ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} when is_integer(Value) ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} ->
+            % Field has invalid type (other than integer/binary)
+            {error, {invalid_field_value, Field, Value}};
+        error ->
+            % Field is optional so ignore it
+            check_user_or_group_ctx_fields(Fields, UserCtx)
     end;
 check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
     case maps:find(Field, UserCtx) of
@@ -546,6 +591,7 @@ check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
         {ok, Value} when is_integer(Value) ->
             check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
         {ok, Value} ->
+            % Field has invalid type (other than integer/binary)
             {error, {invalid_field_value, Field, Value}};
         error ->
             {error, {missing_field, Field}}

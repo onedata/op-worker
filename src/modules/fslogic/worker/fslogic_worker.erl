@@ -24,7 +24,6 @@
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
-% for tests
 
 %%%===================================================================
 %%% Types
@@ -114,6 +113,7 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
+    fslogic_delete:delete_all_opened_files(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -217,11 +217,6 @@ init_report() ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
-
-
-%%%===================================================================
-%%% functions exported for tests
-%%%===================================================================
 
 %%%===================================================================
 %%% Internal functions

@@ -163,7 +163,7 @@ register_release(FileCtx, SessId, Count) ->
             end;
         {error, removed} ->
             session_open_files:deregister(SessId, FileGuid),
-            fslogic_deletion_worker:request_open_file_deletion(FileCtx),
+            fslogic_delete:remove_opened_file(FileCtx),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
             ok;
