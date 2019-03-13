@@ -195,7 +195,7 @@ handle_cast(#client_message{} = Msg, State) ->
     {noreply, NewState};
 
 handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
-    case get_sequencer_out_stream(Msg#server_message{proxy_session_id = SessionId}, State) of
+    case get_sequencer_out_stream(Msg#server_message{effective_session_id = SessionId}, State) of
         {ok, SeqStm} -> sequencer_out_stream:send(SeqStm, Msg);
         {error, not_found} -> ok
     end,

@@ -53,12 +53,12 @@ reroute(UserCtx, ProviderId, Request) ->
 
     SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
 
-    ProxySessionId = user_ctx:get_session_id(UserCtx),
+    EffSessionId = user_ctx:get_session_id(UserCtx),
     Auth = user_ctx:get_auth(UserCtx),
     Msg = #client_message{
         message_body = Request,
-        proxy_session_id = ProxySessionId,
-        proxy_session_auth = Auth
+        effective_session_id = EffSessionId,
+        effective_session_auth = Auth
     },
 
     {ok, #server_message{

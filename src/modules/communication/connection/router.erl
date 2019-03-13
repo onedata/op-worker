@@ -48,11 +48,11 @@
 -spec effective_session_id(client_message()) -> session:id().
 effective_session_id(#client_message{
     session_id = SessionId,
-    proxy_session_id = undefined
+    effective_session_id = undefined
 }) ->
     SessionId;
-effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
-    ProxySessionId.
+effective_session_id(#client_message{effective_session_id = EffSessionId}) ->
+    EffSessionId.
 
 
 %%--------------------------------------------------------------------

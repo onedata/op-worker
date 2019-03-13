@@ -371,8 +371,8 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
-        proxy_session_id = SessId,
-        proxy_session_auth = Auth
+        effective_session_id = SessId,
+        effective_session_auth = Auth
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -398,8 +398,8 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
         session_utils:get_provider_session_id(outgoing, ProviderId),
         #client_message{
             message_body = Request,
-            proxy_session_id = SessId,
-            proxy_session_auth = Auth
+            effective_session_id = SessId,
+            effective_session_auth = Auth
         },
         StreamId, undefined
     ),

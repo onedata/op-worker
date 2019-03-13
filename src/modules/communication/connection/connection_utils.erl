@@ -56,10 +56,10 @@ fill_proxy_info(Msg, SessionId) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{proxy_via = PV}}} when is_binary(PV) ->
             case Msg of
-                #server_message{proxy_session_id = undefined} ->
-                    Msg#server_message{proxy_session_id = SessionId};
-                #client_message{proxy_session_id = undefined} ->
-                    Msg#client_message{proxy_session_id = SessionId};
+                #server_message{effective_session_id = undefined} ->
+                    Msg#server_message{effective_session_id = SessionId};
+                #client_message{effective_session_id = undefined} ->
+                    Msg#client_message{effective_session_id = SessionId};
                 _ ->
                     Msg
             end;
@@ -75,11 +75,11 @@ fill_proxy_info(Msg, SessionId) ->
 %%--------------------------------------------------------------------
 -spec maybe_create_proxy_session(od_provider:id(), #client_message{}) -> ok.
 maybe_create_proxy_session(ProviderId, #client_message{
-    proxy_session_id = ProxySessionId,
-    proxy_session_auth = Auth
-}) when ProxySessionId =/= undefined ->
+    effective_session_id = EffSessionId,
+    effective_session_auth = Auth
+}) when EffSessionId =/= undefined ->
     {ok, _} = session_manager:reuse_or_create_proxy_session(
-        ProxySessionId, ProviderId, Auth, fuse
+        EffSessionId, ProviderId, Auth, fuse
     ),
     ok;
 maybe_create_proxy_session(_, _) ->

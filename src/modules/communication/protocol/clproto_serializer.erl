@@ -53,7 +53,7 @@ deserialize_client_message(Message, SessionId) ->
         message_id = MsgId,
         message_stream = MsgStm,
         message_body = {_, MsgBody},
-        proxy_session_id = PSessID,
+        proxy_session_id = EffSessionId,
         proxy_session_macaroon = PToken
     } = DecodedMsg,
 
@@ -62,8 +62,8 @@ deserialize_client_message(Message, SessionId) ->
         message_id = DecodedId,
         message_stream = clproto_translator:translate_from_protobuf(MsgStm),
         session_id = SessionId,
-        proxy_session_id = PSessID,
-        proxy_session_auth = clproto_translator:translate_from_protobuf(PToken),
+        effective_session_id = EffSessionId,
+        effective_session_auth = clproto_translator:translate_from_protobuf(PToken),
         message_body = clproto_translator:translate_from_protobuf(MsgBody)
     }}.
 
@@ -82,7 +82,7 @@ deserialize_server_message(Message, SessionId) ->
         message_id = MsgId,
         message_stream = MsgStm,
         message_body = {_, MsgBody},
-        proxy_session_id = ProxySessionId
+        proxy_session_id = EffSessionId
     } = DecodedMsg,
 
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
@@ -90,8 +90,8 @@ deserialize_server_message(Message, SessionId) ->
         message_id = DecodedId,
         message_stream = clproto_translator:translate_from_protobuf(MsgStm),
         message_body = clproto_translator:translate_from_protobuf(MsgBody),
-        proxy_session_id = utils:ensure_defined(
-            ProxySessionId, undefined, SessionId
+        effective_session_id = utils:ensure_defined(
+            EffSessionId, undefined, SessionId
         )
     }}.
 
@@ -107,7 +107,7 @@ serialize_server_message(#server_message{
     message_id = MsgId,
     message_stream = MsgStm,
     message_body = MsgBody,
-    proxy_session_id = SessionId
+    effective_session_id = EffSessionId
 }, VerifyMsg) ->
 
     {ok, EncodedId} = clproto_message_id:encode(MsgId),
@@ -115,7 +115,7 @@ serialize_server_message(#server_message{
         message_id = EncodedId,
         message_stream = clproto_translator:translate_to_protobuf(MsgStm),
         message_body = clproto_translator:translate_to_protobuf(MsgBody),
-        proxy_session_id = SessionId
+        proxy_session_id = EffSessionId
     },
 
     case VerifyMsg of
@@ -143,8 +143,8 @@ serialize_server_message(#server_message{
 serialize_client_message(#client_message{
     message_id = MsgId,
     message_stream = MsgStm,
-    proxy_session_id = PSessID,
-    proxy_session_auth = Auth,
+    effective_session_id = EffSessionId,
+    effective_session_auth = Auth,
     message_body = MsgBody
 }, VerifyMsg) ->
 
@@ -153,7 +153,7 @@ serialize_client_message(#client_message{
         message_id = EncodedId,
         message_stream = clproto_translator:translate_to_protobuf(MsgStm),
         message_body = clproto_translator:translate_to_protobuf(MsgBody),
-        proxy_session_id = PSessID,
+        proxy_session_id = EffSessionId,
         proxy_session_macaroon = clproto_translator:translate_to_protobuf(Auth)
     },
 
