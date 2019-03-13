@@ -907,7 +907,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     invalidate_cache_for_all_storages(Worker),
-    ok = test_utils:mock_unload(Workers, [http_client, luma_proxy, luma, space_storage, storage]).
+    ok = test_utils:mock_unload(Workers, [http_client, luma_proxy, luma,
+        space_storage, storage, reverse_luma_proxy, idp_access_token]).
 
 %%%===================================================================
 %%% Internal functions
