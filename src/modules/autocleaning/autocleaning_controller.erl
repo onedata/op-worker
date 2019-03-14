@@ -25,7 +25,7 @@
 
 %% API
 -export([start/3, stop_cleaning/1, process_replica_deletion_result/4, check/1,
-    notify_processed_file/2, restart/3]).
+    notify_processed_file/2, restart/3, replica_deletion_predicate/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -39,7 +39,7 @@
 -define(SERVER(SpaceId), {global, {?SERVER, SpaceId}}).
 
 -record(state, {
-    autocleaning_run_id :: autocleaning_run:id(),
+    autocleaning_run_id :: autocleaning:run_id(),
     space_id :: od_space:id(),
     config :: autocleaning:config(),
 
@@ -76,7 +76,7 @@
 }).
 
 -type batch_id() :: binary().
--type run_id() :: autocleaning_run:id().
+-type run_id() :: autocleaning:run_id().
 -type batch_num() :: non_neg_integer().
 -type state() :: #state{}.
 -type batch_counters() :: #batch_counters{}.
@@ -154,7 +154,7 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec start(od_space:id(), autocleaning:config(), non_neg_integer()) ->
-    {ok, autocleaning_run:id()} | {error, term()}.
+    {ok, autocleaning:run_id()} | {error, term()}.
 start(SpaceId, Config, CurrentSize) ->
     Target = autocleaning_config:get_target(Config),
     BytesToRelease = CurrentSize - Target,
@@ -177,7 +177,7 @@ start(SpaceId, Config, CurrentSize) ->
             Other
     end.
 
--spec restart(autocleaning_run:id(), od_space:id(), autocleaning:config()) ->
+-spec restart(autocleaning:run_id(), od_space:id(), autocleaning:config()) ->
     {ok, autocleaning:run_id()} | ok.
 restart(ARId, SpaceId, Config) ->
     case autocleaning_run:get(ARId) of
@@ -236,29 +236,48 @@ check(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
+%% This function is called by replica_deletion_worker to ensure
+%% whether it should delete file replica.
+%% @end
+%%-------------------------------------------------------------------
+-spec replica_deletion_predicate(autocleaning:run_id()) -> any().
+replica_deletion_predicate(ReportId) ->
+    {ARId, _BatchNum} = from_batch_id(ReportId),
+    {ok, #{
+        released_bytes := Released,
+        bytes_to_release := ToRelease
+    }} = autocleaning_api:get_run_report(ARId),
+    Released < ToRelease.
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Posthook executed by replica_deletion_worker after deleting file
 %% replica.
 %% @end
 %%-------------------------------------------------------------------
 -spec process_replica_deletion_result(replica_deletion:result(), od_space:id(),
-    file_meta:uuid(), autocleaning_run:id()) -> ok.
+    file_meta:uuid(), autocleaning:run_id()) -> ok.
 process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, ReportId) ->
     {ARId, BatchNum} = from_batch_id(ReportId),
     ?debug("Auto-cleaning of file ~p in run ~p released ~p bytes.",
         [FileUuid, ARId, ReleasedBytes]),
     autocleaning_run:mark_released_file(ARId, ReleasedBytes),
     notify_released_file(SpaceId, ReleasedBytes, BatchNum);
+process_replica_deletion_result({error, precondition_not_satisfied},
+    SpaceId, _FileUuid, ReportId
+) ->
+    notify_processed_file(SpaceId,ReportId);
 process_replica_deletion_result(Error, SpaceId, FileUuid, ReportId) ->
     {ARId, _BatchNum} = from_batch_id(ReportId),
     ?error("Error ~p occured during auto-cleanig of file ~p in run ~p",
         [Error, FileUuid, ARId]),
     notify_processed_file(SpaceId,ReportId).
 
--spec to_batch_id(autocleaning_run:id(), non_neg_integer()) -> batch_id().
+-spec to_batch_id(autocleaning:run_id(), non_neg_integer()) -> batch_id().
 to_batch_id(ARId, Int) ->
     <<ARId/binary, ?ID_SEPARATOR/binary, (integer_to_binary(Int))/binary>>.
 
--spec from_batch_id(batch_id()) -> {autocleaning_run:id(), non_neg_integer()}.
+-spec from_batch_id(batch_id()) -> {autocleaning:run_id(), non_neg_integer()}.
 from_batch_id(BatchId) ->
     [ARId, BatchNum] = binary:split(BatchId, ?ID_SEPARATOR),
     {ARId, binary_to_integer(BatchNum)}.
