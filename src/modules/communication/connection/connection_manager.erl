@@ -10,15 +10,15 @@
 %%% monitors processing of asynchronous requests and mediates when sending
 %%% responses.
 %%%
-%%% When connection receives more advanced request it delegates execution to
-%%% appropriate worker and notifies connection manager about pending request.
-%%% It is done using cast to avoid deadlock (connection manager may be trying
-%%% to send message via this connection).
+%%% When connection receives a possibly time-consuming request it delegates
+%%% execution to appropriate worker and notifies connection manager about
+%%% pending request. It is done using cast to avoid deadlock (connection
+%%% manager may be trying to send message via this connection).
 %%% While task is being handled by worker, connection manager periodically
-%%% checks his status. If it is still alive heartbeat message is being send
+%%% checks its status. If it is still alive heartbeat message is being send
 %%% to client informing him that his request is still being processed.
 %%% In case it is dead, error message is send instead.
-%%% Once worker finishes it's task, it calls connection manager to withheld
+%%% Once worker finishes its task, it calls connection manager to withhold
 %%% sending heartbeats for this task and tries to send response via the same
 %%% connection the request came. If it is not possible, due to some errors,
 %%% it tries sending via other connections of client session. If all goes well
@@ -31,7 +31,7 @@
 -behaviour(gen_server).
 
 -include("timeouts.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -72,9 +72,15 @@
 -type req_id() :: {reference(), clproto_message_id:id()}.
 -type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
 
+% Heartbeat messages are sent to client periodically to inform him that
+% his requests are still carried on (generally sent by incoming connections).
 -define(WORKERS_STATUS_CHECK_INTERVAL, application:get_env(
     ?APP_NAME, router_processes_check_interval, timer:seconds(10)
 )).
+-define(RESPONSE_AWAITING_PERIOD, 3 * ?WORKERS_STATUS_CHECK_INTERVAL).
+
+% Keepalive messages are sent to peer periodically to keep connection alive
+% (used by outgoing connections).
 -define(KEEPALIVE_TIMEOUT, timer:seconds(60)).
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
@@ -209,9 +215,9 @@ report_pending_request(SessionId, Pid, ReqId) ->
 %%--------------------------------------------------------------------
 -spec respond(reply_to(), req_id(), term()) -> ok | {error, term()}.
 respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
-    case withheld_heartbeats(ConnManager, ReqId) of
+    case withhold_heartbeats(ConnManager, ReqId) of
         ok ->
-            Response = prepare_response(MsgId, Ans),
+            Response = build_response(MsgId, Ans),
             case respond_internal(Conn, SessionId, Response) of
                 ok ->
                     report_response_sent(ConnManager, ReqId);
@@ -252,14 +258,11 @@ respond(SessionId, ReqId, Ans) ->
 -spec init(Args :: term()) ->
     {ok, state()} | {ok, state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessId, SetKeepaliveTimeout]) ->
+init([SessionId, EnableKeepalive]) ->
     process_flag(trap_exit, true),
-    Self = self(),
-    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
-        {ok, Session#session{connection_manager = Self}}
-    end),
-    maybe_set_keepalive_timeout(SetKeepaliveTimeout),
-    {ok, #state{session_id = SessId}}.
+    ok = session:set_connection_manager(SessionId, self()),
+    EnableKeepalive andalso schedule_keepalive_msg(),
+    {ok, #state{session_id = SessionId}}.
 
 
 %%--------------------------------------------------------------------
@@ -275,7 +278,7 @@ init([SessId, SetKeepaliveTimeout]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({withheld_heartbeats, Pid, ReqId}, _From, #state{
+handle_call({withhold_heartbeats, Pid, ReqId}, _From, #state{
     pending_requests = PendingReqs,
     unreported_requests = UnreportedReqs,
     withheld_heartbeats = WithheldHeartbeats
@@ -374,7 +377,7 @@ handle_info(keepalive, #state{session_id = SessionId} = State) ->
             ?error("Failed to fetch connection to send keepalives because "
                    "of: ~p", [Error])
     end,
-    maybe_set_keepalive_timeout(true),
+    schedule_keepalive_msg(),
     {noreply, State};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -419,19 +422,19 @@ code_change(_OldVsn, State, _Extra) ->
 send_msg_internal(SessionId, Msg, ExcludedCons) ->
     case session_connections:get_connections(SessionId) of
         {ok, Cons} ->
-            send_in_loop(Msg, utils:random_shuffle(Cons -- ExcludedCons));
+            send_via_any(Msg, utils:random_shuffle(Cons -- ExcludedCons));
         Error ->
             Error
     end.
 
 
 %% @private
--spec send_in_loop(message(), [pid()]) -> ok | {error, term()}.
-send_in_loop(_Msg, []) ->
+-spec send_via_any(message(), [pid()]) -> ok | {error, term()}.
+send_via_any(_Msg, []) ->
     {error, no_connections};
-send_in_loop(Msg, [Conn]) ->
+send_via_any(Msg, [Conn]) ->
     connection:send_msg(Conn, Msg);
-send_in_loop(Msg, [Conn | Cons]) ->
+send_via_any(Msg, [Conn | Cons]) ->
     case connection:send_msg(Conn, Msg) of
         ok ->
             ok;
@@ -440,14 +443,13 @@ send_in_loop(Msg, [Conn | Cons]) ->
         {error, sending_msg_via_wrong_connection} = WrongConnError ->
             WrongConnError;
         _Error ->
-            send_in_loop(Msg, Cons)
+            send_via_any(Msg, Cons)
     end.
 
 
 %% @private
 -spec await_response(message()) -> {ok, message()} | {error, timeout}.
 await_response(#client_message{message_id = MsgId} = Msg) ->
-    Timeout = 3 * ?WORKERS_STATUS_CHECK_INTERVAL,
     receive
         #server_message{
             message_id = MsgId,
@@ -456,7 +458,7 @@ await_response(#client_message{message_id = MsgId} = Msg) ->
             await_response(Msg);
         #server_message{message_id = MsgId} = ServerMsg ->
             {ok, ServerMsg}
-    after Timeout ->
+    after ?RESPONSE_AWAITING_PERIOD ->
         {error, timeout}
     end;
 await_response(#server_message{message_id = MsgId}) ->
@@ -470,14 +472,14 @@ await_response(#server_message{message_id = MsgId}) ->
 
 
 %% @private
--spec prepare_response(clproto_message_id:id(), {ok, term()} | term()) ->
+-spec build_response(clproto_message_id:id(), {ok, term()} | term()) ->
     server_message().
-prepare_response(MsgId, {ok, Ans}) ->
+build_response(MsgId, {ok, Ans}) ->
     #server_message{
         message_id = MsgId,
         message_body = Ans
     };
-prepare_response(MsgId, ErrorAns) ->
+build_response(MsgId, ErrorAns) ->
     ?error("Error while handling request with id ~p due to ~p", [
         MsgId, ErrorAns
     ]),
@@ -488,10 +490,10 @@ prepare_response(MsgId, ErrorAns) ->
 
 
 %% @private
--spec withheld_heartbeats(ConnManager :: pid(), req_id()) ->
+-spec withhold_heartbeats(ConnManager :: pid(), req_id()) ->
     ok | {error, term()}.
-withheld_heartbeats(ConnManager, ReqId) ->
-    call_conn_manager(ConnManager, {withheld_heartbeats, self(), ReqId}).
+withhold_heartbeats(ConnManager, ReqId) ->
+    call_conn_manager(ConnManager, {withhold_heartbeats, self(), ReqId}).
 
 
 %% @private
@@ -561,12 +563,12 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
                 ?error("ConnManager: process ~p connected with req_id ~p is dead",
                     [Pid, ReqId]
                 ),
-                send_in_loop(?ERROR_MSG(MsgId), Cons),
+                send_via_any(?ERROR_MSG(MsgId), Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
                 case SendHeartbeats of
                     true ->
-                        send_in_loop(?HEARTBEAT_MSG(MsgId), Cons);
+                        send_via_any(?HEARTBEAT_MSG(MsgId), Cons);
                     false ->
                         ok
                 end,
@@ -598,9 +600,6 @@ set_heartbeat_timer(State) ->
 
 
 %% @private
--spec maybe_set_keepalive_timeout(SetTimeout :: boolean()) ->
-    TimerRef :: reference().
-maybe_set_keepalive_timeout(true) ->
-    erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive);
-maybe_set_keepalive_timeout(false) ->
-    ok.
+-spec schedule_keepalive_msg() -> TimerRef :: reference().
+schedule_keepalive_msg() ->
+    erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive).

@@ -52,51 +52,59 @@ start_link(SessId, SessType) ->
 -spec init(Args :: term()) ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([SessId, SessType]) ->
-    SupFlags = #{strategy => one_for_all, intensity => 0, period => 1},
     Self = self(),
     Node = node(),
     {ok, _} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{supervisor = Self, node = Node}}
     end),
 
-    SequencerEnabled = [fuse, provider_outgoing],
-
-    case SessType of
-        root ->
-            {ok, {SupFlags, [
-                event_manager_sup_spec(SessId)
-            ]}};
-        guest ->
-            {ok, {SupFlags, [
-                event_manager_sup_spec(SessId)
-            ]}};
-        provider_incoming ->
-            {ok, {SupFlags, [
-                session_watcher_spec(SessId, SessType),
-                connection_manager_spec(SessId, false),
-                event_manager_sup_spec(SessId)
-            ]}};
-        _ ->
-            case lists:member(SessType, SequencerEnabled) of
-                true ->
-                    SetKeepaliveTimeout = SessType =:= provider_outgoing,
-                    {ok, {SupFlags, [
-                        session_watcher_spec(SessId, SessType),
-                        connection_manager_spec(SessId, SetKeepaliveTimeout),
-                        sequencer_manager_sup_spec(SessId),
-                        event_manager_sup_spec(SessId)
-                    ]}};
-                _ ->
-                    {ok, {SupFlags, [
-                        session_watcher_spec(SessId, SessType),
-                        event_manager_sup_spec(SessId)
-                    ]}}
-            end
-    end.
+    SupFlags = #{
+        strategy => one_for_all,
+        intensity => 0,
+        period => 1
+    },
+    {ok, {SupFlags, child_specs(SessId, SessType)}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a list of all child_spec necessary for given session type.
+%% @end
+%%--------------------------------------------------------------------
+-spec child_specs(session:id(), session:type()) -> [supervisor:child_spec()].
+child_specs(SessId, root) ->
+    [event_manager_sup_spec(SessId)];
+child_specs(SessId, guest) ->
+    [event_manager_sup_spec(SessId)];
+child_specs(SessId, provider_incoming) ->
+    [
+        session_watcher_spec(SessId, provider_incoming),
+        connection_manager_spec(SessId, false),
+        event_manager_sup_spec(SessId)
+    ];
+child_specs(SessId, provider_outgoing) ->
+    [
+        session_watcher_spec(SessId, provider_outgoing),
+        connection_manager_spec(SessId, true),
+        sequencer_manager_sup_spec(SessId),
+        event_manager_sup_spec(SessId)
+    ];
+child_specs(SessId, fuse) ->
+    [
+        session_watcher_spec(SessId, fuse),
+        connection_manager_spec(SessId, false),
+        sequencer_manager_sup_spec(SessId),
+        event_manager_sup_spec(SessId)
+    ];
+child_specs(SessId, SessType) ->
+    [
+        session_watcher_spec(SessId, SessType),
+        event_manager_sup_spec(SessId)
+    ].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -129,7 +137,7 @@ connection_manager_spec(SessId, SetKeepaliveTimeout) ->
     #{
         id => connection_manager,
         start => {connection_manager, start_link, StartLinkArgs},
-        restart => transient,
+        restart => permanent,
         shutdown => timer:seconds(10),
         type => worker,
         modules => [connection_manager]

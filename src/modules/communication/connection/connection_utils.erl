@@ -20,8 +20,8 @@
 
 %% API
 -export([
-    fill_proxy_info/2,
-    maybe_create_proxy_session/2
+    fill_effective_session_info/2,
+    maybe_create_proxied_session/2
 ]).
 -export([
     get_next_reconnect/2,
@@ -51,8 +51,8 @@
 %% Fills message with info about session to which it should be proxied.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_proxy_info(message(), session:id()) -> message().
-fill_proxy_info(Msg, SessionId) ->
+-spec fill_effective_session_info(message(), session:id()) -> message().
+fill_effective_session_info(Msg, SessionId) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{proxy_via = PV}}} when is_binary(PV) ->
             case Msg of
@@ -73,16 +73,16 @@ fill_proxy_info(Msg, SessionId) ->
 %% Creates proxy session if requested by peer.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_create_proxy_session(od_provider:id(), #client_message{}) -> ok.
-maybe_create_proxy_session(ProviderId, #client_message{
+-spec maybe_create_proxied_session(od_provider:id(), #client_message{}) -> ok.
+maybe_create_proxied_session(ProviderId, #client_message{
     effective_session_id = EffSessionId,
     effective_session_auth = Auth
 }) when EffSessionId =/= undefined ->
-    {ok, _} = session_manager:reuse_or_create_proxy_session(
+    {ok, _} = session_manager:reuse_or_create_proxied_session(
         EffSessionId, ProviderId, Auth, fuse
     ),
     ok;
-maybe_create_proxy_session(_, _) ->
+maybe_create_proxied_session(_, _) ->
     ok.
 
 

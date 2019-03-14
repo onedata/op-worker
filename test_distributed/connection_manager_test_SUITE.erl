@@ -14,7 +14,7 @@
 
 -include("fuse_utils.hrl").
 -include("global_definitions.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -59,7 +59,7 @@
     closing_last_connection_should_cancel_all_session_transfers_test/1
 ]).
 
--define(NORMAL_CASES_NAMES, [
+-define(NORMAL_CASES, [
     response_test,
 
     fallback_during_sending_response_because_of_connection_close_test,
@@ -79,11 +79,11 @@
     closing_last_connection_should_cancel_all_session_transfers_test
 ]).
 
--define(PERFORMANCE_CASES_NAMES, []).
+-define(PERFORMANCE_CASES, []).
 
-all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
+all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 
--define(assertMatchTwo(Guard1, Guard2, Expr),
+-define(assertMatchAny(Guard1, Guard2, Expr),
     begin
         ((fun() ->
             case (Expr) of
@@ -104,9 +104,6 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
         end)())
     end).
 
--define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
-    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
-
 -record(file_handle, {
     handle :: helpers_nif:file_handle(),
     timeout :: timeout()
@@ -124,17 +121,17 @@ response_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
-    {ok, {_Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {_Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
 
     MsgId = <<"1">>,
-    Ping = fuse_utils:generate_ping_message(MsgId),
+    Ping = fuse_test_utils:generate_ping_message(MsgId),
     ssl:send(Sock1, Ping),
 
     ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {pong, #'Pong'{}}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     ok.
 
@@ -145,13 +142,13 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
 
     SessionId = crypto:strong_rand_bytes(10),
     % Create a couple of connections within the same session
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock4, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock5, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock3, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock4, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock5, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
 
-    Ping = fuse_utils:generate_ping_message(),
+    Ping = fuse_test_utils:generate_ping_message(),
 
     % Send requests via each of 5 connections, immediately close four of them
     ok = ssl:send(Sock1, Ping),
@@ -165,7 +162,7 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
     lists:foreach(fun(_) ->
         ?assertMatch(#'ServerMessage'{
             message_body = {pong, #'Pong'{}}
-        }, fuse_utils:receive_server_message())
+        }, fuse_test_utils:receive_server_message())
     end, lists:seq(1, 5)),
 
     ok = ssl:close(Sock1).
@@ -175,18 +172,18 @@ fallback_during_sending_response_because_of_connection_error_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
 
-    mock_ranch_ssl(?FUNCTION_NAME, Worker1),
+    mock_ranch_ssl(Worker1),
     MsgId = <<"1">>,
-    Ping = fuse_utils:generate_ping_message(MsgId),
+    Ping = fuse_test_utils:generate_ping_message(MsgId),
     ssl:send(Sock1, Ping),
 
     ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {pong, #'Pong'{}}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     unmock_ranch_ssl(Worker1),
     ok = ssl:close(Sock1),
@@ -198,11 +195,11 @@ fulfill_promises_after_connection_close_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock3, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock4, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock5, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock3, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock4, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock5, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
@@ -221,7 +218,7 @@ fulfill_promises_after_connection_close_test(Config) ->
     % about pending requests. Even after connection close, the promises should
     % be handled and responses sent to other connection within the session.
     GatherResponses = fun Fun(Counter) ->
-        case fuse_utils:receive_server_message() of
+        case fuse_test_utils:receive_server_message() of
             #'ServerMessage'{
                 message_body = {processing_status, #'ProcessingStatus'{
                     code = 'IN_PROGRESS'
@@ -248,21 +245,21 @@ fulfill_promises_after_connection_error_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
     {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
 
-    mock_ranch_ssl(?FUNCTION_NAME, Workers),
+    mock_ranch_ssl(Workers),
     ok = ssl:send(Sock2, create_resolve_guid_req(Path)),
 
     % Fuse requests are handled using promises - connection process holds info
     % about pending requests. Even after connection close, the promises should
     % be handled and responses sent to other connection within the session.
     GatherResponses = fun Fun(Counter) ->
-        case fuse_utils:receive_server_message() of
+        case fuse_test_utils:receive_server_message() of
             #'ServerMessage'{
                 message_body = {processing_status, #'ProcessingStatus'{
                     code = 'IN_PROGRESS'
@@ -291,11 +288,11 @@ send_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
-    {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
 
     % In case of errors send_sync should try sending via other connections
-    mock_ranch_ssl(?FUNCTION_NAME, Workers),
+    mock_ranch_ssl(Workers),
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
         code = ?OK,
@@ -309,7 +306,7 @@ send_test(Config) ->
             code = ?OK,
             description = Description
         }}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     unmock_ranch_ssl(Worker1),
     ok = ssl:close(Sock1),
@@ -362,11 +359,11 @@ client_keepalive_test(Config) ->
     SessionId = crypto:strong_rand_bytes(10),
 
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
     % send keepalive msg and assert it will not end in decoding error
     % on provider side (following communication should succeed)
     ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
-    fuse_utils:ping(Sock),
+    fuse_test_utils:ping(Sock),
     ok = ssl:close(Sock).
 
 
@@ -376,7 +373,7 @@ heartbeats_test(Config) ->
 
     RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
 
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
@@ -387,9 +384,9 @@ heartbeats_test(Config) ->
 create_timeouts_test(Config, Sock, RootGuid) ->
     configure_cp(Config, helper_timeout),
     % send
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"2">>, <<"ctt2">>)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, <<"2">>, <<"ctt2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchTwo(
+    check_answer(fun() -> ?assertMatchAny(
         #'ServerMessage'{message_body = {
             fuse_response, #'FuseResponse'{status = #'Status'{code = eagain}
             }
@@ -397,50 +394,50 @@ create_timeouts_test(Config, Sock, RootGuid) ->
         #'ServerMessage'{message_body = {
             processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
         }, message_id = <<"2">>},
-        fuse_utils:receive_server_message()) end
+        fuse_test_utils:receive_server_message()) end
     ),
 
     configure_cp(Config, helper_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, <<"3">>, <<"ctt3">>)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, <<"3">>, <<"ctt3">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchTwo(
+    check_answer(fun() -> ?assertMatchAny(
         #'ServerMessage'{message_body = {
             fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
         }, message_id = <<"3">>},
         #'ServerMessage'{message_body = {
             processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
         }, message_id = <<"3">>},
-        fuse_utils:receive_server_message()) end,
+        fuse_test_utils:receive_server_message()) end,
         3
     ).
 
 ls_timeouts_test(Config, Sock, RootGuid) ->
     configure_cp(Config, attr_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_get_children_attrs_message(RootGuid, <<"ls2">>)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_get_children_attrs_message(RootGuid, <<"ls2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchTwo(
+    check_answer(fun() -> ?assertMatchAny(
         #'ServerMessage'{message_body = {
             fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
         }, message_id = <<"ls2">>},
         #'ServerMessage'{message_body = {
             processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
         }, message_id = <<"ls2">>},
-        fuse_utils:receive_server_message()) end,
+        fuse_test_utils:receive_server_message()) end,
         2
     ).
 
 fsync_timeouts_test(Config, Sock, RootGuid) ->
     configure_cp(Config, events_delay),
-    ok = ssl:send(Sock, fuse_utils:generate_fsync_message(RootGuid, <<"fs2">>)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_fsync_message(RootGuid, <<"fs2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchTwo(
+    check_answer(fun() -> ?assertMatchAny(
         #'ServerMessage'{message_body = {
             fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
         }, message_id = <<"fs2">>},
         #'ServerMessage'{message_body = {
             processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
         }, message_id = <<"fs2">>},
-        fuse_utils:receive_server_message()) end,
+        fuse_test_utils:receive_server_message()) end,
         2
     ).
 
@@ -453,17 +450,17 @@ socket_timeout_test(Config) ->
     initializer:remove_pending_messages(),
 
     lists:foreach(fun(MainNum) ->
-        {ok, {Sock2, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
+        {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
 
         lists:foreach(fun(Num) ->
             NumBin = integer_to_binary(Num),
             % send
-            ok = ssl:send(Sock2, fuse_utils:generate_create_file_message(RootGuid, NumBin, NumBin))
+            ok = ssl:send(Sock2, fuse_test_utils:generate_create_file_message(RootGuid, NumBin, NumBin))
         end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
 
         AnsNums = lists:foldl(fun(_Num, Acc) ->
             % receive & validate
-            M = fuse_utils:receive_server_message(),
+            M = fuse_test_utils:receive_server_message(),
             ?assertMatch(#'ServerMessage'{message_body = {
                 fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
             }}, M),
@@ -477,11 +474,11 @@ socket_timeout_test(Config) ->
         end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
 
         lists:foreach(fun(_Num) ->
-            fuse_utils:ls(Sock2, RootGuid)
+            fuse_test_utils:ls(Sock2, RootGuid)
         end, lists:seq(MainNum * 100 + 1, MainNum * 100 + 100)),
 
         timer:sleep(timer:seconds(15)),
-        ?assertMatch({error, closed}, ssl:send(Sock2, fuse_utils:generate_ping_message()))
+        ?assertMatch({error, closed}, ssl:send(Sock2, fuse_test_utils:generate_ping_message()))
 
     end, lists:seq(1, 10)).
 
@@ -499,13 +496,13 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
         meck:passthrough([FileUuid, SessId])
     end),
 
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
     % when
-    fuse_utils:create_file(Sock, RootGuid, <<"f1">>),
+    fuse_test_utils:create_file(Sock, RootGuid, <<"f1">>),
     FileGuid = get_guid(Worker1, SessionId, <<"/space_name1/f1">>),
     FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
-    fuse_utils:open(Sock, FileGuid),
+    fuse_test_utils:open(Sock, FileGuid),
     ok = ssl:close(Sock),
 
     % then
@@ -513,7 +510,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
 
     % File was opened 2 times (create and following open) so cancel should
     % also be called 2 times
-    CallsNum = lists:sum(meck_get_num_calls([Worker1], Mod, Fun, '_')),
+    CallsNum = rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'], timer:seconds(60)),
     ?assertMatch(2, CallsNum),
 
     lists:foreach(fun(Num) ->
@@ -589,9 +586,9 @@ init_per_testcase(heartbeats_test, Config) ->
     test_utils:mock_new(Workers, helpers),
     test_utils:mock_expect(Workers, helpers, apply_helper_nif, fun
         (#helper_handle{handle = Handle, timeout = Timeout}, Function, Args) ->
-            aplly_helper(Handle, Timeout, Function, Args, CP_Pid);
+            apply_helper(Handle, Timeout, Function, Args, CP_Pid);
         (#file_handle{handle = Handle, timeout = Timeout}, Function, Args) ->
-            aplly_helper(Handle, Timeout, Function, Args, CP_Pid)
+            apply_helper(Handle, Timeout, Function, Args, CP_Pid)
     end),
 
     test_utils:mock_new(Workers, attr_req),
@@ -626,7 +623,7 @@ init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
-    mock_identity(Workers),
+    mock_user_identity(Workers),
 
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"auth-macaroon">>, <<"identity-macaroon">>
@@ -679,17 +676,17 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-mock_ranch_ssl(FunName, Workers) ->
+mock_ranch_ssl(Workers) ->
+    Ref = make_ref(),
     test_utils:mock_new(Workers, ranch_ssl, [passthrough]),
     test_utils:mock_expect(Workers, ranch_ssl, send,
         fun(Msg, VerifyMsg) ->
-            case application:get_env(?APP_NAME, FunName, undefined) of
-                undefined ->
-                    application:set_env(?APP_NAME, FunName, true),
-                    {error, you_shall_not_send};
-                _ ->
-                    meck:passthrough([Msg, VerifyMsg])
-
+            case simple_cache:get(Ref) of
+                {ok, _} ->
+                    meck:passthrough([Msg, VerifyMsg]);
+                {error, not_found} ->
+                    simple_cache:put(Ref, true),
+                    {error, you_shall_not_send}
             end
         end
     ).
@@ -712,7 +709,7 @@ prolong_msg_routing(Workers) ->
     test_utils:mock_new(Workers, router),
     test_utils:mock_expect(Workers, router, route_message,
         fun(Msg, ReplyTo) ->
-            timer:sleep(5000),
+            timer:sleep(timer:seconds(5)),
             meck:passthrough([Msg, ReplyTo])
         end
     ).
@@ -746,7 +743,7 @@ communicate(Node, SessionId, Msg) ->
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
     {ok, {Sock :: ssl:socket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
-    {ok, {Sock, SessionId}} = fuse_utils:connect_via_macaroon(NodeToConnect, []),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server
@@ -776,15 +773,6 @@ spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}}.
 
 
-mock_identity(Workers) ->
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-            {ok, #document{value = #user_identity{}}}
-        end
-    ).
-
-
 %%%===================================================================
 %%% Test helper functions
 %%%===================================================================
@@ -808,10 +796,11 @@ check_answer(AsertFun, HeartbeatNum, MinHeartbeatNum) ->
     end.
 
 get_guid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #guid{guid = Guid}} =
+    Req = #fuse_request{fuse_request = #resolve_guid{path = Path}},
+    {ok, #fuse_response{fuse_response = #guid{guid = Guid}}} =
         ?assertMatch(
-            #fuse_response{status = #status{code = ?OK}},
-            ?req(Worker, SessId, #resolve_guid{path = Path}),
+            {ok, #fuse_response{status = #status{code = ?OK}}},
+            rpc:call(Worker, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, Req}]),
             30
         ),
     Guid.
@@ -851,7 +840,7 @@ get_cp_settings(CP_Pid) ->
         {value, Value} -> Value
     end.
 
-aplly_helper(Handle, Timeout, Function, Args, CP_Pid) ->
+apply_helper(Handle, Timeout, Function, Args, CP_Pid) ->
     case get_cp_settings(CP_Pid) of
         helper_timeout ->
             helpers:receive_loop(make_ref(), Timeout);
@@ -897,8 +886,3 @@ heartbeat(N, Master, ResponseRef) ->
     timer:sleep(timer:seconds(10)),
     Master ! {ResponseRef, heartbeat},
     heartbeat(N - 1, Master, ResponseRef).
-
-meck_get_num_calls(Nodes, Module, Fun, Args) ->
-    lists:map(fun(Node) ->
-        rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
-    end, Nodes).

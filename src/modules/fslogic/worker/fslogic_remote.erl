@@ -52,7 +52,6 @@ reroute(UserCtx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
 
     SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
-
     EffSessionId = user_ctx:get_session_id(UserCtx),
     Auth = user_ctx:get_auth(UserCtx),
     Msg = #client_message{

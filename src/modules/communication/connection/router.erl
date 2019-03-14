@@ -12,7 +12,7 @@
 -module(router).
 -author("Tomasz Lichon").
 
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").

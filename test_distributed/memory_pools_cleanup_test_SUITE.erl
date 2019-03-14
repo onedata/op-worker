@@ -11,7 +11,7 @@
 -module(memory_pools_cleanup_test_SUITE).
 -author("Michal Stanisz").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include_lib("clproto/include/messages.hrl").

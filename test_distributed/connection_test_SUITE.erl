@@ -12,9 +12,9 @@
 -module(connection_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -70,7 +70,7 @@
     bandwidth_test2_base/1
 ]).
 
--define(NORMAL_CASES_NAMES, [
+-define(NORMAL_CASES, [
     provider_connection_test,
     client_connection_test,
     python_client_test,
@@ -93,7 +93,7 @@
     socket_error_should_terminate_connection
 ]).
 
--define(PERFORMANCE_CASES_NAMES, [
+-define(PERFORMANCE_CASES, [
     python_client_test,
     multi_connection_test,
     sequential_ping_pong_test,
@@ -102,7 +102,7 @@
     bandwidth_test2
 ]).
 
-all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
+all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 
 -define(CORRECT_PROVIDER_ID, <<"correct-iden-mac">>).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).

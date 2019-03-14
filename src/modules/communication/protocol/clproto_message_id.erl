@@ -12,7 +12,7 @@
 -module(clproto_message_id).
 -author("Tomasz Lichon").
 
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 
 %% API
 -export([generate/1, generate/2, encode/1, decode/1]).

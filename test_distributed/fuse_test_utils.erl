@@ -9,13 +9,13 @@
 %%% Utility functions for tests using fuse client
 %%% @end
 %%%-------------------------------------------------------------------
--module(fuse_utils).
+-module(fuse_test_utils).
 -author("Michal Stanisz").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").

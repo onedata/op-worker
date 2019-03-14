@@ -21,7 +21,7 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
--export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
+-export([reuse_or_create_provider_session/4, reuse_or_create_proxied_session/4]).
 -export([create_gui_session/2, create_root_session/0, create_guest_session/0]).
 -export([remove_session/1]).
 
@@ -97,10 +97,10 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 %% Creates or reuses proxy session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(),
+-spec reuse_or_create_proxied_session(SessId :: session:id(), ProxyVia :: oneprovider:id(),
     Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
-reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
+reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     {ok, #document{value = #user_identity{} = Iden}} = user_identity:get_or_fetch(Auth),
     reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia).
 

@@ -52,7 +52,7 @@ get_random_connection(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_connections(session:id()) -> {ok, [Conn :: pid()]} | {error, term()}.
 get_connections(SessId) ->
-    case get_effective_session(SessId) of
+    case get_proxy_session(SessId) of
         {ok, #session{connections = Cons}} ->
             {ok, Cons};
         Error ->
@@ -67,7 +67,7 @@ get_connections(SessId) ->
 -spec get_connection_manager(session:id()) ->
     {ok, Con :: pid()} | {error, Reason :: term()}.
 get_connection_manager(SessId) ->
-    case get_effective_session(SessId) of
+    case get_proxy_session(SessId) of
         {ok, #session{connection_manager = undefined}} ->
             {error, no_connection_manager};
         {ok, #session{connection_manager = ConnManager}} ->
@@ -84,7 +84,7 @@ get_connection_manager(SessId) ->
 -spec get_random_conn_and_conn_manager(session:id()) ->
     {ok, Con :: pid(), ConnManager :: pid()} | {error, Reason :: term()}.
 get_random_conn_and_conn_manager(SessId) ->
-    case get_effective_session(SessId) of
+    case get_proxy_session(SessId) of
         {ok, #session{connections = []}} ->
             {error, no_connections};
         {ok, #session{connection_manager = undefined}} ->
@@ -93,22 +93,6 @@ get_random_conn_and_conn_manager(SessId) ->
             {ok, utils:random_element(Cons), ConnManager};
         Error ->
             Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns effective session, that is session, which is not proxied.
-%% @end
-%%--------------------------------------------------------------------
-get_effective_session(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
-            ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
-            get_effective_session(ProxyViaSession);
-        {ok, #document{value = Sess}} ->
-            {ok, Sess};
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -218,3 +202,19 @@ ensure_connected(SessId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns effective session, that is session, which is not proxied.
+%% @end
+%%--------------------------------------------------------------------
+get_proxy_session(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
+            ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
+            get_proxy_session(ProxyViaSession);
+        {ok, #document{value = Sess}} ->
+            {ok, Sess};
+        {error, Reason} ->
+            {error, Reason}
+    end.

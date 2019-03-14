@@ -85,6 +85,7 @@
 
 -include("timeouts.hrl").
 -include("http/gui_paths.hrl").
+-include("http/rest/http_status.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -437,14 +438,14 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
             Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, HandlerOpts}},
             {ok, Req, Env};
         {error, upgrade_required} ->
-            NewReq = cowboy_req:reply(426, #{
+            NewReq = cowboy_req:reply(?HTTP_426_UPGRADE_REQUIRED, #{
                 <<"connection">> => <<"Upgrade">>,
                 <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->
         ?debug("Invalid protocol upgrade request - ~p:~p", [Type, Reason]),
-        cowboy_req:reply(400, Req),
+        cowboy_req:reply(?HTTP_400_BAD_REQUEST, Req),
         {stop, Req}
     end.
 
@@ -716,7 +717,7 @@ handle_client_message(#state{
 } = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, SessId),
-        connection_utils:maybe_create_proxy_session(PeerId, Msg),
+        connection_utils:maybe_create_proxied_session(PeerId, Msg),
         route_message(State, Msg)
     catch Type:Reason ->
         ?error("Client message handling error - ~p:~p", [Type, Reason]),

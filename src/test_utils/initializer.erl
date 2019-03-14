@@ -15,7 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
