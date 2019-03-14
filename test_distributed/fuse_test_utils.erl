@@ -118,7 +118,7 @@ connect_as_provider(Node, ProviderId, Nonce) ->
         }}
     } = ?assertMatch(#'ServerMessage'{
         message_body = {handshake_response, _}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     case Status of
         'OK' ->
@@ -155,7 +155,7 @@ connect_as_client(Node, SessId, Macaroon, Version) ->
         }}
     } = ?assertMatch(#'ServerMessage'{
         message_body = {handshake_response, _}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     case Status of
         'OK' ->
@@ -430,7 +430,7 @@ create_file(Sock, RootGuid, Filename) ->
     create_file(Sock, RootGuid, Filename, ?MSG_ID).
 
 create_file(Sock, RootGuid, Filename, MsgId) ->
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_created, #'FileCreated'{
             handle_id = HandleId,
@@ -439,20 +439,20 @@ create_file(Sock, RootGuid, Filename, MsgId) ->
     }} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
     {FileGuid, HandleId}.
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
 
 create_directory(Sock, RootGuid, Dirname, MsgId) ->
-    ok = ssl:send(Sock, fuse_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {dir, #'Dir'{uuid = DirId}}
     }}} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
     DirId.
 
 open(Conn, FileGuid) ->
@@ -539,7 +539,7 @@ ls(Conn, DirId) ->
     ls(Conn, DirId, ?MSG_ID).
 
 ls(Conn, DirId, MsgId) ->
-    ok = ssl:send(Conn, fuse_utils:generate_get_children_message(DirId, MsgId)),
+    ok = ssl:send(Conn, fuse_test_utils:generate_get_children_message(DirId, MsgId)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_children, #'FileChildren'{
             child_links = ChildLinks
@@ -549,7 +549,7 @@ ls(Conn, DirId, MsgId) ->
             status = #'Status'{code = ok}}
         },
         message_id = MsgId
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
     ChildLinks.
     
 
@@ -681,7 +681,7 @@ get_protocol_version(Conn, MsgId) ->
     }}} = ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {protocol_version, #'ProtocolVersion'{}}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     {Major, Minor}.
 
@@ -706,7 +706,7 @@ generate_rtransfer_conn_secret(Conn, MsgId) ->
     } = ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {rtransfer_conn_secret, #'RTransferConnSecret'{}}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     Secret.
 
@@ -729,7 +729,7 @@ get_rtransfer_nodes_ips(Conn, MsgId) ->
     } = ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {rtransfer_nodes_ips, #'RTransferNodesIPs'{}}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     RespNodes.
 
@@ -756,6 +756,6 @@ ping(Conn, MsgId) ->
     ?assertMatch(#'ServerMessage'{
         message_id = MsgId,
         message_body = {pong, #'Pong'{}}
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
 
     ok.

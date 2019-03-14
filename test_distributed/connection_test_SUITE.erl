@@ -246,7 +246,7 @@ multi_connection_test_base(Config) ->
 
     % when
     Connections = lists:map(fun(_) ->
-        fuse_utils:connect_via_macaroon(Worker1, [])
+        fuse_test_utils:connect_via_macaroon(Worker1, [])
     end, ConnNumbersList),
 
     % then
@@ -261,8 +261,8 @@ multi_connection_test_base(Config) ->
 protobuf_message_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
-    {Major, Minor} = fuse_utils:get_protocol_version(Sock),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {Major, Minor} = fuse_test_utils:get_protocol_version(Sock),
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
     ok = ssl:close(Sock).
@@ -296,7 +296,7 @@ sequential_ping_pong_test_base(Config) ->
     initializer:remove_pending_messages(),
 
     % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
 
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun({MsgId, Ping}) ->
@@ -307,7 +307,7 @@ sequential_ping_pong_test_base(Config) ->
         ?assertMatch(#'ServerMessage'{
             message_id = MsgId,
             message_body = {pong, #'Pong'{}}
-        }, fuse_utils:receive_server_message())
+        }, fuse_test_utils:receive_server_message())
     end, Pings),
     T2 = erlang:monotonic_time(milli_seconds),
 
@@ -356,12 +356,12 @@ multi_ping_pong_test_base(Config) ->
     [
         spawn_link(fun() ->
             % when
-            {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
+            {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}]),
             lists:foreach(fun(E) ->
                 ok = ssl:send(Sock, E)
                           end, RawPings),
             Received = lists:map(fun(_) ->
-                Pong = fuse_utils:receive_server_message(),
+                Pong = fuse_test_utils:receive_server_message(),
                 ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
                 {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
             end, MsgNumbersBin),
@@ -416,7 +416,7 @@ bandwidth_test_base(Config) ->
     end),
 
     % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
         ok = ssl:send(Sock, PacketRaw)
@@ -478,7 +478,7 @@ bandwidth_test2_base(Config) ->
     end),
 
     % when
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
     T2 = erlang:monotonic_time(milli_seconds),
@@ -500,12 +500,12 @@ rtransfer_connection_secret_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    {ok, Sock} = fuse_utils:connect_as_provider(
+    {ok, Sock} = fuse_test_utils:connect_as_provider(
         Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
     ),
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
 
-    Secret = fuse_utils:generate_rtransfer_conn_secret(Sock),
+    Secret = fuse_test_utils:generate_rtransfer_conn_secret(Sock),
     ?assert(is_binary(Secret)),
 
     ok = ssl:close(Sock).
@@ -524,12 +524,12 @@ rtransfer_nodes_ips_test(Config) ->
         [#'IpAndPort'{ip = IP, port = ExpectedPort} || IP <- ExpectedIPs]
     ),
 
-    {ok, Sock} = fuse_utils:connect_as_provider(
+    {ok, Sock} = fuse_test_utils:connect_as_provider(
         Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
     ),
 
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
-    RespNodes = fuse_utils:get_rtransfer_nodes_ips(Sock),
+    RespNodes = fuse_test_utils:get_rtransfer_nodes_ips(Sock),
 
     ?assertEqual(ExpectedNodes, RespNodes),
     ok = ssl:close(Sock).
@@ -538,7 +538,7 @@ rtransfer_nodes_ips_test(Config) ->
 sending_server_msg_via_incoming_connection_should_succeed(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, SessionId}} = fuse_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(Worker1),
 
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
@@ -557,14 +557,14 @@ sending_server_msg_via_incoming_connection_should_succeed(Config) ->
     ?assertMatch(ok, send_sync_msg(Worker1, SessionId, ServerMsgInternal)),
 
     % then
-    ?assertEqual(ServerMessageProtobuf, fuse_utils:receive_server_message()),
+    ?assertEqual(ServerMessageProtobuf, fuse_test_utils:receive_server_message()),
     ok = ssl:close(Sock).
 
 
 sending_client_msg_via_incoming_connection_should_fail(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, SessionId}} = fuse_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(Worker1),
 
     ClientMsg = #client_message{message_body = #status{
         code = ?OK,
@@ -578,7 +578,7 @@ sending_client_msg_via_incoming_connection_should_fail(Config) ->
     ),
 
     % then
-    ?assertEqual({error, timeout}, fuse_utils:receive_server_message()),
+    ?assertEqual({error, timeout}, fuse_test_utils:receive_server_message()),
 
     ok = ssl:close(Sock).
 
@@ -586,15 +586,15 @@ sending_client_msg_via_incoming_connection_should_fail(Config) ->
 errors_other_then_socket_ones_should_not_terminate_connection(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
-    Ping = fuse_utils:generate_ping_message(),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    Ping = fuse_test_utils:generate_ping_message(),
 
     lists:foreach(fun({MockFun, UnMockFun}) ->
         MockFun(Worker1),
         ssl:send(Sock, Ping),
-        ?assertEqual({error, timeout}, fuse_utils:receive_server_message()),
+        ?assertEqual({error, timeout}, fuse_test_utils:receive_server_message()),
         UnMockFun(Worker1),
-        fuse_utils:ping(Sock)
+        fuse_test_utils:ping(Sock)
     end, [
         {fun mock_client_msg_decoding/1, fun unmock_serializer/1},
         {fun mock_server_msg_encoding/1, fun unmock_serializer/1},
@@ -607,12 +607,12 @@ errors_other_then_socket_ones_should_not_terminate_connection(Config) ->
 socket_error_should_terminate_connection(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
 
     mock_ranch_ssl(Worker1),
-    Ping = fuse_utils:generate_ping_message(),
+    Ping = fuse_test_utils:generate_ping_message(),
     ssl:send(Sock, Ping),
-    ?assertEqual({error, timeout}, fuse_utils:receive_server_message()),
+    ?assertEqual({error, timeout}, fuse_test_utils:receive_server_message()),
     unmock_ranch_ssl(Worker1),
 
     ?assertMatch({error, closed}, ssl:send(Sock, Ping)),
@@ -720,7 +720,7 @@ end_per_testcase(_Case, Config) ->
 
 
 handshake_as_provider(Node, ProviderId, Nonce) ->
-    case fuse_utils:connect_as_provider(Node, ProviderId, Nonce) of
+    case fuse_test_utils:connect_as_provider(Node, ProviderId, Nonce) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';
@@ -731,7 +731,7 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
 
 handshake_as_client(Node, Macaroon, Version) ->
     SessId = crypto:strong_rand_bytes(10),
-    case fuse_utils:connect_as_client(Node, SessId, Macaroon, Version) of
+    case fuse_test_utils:connect_as_client(Node, SessId, Macaroon, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';

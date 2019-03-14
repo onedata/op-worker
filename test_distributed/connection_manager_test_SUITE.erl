@@ -12,7 +12,7 @@
 -module(connection_manager_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
