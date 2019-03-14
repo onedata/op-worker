@@ -152,7 +152,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args) ->
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, ParentGuid, Filename),
     Subs = create_new_file_subscriptions(Sock, FileGuid, 0),
 
-    fuse_test_utils:fuse_test_utils(Sock, FileGuid, HandleId, false),
+    fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
 
     ExpectedData = maybe_write(Sock, FileGuid, HandleId, Write),
     maybe_read(Sock, FileGuid, HandleId, ExpectedData, Read),
