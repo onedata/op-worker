@@ -625,7 +625,8 @@ init_per_testcase(Case, Config) when
     Case =:= autocleaning_run_should_not_start_when_autocleaning_is_disabled;
     Case =:= periodical_autocleaning_should_evict_file_replica_when_it_is_replicated
 ->
-    % periodical autocleaning_check is not disabled
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = enable_periodical_spaces_autocleaning_check(W),
     init_per_testcase(default, Config);
 
 init_per_testcase(default, Config) ->
@@ -639,13 +640,14 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
+    ok = disable_periodical_spaces_autocleaning_check(W),
+    ensure_controller_stopped(W, ?SPACE_ID),
     clean_autocleaning_run_model(W, ?SPACE_ID),
     delete_file_popularity_config(W, ?SPACE_ID),
     delete_auto_cleaning_config(W, ?SPACE_ID),
     clean_space(?SPACE_ID, Config),
     ensure_space_empty(?SPACE_ID, Config),
     reset_autocleaning_check_timestamp(W, ?SPACE_ID),
-    ok = enable_periodical_spaces_autocleaning_check(W),
     lfm_proxy:teardown(Config).
 
 end_per_suite(Config) ->
@@ -789,6 +791,10 @@ delete_auto_cleaning_config(Worker, SpaceId) ->
 
 force_start(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, force_start, [SpaceId]).
+
+ensure_controller_stopped(Worker, SpaceId) ->
+    ?assertEqual(undefined,
+        rpc:call(Worker, global, whereis_name, [{autocleaning_controller, SpaceId}]), ?ATTEMPTS).
 
 restart_autocleaning_run(Worker, SpaceId) ->
     rpc:call(Worker, autocleaning_api, restart_autocleaning_run, [SpaceId]).
