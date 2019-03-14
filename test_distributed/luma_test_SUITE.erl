@@ -291,10 +291,10 @@ insecure_get_server_user_ctx_should_not_query_luma_base(Config, StorageConfig) -
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageDoc = maps:get(storage_doc, StorageConfig),
     HelperName = maps:get(helper_name, StorageConfig),
-    test_utils:mock_new(Worker, http_client, [passthrough]),
+    test_utils:mock_new(Worker, luma_proxy, [passthrough]),
     rpc:call(Worker, luma, get_server_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
-    test_utils:mock_assert_num_calls(Worker, http_client, post, ['_', '_', '_'], 0).
+    test_utils:mock_assert_num_calls(Worker, luma_proxy, http_client_post, ['_', '_', '_'], 0).
 
 secure_get_server_user_ctx_fetches_user_ctx_from_luma_base(Config, StorageConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -302,8 +302,8 @@ secure_get_server_user_ctx_fetches_user_ctx_from_luma_base(Config, StorageConfig
     HelperName = maps:get(helper_name, StorageConfig),
     UserCtx = maps:get(user_ctx, StorageConfig),
     UserCtxLumaMock = maps:get(user_ctx_luma_mock, StorageConfig, UserCtx),
-    test_utils:mock_new(Worker, http_client),
-    test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
+    test_utils:mock_new(Worker, luma_proxy),
+    test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun(_, _, _) ->
         {ok, 200, [], json_utils:encode(UserCtxLumaMock)}
     end),
 
@@ -315,9 +315,9 @@ get_server_user_ctx_fails_on_invalid_response_from_luma_base(Config, StorageConf
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageDoc = maps:get(storage_doc, StorageConfig),
     HelperName = maps:get(helper_name, StorageConfig),
-    test_utils:mock_new(Worker, http_client),
+    test_utils:mock_new(Worker, luma_proxy),
     lists:foreach(fun({ResponseBody, Reason}) ->
-        test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
+        test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun(_, _, _) ->
             {ok, 200, [], ResponseBody}
         end),
         Result = rpc:call(Worker, luma, get_server_user_ctx,
@@ -434,8 +434,8 @@ secure_get_client_user_ctx_fetches_user_ctx_from_luma_base(Config, StorageConfig
     HelperName = maps:get(helper_name, StorageConfig),
     UserCtx = maps:get(user_ctx, StorageConfig),
     UserCtxLumaMock = maps:get(user_ctx_luma_mock, StorageConfig, UserCtx),
-    test_utils:mock_new(Worker, [luma_proxy, http_client], [passthrough]),
-    test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
+    test_utils:mock_new(Worker, [luma_proxy], [passthrough]),
+    test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun(_, _, _) ->
         {ok, 200, [], json_utils:encode(UserCtxLumaMock)}
     end),
 
@@ -461,8 +461,8 @@ secure_get_client_user_ctx_fetches_user_ctx_from_luma_invalidate_cache_base(Conf
     UserCtx = maps:get(user_ctx, StorageConfig),
     UserCtxLumaMock = maps:get(user_ctx_luma_mock, StorageConfig, UserCtx),
     StorageId = storage:get_id(StorageDoc),
-    test_utils:mock_new(Worker, [luma_proxy, http_client], [passthrough]),
-    test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
+    test_utils:mock_new(Worker, [luma_proxy], [passthrough]),
+    test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun(_, _, _) ->
         {ok, 200, [], json_utils:encode(UserCtxLumaMock)}
     end),
 
@@ -590,8 +590,8 @@ secure_secure_get_posix_user_ctx_should_return_server_user_ctx_on_posix_compatib
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageDoc = maps:get(storage_doc, StorageConfig),
     UserCtx = maps:get(user_ctx, StorageConfig),
-    ok = test_utils:mock_new(Worker, [luma, http_client], [passthrough]),
-    test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
+    ok = test_utils:mock_new(Worker, [luma, luma_proxy], [passthrough]),
+    test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun(_, _, _) ->
         {ok, 200, [], json_utils:encode(UserCtx)}
     end),
     ok = test_utils:mock_new(Worker, storage),
@@ -604,8 +604,8 @@ secure_get_posix_user_ctx_should_generate_user_ctx_on_posix_incompatible_storage
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageDoc = maps:get(storage_doc, StorageConfig),
     UserCtx = maps:get(user_ctx, StorageConfig),
-    ok = test_utils:mock_new(Worker, [luma, http_client], [passthrough]),
-    test_utils:mock_expect(Worker, http_client, post, fun(_, _, _) ->
+    ok = test_utils:mock_new(Worker, [luma, luma_proxy], [passthrough]),
+    test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun(_, _, _) ->
         {ok, 200, [], json_utils:encode(UserCtx)}
     end),
     ok = test_utils:mock_new(Worker, storage),
@@ -907,7 +907,7 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     invalidate_cache_for_all_storages(Worker),
-    ok = test_utils:mock_unload(Workers, [http_client, luma_proxy, luma,
+    ok = test_utils:mock_unload(Workers, [luma_proxy, luma,
         space_storage, storage, reverse_luma_proxy, idp_access_token]).
 
 %%%===================================================================
@@ -953,8 +953,7 @@ invalidate_cache_for_all_storages(Worker) ->
     end, StorageIds).
 
 mock_luma_response(Worker, Expectations) ->
-    ok = test_utils:mock_new(Worker, http_client),
-    ok = test_utils:mock_expect(Worker, http_client, post, fun
+    ok = test_utils:mock_expect(Worker, luma_proxy, http_client_post, fun
         (Url, Headers, Body) when is_binary(Url) ->
             Resource = lists:last(binary:split(Url, <<"/">>, [global])),
             case maps:get(Resource, Expectations, undefined) of
