@@ -74,7 +74,7 @@ all() -> [
 -define(SESSION(User, Worker, Config),
     ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
 
--define(ATTEMPTS, 120).
+-define(ATTEMPTS, 300).
 -define(LIMIT, 10).
 -define(MAX_LIMIT, 10000).
 -define(MAX_VAL, 1000000000).
@@ -407,7 +407,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_min_hours_si
         rules => #{
             enabled => true,
             max_open_count => ?RULE_SETTING(1),
-            min_hours_since_last_open => ?RULE_SETTING(1),
+            min_hours_since_last_open => ?RULE_SETTING(2),
             min_file_size => ?RULE_SETTING(Size - 1),
             max_file_size => ?RULE_SETTING(Size + 1),
             max_hourly_moving_average => ?RULE_SETTING(1),
@@ -576,7 +576,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
         rules => #{
             enabled => true,
             max_open_count => ?RULE_SETTING(1),
-            min_hours_since_last_open => ?RULE_SETTING(1),
+            min_hours_since_last_open => ?RULE_SETTING(2),
             min_file_size => ?RULE_SETTING(Size - 1),
             max_file_size => ?RULE_SETTING(Size + 1),
             max_hourly_moving_average => ?RULE_SETTING(1),
@@ -595,7 +595,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
         files_number := 0
     }}, get_run_report(W1, ARId)),
 
-    % pretend that file has not been opened for an hour
+    % pretend that file has not been opened for 2 hours
     CurrentTimestamp = current_timestamp_hours(W1),
     {ok, _} = change_last_open(W1, Guid, CurrentTimestamp - 2),
     {ok, ARId2} = force_start(W1, ?SPACE_ID),
@@ -631,7 +631,9 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(default, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config);
+    Config2 = lfm_proxy:init(Config),
+    ensure_space_empty(?SPACE_ID, Config2),
+    Config2;
 
 init_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

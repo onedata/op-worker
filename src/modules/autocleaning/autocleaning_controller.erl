@@ -66,10 +66,11 @@
     batches_tokens = #{} :: maps:map(),
     % set of already finished batches, which tokens can be stored in the #autocleaning_run model
     finished_batches = ordsets:new(),
-    % number of the last batch which token was has already been persisted in the autocleaning model
+    % number of the last batch which token has already been persisted in the autocleaning model
     last_persisted_batch = 0 :: non_neg_integer()
 }).
 
+% helper record that stores counters for each batch of files
 -record(batch_counters, {
     files_processed = 0 :: non_neg_integer(),
     files_to_process = 0 :: non_neg_integer()
@@ -259,7 +260,7 @@ replica_deletion_predicate(ReportId) ->
     file_meta:uuid(), autocleaning:run_id()) -> ok.
 process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, ReportId) ->
     {ARId, BatchNum} = from_batch_id(ReportId),
-    ?debug("Auto-cleaning of file ~p in run ~p released ~p bytes.",
+    ?alert("Auto-cleaning of file ~p in run ~p released ~p bytes.",
         [FileUuid, ARId, ReleasedBytes]),
     autocleaning_run:mark_released_file(ARId, ReleasedBytes),
     notify_released_file(SpaceId, ReleasedBytes, BatchNum);
@@ -353,7 +354,7 @@ handle_cast(?START_CLEANING, State = #state{
     space_id = SpaceId
 }) ->
     ?run_and_catch_errors(fun() ->
-        ?debug("Auto-cleaning run ~p of space ~p started", [ARId, SpaceId]),
+        ?alert("Auto-cleaning run ~p of space ~p started", [ARId, SpaceId]),
         State2 = start_cleaning_internal(State),
         State3 = process_updated_state(State2),
         {noreply, State3}
@@ -377,7 +378,7 @@ handle_cast(?STOP_CLEANING, State = #state{
     ?run_and_catch_errors(fun() ->
         autocleaning_run:mark_completed(ARId),
         replica_deletion_master:cancelling_finished(ARId, SpaceId),
-        ?debug("Auto-cleaning run ~p of space ~p finished", [ARId, SpaceId]),
+        ?alert("Auto-cleaning run ~p of space ~p finished", [ARId, SpaceId]),
         {stop, normal, State}
     end, State);
 handle_cast(_Request, State) ->
@@ -436,26 +437,10 @@ start_cleaning_internal(State) ->
 
 -spec mark_released_file(non_neg_integer(), batch_num(), state()) -> state().
 mark_released_file(FileReleasedBytes, BatchNum, State = #state{
-    finished_batches = BatchesToPersist,
-    files_processed = FilesProcessed,
-    released_bytes = ReleasedBytes,
-    batch_counters_map = BatchesCounters
+    released_bytes = ReleasedBytes
 }) ->
-    {NewBatchesCounters, NewBatchesToPersist} = case
-        increment_and_check_equality(BatchesCounters, BatchNum)
-    of
-        {false, BatchesCounters2} ->
-            {BatchesCounters2, BatchesToPersist};
-        {true, BatchesCounters2} ->
-            BatchesToPersist2 = ordsets:add_element(BatchNum, BatchesToPersist),
-            {BatchesCounters2, BatchesToPersist2}
-    end,
-    State#state{
-        finished_batches = NewBatchesToPersist,
-        batch_counters_map = NewBatchesCounters,
-        files_processed = FilesProcessed + 1,
-        released_bytes = ReleasedBytes + FileReleasedBytes
-    }.
+    State2 = mark_processed_file(BatchNum, State),
+    State2#state{released_bytes = ReleasedBytes + FileReleasedBytes}.
 
 
 -spec mark_processed_file(batch_num(), state()) -> state().
@@ -532,17 +517,24 @@ persist_finished_batches(State = #state{
 }) ->
     {BatchNumToPersist, BatchesStripped, BatchesToPersist2} =
         strip_if_continuous(LastPersistedBatch, ordsets:to_list(BatchesToPersist)),
-    {BatchToken, BatchesTokens2} = maps:take(BatchNumToPersist, BatchesTokens),
-    autocleaning_run:set_index_token(ARId, BatchToken),
 
-    BatchesTokens3 = lists:foldl(fun(StrippedBatchNum, BatchesTokensIn) ->
-        maps:remove(StrippedBatchNum, BatchesTokensIn)
-    end, BatchesTokens2, BatchesStripped),
-    State#state{
-        finished_batches = BatchesToPersist2,
-        last_persisted_batch = BatchNumToPersist,
-        batches_tokens = BatchesTokens3
-    }.
+    case BatchNumToPersist =:= 0 of
+        false ->
+            {BatchToken, BatchesTokens2} = maps:take(BatchNumToPersist, BatchesTokens),
+            autocleaning_run:set_index_token(ARId, BatchToken),
+
+            BatchesTokens3 = lists:foldl(fun(StrippedBatchNum, BatchesTokensIn) ->
+                maps:remove(StrippedBatchNum, BatchesTokensIn)
+            end, BatchesTokens2, BatchesStripped),
+            State#state{
+                finished_batches = BatchesToPersist2,
+                last_persisted_batch = BatchNumToPersist,
+                batches_tokens = BatchesTokens3
+            };
+        true ->
+            % batch no. 1 has not been finished yet
+            State
+    end.
 
 
 -spec maybe_refill_queue(state(), non_neg_integer()) -> state().
@@ -595,7 +587,8 @@ refill_queue_with_one_batch(State = #state{
     batches_tokens = BatchStartTokens,
     batch_counters_map = BatchesFileCounters,
     queue_len = QLen,
-    queue = Queue
+    queue = Queue,
+    finished_batches = BatchesToPersist
 }) ->
     BatchesCounter2 = BatchesCounter + 1,
     case query(SpaceId, ?VIEW_BATCH_SIZE, NextBatchToken) of
@@ -604,17 +597,26 @@ refill_queue_with_one_batch(State = #state{
                 end_of_view_reached = true
             };
         {PreselectedFileIds, NewNextBatchToken} ->
-            FilteredFiles = filter(PreselectedFileIds, ACRules),
-            NewFilesToProcess = length(FilteredFiles),
-            FilesWithBatchNum = [{F, BatchesCounter2} || F <- FilteredFiles],
-            State#state{
-                batches_counter = BatchesCounter2,
-                next_batch_token = NewNextBatchToken,
-                batches_tokens = BatchStartTokens#{BatchesCounter2 => NextBatchToken},
-                batch_counters_map = BatchesFileCounters#{BatchesCounter2 => new_batch_counters(NewFilesToProcess)},
-                queue_len = QLen + NewFilesToProcess,
-                queue = queue:join(Queue, queue:from_list(FilesWithBatchNum))
-            }
+            case filter(PreselectedFileIds, ACRules) of
+                [] ->
+                    State#state{
+                        batches_counter = BatchesCounter2,
+                        next_batch_token = NewNextBatchToken,
+                        batches_tokens = BatchStartTokens#{BatchesCounter2 => NextBatchToken},
+                        finished_batches = ordsets:add_element(BatchesCounter2, BatchesToPersist)
+                    };
+                FilteredFiles ->
+                    NewFilesToProcess = length(FilteredFiles),
+                    FilesWithBatchNum = [{F, BatchesCounter2} || F <- FilteredFiles],
+                    State#state{
+                        batches_counter = BatchesCounter2,
+                        next_batch_token = NewNextBatchToken,
+                        batches_tokens = BatchStartTokens#{BatchesCounter2 => NextBatchToken},
+                        batch_counters_map = BatchesFileCounters#{BatchesCounter2 => new_batch_counters(NewFilesToProcess)},
+                        queue_len = QLen + NewFilesToProcess,
+                        queue = queue:join(Queue, queue:from_list(FilesWithBatchNum))
+                    }
+            end
     end.
 
 %%-------------------------------------------------------------------
