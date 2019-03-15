@@ -6,46 +6,39 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module encapsulates API for communication with given session but also
-%%% monitors processing of asynchronous requests and mediates when sending
-%%% responses.
+%%% This module monitors execution of client requests and periodically
+%%% send heartbeat messages to inform him that his requests are still being
+%%% handled.
 %%%
 %%% When connection receives a possibly time-consuming request it delegates
-%%% execution to appropriate worker and notifies connection manager about
-%%% pending request. It is done using cast to avoid deadlock (connection
-%%% manager may be trying to send message via this connection).
-%%% While task is being handled by worker, connection manager periodically
+%%% execution to appropriate worker and notifies async request manager about
+%%% pending request. It is done using cast to avoid deadlock (manager may be
+%%% trying to send heartbeat via this connection).
+%%% While task is being handled by worker, async request manager periodically
 %%% checks its status. If it is still alive heartbeat message is being send
 %%% to client informing him that his request is still being processed.
 %%% In case it is dead, error message is send instead.
-%%% Once worker finishes its task, it calls connection manager to withhold
+%%% Once worker finishes its task, it calls async request manager to withhold
 %%% sending heartbeats for this task and tries to send response via the same
 %%% connection the request came. If it is not possible, due to some errors,
 %%% it tries sending via other connections of client session. If all goes well
-%%% worker informs connection manager about successful sending of response.
+%%% worker informs async request manager about successful sending of response.
 %%% @end
 %%%-------------------------------------------------------------------
--module(connection_manager).
+-module(async_request_manager).
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_server).
 
 -include("timeouts.hrl").
+-include("modules/communication/connection.hrl").
 -include("proto/common/clproto_message_id.hrl").
--include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([start_link/2]).
--export([
-    communicate/2,
-    send/2, send/3,
-
-    assign_request_id/1,
-    report_pending_request/3,
-    respond/3
-]).
+-export([delegate_and_supervise/4]).
 
 %% gen_server callbacks
 -export([
@@ -65,23 +58,12 @@
 }).
 
 -type state() :: #state{}.
--type client_message() :: #client_message{}.
--type server_message() :: #server_message{}.
--type message() :: client_message() | server_message().
-
 -type req_id() :: {reference(), clproto_message_id:id()}.
--type reply_to() :: {Conn :: pid(), ConnManager :: pid(), session:id()} | session:id().
+-type server_message() :: #server_message{}.
 
-% Heartbeat messages are sent to client periodically to inform him that
-% his requests are still carried on (generally sent by incoming connections).
--define(WORKERS_STATUS_CHECK_INTERVAL, application:get_env(
-    ?APP_NAME, router_processes_check_interval, timer:seconds(10)
-)).
--define(RESPONSE_AWAITING_PERIOD, 3 * ?WORKERS_STATUS_CHECK_INTERVAL).
+-type worker_ref() :: proc | module() | {module(), node()}.
+-type reply_to() :: session:id() | {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
-% Keepalive messages are sent to peer periodically to keep connection alive
-% (used by outgoing connections).
--define(KEEPALIVE_TIMEOUT, timer:seconds(60)).
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,
@@ -91,6 +73,7 @@
     message_id = __MSG_ID,
     message_body = #processing_status{code = 'ERROR'}
 }).
+
 
 %%%===================================================================
 %%% API
@@ -111,136 +94,25 @@ start_link(SessId, SetKeepaliveTimeout) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to peer and awaits answer. If no answer or heartbeat is
-%% sent within 3 ?WORKERS_STATUS_CHECK_INTERVAL then timeout error
-%% is returned.
-%% In case of errors during sending tries other session connections
-%% until message is send or no more available connections remains.
-%% Exceptions to this are encoding errors which immediately fails call.
+%% Delegates handling of request to specified worker. When worker finishes
+%% it's work, he will send result using given ReplyTo info.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(session:id(), message()) ->
-    {ok, message()} | {error, term()}.
-communicate(SessionId, RawMsg) ->
-    {ok, MsgId} = clproto_message_id:generate(self()),
-    Msg = set_msg_id(RawMsg, MsgId),
-    case send_msg_internal(SessionId, Msg, []) of
-        ok ->
-            await_response(Msg);
-        {error, no_connections} = NoConsError ->
-            ?debug("Failed to communicate with peer ~p due to no connections", [
-                SessionId
+-spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
+    reply_to()) -> ok | {ok, server_message()}.
+delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
+    try
+        ReqId = {make_ref(), MsgId},
+        ok = delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo)
+    catch
+        Type:Error ->
+            ?error_stacktrace("Router error: ~p:~p for message id ~p", [
+                Type, Error, MsgId
             ]),
-            NoConsError;
-        Error ->
-            ?error("Failed to communicate msg ~p to peer ~p due to: ~p", [
-                Msg, SessionId, Error
-            ]),
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv send_sync(SessionId, Msg, []).
-%% @end
-%%--------------------------------------------------------------------
--spec send(session:id(), message()) ->
-    ok | {error, Reason :: term()}.
-send(SessionId, Msg) ->
-    send(SessionId, Msg, []).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends message to peer. In case of errors during sending tries other
-%% session connections until message is send or no more available
-%% connections remains.
-%% Exceptions to this are encoding errors which immediately fails call.
-%% @end
-%%--------------------------------------------------------------------
--spec send(session:id(), message(), ExcludedCons :: [pid()]) ->
-    ok | {error, Reason :: term()}.
-send(SessionId, Msg, ExcludedCons) ->
-    case send_msg_internal(SessionId, Msg, ExcludedCons) of
-        ok ->
-            ok;
-        {error, no_connections} = NoConsError ->
-            ?debug("Failed to send msg to ~p due to no connections", [
-                SessionId
-            ]),
-            NoConsError;
-        Error ->
-            ?error("Failed to send msg ~p to peer ~p due to: ~p", [
-                Msg, SessionId, Error
-            ]),
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates unique id for request using specified message id.
-%% @end
-%%--------------------------------------------------------------------
--spec assign_request_id(clproto_message_id:id()) -> req_id().
-assign_request_id(MsgId) ->
-    Ref = make_ref(),
-    {Ref, MsgId}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Informs connection manager about pending request (identifiable by
-%% specified request id) being processed by specified process.
-%% @end
-%%--------------------------------------------------------------------
--spec report_pending_request(reply_to(), pid(), req_id()) ->
-    ok | {error, term()}.
-report_pending_request({_, ConnManager, _}, Pid, ReqId) ->
-    gen_server2:cast(ConnManager, {report_pending_req, Pid, ReqId});
-report_pending_request(SessionId, Pid, ReqId) ->
-    case session_connections:get_connection_manager(SessionId) of
-        {ok, ConnManager} ->
-            gen_server2:cast(ConnManager, {report_pending_req, Pid, ReqId});
-        Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends response to peer.
-%% @end
-%%--------------------------------------------------------------------
--spec respond(reply_to(), req_id(), term()) -> ok | {error, term()}.
-respond({Conn, ConnManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
-    case withhold_heartbeats(ConnManager, ReqId) of
-        ok ->
-            Response = build_response(MsgId, Ans),
-            case respond_internal(Conn, SessionId, Response) of
-                ok ->
-                    report_response_sent(ConnManager, ReqId);
-                {error, no_connections} = NoConsError ->
-                    ?debug("Failed to send response to ~p due to no connections", [
-                        SessionId
-                    ]),
-                    NoConsError;
-                Error ->
-                    ?error("Failed to send response ~p to peer ~p due to: ~p", [
-                        Response, SessionId, Error
-                    ]),
-                    Error
-            end;
-        Error ->
-            Error
-    end;
-respond(SessionId, ReqId, Ans) ->
-    case session_connections:get_random_conn_and_conn_manager(SessionId) of
-        {ok, Conn, ConnManager} ->
-            respond({Conn, ConnManager, SessionId}, ReqId, Ans);
-        Error ->
-            Error
+            {ok, #server_message{
+                message_id = MsgId,
+                message_body = #processing_status{code = 'ERROR'}
+            }}
     end.
 
 
@@ -260,7 +132,7 @@ respond(SessionId, ReqId, Ans) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId, EnableKeepalive]) ->
     process_flag(trap_exit, true),
-    ok = session:set_connection_manager(SessionId, self()),
+    ok = session:set_async_request_manager(SessionId, self()),
     EnableKeepalive andalso schedule_keepalive_msg(),
     {ok, #state{session_id = SessionId}}.
 
@@ -294,7 +166,7 @@ handle_call({withhold_heartbeats, Pid, ReqId}, _From, #state{
         unreported_requests = NewUnreportedReqs,
         withheld_heartbeats = WithheldHeartbeats#{ReqId => Pid}
     },
-    {reply, ok, set_heartbeat_timer(NewState)};
+    {reply, ok, schedule_workers_status_checkup(NewState)};
 handle_call({response_sent, ReqId}, _From, #state{
     withheld_heartbeats = WithheldHeartbeats
 } = State) ->
@@ -324,7 +196,7 @@ handle_cast({report_pending_req, Pid, ReqId}, #state{
         {Pid, NewUnreportedReqs} ->
             State#state{unreported_requests = NewUnreportedReqs};
         error ->
-            set_heartbeat_timer(State#state{
+            schedule_workers_status_checkup(State#state{
                 pending_requests = PendingReqs#{ReqId => Pid}
             })
     end,
@@ -366,7 +238,7 @@ handle_info(heartbeat, #state{
                    "of: ~p", [Error]),
             State#state{heartbeat_timer = undefined}
     end,
-    {noreply, set_heartbeat_timer(NewState)};
+    {noreply, schedule_workers_status_checkup(NewState)};
 handle_info(keepalive, #state{session_id = SessionId} = State) ->
     case session_connections:get_connections(SessionId) of
         {ok, Cons} ->
@@ -416,59 +288,93 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec send_msg_internal(session:id(), message(), ExcludedCons :: [pid()]) ->
+%% @doc
+%% If worker_ref is `proc` then spawns new process to handle request.
+%% Otherwise delegates it to specified worker via worker_proxy.
+%% @end
+%%--------------------------------------------------------------------
+-spec delegate_request_insecure(worker_ref(), Req :: term(),
+    connection_api:req_id(), connection_api:reply_to()) ->
     ok | {error, term()}.
-send_msg_internal(SessionId, Msg, ExcludedCons) ->
-    case session_connections:get_connections(SessionId) of
-        {ok, Cons} ->
-            send_via_any(Msg, utils:random_shuffle(Cons -- ExcludedCons));
+delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
+    Pid = spawn(fun() ->
+        Response = try
+            HandlerFun()
+        catch
+            Type:Error ->
+                ?error("Router local delegation error: ~p for request id ~p", [
+                    Type, Error, ReqId
+                ]),
+                #processing_status{code = 'ERROR'}
+        end,
+        respond(ReplyTo, ReqId, {ok, Response})
+    end),
+    report_pending_request(ReplyTo, Pid, ReqId);
+
+delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
+    ReplyFun = fun(Response) -> respond(ReplyTo, ReqId, Response) end,
+    case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
+        Pid when is_pid(Pid) ->
+            report_pending_request(ReplyTo, Pid, ReqId);
         Error ->
             Error
     end.
 
 
 %% @private
--spec send_via_any(message(), [pid()]) -> ok | {error, term()}.
-send_via_any(_Msg, []) ->
-    {error, no_connections};
-send_via_any(Msg, [Conn]) ->
-    connection:send_msg(Conn, Msg);
-send_via_any(Msg, [Conn | Cons]) ->
-    case connection:send_msg(Conn, Msg) of
-        ok ->
-            ok;
-        {error, serialization_failed} = SerializationError ->
-            SerializationError;
-        {error, sending_msg_via_wrong_connection} = WrongConnError ->
-            WrongConnError;
-        _Error ->
-            send_via_any(Msg, Cons)
+-spec report_pending_request(reply_to(), pid(), req_id()) ->
+    ok | {error, term()}.
+report_pending_request({_, AsyncReqManager, _}, Pid, ReqId) ->
+    gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId});
+report_pending_request(SessionId, Pid, ReqId) ->
+    case session_connections:get_async_req_manager(SessionId) of
+        {ok, AsyncReqManager} ->
+            gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId});
+        Error ->
+            Error
     end.
 
 
 %% @private
--spec await_response(message()) -> {ok, message()} | {error, timeout}.
-await_response(#client_message{message_id = MsgId} = Msg) ->
-    receive
-        #server_message{
-            message_id = MsgId,
-            message_body = #processing_status{code = 'IN_PROGRESS'}
-        } ->
-            await_response(Msg);
-        #server_message{message_id = MsgId} = ServerMsg ->
-            {ok, ServerMsg}
-    after ?RESPONSE_AWAITING_PERIOD ->
-        {error, timeout}
+-spec respond(reply_to(), req_id(), term()) -> ok | {error, term()}.
+respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
+    case withhold_heartbeats(AsyncReqManager, ReqId) of
+        ok ->
+            Response = build_response(MsgId, Ans),
+            case respond_via_any_conn(Conn, SessionId, Response) of
+                ok ->
+                    report_response_sent(AsyncReqManager, ReqId);
+                {error, no_connections} = NoConsError ->
+                    ?debug("Failed to send response to ~p due to no connections", [
+                        SessionId
+                    ]),
+                    NoConsError;
+                Error ->
+                    ?error("Failed to send response ~p to peer ~p due to: ~p", [
+                        Response, SessionId, Error
+                    ]),
+                    Error
+            end;
+        Error ->
+            Error
     end;
-await_response(#server_message{message_id = MsgId}) ->
-    receive
-        #client_message{message_id = MsgId} = ClientMsg ->
-            {ok, ClientMsg}
-    % TODO VFS-4025 - how long should we wait for client answer?
-    after ?DEFAULT_REQUEST_TIMEOUT ->
-        {error, timeout}
+respond(SessionId, ReqId, Ans) ->
+    case session_connections:get_random_conn_and_async_req_manager(SessionId) of
+        {ok, Conn, AsyncReqManager} ->
+            respond({Conn, AsyncReqManager, SessionId}, ReqId, Ans);
+        Error ->
+            Error
     end.
+
+
+%% @private
+-spec withhold_heartbeats(AsyncReqManager :: pid(), req_id()) ->
+    ok | {error, term()}.
+withhold_heartbeats(AsyncReqManager, ReqId) ->
+    Req = {withhold_heartbeats, self(), ReqId},
+    call_async_request_manager(AsyncReqManager, Req).
 
 
 %% @private
@@ -490,14 +396,9 @@ build_response(MsgId, ErrorAns) ->
 
 
 %% @private
--spec withhold_heartbeats(ConnManager :: pid(), req_id()) ->
+-spec respond_via_any_conn(pid(), session:id(), server_message()) ->
     ok | {error, term()}.
-withhold_heartbeats(ConnManager, ReqId) ->
-    call_conn_manager(ConnManager, {withhold_heartbeats, self(), ReqId}).
-
-
-%% @private
-respond_internal(Conn, SessionId, Response) ->
+respond_via_any_conn(Conn, SessionId, Response) ->
     case connection:send_msg(Conn, Response) of
         ok ->
             ok;
@@ -506,41 +407,17 @@ respond_internal(Conn, SessionId, Response) ->
         {error, sending_msg_via_wrong_connection} = WrongConnError ->
             WrongConnError;
         _Error ->
-            send_msg_internal(SessionId, Response, [Conn])
+            connection_utils:send_msg_excluding_connections(
+                SessionId, Response, [Conn]
+            )
     end.
 
 
 %% @private
--spec report_response_sent(ConnManager :: pid(), req_id()) ->
+-spec report_response_sent(AsyncReqManager :: pid(), req_id()) ->
     ok | {error, term()}.
-report_response_sent(ConnManager, ReqId) ->
-    call_conn_manager(ConnManager, {response_sent, ReqId}).
-
-
-%% @private
--spec call_conn_manager(ConnManager :: pid(), term()) ->
-    ok | {error, term()}.
-call_conn_manager(ConnManager, Msg) ->
-    try
-        gen_server2:call(ConnManager, Msg)
-    catch
-        exit:{noproc, _} ->
-            ?debug("Connection manager process ~p does not exist", [
-                ConnManager
-            ]),
-            {error, no_connection_manager};
-        exit:{normal, _} ->
-            ?debug("Exit of connection manager process ~p", [ConnManager]),
-            {error, no_connection_manager};
-        exit:{timeout, _} ->
-            ?debug("Timeout of connection manager process ~p", [ConnManager]),
-            {error, timeout};
-        Type:Reason ->
-            ?error("Cannot call connection manager ~p due to ~p:~p", [
-                ConnManager, Type, Reason
-            ]),
-            {error, Reason}
-    end.
+report_response_sent(AsyncReqManager, ReqId) ->
+    call_async_request_manager(AsyncReqManager, {response_sent, ReqId}).
 
 
 %%--------------------------------------------------------------------
@@ -560,18 +437,13 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
     maps:fold(
         fun
             ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
-                ?error("ConnManager: process ~p connected with req_id ~p is dead",
+                ?error("AsyncManager: process ~p connected with req_id ~p is dead",
                     [Pid, ReqId]
                 ),
-                send_via_any(?ERROR_MSG(MsgId), Cons),
+                send_via_any_conn(?ERROR_MSG(MsgId), Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
-                case SendHeartbeats of
-                    true ->
-                        send_via_any(?HEARTBEAT_MSG(MsgId), Cons);
-                    false ->
-                        ok
-                end,
+                SendHeartbeats andalso send_via_any_conn(?HEARTBEAT_MSG(MsgId), Cons),
                 case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
                     true ->
                         Acc#{ReqId => Pid};
@@ -583,19 +455,44 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
 
 
 %% @private
--spec set_msg_id(message(), clproto_message_id:id()) -> message().
-set_msg_id(#client_message{} = Msg, MsgId) ->
-    Msg#client_message{message_id = MsgId};
-set_msg_id(#server_message{} = Msg, MsgId) ->
-    Msg#server_message{message_id = MsgId}.
+-spec send_via_any_conn(#server_message{}, [pid()]) -> ok | {error, term()}.
+send_via_any_conn(Msg, Cons) ->
+    connection_utils:send_via_any_connection(Msg, Cons).
 
 
 %% @private
--spec set_heartbeat_timer(state()) -> state().
-set_heartbeat_timer(#state{heartbeat_timer = undefined} = State) ->
-    TimerRef = erlang:send_after(?WORKERS_STATUS_CHECK_INTERVAL, self(), heartbeat),
-    State#state{heartbeat_timer = TimerRef};
-set_heartbeat_timer(State) ->
+-spec call_async_request_manager(AsyncReqManager :: pid(), term()) ->
+    ok | {error, term()}.
+call_async_request_manager(AsyncReqManager, Msg) ->
+    try
+        gen_server2:call(AsyncReqManager, Msg)
+    catch
+        exit:{noproc, _} ->
+            ?debug("Connection manager process ~p does not exist", [
+                AsyncReqManager
+            ]),
+            {error, no_async_req_manager};
+        exit:{normal, _} ->
+            ?debug("Exit of connection manager process ~p", [AsyncReqManager]),
+            {error, no_async_req_manager};
+        exit:{timeout, _} ->
+            ?debug("Timeout of connection manager process ~p", [AsyncReqManager]),
+            {error, timeout};
+        Type:Reason ->
+            ?error("Cannot call connection manager ~p due to ~p:~p", [
+                AsyncReqManager, Type, Reason
+            ]),
+            {error, Reason}
+    end.
+
+
+%% @private
+-spec schedule_workers_status_checkup(state()) -> state().
+schedule_workers_status_checkup(#state{heartbeat_timer = undefined} = State) ->
+    State#state{heartbeat_timer = erlang:send_after(
+        ?WORKERS_STATUS_CHECK_INTERVAL, self(), heartbeat
+    )};
+schedule_workers_status_checkup(State) ->
     State.
 
 

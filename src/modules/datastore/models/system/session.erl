@@ -31,7 +31,7 @@
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_auth/1, get_user_id/1]).
 -export([set_direct_io/2]).
--export([set_connection_manager/2]).
+-export([set_async_request_manager/2]).
 
 % exometer callbacks
 -export([init_counters/0, init_report/0]).
@@ -336,14 +336,14 @@ set_direct_io(SessId, DirectIO) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets connection_manager property of session.
+%% Sets async_request_manager property of session.
 %% @end
 %%--------------------------------------------------------------------
--spec set_connection_manager(session:id(), ConnManager :: pid()) ->
+-spec set_async_request_manager(session:id(), ConnManager :: pid()) ->
     ok | datastore:update_error().
-set_connection_manager(SessionId, ConnManager) ->
+set_async_request_manager(SessionId, AsyncReqManager) ->
     ?extract_ok(session:update(SessionId, fun(Session = #session{}) ->
-        {ok, Session#session{connection_manager = ConnManager}}
+        {ok, Session#session{async_request_manager = AsyncReqManager}}
     end)).
 
 %%%===================================================================

@@ -108,7 +108,7 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
-    conn_manager = undefined :: undefined | pid(),
+    async_req_manager = undefined :: undefined | pid(),
     verify_msg = true :: boolean()
 }).
 
@@ -743,12 +743,12 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
     {ok, state()} | {error, Reason :: term()}.
 route_message(#state{
     session_id = SessionId,
-    conn_manager = undefined
+    async_req_manager = undefined
 } = State, Msg) ->
-    case session_connections:get_connection_manager(SessionId) of
-        {ok, ConnManager} ->
-            NewState = State#state{conn_manager = ConnManager},
-            route_message(NewState, Msg, {self(), ConnManager, SessionId});
+    case session_connections:get_async_req_manager(SessionId) of
+        {ok, AsyncReqManager} ->
+            NewState = State#state{async_req_manager = AsyncReqManager},
+            route_message(NewState, Msg, {self(), AsyncReqManager, SessionId});
         _Error ->
             % Connection manager starts asynchronously so it is
             % possible that it hasn't started yet.
@@ -756,13 +756,13 @@ route_message(#state{
     end;
 route_message(#state{
     session_id = SessionId,
-    conn_manager = ConnManager
+    async_req_manager = AsyncReqManager
 } = State, Msg) ->
-    route_message(State, Msg, {self(), ConnManager, SessionId}).
+    route_message(State, Msg, {self(), AsyncReqManager, SessionId}).
 
 
 %% @private
--spec route_message(state(), message(), connection_manager:reply_to()) ->
+-spec route_message(state(), message(), async_request_manager:reply_to()) ->
     {ok, state()} | {error, Reason :: term()}.
 route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
     case router:route_message(Msg, ReplyTo) of
@@ -778,11 +778,11 @@ route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
                 Error ->
                     % Before reporting error and closing connection
                     % try to send msg via other connections
-                    connection_manager:send(SessionId, ServerMsg, [self()]),
+                    connection_api:send(SessionId, ServerMsg, [self()]),
                     Error
             end;
         {error, Reason} ->
-            ?error_stacktrace("Message ~p handling error: ~p", [Msg, Reason]),
+            ?error("Message ~p handling error: ~p", [Msg, Reason]),
             {ok, State}
     end.
 

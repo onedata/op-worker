@@ -33,7 +33,6 @@
 -type client_message() :: #client_message{}.
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
--type worker_ref() :: proc | module() | {module(), node()}.
 
 %%%===================================================================
 %%% API
@@ -72,7 +71,7 @@ route_message(Msg) ->
 %% otherwise routes it directly
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(message(), connection_manager:reply_to()) ->
+-spec route_message(message(), connection_api:reply_to()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_message(Msg, ReplyTo) ->
     case stream_router:is_stream_message(Msg) of
@@ -96,7 +95,7 @@ route_message(Msg, ReplyTo) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_direct_message(message(), connection_manager:reply_to()) ->
+-spec route_direct_message(message(), connection_api:reply_to()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_direct_message(#client_message{message_id = undefined} = Msg, _) ->
     route_and_ignore_answer(Msg);
@@ -170,7 +169,7 @@ route_and_ignore_answer(ClientMsg) ->
 %% reply address. Otherwise delegates it to event_router.
 %% @end
 %%--------------------------------------------------------------------
--spec answer_or_delegate(client_message(), connection_manager:reply_to()) ->
+-spec answer_or_delegate(client_message(), connection_api:reply_to()) ->
     ok | {ok, server_message()} | {error, term()}.
 answer_or_delegate(#client_message{
     message_id = MsgId,
@@ -279,63 +278,11 @@ answer_or_delegate(Msg, _) ->
     event_router:route_message(Msg).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Delegates handling of request to specified worker. When worker finishes
-%% it's work, he will send result using specified ReplyTo info.
-%% @end
-%%--------------------------------------------------------------------
--spec delegate_request(worker_ref(), Req :: term(), clproto_message_id:id(),
-    connection_manager:reply_to()) -> ok | {ok, server_message()}.
+-spec delegate_request(async_request_manager:worker_ref(), Req :: term(),
+    clproto_message_id:id(), async_request_manager:reply_to()) ->
+    ok | {ok, server_message()}.
 delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
-    try
-        ReqId = connection_manager:assign_request_id(MsgId),
-        ok = delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo)
-    catch
-        Type:Error ->
-            ?error_stacktrace("Router error: ~p:~p for message id ~p", [
-                Type, Error, MsgId
-            ]),
-            {ok, #server_message{
-                message_id = MsgId,
-                message_body = #processing_status{code = 'ERROR'}
-            }}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% If worker_ref is `proc` then spawns new process to handle request.
-%% Otherwise delegates it to specified worker via worker_proxy.
-%% @end
-%%--------------------------------------------------------------------
--spec delegate_request_insecure(worker_ref(), Req :: term(),
-    connection_manager:req_id(), connection_manager:reply_to()) ->
-    ok | {error, term()}.
-delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
-    Pid = spawn(fun() ->
-        Response = try
-            HandlerFun()
-        catch
-            Type:Error ->
-                ?error("Router local delegation error: ~p for request id ~p", [
-                    Type, Error, ReqId
-                ]),
-                #processing_status{code = 'ERROR'}
-        end,
-        connection_manager:respond(ReplyTo, ReqId, {ok, Response})
-    end),
-    connection_manager:report_pending_request(ReplyTo, Pid, ReqId);
-
-delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
-    ReplyFun = fun(Response) ->
-        connection_manager:respond(ReplyTo, ReqId, Response)
-    end,
-    case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
-        Pid when is_pid(Pid) ->
-            connection_manager:report_pending_request(ReplyTo, Pid, ReqId);
-        Error ->
-            Error
-    end.
+    async_request_manager:delegate_and_supervise(
+        WorkerRef, Req, MsgId, ReplyTo
+    ).

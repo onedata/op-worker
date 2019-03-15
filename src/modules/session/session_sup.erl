@@ -83,20 +83,20 @@ child_specs(SessId, guest) ->
 child_specs(SessId, provider_incoming) ->
     [
         session_watcher_spec(SessId, provider_incoming),
-        connection_manager_spec(SessId, false),
+        async_request_manager_spec(SessId, false),
         event_manager_sup_spec(SessId)
     ];
 child_specs(SessId, provider_outgoing) ->
     [
         session_watcher_spec(SessId, provider_outgoing),
-        connection_manager_spec(SessId, true),
+        async_request_manager_spec(SessId, true),
         sequencer_manager_sup_spec(SessId),
         event_manager_sup_spec(SessId)
     ];
 child_specs(SessId, fuse) ->
     [
         session_watcher_spec(SessId, fuse),
-        connection_manager_spec(SessId, false),
+        async_request_manager_spec(SessId, false),
         sequencer_manager_sup_spec(SessId),
         event_manager_sup_spec(SessId)
     ];
@@ -127,20 +127,20 @@ session_watcher_spec(SessId, SessType) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a supervisor child_spec for a connection manager child.
+%% Creates a supervisor child_spec for a async_request_manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec connection_manager_spec(SessId :: session:id(),
+-spec async_request_manager_spec(SessId :: session:id(),
     SetKeepaliveTimeout :: boolean()) -> supervisor:child_spec().
-connection_manager_spec(SessId, SetKeepaliveTimeout) ->
+async_request_manager_spec(SessId, SetKeepaliveTimeout) ->
     StartLinkArgs = [SessId, SetKeepaliveTimeout],
     #{
-        id => connection_manager,
-        start => {connection_manager, start_link, StartLinkArgs},
+        id => async_request_manager,
+        start => {async_request_manager, start_link, StartLinkArgs},
         restart => permanent,
         shutdown => timer:seconds(10),
         type => worker,
-        modules => [connection_manager]
+        modules => [async_request_manager]
     }.
 
 %%--------------------------------------------------------------------

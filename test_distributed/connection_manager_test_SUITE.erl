@@ -728,11 +728,11 @@ create_resolve_guid_req(Path) ->
 
 
 send_sync_msg(Node, SessionId, Msg) ->
-    rpc:call(Node, connection_manager, send, [SessionId, Msg]).
+    rpc:call(Node, connection_api, send, [SessionId, Msg]).
 
 
 communicate(Node, SessionId, Msg) ->
-    rpc:call(Node, connection_manager, communicate, [SessionId, Msg]).
+    rpc:call(Node, connection_api, communicate, [SessionId, Msg]).
 
 
 %%--------------------------------------------------------------------

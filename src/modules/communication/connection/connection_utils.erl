@@ -20,6 +20,10 @@
 
 %% API
 -export([
+    send_msg_excluding_connections/3,
+    send_via_any_connection/2
+]).
+-export([
     fill_effective_session_info/2,
     maybe_create_proxied_session/2
 ]).
@@ -41,9 +45,51 @@
 -define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tries to send given message via any connection of specified session
+%% excluding those specified as 3rd argument.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_msg_excluding_connections(session:id(), message(),
+    ExcludedCons :: [pid()]) -> ok | {error, term()}.
+send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
+    case session_connections:get_connections(SessionId) of
+        {ok, AllCons} ->
+            Cons = utils:random_shuffle(AllCons -- ExcludedCons),
+            send_via_any_connection(Msg, Cons);
+        Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tries to send given message via any given connections.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_via_any_connection(message(), [pid()]) -> ok | {error, term()}.
+send_via_any_connection(_Msg, []) ->
+    {error, no_connections};
+send_via_any_connection(Msg, [Conn]) ->
+    connection:send_msg(Conn, Msg);
+send_via_any_connection(Msg, [Conn | Cons]) ->
+    case connection:send_msg(Conn, Msg) of
+        ok ->
+            ok;
+        {error, serialization_failed} = SerializationError ->
+            SerializationError;
+        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+            WrongConnError;
+        _Error ->
+            send_via_any_connection(Msg, Cons)
+    end.
 
 
 %%--------------------------------------------------------------------

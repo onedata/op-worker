@@ -174,9 +174,9 @@ stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
 -spec send_to_oneclient_internal(session:id(), server_msg(), retries()) ->
     ok | {error, Reason :: term()}.
 send_to_oneclient_internal(SessionId, Msg, 0) ->
-    connection_manager:send(SessionId, Msg);
+    connection_api:send(SessionId, Msg);
 send_to_oneclient_internal(SessionId, Msg, Retries) ->
-    case connection_manager:send(SessionId, Msg) of
+    case connection_api:send(SessionId, Msg) of
         ok ->
             ok;
         {error, no_connections} = NoConnectionsError ->
@@ -192,10 +192,10 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
     ok | {error, Reason :: term()}.
 send_to_provider_internal(SessionId, Msg, 0) ->
     session_connections:ensure_connected(SessionId),
-    connection_manager:send(SessionId, Msg);
+    connection_api:send(SessionId, Msg);
 send_to_provider_internal(SessionId, Msg, Retries) ->
     session_connections:ensure_connected(SessionId),
-    case connection_manager:send(SessionId, Msg) of
+    case connection_api:send(SessionId, Msg) of
         ok ->
             ok;
         {error, _Reason} ->
@@ -209,10 +209,10 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
     retries()) -> {ok, msg()} | {error, Reason :: term()}.
 communicate_with_provider_internal(SessionId, Msg, 0) ->
     session_connections:ensure_connected(SessionId),
-    connection_manager:communicate(SessionId, Msg);
+    connection_api:communicate(SessionId, Msg);
 communicate_with_provider_internal(SessionId, Msg, Retries) ->
     session_connections:ensure_connected(SessionId),
-    case connection_manager:communicate(SessionId, Msg) of
+    case connection_api:communicate(SessionId, Msg) of
         {ok, _Response} = Ans ->
             Ans;
         {error, _Reason} ->

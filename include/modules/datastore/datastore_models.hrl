@@ -215,7 +215,7 @@
     event_manager :: undefined | pid(),
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
-    connection_manager :: undefined | pid(),
+    async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory

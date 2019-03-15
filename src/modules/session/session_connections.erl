@@ -18,8 +18,8 @@
 %% API
 -export([
     get_random_connection/1, get_connections/1,
-    get_connection_manager/1,
-    get_random_conn_and_conn_manager/1
+    get_async_req_manager/1,
+    get_random_conn_and_async_req_manager/1
 ]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
 -export([ensure_connected/1]).
@@ -64,14 +64,14 @@ get_connections(SessId) ->
 %% Returns connection manager for session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_connection_manager(session:id()) ->
+-spec get_async_req_manager(session:id()) ->
     {ok, Con :: pid()} | {error, Reason :: term()}.
-get_connection_manager(SessId) ->
+get_async_req_manager(SessId) ->
     case get_proxy_session(SessId) of
-        {ok, #session{connection_manager = undefined}} ->
-            {error, no_connection_manager};
-        {ok, #session{connection_manager = ConnManager}} ->
-            {ok, ConnManager};
+        {ok, #session{async_request_manager = undefined}} ->
+            {error, no_async_req_manager};
+        {ok, #session{async_request_manager = AsyncReqManager}} ->
+            {ok, AsyncReqManager};
         Error ->
             Error
     end.
@@ -81,16 +81,16 @@ get_connection_manager(SessId) ->
 %% Returns connection manager for session and random connection.
 %% @end
 %%--------------------------------------------------------------------
--spec get_random_conn_and_conn_manager(session:id()) ->
+-spec get_random_conn_and_async_req_manager(session:id()) ->
     {ok, Con :: pid(), ConnManager :: pid()} | {error, Reason :: term()}.
-get_random_conn_and_conn_manager(SessId) ->
+get_random_conn_and_async_req_manager(SessId) ->
     case get_proxy_session(SessId) of
         {ok, #session{connections = []}} ->
             {error, no_connections};
-        {ok, #session{connection_manager = undefined}} ->
-            {error, no_connection_manager};
-        {ok, #session{connections = Cons, connection_manager = ConnManager}} ->
-            {ok, utils:random_element(Cons), ConnManager};
+        {ok, #session{async_request_manager = undefined}} ->
+            {error, no_async_req_manager};
+        {ok, #session{connections = Cons, async_request_manager = AsyncReqManager}} ->
+            {ok, utils:random_element(Cons), AsyncReqManager};
         Error ->
             Error
     end.
