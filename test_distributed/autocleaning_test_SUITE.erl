@@ -631,6 +631,9 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(default, Config) ->
     ct:timetrap({minutes, 10}),
+    Workers = ?config(op_worker_nodes, Config),
+    % ensure that all file blocks will be public
+    ok = test_utils:set_env(Workers, ?APP_NAME, public_block_size_treshold, 1),
     Config2 = lfm_proxy:init(Config),
     ensure_space_empty(?SPACE_ID, Config2),
     Config2;
