@@ -20,6 +20,9 @@
 %% API
 -export([get_user_ctx/5, get_request_headers/1, get_group_ctx/4]).
 
+%% exported for test reasons
+-export([http_client_post/3]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -38,7 +41,7 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
     ReqBody = get_request_body(SessionId, UserId, SpaceId, StorageDoc),
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
             case helper:validate_user_ctx(Helper, UserCtx) of
@@ -73,7 +76,7 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     Url = str_utils:format_bin("~s/map_group", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
     ReqBody = get_group_request_body(GroupId, SpaceId, StorageDoc),
-    case http_client:post(Url, ReqHeaders, ReqBody) of
+    case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
             case helper:validate_group_ctx(Helper, GroupCtx) of
@@ -107,6 +110,18 @@ get_request_headers(#luma_config{api_key = APIKey}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Simple wrapper for http_client:post.
+%% This function is used to avoid mocking http_client in tests.
+%% Mocking http_client is dangerous because meck's reloading and
+%% purging the module can result in node_manager being killed.
+%%-------------------------------------------------------------------
+-spec http_client_post(http_client:url(), http_client:headers(),
+    http_client:body()) -> http_client:response().
+http_client_post(Url, ReqHeaders, ReqBody) ->
+    http_client:post(Url, ReqHeaders, ReqBody).
 
 %%--------------------------------------------------------------------
 %% @private
