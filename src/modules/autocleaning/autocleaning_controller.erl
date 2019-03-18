@@ -211,7 +211,7 @@ stop_cleaning(SpaceId) ->
 
 -spec notify_processed_file(od_space:id(), batch_id()) -> ok.
 notify_processed_file(SpaceId, BatchId) ->
-    {_ARId, BatchNum} = from_batch_id(BatchId),
+    {_AutocleaningRunId, BatchNum} = unpack_batch_id(BatchId),
     gen_server2:cast(?SERVER(SpaceId), ?FILE_PROCESSED(BatchNum)).
 
 %%%===================================================================
@@ -243,11 +243,11 @@ check(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec replica_deletion_predicate(autocleaning:run_id()) -> any().
 replica_deletion_predicate(ReportId) ->
-    {ARId, _BatchNum} = from_batch_id(ReportId),
+    {AutocleaningRunId, _BatchNum} = unpack_batch_id(ReportId),
     {ok, #{
         released_bytes := Released,
         bytes_to_release := ToRelease
-    }} = autocleaning_api:get_run_report(ARId),
+    }} = autocleaning_api:get_run_report(AutocleaningRunId),
     Released < ToRelease.
 
 %%-------------------------------------------------------------------
@@ -259,8 +259,8 @@ replica_deletion_predicate(ReportId) ->
 -spec process_replica_deletion_result(replica_deletion:result(), od_space:id(),
     file_meta:uuid(), autocleaning:run_id()) -> ok.
 process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, ReportId) ->
-    {ARId, BatchNum} = from_batch_id(ReportId),
-    ?alert("Auto-cleaning of file ~p in run ~p released ~p bytes.",
+    {ARId, BatchNum} = unpack_batch_id(ReportId),
+    ?debug("Auto-cleaning of file ~p in run ~p released ~p bytes.",
         [FileUuid, ARId, ReleasedBytes]),
     autocleaning_run:mark_released_file(ARId, ReleasedBytes),
     notify_released_file(SpaceId, ReleasedBytes, BatchNum);
@@ -269,19 +269,19 @@ process_replica_deletion_result({error, precondition_not_satisfied},
 ) ->
     notify_processed_file(SpaceId,ReportId);
 process_replica_deletion_result(Error, SpaceId, FileUuid, ReportId) ->
-    {ARId, _BatchNum} = from_batch_id(ReportId),
+    {ARId, _BatchNum} = unpack_batch_id(ReportId),
     ?error("Error ~p occured during auto-cleanig of file ~p in run ~p",
         [Error, FileUuid, ARId]),
     notify_processed_file(SpaceId,ReportId).
 
--spec to_batch_id(autocleaning:run_id(), non_neg_integer()) -> batch_id().
-to_batch_id(ARId, Int) ->
-    <<ARId/binary, ?ID_SEPARATOR/binary, (integer_to_binary(Int))/binary>>.
+-spec pack_batch_id(autocleaning:run_id(), non_neg_integer()) -> batch_id().
+pack_batch_id(AutocleaningRunId, Int) ->
+    <<AutocleaningRunId/binary, ?ID_SEPARATOR/binary, (integer_to_binary(Int))/binary>>.
 
--spec from_batch_id(batch_id()) -> {autocleaning:run_id(), non_neg_integer()}.
-from_batch_id(BatchId) ->
-    [ARId, BatchNum] = binary:split(BatchId, ?ID_SEPARATOR),
-    {ARId, binary_to_integer(BatchNum)}.
+-spec unpack_batch_id(batch_id()) -> {autocleaning:run_id(), non_neg_integer()}.
+unpack_batch_id(BatchId) ->
+    [AutocleaningRunId, BatchNum] = binary:split(BatchId, ?ID_SEPARATOR),
+    {AutocleaningRunId, binary_to_integer(BatchNum)}.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -354,7 +354,7 @@ handle_cast(?START_CLEANING, State = #state{
     space_id = SpaceId
 }) ->
     ?run_and_catch_errors(fun() ->
-        ?alert("Auto-cleaning run ~p of space ~p started", [ARId, SpaceId]),
+        ?debug("Auto-cleaning run ~p of space ~p started", [ARId, SpaceId]),
         State2 = start_cleaning_internal(State),
         State3 = process_updated_state(State2),
         {noreply, State3}
@@ -378,7 +378,7 @@ handle_cast(?STOP_CLEANING, State = #state{
     ?run_and_catch_errors(fun() ->
         autocleaning_run:mark_completed(ARId),
         replica_deletion_master:cancelling_finished(ARId, SpaceId),
-        ?alert("Auto-cleaning run ~p of space ~p finished", [ARId, SpaceId]),
+        ?debug("Auto-cleaning run ~p of space ~p finished", [ARId, SpaceId]),
         {stop, normal, State}
     end, State);
 handle_cast(_Request, State) ->
@@ -493,7 +493,7 @@ maybe_stop_cleaning(State = #state{
 }) when BytesToRelease =< ReleasedBytes ->
 
     lists:foreach(fun(BatchNum) ->
-        replica_deletion_master:cancel(to_batch_id(ARId, BatchNum), SpaceId)
+        replica_deletion_master:cancel(pack_batch_id(ARId, BatchNum), SpaceId)
     end, maps:keys(BatchesCounters)),
 
     State#state{
@@ -660,7 +660,7 @@ schedule_file_replicas_deletion(FilesToCleanAndBatchNum, ARId, SpaceId) ->
             undefined ->
                 ScheduledNumIn;
             {FileUuid, Provider, Blocks, VV} ->
-                BatchId = to_batch_id(ARId, BatchNum),
+                BatchId = pack_batch_id(ARId, BatchNum),
                 schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, BatchId, SpaceId),
                 ScheduledNumIn + 1
         end
