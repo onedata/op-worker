@@ -69,6 +69,7 @@ start_link(SeqManSup, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send(pid(), term()) -> ok.
+% TODO - moze zamiast na wielu node'ach od razu robic rpca na node na ktorym jest sesja?
 send(Manager, {close_stream, StmId}) ->
     ?debug("Closing stream ~p", [StmId]),
     forward_to_sequencer_out_stream(#server_message{

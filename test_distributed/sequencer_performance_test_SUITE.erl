@@ -63,6 +63,7 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 %%%===================================================================
 
 manager_test(Config) ->
+    % TODO - przetestowac na wielu node'ach
     [Worker | _] = ?config(op_worker_nodes, Config),
     StmId = 1,
     {ok, SessId} = session_setup(Worker),
