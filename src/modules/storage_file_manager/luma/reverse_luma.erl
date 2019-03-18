@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for mapping onedata users to storage users.
+%%% This module is responsible for mapping storage users to onedata users.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(reverse_luma).

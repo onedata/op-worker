@@ -94,14 +94,20 @@ copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, T
 copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
     {ok, {TargetGuid, TargetHandle}} = logical_file_manager:create_and_open(
         SessId, TargetParentGuid, TargetName, Mode, write),
-    {ok, SourceHandle} =
-        logical_file_manager:open(SessId, {guid, SourceGuid}, read),
-    {ok, _NewSourceHandle, _NewTargetHandle} =
-        copy_file_content(SourceHandle, TargetHandle, 0),
-    ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
-    ok = logical_file_manager:release(SourceHandle),
-    ok = logical_file_manager:fsync(TargetHandle),
-    ok = logical_file_manager:release(TargetHandle),
+    try
+        {ok, SourceHandle} =
+            logical_file_manager:open(SessId, {guid, SourceGuid}, read),
+        try
+            {ok, _NewSourceHandle, _NewTargetHandle} =
+                copy_file_content(SourceHandle, TargetHandle, 0),
+            ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
+            ok = logical_file_manager:fsync(TargetHandle)
+        after
+            logical_file_manager:release(SourceHandle)
+        end
+    after
+        logical_file_manager:release(TargetHandle)
+    end,
     {ok, TargetGuid, []}.
 
 %%--------------------------------------------------------------------

@@ -132,13 +132,13 @@
     readdir_should_work_with_token2
 %%    TODO: Turn on this tests after resolving VFS-5232
 %%    lfm_recreate_handle_test,
-%%    lfm_open_failure_test
+%%    lfm_open_failure_test,
 %%    lfm_create_and_open_failure_test,
-%%    open_in_direct_mode_test,
+%%    lfm_open_in_direct_mode_test,
 %%    lfm_copy_failure_test,
-%%    lfm_open_multiple_times,
-%%    lfm_open_multiple_users,
-%%    lfm_open_and_create_open_test,
+%%    lfm_open_multiple_times_failure_test,
+%%    lfm_open_failure_multiple_users_test,
+%%    lfm_open_and_create_open_failure_test,
 %%    lfm_copy_failure_multiple_users_test
 ]).
 
@@ -311,13 +311,12 @@ lfm_open_in_direct_mode_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
     %% force direct io mode
-    test_utils:mock_new(W, user_ctx, [passthrough]),
     test_utils:mock_expect(W, user_ctx, is_direct_io,
         fun(_) ->
             true
         end),
 
-    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    {ok, Handle} = ?assertMatch({ok, Handle}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
     Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
     HandleId = lfm_context:get_handle_id(Context),
     ?assertEqual({error, not_found}, rpc:call(W, session_handles, get, [SessId1, HandleId])),
@@ -1492,6 +1491,25 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(Case, Config) when
+    Case =:= lfm_open_in_direct_mode_test ->
+        Workers = ?config(op_worker_nodes, Config),
+        test_utils:mock_new(Workers, user_ctx, [passthrough]),
+        init_per_testcase(default, Config);
+
+
+init_per_testcase(Case, Config) when
+    Case =:=  lfm_open_failure_test orelse
+        Case =:= lfm_create_and_open_failure_test orelse
+        Case =:= lfm_copy_failure_test orelse
+        Case =:= lfm_open_multiple_times_failure_test orelse
+        Case =:= lfm_open_failure_multiple_users_test,
+        Case =:= lfm_open_and_create_open_failure_test,
+        Case =:= lfm_copy_failure_multiple_users_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_handles, [passthrough]),
+    init_per_testcase(default, Config);
+
 init_per_testcase(ShareTest, Config) when
     ShareTest =:= create_share_dir_test orelse
         ShareTest =:= create_share_file_test orelse
@@ -1511,6 +1529,24 @@ init_per_testcase(_Case, Config) ->
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
+
+end_per_testcase(Case, Config) when
+    Case =:= lfm_open_in_direct_mode_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [user_ctx]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:=  lfm_open_failure_test orelse
+        Case =:= lfm_create_and_open_failure_test orelse
+        Case =:= lfm_copy_failure_test orelse
+        Case =:= lfm_open_multiple_times_failure_test orelse
+        Case =:= lfm_open_failure_multiple_users_test,
+        Case =:= lfm_open_and_create_open_failure_test,
+        Case =:= lfm_copy_failure_multiple_users_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [file_handles]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(ShareTest, Config) when
     ShareTest =:= create_share_dir_test orelse
@@ -1546,7 +1582,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 register_open_failure_mock(Worker) ->
-    test_utils:mock_new(Worker, file_handles, [passthrough]),
     test_utils:mock_expect(Worker, file_handles, register_open,
         fun(FileCtx, SessId, Count) ->
             meck:passthrough([FileCtx, SessId, Count]),

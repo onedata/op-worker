@@ -515,7 +515,8 @@ testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
 
 -spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
 node_get_mocked_space_user_privileges(SpaceId, UserId) ->
-    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() -> {false, privileges:space_admin()} end),
+    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() ->
+        {false, privileges:space_admin()} end),
     Privileges.
 
 -spec mock_share_logic(proplists:proplist()) -> ok.
@@ -541,7 +542,6 @@ mock_share_logic(Config) ->
 unmock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, share_logic).
-
 
 
 %%%===================================================================
@@ -775,7 +775,7 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, user_logic),
+    test_utils:mock_new(Workers, user_logic, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{
@@ -1019,7 +1019,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                 {ok, #document{key = PID, value = #od_provider{
                     name = PID,
                     subdomain_delegation = false,
-                    domain = PID,
+                    domain = PID,  % domain is the same as Id
                     spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
                     longitude = 0.0,
                     latitude = 0.0
@@ -1037,9 +1037,18 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         {ok, Domain}
     end,
 
-    ResolveIPsFun = fun(?ROOT_SESS_ID, PID) ->
+    GetNodesFun = fun(PID) ->
         {ok, Domain} = GetDomainFun(?ROOT_SESS_ID, PID),
-        inet:getaddrs(binary_to_list(Domain), inet)
+        % Simulate the fact the some providers can be reached only by their domain,
+        % but return the domain/IP consistently
+        AllProviders = lists:sort(maps:keys(ProvMap)),
+        case index_of(PID, AllProviders) rem 2 of
+            0 ->
+                {ok, [Domain]};
+            1 ->
+                {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
+                {ok, [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms]}
+        end
     end,
 
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
@@ -1111,12 +1120,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips,
-        fun(PID) ->
-            ResolveIPsFun(?ROOT_SESS_ID, PID)
-        end),
+    test_utils:mock_expect(AllWorkers, provider_logic, get_nodes, GetNodesFun),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces, GetSpacesFun),
@@ -1172,39 +1176,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        VerifyProviderIdentityFun),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_nonce,
-        fun(ProviderId, Nonce) ->
-            {ok, #document{value = #od_provider{
-                domain = Domain
-            }}} = GetProviderFun(?ROOT_SESS_ID, ProviderId),
-            [Worker | _] = get_same_domain_workers(Config, binary_to_atom(Domain, utf8)),
-            Hostname = ?GET_HOSTNAME(Worker),
-            try
-                URL = str_utils:format_bin("https://~s~s?nonce=~s", [
-                    Hostname, ?NONCE_VERIFY_PATH, Nonce
-                ]),
-
-                CaCerts = oneprovider:trusted_ca_certs(),
-                SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
-                Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
-
-                case http_client:get(URL, #{}, <<>>, Opts) of
-                    {ok, 200, _, JSON} ->
-                        case json_utils:decode(JSON) of
-                            #{<<"status">> := <<"ok">>} -> ok;
-                            _ -> {error, invalid_nonce}
-                        end;
-                    {ok, Code, _, _} ->
-                        {error, {bad_http_code, Code}};
-                    {error, _} = Error ->
-                        Error
-                end
-            catch _:_ ->
-                {error, unauthorized}
-            end
-        end).
+        VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1263,3 +1235,12 @@ add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
     ?assertMatch({ok, _},
         rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
     ).
+
+
+-spec index_of(term(), [term()]) -> not_found | integer().
+index_of(Value, List) ->
+    WithIndices = lists:zip(List, lists:seq(1, length(List))),
+    case lists:keyfind(Value, 1, WithIndices) of
+        {Value, Index} -> Index;
+        false -> not_found
+    end.

@@ -18,6 +18,7 @@
 -author("Lukasz Opiola").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/gui_paths.hrl").
@@ -26,6 +27,7 @@
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
 -export([get_as_map/0]).
+-export([to_string/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
@@ -38,16 +40,20 @@
 -export([set_domain/1, set_delegated_subdomain/1]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
--export([resolve_ips/1, resolve_ips/2]).
+-export([get_nodes/1, get_nodes/2]).
+-export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
+-export([zone_get_offline_access_idps/0]).
+-export([fetch_compatibility_config/1]).
 -export([assert_zone_compatibility/0]).
+-export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/3]).
--export([fetch_oz_compatibility_config/1]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
--define(IPS_CACHE_TTL, application:get_env(?APP_NAME, provider_ips_cache_ttl, timer:minutes(10))).
+-define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
+
 
 %%%===================================================================
 %%% API
@@ -111,6 +117,14 @@ get_protected_data(SessionId, ProviderId) ->
         gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
         subscribe = true
     }).
+
+
+-spec to_string(od_provider:id()) -> string().
+to_string(ProviderId) ->
+    case provider_logic:get_name(ProviderId) of
+        {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
+        _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -373,33 +387,75 @@ get_domain(SessionId, ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Resolves IPs of given provider via DNS using current provider's auth.
+%% Resolves the node hostnames of given provider. Tries to resolve the IP
+%% addresses and check if they are reachable (may not be true due to reverse proxy etc.)
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_ips(od_provider:id()) -> {ok, [inet:ip4_address()]} | {error, term()}.
-resolve_ips(ProviderId) ->
-    resolve_ips(?ROOT_SESS_ID, ProviderId).
+-spec get_nodes(od_provider:id()) -> {ok, [binary()]} | {error, term()}.
+get_nodes(ProviderId) ->
+    ResolveNodes = fun() ->
+        % Call by ?MODULE to allow for CT testing
+        case ?MODULE:get_domain(?ROOT_SESS_ID, ProviderId) of
+            {ok, Domain} ->
+                {true, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
+            {error, _} = Error ->
+                Error
+        end
+    end,
+    simple_cache:get({provider_nodes, ProviderId}, ResolveNodes).
+
+-spec get_nodes(od_provider:id(), od_provider:domain()) -> [binary()].
+get_nodes(ProviderId, Domain) ->
+    case inet:parse_ipv4_address(binary_to_list(Domain)) of
+        {ok, _} ->
+            ?warning("Provider ~ts is using an IP address instead of domain", [to_string(ProviderId)]),
+            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_string(ProviderId), Domain]),
+            [Domain];
+        {error, einval} ->
+            {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
+            IPs = [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms],
+            IpsString = str_utils:join_binary(IPs, <<", ">>),
+            ProviderConfig = fetch_service_configuration({oneprovider, Domain, Domain}),
+            ConfigMatches = fun(IP) ->
+                ProviderConfig =:= (catch fetch_service_configuration({oneprovider, Domain, IP}))
+            end,
+            case lists:all(ConfigMatches, IPs) of
+                true ->
+                    ?info("Resolved ~B node(s) for connection to provider ~ts: ~s", [
+                        length(IPs), to_string(ProviderId), IpsString
+                    ]),
+                    IPs;
+                false ->
+                    ?info(
+                        "Falling back to domain '~ts' for connection to provider ~ts as "
+                        "IP addresses failed the connectivity check (~s)", [
+                            Domain, to_string(ProviderId), IpsString
+                        ]),
+                    [Domain]
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Resolves IPs of given provider via DNS.
+%% Resolves rtransfer port of given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_ips(gs_client_worker:client(), od_provider:id()) ->
-    {ok, [inet:ip4_address()]} | {error, term()}.
-resolve_ips(SessionId, ProviderId) ->
-    ResolveIPs = fun() ->
-        case get_domain(SessionId, ProviderId) of
-            {ok, Domain} ->
-                Ans = inet:getaddrs(binary_to_list(Domain), inet),
-                {true, Ans, ?IPS_CACHE_TTL};
-            {error, _} = Error ->
-                {false, Error}
-        end
+-spec get_rtransfer_port(ProviderId :: binary()) -> {ok, inet:port_number()}.
+get_rtransfer_port(ProviderId) ->
+    ResolvePort = fun() ->
+        {ok, Domain} = provider_logic:get_domain(ProviderId),
+        Port = case fetch_service_configuration({oneprovider, Domain, Domain}) of
+            {ok, #{<<"rtransferPort">> := RtransferPort}} ->
+                RtransferPort;
+            _ ->
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
+                    [to_string(ProviderId), ?RTRANSFER_PORT]),
+                ?RTRANSFER_PORT
+        end,
+        {true, Port, ?PROVIDER_NODES_CACHE_TTL}
     end,
-    {ok, IP} = simple_cache:get({cached_ip, ProviderId}, ResolveIPs),
-    IP.
+    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------
@@ -629,6 +685,38 @@ zone_time_seconds() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the list of IdPs in Onezone that support offline access.
+%% NOTE: The Onezone response has the following format:
+%%  <<"supportedIdPs">> => [
+%%      #{
+%%          <<"id">> => <<"google">>,
+%%          <<"offlineAccess">> => false
+%%      },
+%%      #{
+%%          <<"id">> => <<"github">>,
+%%          <<"offlineAccess">> => true
+%%      }
+%%  ]
+%% @end
+%%--------------------------------------------------------------------
+-spec zone_get_offline_access_idps() -> {ok, [IdP :: binary()]} | {error, term()}.
+zone_get_offline_access_idps() ->
+    case fetch_service_configuration(onezone) of
+        {ok, Map} ->
+            SupportedIdPs = maps:get(<<"supportedIdPs">>, Map, []),
+            {ok, lists:filtermap(fun(IdPConfig) ->
+                case maps:get(<<"offlineAccess">>, IdPConfig, false) of
+                    false -> false;
+                    true -> {true, maps:get(<<"id">>, IdPConfig)}
+                end
+            end, SupportedIdPs)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Contacts given provider and retrieves his identity macaroon, and then
 %% verifies it in Onezone.
 %% @end
@@ -637,14 +725,8 @@ zone_time_seconds() ->
 verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
-        URL = str_utils:format_bin("https://~s~s", [
-            Domain, ?IDENTITY_MACAROON_PATH
-        ]),
-
-        CaCerts = oneprovider:trusted_ca_certs(),
-        SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
-        SslOpts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
-
+        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_MACAROON_PATH]),
+        SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, #{}, <<>>, SslOpts) of
             {ok, 200, _, IdentityMacaroon} ->
                 verify_provider_identity(ProviderId, IdentityMacaroon);
@@ -686,17 +768,10 @@ verify_provider_identity(ProviderId, IdentityMacaroon) ->
     ok | {error, term()}.
 verify_provider_nonce(ProviderId, Nonce) ->
     try
-        {ok, Domain} = get_domain(ProviderId),
-        URL = str_utils:format_bin("https://~s~s?nonce=~s", [
-            Domain, ?NONCE_VERIFY_PATH, Nonce
-        ]),
-
-        CaCerts = oneprovider:trusted_ca_certs(),
-        SecureFlag = application:get_env(
-            ?APP_NAME, interprovider_connections_security, true
-        ),
-        SslOpts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
-
+        % Call by ?MODULE to allow for CT testing
+        {ok, Domain} = ?MODULE:get_domain(ProviderId),
+        URL = str_utils:format_bin("https://~s~s?nonce=~s", [Domain, ?NONCE_VERIFY_PATH, Nonce]),
+        SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, #{}, <<>>, SslOpts) of
             {ok, 200, _, JSON} ->
                 case json_utils:decode(JSON) of
@@ -708,8 +783,34 @@ verify_provider_nonce(ProviderId, Nonce) ->
             {error, _} = Error ->
                 Error
         end
-    catch _:_ ->
+    catch Type:Reason ->
+        ?debug_stacktrace("Cannot verify nonce for provider ~ts - nonce was '~s' - ~p:~p", [
+            to_string(ProviderId), Nonce, Type, Reason
+        ]),
         ?ERROR_UNAUTHORIZED
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Performs request fetching compatibility information from
+%% Onezone or another Oneprovider.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_compatibility_config(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}.
+fetch_compatibility_config(Service) ->
+    case fetch_service_configuration(Service) of
+        {ok, JsonMap} ->
+            PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
+            CompatibleOpVersions = maps:get(
+                <<"compatibleOneproviderVersions">>, JsonMap, []
+            ),
+            {ok, PeerVersion, CompatibleOpVersions};
+        {error, Error} ->
+            {error, Error}
     end.
 
 
@@ -720,8 +821,7 @@ verify_provider_nonce(ProviderId, Nonce) ->
 %%--------------------------------------------------------------------
 -spec assert_zone_compatibility() -> ok | no_return().
 assert_zone_compatibility() ->
-    OzUrl = oneprovider:get_oz_url(),
-    case fetch_oz_compatibility_config(OzUrl) of
+    case fetch_compatibility_config(onezone) of
         {ok, OzVersion, CompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
             CompOzVersions = application:get_env(
@@ -758,14 +858,25 @@ assert_zone_compatibility() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns ssl options for connecting to a provider under given domain.
+%% @end
+%%--------------------------------------------------------------------
+-spec provider_connection_ssl_opts(od_provider:domain()) -> [http_client:ssl_opt()].
+provider_connection_ssl_opts(Domain) ->
+    CaCerts = oneprovider:trusted_ca_certs(),
+    SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+    [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}].
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_provider_compatibility(Hostname :: binary(), od_provider:id(),
-    [http_client:ssl_opt()]) ->
+-spec assert_provider_compatibility(od_provider:id(), Domain :: binary(), Hostname :: binary()) ->
     ok | no_return().
-assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
-    case fetch_op_compatibility_config(Hostname, SslOpts) of
+assert_provider_compatibility(ProviderId, Domain, Hostname) ->
+    case fetch_compatibility_config({oneprovider, Domain, Hostname}) of
         {ok, RemoteOpVersion, RemoteCompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
             CompOpVersions = application:get_env(
@@ -800,58 +911,58 @@ assert_provider_compatibility(Hostname, ProviderId, SslOpts) ->
     end.
 
 
--spec fetch_oz_compatibility_config(OzUrl :: string()) ->
-    {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
-    {error, {bad_response, Code :: integer(), Body :: binary()}} |
-    {error, term()}.
-fetch_oz_compatibility_config(OzUrl) ->
-    URL = OzUrl ++ ?ZONE_CONFIGURATION_PATH,
-    DeprecatedURL = OzUrl ++ ?DEPRECATED_ZONE_CONFIGURATION_PATH,
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
-    fetch_compatibility_config(URL, DeprecatedURL, SslOpts).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
+%%--------------------------------------------------------------------
 %% @private
--spec fetch_op_compatibility_config(
-    Hostname :: binary(), SslOpts :: [http_client:ssl_opt()]) ->
-    {ok, OzVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+%% @doc
+%% Attempts to fetch the configuration page of given service.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-fetch_op_compatibility_config(Hostname, SslOpts) ->
+fetch_service_configuration(onezone) ->
+    OzHostname = oneprovider:get_oz_domain(),
+    URL = str_utils:format_bin("https://~s~s", [
+        OzHostname, ?ZONE_CONFIGURATION_PATH
+    ]),
+    DeprecatedURL = str_utils:format_bin("https://~s~s", [
+        OzHostname, ?DEPRECATED_ZONE_CONFIGURATION_PATH
+    ]),
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
+    fetch_configuration(URL, DeprecatedURL, SslOpts);
+
+fetch_service_configuration({oneprovider, Domain, Hostname}) ->
     URL = str_utils:format_bin("https://~s~s", [
         Hostname, ?PROVIDER_CONFIGURATION_PATH
     ]),
     DeprecatedURL = str_utils:format_bin("https://~s~s", [
         Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
     ]),
-    fetch_compatibility_config(URL, DeprecatedURL, SslOpts).
+    SslOpts = provider_connection_ssl_opts(Domain),
+    fetch_configuration(URL, DeprecatedURL, SslOpts).
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Attempts to fetch the configuration page providing compatibility
-%% information.
-%% If the resource with default URL is not found, the older path
-%% is attempted.
+%% Attempts to fetch the configuration page.
+%% If the resource with default URL is not found, the older path is attempted.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_compatibility_config(
-    URL, DeprecatedURL :: URL, SslOpts :: [http_client:ssl_opt()]
-) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+-spec fetch_configuration(URL, DeprecatedURL :: URL, [http_client:ssl_opt()]) ->
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}
-    when URL :: string() | binary().
-fetch_compatibility_config(URL, DeprecatedURL, SslOpts) ->
-    case http_get_compatibility_config(URL, SslOpts) of
+    when URL :: binary().
+fetch_configuration(URL, DeprecatedURL, SslOpts) ->
+    case http_get_configuration(URL, SslOpts) of
         {error, {bad_response, 404, _}} ->
-            case http_get_compatibility_config(DeprecatedURL, SslOpts) of
+            case http_get_configuration(DeprecatedURL, SslOpts) of
                 {error, Error} -> {error, Error};
                 Success -> Success
             end;
@@ -863,25 +974,19 @@ fetch_compatibility_config(URL, DeprecatedURL, SslOpts) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Performs request fetching compatibility information from
-%% Onezone or another Oneprovider.
+%% Attempts to fetch and parse the configuration page under given URL.
 %% @end
 %%--------------------------------------------------------------------
--spec http_get_compatibility_config(
+-spec http_get_configuration(
     URL :: string() | binary(), SslOpts :: [http_client:ssl_opt()]
 ) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
+    {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-http_get_compatibility_config(URL, SslOpts) ->
+http_get_configuration(URL, SslOpts) ->
     case http_client:get(URL, #{}, <<>>, [{ssl_options, SslOpts}]) of
         {ok, 200, _, JsonBody} ->
-            JsonMap = json_utils:decode(JsonBody),
-            PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
-            CompatibleOpVersions = maps:get(
-                <<"compatibleOneproviderVersions">>, JsonMap, []
-            ),
-            {ok, PeerVersion, CompatibleOpVersions};
+            {ok, json_utils:decode(JsonBody)};
         {ok, Code, _, Body} ->
             {error, {bad_response, Code, Body}};
         {error, Error} ->
