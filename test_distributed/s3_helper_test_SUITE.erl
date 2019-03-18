@@ -233,11 +233,11 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
 
-    UserCtx = helper:new_s3_user_ctx(
+    {ok, UserCtx} = helper:new_s3_user_ctx(
         atom_to_binary(?config(access_key, S3Config), utf8),
         atom_to_binary(?config(secret_key, S3Config), utf8)
     ),
-    Helper = helper:new_s3_helper(
+    {ok, Helper} = helper:new_s3_helper(
         atom_to_binary(?config(host_name, S3Config), utf8),
         ?S3_BUCKET_NAME,
         false,
