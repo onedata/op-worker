@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -140,6 +141,8 @@ verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
             remove_test_file(Helper, UserCtx, FileId, byte_size(ExpectedFileContent)),
             ok;
         UnexpectedFileContent ->
+            ?error("Unexpected test file content in ~p", [FileId]),
+            remove_test_file(Helper, UserCtx, FileId, byte_size(ExpectedFileContent)),
             {error, {storage_test_file, {ExpectedFileContent, UnexpectedFileContent}}}
     end.
 
