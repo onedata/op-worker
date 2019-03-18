@@ -17,8 +17,12 @@
 
 
 %% API
--export([generate_file_id/0, create_test_file/3, update_test_file/3,
-    remove_test_file/4, verify_test_file/4, verify_storage_on_all_nodes/1]).
+-export([generate_file_id/0, create_test_file/3, read_test_file/3,
+    update_test_file/3, remove_test_file/4, verify_storage_on_all_nodes/1]).
+
+%% exported for RPC
+-export([verify_test_file/4]).
+
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
     storage_test_file_name_size, 32)).
@@ -56,19 +60,17 @@ create_test_file(Helper, UserCtx, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies content of storage test file and removes it.
+%% Returns content of storage test file.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
-    Content :: binary()) -> ok | {error, term()}.
-verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
-    case read_test_file(Helper, UserCtx, FileId) of
-        ExpectedFileContent ->
-            remove_test_file(Helper, UserCtx, FileId, byte_size(ExpectedFileContent)),
-            ok;
-        UnexpectedFileContent ->
-            {error, {storage_test_file, {ExpectedFileContent, UnexpectedFileContent}}}
-    end.
+-spec read_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+    Content :: binary().
+read_test_file(Helper, UserCtx, FileId) ->
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    {ok, FileHandle} = helpers:open(Handle, FileId, read),
+    {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_CONTENT_LEN),
+    ok = helpers:release(FileHandle),
+    Content.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,23 +124,28 @@ verify_storage_on_all_nodes(Helper) ->
     end.
 
 %%%===================================================================
-%%% Internal functions
+%%% RPC
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns content of storage test file.
+%% Verifies content of storage test file and removes it.
 %% @end
 %%--------------------------------------------------------------------
--spec read_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
-    Content :: binary().
-read_test_file(Helper, UserCtx, FileId) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
-    {ok, FileHandle} = helpers:open(Handle, FileId, read),
-    {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_CONTENT_LEN),
-    ok = helpers:release(FileHandle),
-    Content.
+-spec verify_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
+    Content :: binary()) -> ok | {error, term()}.
+verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
+    case read_test_file(Helper, UserCtx, FileId) of
+        ExpectedFileContent ->
+            remove_test_file(Helper, UserCtx, FileId, byte_size(ExpectedFileContent)),
+            ok;
+        UnexpectedFileContent ->
+            {error, {storage_test_file, {ExpectedFileContent, UnexpectedFileContent}}}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
