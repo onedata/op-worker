@@ -17,8 +17,8 @@
 
 
 %% API
--export([generate_file_id/0, create_test_file/3, read_test_file/3,
-    update_test_file/3, remove_test_file/4, verify_test_file/4, verify_storage_on_all_nodes/1]).
+-export([generate_file_id/0, create_test_file/3, update_test_file/3,
+    remove_test_file/4, verify_test_file/4, verify_storage_on_all_nodes/1]).
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
     storage_test_file_name_size, 32)).
@@ -56,21 +56,7 @@ create_test_file(Helper, UserCtx, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns content of storage test file.
-%% @end
-%%--------------------------------------------------------------------
--spec read_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
-    Content :: binary().
-read_test_file(Helper, UserCtx, FileId) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
-    {ok, FileHandle} = helpers:open(Handle, FileId, read),
-    {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_CONTENT_LEN),
-    ok = helpers:release(FileHandle),
-    Content.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Verifies content of storage test file.
+%% Verifies content of storage test file and removes it.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
@@ -78,6 +64,7 @@ read_test_file(Helper, UserCtx, FileId) ->
 verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
     case read_test_file(Helper, UserCtx, FileId) of
         ExpectedFileContent ->
+            remove_test_file(Helper, UserCtx, FileId, byte_size(ExpectedFileContent)),
             ok;
         UnexpectedFileContent ->
             {error, {storage_test_file, {ExpectedFileContent, UnexpectedFileContent}}}
@@ -115,7 +102,8 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Verifies whether storage is accessible for all nodes in the cluster
+%% Verifies whether storage is accessible for all nodes in the cluster.
+%% This function is called by onepanel, BEFORE adding new storage.
 %% @end
 %%-------------------------------------------------------------------
 -spec verify_storage_on_all_nodes(helpers:helper()) -> ok | {error, term()}.
@@ -140,6 +128,21 @@ verify_storage_on_all_nodes(Helper) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Returns content of storage test file.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+    Content :: binary().
+read_test_file(Helper, UserCtx, FileId) ->
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    {ok, FileHandle} = helpers:open(Handle, FileId, read),
+    {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_CONTENT_LEN),
+    ok = helpers:release(FileHandle),
+    Content.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Create random sequence consisting of lowercase ASCII letters.
 %% @end
 %%--------------------------------------------------------------------
@@ -150,6 +153,16 @@ random_ascii_lowercase_sequence(Length) ->
         <<Acc/binary, (rand:uniform(26) + 96)>>
     end, <<>>, lists:seq(1, Length)).
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is used to verify whether storage is accessible on
+%% all nodes. It verifies whether it can read the file referenced by
+%% FileId and whether its content is equal to FileContent.
+%% Next, it creates a new test file and recursively calls itself
+%% on the next node from the Nodes list.
+%% @end
+%%-------------------------------------------------------------------
 -spec verify_storage_internal(helpers:helper(), helpers:user_ctx(), [node()],
     helpers:file_id(), Content :: binary()) ->
     {ok, {helpers:file_id(), binary()}} | {error, term()}.
