@@ -25,7 +25,7 @@
     stream_to_provider/4
 ]).
 
--type recipient() :: undefined | pid().
+-type recipient_pid() :: undefined | pid().
 -type retries() :: non_neg_integer() | infinity.
 -type generic_msg() :: tuple().
 -type client_msg() :: #client_message{}.
@@ -96,7 +96,7 @@ send_to_provider(SessionId, Msg, RecipientPid) ->
 %% until either message is sent or no more retries are left.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_msg(), recipient(), retries()) ->
+-spec send_to_provider(session:id(), generic_msg(), recipient_pid(), retries()) ->
     ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
 send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
     {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
@@ -147,8 +147,9 @@ communicate_with_provider(SessionId, Msg, Retries) ->
 %% Sends stream message to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_to_provider(session:id(), generic_msg(), sequencer:stream_id(),
-    recipient()) -> ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
+-spec stream_to_provider(session:id(), generic_msg(),
+    sequencer:stream_id(), recipient_pid()) ->
+    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
 stream_to_provider(SessionId, #client_message{} = Msg0, StreamId, RecipientPid) ->
     session_connections:ensure_connected(SessionId),
     {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
@@ -229,7 +230,7 @@ retries_left(Num) -> Num - 1.
 
 
 %% @private
--spec maybe_set_msg_id(msg(), recipient()) ->
+-spec maybe_set_msg_id(msg(), recipient_pid()) ->
     {undefined | clproto_message_id:id(), msg()}.
 maybe_set_msg_id(#client_message{message_id = undefined} = Msg, undefined) ->
     {undefined, Msg};

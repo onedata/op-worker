@@ -21,7 +21,7 @@
 %% API
 -export([
     send_msg_excluding_connections/3,
-    send_via_any_connection/2
+    send_via_any/2
 ]).
 -export([
     fill_effective_session_info/2,
@@ -63,7 +63,7 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
     case session_connections:get_connections(SessionId) of
         {ok, AllCons} ->
             Cons = utils:random_shuffle(AllCons -- ExcludedCons),
-            send_via_any_connection(Msg, Cons);
+            send_via_any(Msg, Cons);
         Error ->
             Error
     end.
@@ -74,12 +74,12 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
 %% Tries to send given message via any given connections.
 %% @end
 %%--------------------------------------------------------------------
--spec send_via_any_connection(message(), [pid()]) -> ok | {error, term()}.
-send_via_any_connection(_Msg, []) ->
+-spec send_via_any(message(), [pid()]) -> ok | {error, term()}.
+send_via_any(_Msg, []) ->
     {error, no_connections};
-send_via_any_connection(Msg, [Conn]) ->
+send_via_any(Msg, [Conn]) ->
     connection:send_msg(Conn, Msg);
-send_via_any_connection(Msg, [Conn | Cons]) ->
+send_via_any(Msg, [Conn | Cons]) ->
     case connection:send_msg(Conn, Msg) of
         ok ->
             ok;
@@ -88,7 +88,7 @@ send_via_any_connection(Msg, [Conn | Cons]) ->
         {error, sending_msg_via_wrong_connection} = WrongConnError ->
             WrongConnError;
         _Error ->
-            send_via_any_connection(Msg, Cons)
+            send_via_any(Msg, Cons)
     end.
 
 

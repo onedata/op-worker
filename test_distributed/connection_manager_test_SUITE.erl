@@ -175,7 +175,7 @@ fallback_during_sending_response_because_of_connection_error_test(Config) ->
     {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
     {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
 
-    mock_ranch_ssl(Worker1),
+    mock_ranch_ssl_to_fail_once(Worker1),
     MsgId = <<"1">>,
     Ping = fuse_test_utils:generate_ping_message(MsgId),
     ssl:send(Sock1, Ping),
@@ -252,7 +252,7 @@ fulfill_promises_after_connection_error_test(Config) ->
     Path = <<"/", SpaceName/binary, "/test_file">>,
     {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
 
-    mock_ranch_ssl(Workers),
+    mock_ranch_ssl_to_fail_once(Workers),
     ok = ssl:send(Sock2, create_resolve_guid_req(Path)),
 
     % Fuse requests are handled using promises - connection process holds info
@@ -292,7 +292,7 @@ send_test(Config) ->
     {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
 
     % In case of errors send_sync should try sending via other connections
-    mock_ranch_ssl(Workers),
+    mock_ranch_ssl_to_fail_once(Workers),
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
         code = ?OK,
@@ -676,7 +676,7 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-mock_ranch_ssl(Workers) ->
+mock_ranch_ssl_to_fail_once(Workers) ->
     Ref = make_ref(),
     test_utils:mock_new(Workers, ranch_ssl, [passthrough]),
     test_utils:mock_expect(Workers, ranch_ssl, send,
@@ -850,7 +850,7 @@ apply_helper(Handle, Timeout, Function, Args, CP_Pid) ->
             spawn(fun() ->
                 {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
                 Master ! {ref, ResponseRef},
-                heartbeat(10, Master, ResponseRef),
+                send_helpers_heartbeats_with_delay(10, Master, ResponseRef),
                 Ans = helpers:receive_loop(ResponseRef, Timeout),
                 Master ! {ResponseRef, Ans}
             end),
@@ -880,9 +880,9 @@ handle_file_written_events(CP_Pid) ->
             ok
     end.
 
-heartbeat(0, _Master, _ResponseRef) ->
+send_helpers_heartbeats_with_delay(0, _Master, _ResponseRef) ->
     ok;
-heartbeat(N, Master, ResponseRef) ->
+send_helpers_heartbeats_with_delay(N, Master, ResponseRef) ->
     timer:sleep(timer:seconds(10)),
     Master ! {ResponseRef, heartbeat},
-    heartbeat(N - 1, Master, ResponseRef).
+    send_helpers_heartbeats_with_delay(N - 1, Master, ResponseRef).

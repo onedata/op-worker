@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module monitors execution of client requests and periodically
 %%% send heartbeat messages to inform him that his requests are still being
-%%% handled.
+%%% handled or error messages in case of workers deaths.
 %%%
 %%% When connection receives a possibly time-consuming request it delegates
 %%% execution to appropriate worker and notifies async request manager about
@@ -17,12 +17,103 @@
 %%% While task is being handled by worker, async request manager periodically
 %%% checks its status. If it is still alive heartbeat message is being send
 %%% to client informing him that his request is still being processed.
-%%% In case it is dead, error message is send instead.
+%%% In case it has died, error message is send instead.
 %%% Once worker finishes its task, it calls async request manager to withhold
 %%% sending heartbeats for this task and tries to send response via the same
 %%% connection the request came. If it is not possible, due to some errors,
-%%% it tries sending via other connections of client session. If all goes well
+%%% it tries sending via other connections of peer session. If all goes well
 %%% worker informs async request manager about successful sending of response.
+%%% Generally it would look like this from sync request manager perspective:
+%%%
+%%%                            +----------------------------+
+%%%                            |    Async request manager   |
+%%%  report pending request -->|                            |
+%%%       (ReqId, Pid)         | - pending_requests:    #{} |
+%%%                            | - withheld_heartbeats: #{} |
+%%%                            +----------------------------+
+%%%                                         |
+%%% ----------------------------------------|---------------------------------
+%%%                                         v
+%%%                            +----------------------------------------+
+%%%                            |         Async request manager          |
+%%%    withhold heartbeats --->|                                        |
+%%%        (ReqId, Pid)        | - pending_requests:    #{ReqId => Pid} |
+%%%                            | - withheld_heartbeats: #{}             |
+%%%                            +----------------------------------------+
+%%%                                                |
+%%% -----------------------------------------------|--------------------------
+%%%                                                v
+%%%                            +----------------------------------------+
+%%%                            |         Async request manager          |
+%%%   report response sent --->|                                        |
+%%%        (ReqId, Pid)        | - pending_requests:    #{}             |
+%%%                            | - withheld_heartbeats: #{ReqId => Pid} |
+%%%                            +----------------------------------------+
+%%%                                         |
+%%% ----------------------------------------|---------------------------------
+%%%                                         v
+%%%                            +----------------------------+
+%%%                            |    Async request manager   |
+%%%                            |                            |
+%%%                            | - pending_requests:    #{} |
+%%%                            | - withheld_heartbeats: #{} |
+%%%                            +----------------------------+
+%%%
+%%%
+%%% CAUTION!!!
+%%% Because reporting pending requests is done using cast a race when
+%%% "withhold heartbeats" call comes earlier then "report pending request" cast
+%%% is possible. When the aforementioned cast comes later it would be added to
+%%% pending_requests map and error would be send to peer on next workers checkup
+%%% (because worker already handled request and responded == it is dead).
+%%% To avoid such situation 1 more mapping is needed -> unreported_requests.
+%%% When "withhold heartbeats" call comes and no req_id to worker pid mapping
+%%% is kept in pending_requests it is added to both withheld_heartbeats and
+%%% unreported_requests. When the "report pending request" cast finally comes
+%%% unreported_requests map will be checked first. If it contains association
+%%% then no new mapping will be added but it will be removed from
+%%% unreported_requests.
+%%%
+%%% Example of this:
+%%%
+%%%                            +----------------------------+
+%%%                            |   Async request manager    |
+%%%    withhold heartbeats --->|                            |
+%%%        (ReqId, Pid)        | - pending_requests:    #{} |
+%%%                            | - unreported_requests: #{} |
+%%%                            | - withheld_heartbeats: #{} |
+%%%                            +----------------------------+
+%%%                                         |
+%%% ----------------------------------------|---------------------------------
+%%%                                         v
+%%%                            +----------------------------------------+
+%%%                            |    Async request manager               |
+%%%  report pending request -->|                                        |
+%%%       (ReqId, Pid)         | - pending_requests:    #{}             |
+%%%                            | - unreported_requests: #{ReqId => Pid} |
+%%%                            | - withheld_heartbeats: #{ReqId => Pid} |
+%%%                            +----------------------------------------+
+%%%                                                |
+%%% -----------------------------------------------|--------------------------
+%%%                                                v
+%%%                            +----------------------------------------+
+%%%                            |         Async request manager          |
+%%%   report response sent --->|                                        |
+%%%        (ReqId, Pid)        | - pending_requests:    #{}             |
+%%%                            | - unreported_requests: #{}             |
+%%%                            | - withheld_heartbeats: #{ReqId => Pid} |
+%%%                            +----------------------------------------+
+%%%                                         |
+%%% ----------------------------------------|---------------------------------
+%%%                                         v
+%%%                            +----------------------------+
+%%%                            |    Async request manager   |
+%%%                            |                            |
+%%%                            | - pending_requests:    #{} |
+%%%                            | - unreported_requests: #{} |
+%%%                            | - withheld_heartbeats: #{} |
+%%%                            +----------------------------+
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(async_request_manager).
@@ -86,16 +177,17 @@
 %% be done only for provider_outgoing sessions).
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), SetKeepaliveTimeout :: boolean()) ->
+-spec start_link(SessId :: session:id(), EnableKeepalive :: boolean()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId, SetKeepaliveTimeout) ->
-    gen_server:start_link(?MODULE, [SessId, SetKeepaliveTimeout], []).
+start_link(SessId, EnableKeepalive) ->
+    gen_server:start_link(?MODULE, [SessId, EnableKeepalive], []).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Delegates handling of request to specified worker. When worker finishes
-%% it's work, he will send result using given ReplyTo info.
+%% Delegates handling of request to specified worker or spawned process
+%% (if worker_ref is `proc`). When worker finishes it's work,
+%% it will send result using given ReplyTo info.
 %% @end
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
@@ -106,8 +198,8 @@ delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
         ok = delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo)
     catch
         Type:Error ->
-            ?error_stacktrace("Router error: ~p:~p for message id ~p", [
-                Type, Error, MsgId
+            ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
+                MsgId, Type, Error
             ]),
             {ok, #server_message{
                 message_id = MsgId,
@@ -234,8 +326,9 @@ handle_info(heartbeat, #state{
                 heartbeat_timer = undefined
             };
         Error ->
-            ?error("Failed to fetch connections to send heartbeats because "
-                   "of: ~p", [Error]),
+            ?error("Async request manager: failed to send heartbeats due to: ~p",
+                [Error]
+            ),
             State#state{heartbeat_timer = undefined}
     end,
     {noreply, schedule_workers_status_checkup(NewState)};
@@ -246,8 +339,9 @@ handle_info(keepalive, #state{session_id = SessionId} = State) ->
                 connection:send_keepalive(Conn) 
             end, Cons);
         Error ->
-            ?error("Failed to fetch connection to send keepalives because "
-                   "of: ~p", [Error])
+            ?error("Async request manager: failed to send keepalives due to: ~p",
+                [Error]
+            )
     end,
     schedule_keepalive_msg(),
     {noreply, State};
@@ -288,19 +382,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% If worker_ref is `proc` then spawns new process to handle request.
-%% Otherwise delegates it to specified worker via worker_proxy.
-%% @end
-%%--------------------------------------------------------------------
--spec delegate_request_insecure(worker_ref(), Req :: term(),
-    connection_api:req_id(), connection_api:reply_to()) ->
+-spec delegate_request_insecure(worker_ref(), term(), req_id(), reply_to()) ->
     ok | {error, term()}.
 delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
     Pid = spawn(fun() ->
-        Response = try
+        Ans = try
             HandlerFun()
         catch
             Type:Error ->
@@ -309,12 +396,18 @@ delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
                 ]),
                 #processing_status{code = 'ERROR'}
         end,
-        respond(ReplyTo, ReqId, {ok, Response})
+        respond(ReplyTo, ReqId, Ans)
     end),
     report_pending_request(ReplyTo, Pid, ReqId);
 
 delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
-    ReplyFun = fun(Response) -> respond(ReplyTo, ReqId, Response) end,
+    ReplyFun =
+        fun
+            ({ok, Ans}) ->
+                respond(ReplyTo, ReqId, Ans);
+            ({error, Reason}) ->
+                respond(ReplyTo, ReqId, #processing_status{code = 'ERROR'})
+        end,
     case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
         Pid when is_pid(Pid) ->
             report_pending_request(ReplyTo, Pid, ReqId);
@@ -342,8 +435,8 @@ report_pending_request(SessionId, Pid, ReqId) ->
 respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
     case withhold_heartbeats(AsyncReqManager, ReqId) of
         ok ->
-            Response = build_response(MsgId, Ans),
-            case respond_via_any_conn(Conn, SessionId, Response) of
+            Response = #server_message{message_id = MsgId, message_body = Ans},
+            case send_response(Conn, SessionId, Response) of
                 ok ->
                     report_response_sent(AsyncReqManager, ReqId);
                 {error, no_connections} = NoConsError ->
@@ -378,27 +471,9 @@ withhold_heartbeats(AsyncReqManager, ReqId) ->
 
 
 %% @private
--spec build_response(clproto_message_id:id(), {ok, term()} | term()) ->
-    server_message().
-build_response(MsgId, {ok, Ans}) ->
-    #server_message{
-        message_id = MsgId,
-        message_body = Ans
-    };
-build_response(MsgId, ErrorAns) ->
-    ?error("Error while handling request with id ~p due to ~p", [
-        MsgId, ErrorAns
-    ]),
-    #server_message{
-        message_id = MsgId,
-        message_body = #processing_status{code = 'ERROR'}
-    }.
-
-
-%% @private
--spec respond_via_any_conn(pid(), session:id(), server_message()) ->
+-spec send_response(pid(), session:id(), server_message()) ->
     ok | {error, term()}.
-respond_via_any_conn(Conn, SessionId, Response) ->
+send_response(Conn, SessionId, Response) ->
     case connection:send_msg(Conn, Response) of
         ok ->
             ok;
@@ -420,46 +495,6 @@ report_response_sent(AsyncReqManager, ReqId) ->
     call_async_request_manager(AsyncReqManager, {response_sent, ReqId}).
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether workers/processes handling requests are still alive.
-%% If they are, optionally (SendHeartbeats flag) informs peer about
-%% ongoing requests processing by sending heartbeat messages.
-%% Otherwise (dead workers) schedules error messages to be send during
-%% next checkup. They are not send immediately to avoid race
-%% response/heartbeats.
-%% @end
-%%--------------------------------------------------------------------
--spec check_workers_status(Workers, [pid()], boolean()) -> Workers when
-    Workers :: #{req_id() => pid() | {pid(), not_alive}}.
-check_workers_status(Workers, Cons, SendHeartbeats) ->
-    maps:fold(
-        fun
-            ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
-                ?error("AsyncManager: process ~p connected with req_id ~p is dead",
-                    [Pid, ReqId]
-                ),
-                send_via_any_conn(?ERROR_MSG(MsgId), Cons),
-                Acc;
-            ({_Ref, MsgId} = ReqId, Pid, Acc) ->
-                SendHeartbeats andalso send_via_any_conn(?HEARTBEAT_MSG(MsgId), Cons),
-                case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
-                    true ->
-                        Acc#{ReqId => Pid};
-                    false ->
-                        Acc#{ReqId => {Pid, not_alive}}
-                end
-        end, #{}, Workers
-    ).
-
-
-%% @private
--spec send_via_any_conn(#server_message{}, [pid()]) -> ok | {error, term()}.
-send_via_any_conn(Msg, Cons) ->
-    connection_utils:send_via_any_connection(Msg, Cons).
-
-
 %% @private
 -spec call_async_request_manager(AsyncReqManager :: pid(), term()) ->
     ok | {error, term()}.
@@ -468,22 +503,58 @@ call_async_request_manager(AsyncReqManager, Msg) ->
         gen_server2:call(AsyncReqManager, Msg)
     catch
         exit:{noproc, _} ->
-            ?debug("Connection manager process ~p does not exist", [
+            ?debug("Request manager process ~p does not exist", [
                 AsyncReqManager
             ]),
             {error, no_async_req_manager};
         exit:{normal, _} ->
-            ?debug("Exit of connection manager process ~p", [AsyncReqManager]),
+            ?debug("Exit of request manager process ~p", [AsyncReqManager]),
             {error, no_async_req_manager};
         exit:{timeout, _} ->
-            ?debug("Timeout of connection manager process ~p", [AsyncReqManager]),
+            ?debug("Timeout of request manager process ~p", [AsyncReqManager]),
             {error, timeout};
         Type:Reason ->
-            ?error("Cannot call connection manager ~p due to ~p:~p", [
+            ?error("Cannot call request manager ~p due to ~p:~p", [
                 AsyncReqManager, Type, Reason
             ]),
             {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether workers/processes handling requests are still alive.
+%% If they are and `SendHeartbeats` flag is set then informs peer about
+%% ongoing requests processing by sending heartbeat messages.
+%% Otherwise (dead workers) schedules error messages to be send during
+%% next checkup. They are not send immediately to avoid potential race
+%% between response and heartbeats.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_workers_status(Workers, [pid()], boolean()) -> Workers when
+    Workers :: #{req_id() => pid() | {pid(), not_alive}}.
+check_workers_status(Workers, Cons, SendHeartbeats) ->
+    maps:fold(
+        fun
+            ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
+                ?error("Async Request Manager: process ~p handling request ~p died",
+                    [Pid, ReqId]
+                ),
+                connection_utils:send_via_any(?ERROR_MSG(MsgId), Cons),
+                Acc;
+            ({_Ref, MsgId} = ReqId, Pid, Acc) ->
+                SendHeartbeats andalso connection_utils:send_via_any(
+                    ?HEARTBEAT_MSG(MsgId), Cons
+                ),
+                case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+                    true ->
+                        Acc#{ReqId => Pid};
+                    false ->
+                        Acc#{ReqId => {Pid, not_alive}}
+                end
+        end, #{}, Workers
+    ).
 
 
 %% @private

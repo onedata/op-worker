@@ -184,7 +184,6 @@ python_client_test_base(Config) ->
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
-    initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}, _) ->
@@ -242,7 +241,6 @@ multi_connection_test_base(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
-    initializer:remove_pending_messages(),
 
     % when
     Connections = lists:map(fun(_) ->
@@ -292,8 +290,6 @@ sequential_ping_pong_test_base(Config) ->
         Msg = #'ClientMessage'{message_id = MsgId, message_body = {ping, #'Ping'{}}},
         {MsgId, messages:encode_msg(Msg)}
     end, lists:seq(1, MsgNum)),
-
-    initializer:remove_pending_messages(),
 
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
@@ -349,7 +345,6 @@ multi_ping_pong_test_base(Config) ->
     end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
 
-    initializer:remove_pending_messages(),
     Self = self(),
 
     T1 = erlang:monotonic_time(milli_seconds),
@@ -407,7 +402,6 @@ bandwidth_test_base(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
-    initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}, _) ->
@@ -468,7 +462,6 @@ bandwidth_test2_base(Config) ->
         }]}}}
     end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
-    initializer:remove_pending_messages(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             type = #file_read_event{counter = Counter}

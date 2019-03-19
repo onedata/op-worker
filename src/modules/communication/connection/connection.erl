@@ -745,6 +745,7 @@ route_message(#state{
     session_id = SessionId,
     async_req_manager = undefined
 } = State, Msg) ->
+    % TODO VFS-5312
     case session_connections:get_async_req_manager(SessionId) of
         {ok, AsyncReqManager} ->
             NewState = State#state{async_req_manager = AsyncReqManager},

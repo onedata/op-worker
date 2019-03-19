@@ -69,6 +69,7 @@ route_message(#client_message{message_body = #subscription_cancellation{} = SubC
     end;
 route_message(#client_message{
     session_id = OriginSessId,
+    % TODO VFS-5326
     message_id = MsgId,
     message_body = FlushMsg = #flush_events{}
 }, SessionID) ->
