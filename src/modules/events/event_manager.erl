@@ -85,9 +85,6 @@ send_internal(Manager, Request, RetryCounter) ->
         case {get_provider(Request, Manager), Request} of
             {self, _} ->
                 handle_locally(Request, Manager);
-            {RemoteProviderId, _} ->
-                {ok, SessId} = ets_state:get(session, Manager, session_id),
-                handle_remotely(Request, RemoteProviderId, SessId);
             {RemoteProviderId, #subscription{} = Sub} ->
                 gen_server2:cast(Manager, {cache_provider, Sub, RemoteProviderId}),
                 {ok, SessId} = ets_state:get(session, Manager, session_id),
@@ -95,7 +92,16 @@ send_internal(Manager, Request, RetryCounter) ->
             {RemoteProviderId, #subscription_cancellation{id = SubId}} ->
                 gen_server2:cast(Manager, {remove_provider_cache, SubId}),
                 {ok, SessId} = ets_state:get(session, Manager, session_id),
-                handle_remotely(Request, RemoteProviderId, SessId)
+                handle_remotely(Request, RemoteProviderId, SessId);
+            {RemoteProviderId, _} ->
+                Self = oneprovider:get_id_or_undefined(),
+                case RemoteProviderId of
+                    Self ->
+                        handle_locally(Request, Manager);
+                    _ ->
+                        {ok, SessId} = ets_state:get(session, Manager, session_id),
+                        handle_remotely(Request, RemoteProviderId, SessId)
+                end
         end
     catch
         exit:{noproc, _} ->
@@ -132,7 +138,7 @@ send_internal(Manager, Request, RetryCounter) ->
 init([MgrSup, SessId]) ->
     ?debug("Initializing event manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
-    init_memory(),
+    init_memory(SessId),
     Self = self(),
     {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{event_manager = Self}}
@@ -259,7 +265,7 @@ get_provider(Request, Manager) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
         undefined ->
-            oneprovider:get_id_or_undefined();
+            self;
         {file, FileCtx} ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
@@ -279,7 +285,7 @@ get_provider(#event{type = Type}, SessId, _FileCtx)
     orelse is_record(Type, file_renamed_event)
     orelse is_record(Type, quota_exceeded_event) ->
     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
-    utils:ensure_defined(ProxyVia, undefined, oneprovider:get_id_or_undefined());
+    utils:ensure_defined(ProxyVia, undefined, self);
 get_provider(_, SessId, FileCtx) ->
     ProviderId = oneprovider:get_id(),
     case file_ctx:is_root_dir_const(FileCtx) of
@@ -552,13 +558,13 @@ get_from_memory(StreamType, StmId) ->
 get_from_memory(Manager, StreamType, StmId) ->
     ets_state:get(session, Manager, {StreamType, StmId}).
 
-init_memory() ->
+init_memory(SessionID) ->
     Manager = self(),
     ets_state:save(session, Manager, streams, #{}),
     ets_state:save(session, Manager, subscriptions, #{}),
     ets_state:save(session, Manager, sub_to_provider, #{}),
     ets_state:save(session, Manager, guid_to_provider, #{}),
-    ets_state:save(session, Manager, session_id, #{}).
+    ets_state:save(session, Manager, session_id, SessionID).
 
 delete_memory() ->
     delete_data(streams),
