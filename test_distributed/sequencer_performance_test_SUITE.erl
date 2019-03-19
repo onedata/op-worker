@@ -122,7 +122,7 @@ manager_test(Config) ->
 manager_test_on_node(Manager, Messages) ->
     Start = os:timestamp(),
     lists:foreach(fun(Msg) ->
-        ok = sequencer_manager:send(Manager, Msg)
+        ok = sequencer_manager:handle(Manager, Msg)
     end, Messages),
     {ok, timer:now_diff(os:timestamp(), Start)}.
 
