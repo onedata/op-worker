@@ -205,19 +205,21 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons) ->
 reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
     {Sess, Diff} = session_connections:get_new_record_and_update_fun(
         NewCons, ProxyVia, SessType, Auth, Iden),
-    case session:update(SessId, Diff) of
-        {ok, SessId} ->
-            {ok, SessId};
-        {error, not_found} ->
-            case start_session(#document{key = SessId, value = Sess}, SessType) of
-                {error, already_exists} ->
-                    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia);
-                Other ->
-                    Other
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    critical_section:run([?MODULE, SessId], fun() ->
+        case session:update(SessId, Diff) of
+            {ok, SessId} ->
+                {ok, SessId};
+            {error, not_found} ->
+                case start_session(#document{key = SessId, value = Sess}, SessType) of
+                    {error, already_exists} ->
+                        reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia);
+                    Other ->
+                        Other
+                end;
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

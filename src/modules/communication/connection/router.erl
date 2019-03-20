@@ -28,7 +28,7 @@
 
 %% API
 -export([effective_session_id/1]).
--export([route_message/1, route_message/2]).
+-export([route_message/2]).
 
 -type client_message() :: #client_message{}.
 -type server_message() :: #server_message{}.
@@ -56,22 +56,11 @@ effective_session_id(#client_message{effective_session_id = EffSessionId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv route_message(Msg, effective_session_id(Msg)).
-%% @end
-%%--------------------------------------------------------------------
--spec route_message(message()) ->
-    ok | {ok, server_message()} | {error, term()}.
-route_message(Msg) ->
-    route_message(Msg, effective_session_id(Msg)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Check if message is sequential, if so - proxy it through sequencer,
 %% otherwise routes it directly
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(message(), connection_api:reply_to()) ->
+-spec route_message(message(), async_request_manager:reply_to()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_message(Msg, ReplyTo) ->
     case stream_router:is_stream_message(Msg) of
@@ -95,7 +84,7 @@ route_message(Msg, ReplyTo) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_direct_message(message(), connection_api:reply_to()) ->
+-spec route_direct_message(message(), async_request_manager:reply_to()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_direct_message(#client_message{message_id = undefined} = Msg, _) ->
     route_and_ignore_answer(Msg);
@@ -230,10 +219,10 @@ answer_or_delegate(Msg = #client_message{
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = #get_configuration{}
-}, ReturnAddr) ->
+}, ReplyTo) ->
     delegate_request(proc, fun() ->
         storage_req:get_configuration(effective_session_id(Msg))
-    end, MsgId, ReturnAddr);
+    end, MsgId, ReplyTo);
 
 answer_or_delegate(#client_message{
     message_id = MsgId,

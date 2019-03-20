@@ -153,7 +153,7 @@
 -type server_message() :: #server_message{}.
 
 -type worker_ref() :: proc | module() | {module(), node()}.
--type reply_to() :: session:id() | {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
+-type reply_to() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
@@ -201,10 +201,7 @@ delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
                 MsgId, Type, Error
             ]),
-            {ok, #server_message{
-                message_id = MsgId,
-                message_body = #processing_status{code = 'ERROR'}
-            }}
+            {ok, ?ERROR_MSG(MsgId)}
     end.
 
 
@@ -417,17 +414,9 @@ delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
 
 
 %% @private
--spec report_pending_request(reply_to(), pid(), req_id()) ->
-    ok | {error, term()}.
+-spec report_pending_request(reply_to(), pid(), req_id()) -> ok.
 report_pending_request({_, AsyncReqManager, _}, Pid, ReqId) ->
-    gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId});
-report_pending_request(SessionId, Pid, ReqId) ->
-    case session_connections:get_async_req_manager(SessionId) of
-        {ok, AsyncReqManager} ->
-            gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId});
-        Error ->
-            Error
-    end.
+    gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId}).
 
 
 %% @private
@@ -450,13 +439,6 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
                     ]),
                     Error
             end;
-        Error ->
-            Error
-    end;
-respond(SessionId, ReqId, Ans) ->
-    case session_connections:get_random_conn_and_async_req_manager(SessionId) of
-        {ok, Conn, AsyncReqManager} ->
-            respond({Conn, AsyncReqManager, SessionId}, ReqId, Ans);
         Error ->
             Error
     end.

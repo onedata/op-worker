@@ -108,8 +108,11 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
-    async_req_manager = undefined :: undefined | pid(),
-    verify_msg = true :: boolean()
+    verify_msg = true :: boolean(),
+
+    % info used when replying to delegated requests
+    % (used by async_request_manager)
+    reply_to = undefined :: undefined | async_request_manager:reply_to()
 }).
 
 -type state() :: #state{}.
@@ -581,6 +584,7 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
             provider_id = session_utils:session_id_to_provider_id(SessionId)
         }, self()
     ),
+    {ok, ReqManager} = session_connections:get_async_req_manager(SessionId),
 
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{
@@ -594,7 +598,8 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
         status = upgrading_protocol,
         session_id = SessionId,
         peer_id = ProviderId,
-        verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
+        verify_msg = ?DEFAULT_VERIFY_MSG_FLAG,
+        reply_to = {self(), ReqManager, SessionId}
     },
     activate_socket(State, true),
 
@@ -655,8 +660,13 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
         {PeerId, SessionId} = connection_auth:handle_handshake(
             Msg#client_message.message_body, IpAddress
         ),
-        NewState = State#state{peer_id = PeerId, session_id = SessionId},
+        {ok, ReqManager} = session_connections:get_async_req_manager(SessionId),
 
+        NewState = State#state{
+            peer_id = PeerId,
+            session_id = SessionId,
+            reply_to = {self(), ReqManager, SessionId}
+        },
         send_server_message(NewState, #server_message{
             message_body = #handshake_response{status = 'OK'}
         })
@@ -741,31 +751,7 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 %% @private
 -spec route_message(state(), message()) ->
     {ok, state()} | {error, Reason :: term()}.
-route_message(#state{
-    session_id = SessionId,
-    async_req_manager = undefined
-} = State, Msg) ->
-    % TODO VFS-5312
-    case session_connections:get_async_req_manager(SessionId) of
-        {ok, AsyncReqManager} ->
-            NewState = State#state{async_req_manager = AsyncReqManager},
-            route_message(NewState, Msg, {self(), AsyncReqManager, SessionId});
-        _Error ->
-            % Connection manager starts asynchronously so it is
-            % possible that it hasn't started yet.
-            route_message(State, Msg, SessionId)
-    end;
-route_message(#state{
-    session_id = SessionId,
-    async_req_manager = AsyncReqManager
-} = State, Msg) ->
-    route_message(State, Msg, {self(), AsyncReqManager, SessionId}).
-
-
-%% @private
--spec route_message(state(), message(), async_request_manager:reply_to()) ->
-    {ok, state()} | {error, Reason :: term()}.
-route_message(#state{session_id = SessionId} = State, Msg, ReplyTo) ->
+route_message(#state{session_id = SessionId, reply_to = ReplyTo} = State, Msg) ->
     case router:route_message(Msg, ReplyTo) of
         ok ->
             {ok, State};

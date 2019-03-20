@@ -454,7 +454,7 @@ forward_message(#client_message{message_body = #end_of_message_stream{}},
     State#state{sequence_number = SeqNum + 1};
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
-    router:route_message(stream_router:make_message_direct(Msg)),
+    event_router:route_message(stream_router:make_message_direct(Msg)),
     State#state{sequence_number = SeqNum + 1}.
 
 
