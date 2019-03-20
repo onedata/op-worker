@@ -78,7 +78,7 @@ get(TableIdentifier, Owner, Key) ->
 delete(TableIdentifier, Owner, Key) ->
     Nodes = consistent_hasing:get_all_nodes(),
     lists:foreach(fun(Node) ->
-        true = rpc:call(Node, ets, delete, [TableIdentifier, {{Owner, Key}}])
+        true = rpc:call(Node, ets, delete, [TableIdentifier, {Owner, Key}])
     end, Nodes),
     ok.
 
@@ -106,7 +106,7 @@ delete_collection(TableIdentifier, Collection) ->
     {ok, CollectionMap} = get(TableIdentifier, Owner, Collection),
     maps:map(fun(Key, _) ->
         delete(TableIdentifier, Owner, {Collection, Key})
-             end, CollectionMap),
+    end, CollectionMap),
     delete(TableIdentifier, Owner, Collection).
 
 %%--------------------------------------------------------------------

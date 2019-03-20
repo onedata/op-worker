@@ -70,23 +70,29 @@ event_manager_should_start_streams_on_init(_) ->
     ?assertReceivedMatch({start_stream, #subscription{type = stream_2}}, ?TIMEOUT).
 
 event_manager_should_register_event_stream(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, {register_stream, stream_1, self()}),
-    gen_server:cast(Mgr, #event{type = stream_1}),
+    timer:sleep(100), % sleep to finish cast handling
+    spawn(Worker, fun() -> event_manager:handle(Mgr, #event{type = stream_1}) end),
     {_, From, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
     gen_server:reply(From, ok).
 
 event_manager_should_unregister_event_stream(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, {unregister_stream, stream_1}),
     gen_server:cast(Mgr, {unregister_stream, stream_2}),
-    gen_server:cast(Mgr, #event{type = stream_1}),
+    timer:sleep(100), % sleep to finish cast handling
+    spawn(Worker, fun() -> event_manager:handle(Mgr, #event{type = stream_1}) end),
     ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
+    timer:sleep(100),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     Mgr = ?config(event_manager, Config),
-    gen_server:cast(Mgr, #event{type = stream_1}),
-    gen_server:cast(Mgr, #event{type = stream_2}),
+    spawn(Worker, fun() -> event_manager:handle(Mgr, #event{type = stream_1}) end),
+    spawn(Worker, fun() -> event_manager:handle(Mgr, #event{type = stream_2}) end),
     {_, From, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
     gen_server:reply(From, ok),
     {_, From2, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
@@ -94,13 +100,15 @@ event_manager_should_forward_events_to_event_streams(Config) ->
     ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_start_stream_on_subscription(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     Mgr = ?config(event_manager, Config),
-    gen_server:cast(Mgr, #subscription{type = test}),
+    spawn(Worker, fun() -> event_manager:handle(Mgr, #subscription{type = test}) end),
     ?assertReceivedMatch({start_stream, #subscription{type = test}}, ?TIMEOUT).
 
 event_manager_should_terminate_event_stream_on_subscription_cancellation(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     Mgr = ?config(event_manager, Config),
-    gen_server:cast(Mgr, #subscription_cancellation{id = 1}),
+    spawn(Worker, fun() -> event_manager:handle(Mgr, #subscription_cancellation{id = 1}) end),
     ?assertReceivedMatch({'DOWN', _, _, _, _}, ?TIMEOUT).
 
 %%%===================================================================
