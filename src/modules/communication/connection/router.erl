@@ -212,6 +212,7 @@ answer_or_delegate(Msg = #client_message{
             file_request = #storage_file_created{}
         }}
 }, _) ->
+    % TODO VFS-5331
     ok = worker_proxy:cast(fslogic_worker,
         {fuse_request, effective_session_id(Msg), FuseRequest}
     );

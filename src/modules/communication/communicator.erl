@@ -112,6 +112,8 @@ send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
             ok;
         {ok, _} ->
             {ok, MsgId};
+        {{error, no_connections}, _} ->
+            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
         {Error, _} ->
             Error
     end;
@@ -141,7 +143,14 @@ communicate_with_provider(SessionId, Msg) ->
     {ok, message()} | error().
 communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
     Msg1 = connection_utils:fill_effective_session_info(Msg0, SessionId),
-    communicate_with_provider_internal(SessionId, Msg1, Retries);
+    case communicate_with_provider_internal(SessionId, Msg1, Retries) of
+        {ok, _} = Ans ->
+            Ans;
+        {error, no_connections} ->
+            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
+        Error ->
+            Error
+    end;
 communicate_with_provider(SessionId, Msg, Retries) ->
     ClientMsg = #client_message{message_body = Msg},
     communicate_with_provider(SessionId, ClientMsg, Retries).
@@ -198,14 +207,7 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
     ok | error().
 send_to_provider_internal(SessionId, Msg, 0) ->
     session_connections:ensure_connected(SessionId),
-    case connection_api:send(SessionId, Msg) of
-        ok ->
-            ok;
-        {error, no_connections} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
-        Error ->
-            Error
-    end;
+    connection_api:send(SessionId, Msg);
 send_to_provider_internal(SessionId, Msg, Retries) ->
     session_connections:ensure_connected(SessionId),
     case connection_api:send(SessionId, Msg) of
@@ -222,14 +224,7 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
     retries()) -> {ok, message()} | error().
 communicate_with_provider_internal(SessionId, Msg, 0) ->
     session_connections:ensure_connected(SessionId),
-    case connection_api:communicate(SessionId, Msg) of
-        {ok, _} = Ans ->
-            Ans;
-        {error, no_connections} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
-        Error ->
-            Error
-    end;
+    connection_api:communicate(SessionId, Msg);
 communicate_with_provider_internal(SessionId, Msg, Retries) ->
     session_connections:ensure_connected(SessionId),
     case connection_api:communicate(SessionId, Msg) of
