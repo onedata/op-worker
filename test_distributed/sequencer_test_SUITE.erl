@@ -169,7 +169,7 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate_and_unload(Worker, [communicator, router,
+    test_utils:mock_validate_and_unload(Worker, [communicator, event_router,
         stream_router]).
 
 %%%===================================================================
@@ -264,9 +264,13 @@ route_message(Worker, Msg) ->
 -spec client_message(SessId :: session:id(), StmId :: sequencer:stream_id(),
     SeqNum :: sequencer:sequence_number()) -> Msg :: #client_message{}.
 client_message(SessId, StmId, SeqNum) ->
-    #client_message{session_id = SessId, message_stream = #message_stream{
-        stream_id = StmId, sequence_number = SeqNum
-    }}.
+    #client_message{
+        session_id = SessId,
+        message_stream = #message_stream{
+            stream_id = StmId,
+            sequence_number = SeqNum
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -299,8 +303,8 @@ mock_communicator(Worker, MockFun) ->
 -spec mock_router(Worker :: node()) -> ok.
 mock_router(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, [router]),
-    test_utils:mock_expect(Worker, router, route_message, fun
+    test_utils:mock_new(Worker, [event_router]),
+    test_utils:mock_expect(Worker, event_router, route_message, fun
         (Msg) -> Self ! Msg
     end),
     test_utils:mock_new(Worker, [stream_router]),

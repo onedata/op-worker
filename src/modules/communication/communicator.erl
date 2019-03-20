@@ -25,6 +25,9 @@
     stream_to_provider/4
 ]).
 
+% Pid of process that should receive response to send message.
+% It is part of MsgId, so if left undefined no new MsgId will
+% generated for given message.
 -type recipient_pid() :: undefined | pid().
 -type retries() :: non_neg_integer() | infinity.
 -type generic_msg() :: tuple().
