@@ -15,6 +15,7 @@
 -include("timeouts.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -30,11 +31,13 @@
 % generated for given message.
 -type recipient_pid() :: undefined | pid().
 -type retries() :: non_neg_integer() | infinity.
--type generic_msg() :: tuple().
--type client_msg() :: #client_message{}.
--type server_msg() :: #server_message{}.
--type msg() :: client_msg() | server_msg().
 
+-type generic_message() :: tuple().
+-type client_message() :: #client_message{}.
+-type server_message() :: #server_message{}.
+-type message() :: client_message() | server_message().
+
+-type error() :: {error, Reason :: term()}.
 
 %%%===================================================================
 %%% API - convenience functions
@@ -46,8 +49,7 @@
 %% @equiv send_to_oneclient(SessionId, Msg, 1).
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_oneclient(session:id(), generic_msg()) ->
-    ok | {error, Reason :: term()}.
+-spec send_to_oneclient(session:id(), generic_message()) -> ok | error().
 send_to_oneclient(SessionId, Msg) ->
     % called as such to allow mocking in tests
     communicator:send_to_oneclient(SessionId, Msg, 1).
@@ -61,8 +63,8 @@ send_to_oneclient(SessionId, Msg) ->
 %% no_connections error which fails call immediately.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_oneclient(session:id(), generic_msg(), retries()) ->
-    ok | {error, Reason :: term()}.
+-spec send_to_oneclient(session:id(), generic_message(), retries()) ->
+    ok | error().
 send_to_oneclient(SessionId, #server_message{} = Msg0, Retries) ->
     Msg1 = connection_utils:fill_effective_session_info(Msg0, SessionId),
     send_to_oneclient_internal(SessionId, Msg1, Retries);
@@ -76,8 +78,8 @@ send_to_oneclient(SessionId, Msg, RetriesLeft) ->
 %% @equiv send_to_provider(SessionId, Msg, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_msg()) ->
-    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
+-spec send_to_provider(session:id(), generic_message()) ->
+    ok | {ok | clproto_message_id:id()} | error().
 send_to_provider(SessionId, Msg) ->
     send_to_provider(SessionId, Msg, undefined).
 
@@ -87,8 +89,8 @@ send_to_provider(SessionId, Msg) ->
 %% @equiv send_to_provider(SessionId, Msg, RecipientPid, 1).
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_msg(), undefined | pid()) ->
-    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
+-spec send_to_provider(session:id(), generic_message(), undefined | pid()) ->
+    ok | {ok | clproto_message_id:id()} | error().
 send_to_provider(SessionId, Msg, RecipientPid) ->
     send_to_provider(SessionId, Msg, RecipientPid, 1).
 
@@ -99,8 +101,8 @@ send_to_provider(SessionId, Msg, RecipientPid) ->
 %% until either message is sent or no more retries are left.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_provider(session:id(), generic_msg(), recipient_pid(), retries()) ->
-    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
+-spec send_to_provider(session:id(), generic_message(), recipient_pid(),
+    retries()) -> ok | {ok | clproto_message_id:id()} | error().
 send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
     {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
     Msg2 = connection_utils:fill_effective_session_info(Msg1, SessionId),
@@ -123,8 +125,8 @@ send_to_provider(SessionId, Msg, RecipientPid, Retries) ->
 %% @equiv communicate_with_provider(SessionId, Msg, 1).
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_with_provider(session:id(), generic_msg()) ->
-    {ok | msg()} | {error, Reason :: term()}.
+-spec communicate_with_provider(session:id(), generic_message()) ->
+    {ok | message()} | error().
 communicate_with_provider(SessionId, Msg) ->
     communicate_with_provider(SessionId, Msg, 1).
 
@@ -135,8 +137,8 @@ communicate_with_provider(SessionId, Msg) ->
 %% retrying until either message is sent or no more retries are left.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_with_provider(session:id(), generic_msg(), retries()) ->
-    {ok, msg()} | {error, Reason :: term()}.
+-spec communicate_with_provider(session:id(), generic_message(), retries()) ->
+    {ok, message()} | error().
 communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
     Msg1 = connection_utils:fill_effective_session_info(Msg0, SessionId),
     communicate_with_provider_internal(SessionId, Msg1, Retries);
@@ -150,18 +152,18 @@ communicate_with_provider(SessionId, Msg, Retries) ->
 %% Sends stream message to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_to_provider(session:id(), generic_msg(),
+-spec stream_to_provider(session:id(), generic_message(),
     sequencer:stream_id(), recipient_pid()) ->
-    ok | {ok | clproto_message_id:id()} | {error, Reason :: term()}.
-stream_to_provider(SessionId, #client_message{} = Msg0, StreamId, RecipientPid) ->
+    ok | {ok | clproto_message_id:id()} | error().
+stream_to_provider(SessionId, #client_message{} = Msg0, StmId, RecipientPid) ->
     session_connections:ensure_connected(SessionId),
     {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
-    case {sequencer:send_message(Msg, StreamId, SessionId), RecipientPid} of
+    case {sequencer:send_message(Msg, StmId, SessionId), RecipientPid} of
         {ok, undefined} ->
             ok;
         {ok, _} ->
             {ok, MsgId};
-        Error ->
+        {Error, _} ->
             Error
     end;
 stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
@@ -175,8 +177,8 @@ stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
 
 
 %% @private
--spec send_to_oneclient_internal(session:id(), server_msg(), retries()) ->
-    ok | {error, Reason :: term()}.
+-spec send_to_oneclient_internal(session:id(), server_message(), retries()) ->
+    ok | error().
 send_to_oneclient_internal(SessionId, Msg, 0) ->
     connection_api:send(SessionId, Msg);
 send_to_oneclient_internal(SessionId, Msg, Retries) ->
@@ -192,11 +194,18 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
 
 
 %% @private
--spec send_to_provider_internal(session:id(), client_msg(), retries()) ->
-    ok | {error, Reason :: term()}.
+-spec send_to_provider_internal(session:id(), client_message(), retries()) ->
+    ok | error().
 send_to_provider_internal(SessionId, Msg, 0) ->
     session_connections:ensure_connected(SessionId),
-    connection_api:send(SessionId, Msg);
+    case connection_api:send(SessionId, Msg) of
+        ok ->
+            ok;
+        {error, no_connections} ->
+            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
+        Error ->
+            Error
+    end;
 send_to_provider_internal(SessionId, Msg, Retries) ->
     session_connections:ensure_connected(SessionId),
     case connection_api:send(SessionId, Msg) of
@@ -209,11 +218,18 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
 
 
 %% @private
--spec communicate_with_provider_internal(session:id(), client_msg(),
-    retries()) -> {ok, msg()} | {error, Reason :: term()}.
+-spec communicate_with_provider_internal(session:id(), client_message(),
+    retries()) -> {ok, message()} | error().
 communicate_with_provider_internal(SessionId, Msg, 0) ->
     session_connections:ensure_connected(SessionId),
-    connection_api:communicate(SessionId, Msg);
+    case connection_api:communicate(SessionId, Msg) of
+        {ok, _} = Ans ->
+            Ans;
+        {error, no_connections} ->
+            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
+        Error ->
+            Error
+    end;
 communicate_with_provider_internal(SessionId, Msg, Retries) ->
     session_connections:ensure_connected(SessionId),
     case connection_api:communicate(SessionId, Msg) of
@@ -233,8 +249,8 @@ retries_left(Num) -> Num - 1.
 
 
 %% @private
--spec maybe_set_msg_id(msg(), recipient_pid()) ->
-    {undefined | clproto_message_id:id(), msg()}.
+-spec maybe_set_msg_id(message(), recipient_pid()) ->
+    {undefined | clproto_message_id:id(), message()}.
 maybe_set_msg_id(#client_message{message_id = undefined} = Msg, undefined) ->
     {undefined, Msg};
 maybe_set_msg_id(#client_message{message_id = undefined} = Msg, Recipient) ->

@@ -126,6 +126,7 @@
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([start_link/2]).
@@ -155,6 +156,7 @@
 -type worker_ref() :: proc | module() | {module(), node()}.
 -type reply_to() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
+-type error() :: {error, Reason :: term()}.
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,
@@ -178,7 +180,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(SessId :: session:id(), EnableKeepalive :: boolean()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+    {ok, pid()} | ignore | error().
 start_link(SessId, EnableKeepalive) ->
     gen_server:start_link(?MODULE, [SessId, EnableKeepalive], []).
 
@@ -369,7 +371,7 @@ terminate(_Reason, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn :: term() | {down, term()}, state(), Extra :: term()) ->
-    {ok, NewState :: state()} | {error, Reason :: term()}.
+    {ok, NewState :: state()} | error().
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -381,7 +383,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 -spec delegate_request_insecure(worker_ref(), term(), req_id(), reply_to()) ->
-    ok | {error, term()}.
+    ok | error().
 delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
     Pid = spawn(fun() ->
         Ans = try
@@ -420,7 +422,7 @@ report_pending_request({_, AsyncReqManager, _}, Pid, ReqId) ->
 
 
 %% @private
--spec respond(reply_to(), req_id(), term()) -> ok | {error, term()}.
+-spec respond(reply_to(), req_id(), term()) -> ok | error().
 respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
     case withhold_heartbeats(AsyncReqManager, ReqId) of
         ok ->
@@ -446,7 +448,7 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
 
 %% @private
 -spec withhold_heartbeats(AsyncReqManager :: pid(), req_id()) ->
-    ok | {error, term()}.
+    ok | error().
 withhold_heartbeats(AsyncReqManager, ReqId) ->
     Req = {withhold_heartbeats, self(), ReqId},
     call_async_request_manager(AsyncReqManager, Req).
@@ -454,14 +456,14 @@ withhold_heartbeats(AsyncReqManager, ReqId) ->
 
 %% @private
 -spec send_response(pid(), session:id(), server_message()) ->
-    ok | {error, term()}.
+    ok | error().
 send_response(Conn, SessionId, Response) ->
     case connection:send_msg(Conn, Response) of
         ok ->
             ok;
         {error, serialization_failed} = SerializationError ->
             SerializationError;
-        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+        {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         _Error ->
             connection_utils:send_msg_excluding_connections(
@@ -472,14 +474,14 @@ send_response(Conn, SessionId, Response) ->
 
 %% @private
 -spec report_response_sent(AsyncReqManager :: pid(), req_id()) ->
-    ok | {error, term()}.
+    ok | error().
 report_response_sent(AsyncReqManager, ReqId) ->
     call_async_request_manager(AsyncReqManager, {response_sent, ReqId}).
 
 
 %% @private
 -spec call_async_request_manager(AsyncReqManager :: pid(), term()) ->
-    ok | {error, term()}.
+    ok | error().
 call_async_request_manager(AsyncReqManager, Msg) ->
     try
         gen_server2:call(AsyncReqManager, Msg)
@@ -494,7 +496,7 @@ call_async_request_manager(AsyncReqManager, Msg) ->
             {error, no_async_req_manager};
         exit:{timeout, _} ->
             ?debug("Timeout of request manager process ~p", [AsyncReqManager]),
-            {error, timeout};
+            ?ERROR_TIMEOUT;
         Type:Reason ->
             ?error("Cannot call request manager ~p due to ~p:~p", [
                 AsyncReqManager, Type, Reason

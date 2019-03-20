@@ -17,6 +17,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -85,7 +86,7 @@ send_via_any(Msg, [Conn | Cons]) ->
             ok;
         {error, serialization_failed} = SerializationError ->
             SerializationError;
-        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+        {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         _Error ->
             send_via_any(Msg, Cons)

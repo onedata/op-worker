@@ -92,6 +92,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -record(state, {
     socket :: ssl:socket(),
@@ -119,6 +120,7 @@
 -type client_message() :: #client_message{}.
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
+-type error() :: {error, Reason :: term()}.
 
 % Default value for {packet, N} socket option. When specified, erlang first
 % reads N bytes to get length of your data, allocates a buffer to hold it
@@ -191,7 +193,7 @@ close(Pid) ->
 %% eventual errors while serializing/sending.
 %% @end
 %%-------------------------------------------------------------------
--spec send_msg(pid(), message()) -> ok | {error, term()}.
+-spec send_msg(pid(), message()) -> ok | error().
 send_msg(Pid, Msg) ->
     try
         gen_server2:call(Pid, {send_msg, Msg})
@@ -208,7 +210,7 @@ send_msg(Pid, Msg) ->
             ?debug("Timeout of connection process ~p for message ~p", [
                 Pid, Msg
             ]),
-            {error, timeout};
+            ?ERROR_TIMEOUT;
         Type:Reason ->
             ?error("Connection ~p cannot send msg ~p due to ~p:~p", [
                 Pid, Msg, Type, Reason
@@ -263,7 +265,7 @@ handle_call({send_msg, Msg}, _From, #state{status = ready} = State) ->
             {reply, ok, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, serialization_failed} = SerializationError ->
             {reply, SerializationError, State, ?PROTO_CONNECTION_TIMEOUT};
-        {error, sending_msg_via_wrong_connection} = WrongConnError ->
+        {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             {reply, WrongConnError, State, ?PROTO_CONNECTION_TIMEOUT};
         Error ->
             {stop, Error, Error, State}
@@ -393,7 +395,7 @@ terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn :: term() | {down, term()}, State :: state(),
-    Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
+    Extra :: term()) -> {ok, NewState :: state()} | error().
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -618,7 +620,7 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_protocol_upgrade_response(state(), Data :: binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+    {ok, state()} | error().
 handle_protocol_upgrade_response(State, Data) ->
     case connection_utils:verify_protocol_upgrade_response(Data) of
         false ->
@@ -641,8 +643,7 @@ handle_protocol_upgrade_response(State, Data) ->
 
 
 %% @private
--spec handle_handshake(state(), binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec handle_handshake(state(), binary()) -> {ok, state()} | error().
 handle_handshake(#state{type = incoming} = State, Data) ->
     handle_handshake_request(State, Data);
 handle_handshake(#state{type = outgoing} = State, Data) ->
@@ -650,8 +651,7 @@ handle_handshake(#state{type = outgoing} = State, Data) ->
 
 
 %% @private
--spec handle_handshake_request(state(), binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec handle_handshake_request(state(), binary()) -> {ok, state()} | error().
 handle_handshake_request(#state{socket = Socket} = State, Data) ->
     try
         {ok, {IpAddress, _Port}} = ssl:peername(Socket),
@@ -678,8 +678,7 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
 
 
 %% @private
--spec handle_handshake_response(state(), binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec handle_handshake_response(state(), binary()) -> {ok, state()} | error().
 handle_handshake_response(#state{
     session_id = SessId,
     peer_id = ProviderId
@@ -708,8 +707,7 @@ handle_handshake_response(#state{
 
 
 %% @private
--spec handle_message(state(), binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec handle_message(state(), binary()) -> {ok, state()} | error().
 handle_message(#state{type = incoming} = State, Data) ->
     handle_client_message(State, Data);
 handle_message(#state{type = outgoing} = State, Data) ->
@@ -717,8 +715,7 @@ handle_message(#state{type = outgoing} = State, Data) ->
 
 
 %% @private
--spec handle_client_message(state(), binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec handle_client_message(state(), binary()) -> {ok, state()} | error().
 handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     {ok, State};
 handle_client_message(#state{
@@ -736,8 +733,7 @@ handle_client_message(#state{
 
 
 %% @private
--spec handle_server_message(state(), binary()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec handle_server_message(state(), binary()) -> {ok, state()} | error().
 handle_server_message(#state{session_id = SessId} = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_server_message(Data, SessId),
@@ -749,8 +745,7 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 
 
 %% @private
--spec route_message(state(), message()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec route_message(state(), message()) -> {ok, state()} | error().
 route_message(#state{session_id = SessionId, reply_to = ReplyTo} = State, Msg) ->
     case router:route_message(Msg, ReplyTo) of
         ok ->
@@ -775,8 +770,7 @@ route_message(#state{session_id = SessionId, reply_to = ReplyTo} = State, Msg) -
 
 
 %% @private
--spec send_message(state(), message()) ->
-    {ok, state()} | {error, Reason :: term()}.
+-spec send_message(state(), message()) -> {ok, state()} | error().
 send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
     send_client_message(State, Msg);
 send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
@@ -785,12 +779,12 @@ send_message(#state{type = ConnType}, Msg) ->
     ?warning_stacktrace("Attempt to send msg ~p via wrong connection ~p", [
         Msg, ConnType
     ]),
-    {error, sending_msg_via_wrong_connection}.
+    {error, sending_msg_via_wrong_conn_type}.
 
 
 %% @private
 -spec send_client_message(state(), client_message()) ->
-    {ok, state()} | {error, Reason :: term()}.
+    {ok, state()} | error().
 send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     try
         {ok, Data} = clproto_serializer:serialize_client_message(ClientMsg, VerifyMsg),
@@ -806,7 +800,7 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
 
 %% @private
 -spec send_server_message(state(), server_message()) ->
-    {ok, state()} | {error, Reason :: term()}.
+    {ok, state()} | error().
 send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     try
         {ok, Data} = clproto_serializer:serialize_server_message(ServerMsg, VerifyMsg),
@@ -821,8 +815,7 @@ send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
 
 
 %% @private
--spec socket_send(state(), Data :: binary()) ->
-    {ok, state()} | {error, term()}.
+-spec socket_send(state(), Data :: binary()) -> {ok, state()} | error().
 socket_send(#state{transport = Transport, socket = Socket} = State, Data) ->
     case Transport:send(Socket, Data) of
         ok ->

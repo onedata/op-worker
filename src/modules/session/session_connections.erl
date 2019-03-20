@@ -18,8 +18,7 @@
 %% API
 -export([
     get_random_connection/1, get_connections/1,
-    get_async_req_manager/1,
-    get_random_conn_and_async_req_manager/1
+    get_async_req_manager/1
 ]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
 -export([ensure_connected/1]).
@@ -72,25 +71,6 @@ get_async_req_manager(SessId) ->
             {error, no_async_req_manager};
         {ok, #session{async_request_manager = AsyncReqManager}} ->
             {ok, AsyncReqManager};
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns connection manager for session and random connection.
-%% @end
-%%--------------------------------------------------------------------
--spec get_random_conn_and_async_req_manager(session:id()) ->
-    {ok, Con :: pid(), ConnManager :: pid()} | {error, Reason :: term()}.
-get_random_conn_and_async_req_manager(SessId) ->
-    case get_proxy_session(SessId) of
-        {ok, #session{connections = []}} ->
-            {error, no_connections};
-        {ok, #session{async_request_manager = undefined}} ->
-            {error, no_async_req_manager};
-        {ok, #session{connections = Cons, async_request_manager = AsyncReqManager}} ->
-            {ok, utils:random_element(Cons), AsyncReqManager};
         Error ->
             Error
     end.
@@ -208,6 +188,7 @@ ensure_connected(SessId) ->
 %% Returns effective session, that is session, which is not proxied.
 %% @end
 %%--------------------------------------------------------------------
+-spec get_proxy_session(session:id()) -> {ok, #session{}} | {error, term()}.
 get_proxy_session(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
@@ -215,6 +196,6 @@ get_proxy_session(SessId) ->
             get_proxy_session(ProxyViaSession);
         {ok, #document{value = Sess}} ->
             {ok, Sess};
-        {error, Reason} ->
-            {error, Reason}
+        Error ->
+            Error
     end.

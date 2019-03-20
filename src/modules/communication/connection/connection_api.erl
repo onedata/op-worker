@@ -17,6 +17,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -111,7 +112,7 @@ send(SessionId, Msg, ExcludedCons) ->
 
 
 %% @private
--spec await_response(message()) -> {ok, message()} | {error, timeout}.
+-spec await_response(message()) -> {ok, message()} | ?ERROR_TIMEOUT.
 await_response(#client_message{message_id = MsgId} = Msg) ->
     receive
         #server_message{
@@ -122,7 +123,7 @@ await_response(#client_message{message_id = MsgId} = Msg) ->
         #server_message{message_id = MsgId} = ServerMsg ->
             {ok, ServerMsg}
     after ?RESPONSE_AWAITING_PERIOD ->
-        {error, timeout}
+        ?ERROR_TIMEOUT
     end;
 await_response(#server_message{message_id = MsgId}) ->
     receive
@@ -130,7 +131,7 @@ await_response(#server_message{message_id = MsgId}) ->
             {ok, ClientMsg}
     % TODO VFS-4025 - how long should we wait for client answer?
     after ?DEFAULT_REQUEST_TIMEOUT ->
-        {error, timeout}
+        ?ERROR_TIMEOUT
     end.
 
 
