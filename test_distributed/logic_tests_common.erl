@@ -225,6 +225,16 @@ mock_graph_request(GsGraph = #gs_req_graph{operation = delete}, Authorization) -
     mock_graph_delete(GsGraph#gs_req_graph.gri, Authorization).
 
 
+mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
+    case lists:member(UserId, [?USER_1, ?USER_2, ?USER_3]) andalso IdP == ?MOCK_IDP of
+        true ->
+            {ok, #gs_resp_graph{data_format = value, data = #{
+                <<"token">> => ?MOCK_IDP_ACCESS_TOKEN, <<"ttl">> => 3600
+            }}};
+        _ ->
+            ?ERROR_NOT_FOUND
+    end;
+
 mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
     #{
         <<"shareId">> := ShareId,
