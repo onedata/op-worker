@@ -21,7 +21,7 @@
 
 %% API
 -export([get_server_user_ctx/5, get_server_user_ctx/6, get_client_user_ctx/5,
-    get_posix_user_ctx/3, get_posix_user_ctx/4]).
+    get_posix_user_ctx/3, get_posix_user_ctx/4, add_helper_specific_fields/4]).
 
 % exported for CT tests
 -export([get_admin_ctx/2, get_insecure_user_ctx/1, generate_user_ctx/2,

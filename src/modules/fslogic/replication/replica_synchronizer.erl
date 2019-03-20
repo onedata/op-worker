@@ -1361,7 +1361,7 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     #file_location{blocks = FinalBlocks} = Location =
         file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
-        fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+            fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
     case Flush of
@@ -1541,19 +1541,19 @@ wait_for_terminate(Pid) ->
 delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     try
-        LocalFileId = file_location:local_id(FileUuid),
-        {ok, LocDoc} = fslogic_location_cache:get_location(LocalFileId, FileUuid),
+        LocalFileLocId = file_location:local_id(FileUuid),
+        ProviderId = oneprovider:get_id(),
+        {ok, LocDoc} = fslogic_location_cache:get_location(LocalFileLocId, FileUuid),
         CurrentVV = file_location:get_version_vector(LocDoc),
-        case version_vector:compare(CurrentVV, AllowedVV) of
-            ComparisonResult when
-                ComparisonResult =:= identical orelse
-                    ComparisonResult =:= lesser
-                ->
+        AllowedLocalV = version_vector:get_version(LocalFileLocId, ProviderId, AllowedVV),
+        CurrentLocalV = version_vector:get_version(LocalFileLocId, ProviderId, CurrentVV),
+        case AllowedLocalV =:= CurrentLocalV of
+            true ->
                 UserCtx = user_ctx:new(?ROOT_SESS_ID),
                 #fuse_response{status = #status{code = ?OK}} =
                     truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
                 %todo VFS-4433 file_popularity should be updated after updates on file_location
-                fslogic_location_cache:clear_blocks(FileCtx, LocalFileId),
+                fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
                 State2 = flush_events(State),
                 {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2};
             _ ->
