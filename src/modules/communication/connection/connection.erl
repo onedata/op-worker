@@ -203,17 +203,17 @@ send_msg(Pid, Msg) ->
             {error, no_connection};
         exit:{normal, _} ->
             ?debug("Exit of connection process ~p for message ~p", [
-                Pid, Msg
+                Pid, clproto_utils:msg_to_string(Msg)
             ]),
             {error, no_connection};
         exit:{timeout, _} ->
             ?debug("Timeout of connection process ~p for message ~p", [
-                Pid, Msg
+                Pid, clproto_utils:msg_to_string(Msg)
             ]),
             ?ERROR_TIMEOUT;
         Type:Reason ->
             ?error("Connection ~p cannot send msg ~p due to ~p:~p", [
-                Pid, Msg, Type, Reason
+                Pid, clproto_utils:msg_to_string(Msg), Type, Reason
             ]),
             {error, Reason}
     end.
@@ -764,7 +764,9 @@ route_message(#state{session_id = SessionId, reply_to = ReplyTo} = State, Msg) -
                     Error
             end;
         {error, Reason} ->
-            ?error("Message ~p handling error: ~p", [Msg, Reason]),
+            ?error("Message ~p handling error: ~p", [
+                clproto_utils:msg_to_string(Msg), Reason
+            ]),
             {ok, State}
     end.
 
@@ -777,7 +779,7 @@ send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
     send_server_message(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
     ?warning_stacktrace("Attempt to send msg ~p via wrong connection ~p", [
-        Msg, ConnType
+        clproto_utils:msg_to_string(Msg), ConnType
     ]),
     {error, sending_msg_via_wrong_conn_type}.
 
@@ -792,7 +794,7 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     catch
         _:Reason ->
             ?error_stacktrace("Unable to serialize client_message ~p due to: ~p", [
-                ClientMsg, Reason
+                clproto_utils:msg_to_string(ClientMsg), Reason
             ]),
             {error, serialization_failed}
     end.
@@ -808,7 +810,7 @@ send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     catch
         _:Reason ->
             ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [
-                ServerMsg, Reason
+                clproto_utils:msg_to_string(ServerMsg), Reason
             ]),
             {error, serialization_failed}
     end.

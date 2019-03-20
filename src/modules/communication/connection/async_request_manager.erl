@@ -386,25 +386,28 @@ code_change(_OldVsn, State, _Extra) ->
     ok | error().
 delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
     Pid = spawn(fun() ->
-        Ans = try
+        Response = try
             HandlerFun()
         catch
             Type:Error ->
-                ?error("Router local delegation error: ~p for request id ~p", [
-                    Type, Error, ReqId
+                ?error("Failed to handle delegated request ~p due to ~p:~p", [
+                    ReqId, Type, Error
                 ]),
                 #processing_status{code = 'ERROR'}
         end,
-        respond(ReplyTo, ReqId, Ans)
+        respond(ReplyTo, ReqId, Response)
     end),
     report_pending_request(ReplyTo, Pid, ReqId);
 
 delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
     ReplyFun =
         fun
-            ({ok, Ans}) ->
-                respond(ReplyTo, ReqId, Ans);
+            ({ok, Response}) ->
+                respond(ReplyTo, ReqId, Response);
             ({error, Reason}) ->
+                ?error("Failed to handle delegated request ~p due to ~p", [
+                    ReqId, Reason
+                ]),
                 respond(ReplyTo, ReqId, #processing_status{code = 'ERROR'})
         end,
     case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
@@ -423,11 +426,14 @@ report_pending_request({_, AsyncReqManager, _}, Pid, ReqId) ->
 
 %% @private
 -spec respond(reply_to(), req_id(), term()) -> ok | error().
-respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
+respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
     case withhold_heartbeats(AsyncReqManager, ReqId) of
         ok ->
-            Response = #server_message{message_id = MsgId, message_body = Ans},
-            case send_response(Conn, SessionId, Response) of
+            Msg = #server_message{
+                message_id = MsgId,
+                message_body = Response
+            },
+            case send_response(Conn, SessionId, Msg) of
                 ok ->
                     report_response_sent(AsyncReqManager, ReqId);
                 {error, no_connections} = NoConsError ->
@@ -437,7 +443,7 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Ans) ->
                     NoConsError;
                 Error ->
                     ?error("Failed to send response ~p to peer ~p due to: ~p", [
-                        Response, SessionId, Error
+                        clproto_utils:msg_to_string(Msg), SessionId, Error
                     ]),
                     Error
             end;
