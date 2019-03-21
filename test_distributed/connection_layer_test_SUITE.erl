@@ -6,10 +6,12 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module tests connection_manager.
+%%% This module tests functionality of entire connection layer
+%%% (modules/communication/connection/) such as sending messages or
+%%% answering requests.
 %%% @end
 %%%--------------------------------------------------------------------
--module(connection_manager_test_SUITE).
+-module(connection_layer_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("fuse_test_utils.hrl").
@@ -82,27 +84,6 @@
 -define(PERFORMANCE_CASES, []).
 
 all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
-
--define(assertMatchAny(Guard1, Guard2, Expr),
-    begin
-        ((fun() ->
-            case (Expr) of
-                Guard1 -> 1;
-                Guard2 -> 2;
-                __V ->
-                    ct:pal("~p", [
-                        {assertMatch, [
-                            {module, ?MODULE},
-                            {line, ?LINE},
-                            {expression, (??Expr)},
-                            {pattern, (??Guard1), (??Guard2)},
-                            {value, __V}
-                        ]}
-                    ]),
-                    erlang:error(assertMatch)
-            end
-        end)())
-    end).
 
 -record(file_handle, {
     handle :: helpers_nif:file_handle(),
@@ -386,60 +367,24 @@ create_timeouts_test(Config, Sock, RootGuid) ->
     % send
     ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, <<"2">>, <<"ctt2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchAny(
-        #'ServerMessage'{message_body = {
-            fuse_response, #'FuseResponse'{status = #'Status'{code = eagain}
-            }
-        }, message_id = <<"2">>},
-        #'ServerMessage'{message_body = {
-            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
-        }, message_id = <<"2">>},
-        fuse_test_utils:receive_server_message()) end
-    ),
+    await_status_answer(eagain, <<"2">>),
 
     configure_cp(Config, helper_delay),
     ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, <<"3">>, <<"ctt3">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchAny(
-        #'ServerMessage'{message_body = {
-            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-        }, message_id = <<"3">>},
-        #'ServerMessage'{message_body = {
-            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
-        }, message_id = <<"3">>},
-        fuse_test_utils:receive_server_message()) end,
-        3
-    ).
+    await_status_answer(ok, <<"3">>, 3).
 
 ls_timeouts_test(Config, Sock, RootGuid) ->
     configure_cp(Config, attr_delay),
     ok = ssl:send(Sock, fuse_test_utils:generate_get_children_attrs_message(RootGuid, <<"ls2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchAny(
-        #'ServerMessage'{message_body = {
-            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-        }, message_id = <<"ls2">>},
-        #'ServerMessage'{message_body = {
-            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
-        }, message_id = <<"ls2">>},
-        fuse_test_utils:receive_server_message()) end,
-        2
-    ).
+    await_status_answer(ok, <<"ls2">>, 2).
 
 fsync_timeouts_test(Config, Sock, RootGuid) ->
     configure_cp(Config, events_delay),
     ok = ssl:send(Sock, fuse_test_utils:generate_fsync_message(RootGuid, <<"fs2">>)),
     % receive & validate
-    check_answer(fun() -> ?assertMatchAny(
-        #'ServerMessage'{message_body = {
-            fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-        }, message_id = <<"fs2">>},
-        #'ServerMessage'{message_body = {
-            processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}
-        }, message_id = <<"fs2">>},
-        fuse_test_utils:receive_server_message()) end,
-        2
-    ).
+    await_status_answer(ok, <<"fs2">>, 2).
 
 
 socket_timeout_test(Config) ->
@@ -778,22 +723,35 @@ spawn_ssl_echo_client(NodeToConnect) ->
 %%%===================================================================
 
 
-check_answer(AsertFun) ->
-    check_answer(AsertFun, 0).
+await_status_answer(ExpStatus, MsgId) ->
+    await_status_answer(ExpStatus, MsgId, 0).
 
-check_answer(AsertFun, MinHeartbeatNum) ->
+
+await_status_answer(ExpStatus, MsgId, MinHeartbeatNum) ->
     timer:sleep(100), % wait for pending messages
     initializer:remove_pending_messages(),
-    check_answer(AsertFun, 0, MinHeartbeatNum).
+    await_status_answer(ExpStatus, MsgId, MinHeartbeatNum, 0).
 
-check_answer(AsertFun, HeartbeatNum, MinHeartbeatNum) ->
-    AnsNum = AsertFun(),
-    case AnsNum of
-        1 ->
-            ?assert(HeartbeatNum >= MinHeartbeatNum);
-        _ ->
-            check_answer(AsertFun, HeartbeatNum + 1, MinHeartbeatNum)
+
+await_status_answer(ExpStatus, MsgId, MinHeartbeatsNum, HeartbeatsNum) ->
+    case fuse_test_utils:receive_server_message() of
+        #'ServerMessage'{
+            message_id = MsgId,
+            message_body = {processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}}
+        } ->
+            await_status_answer(ExpStatus, MsgId, MinHeartbeatsNum, HeartbeatsNum + 1);
+        #'ServerMessage'{
+            message_id = MsgId,
+            message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ExpStatus}}}
+        } ->
+            ?assert(MinHeartbeatsNum =< HeartbeatsNum);
+        UnExpectedMsg ->
+            ct:pal("Receive unexpected msg ~p while waiting for ~p", [
+                UnExpectedMsg, ExpStatus
+            ]),
+            erlang:error(assertMatch)
     end.
+
 
 get_guid(Worker, SessId, Path) ->
     Req = #fuse_request{fuse_request = #resolve_guid{path = Path}},
