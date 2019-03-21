@@ -85,25 +85,28 @@ handle(_Manager, Request, -1) ->
     ok;
 handle(Manager, Request, RetryCounter) ->
     try
-        case {get_provider(Request, Manager), Request} of
-            {self, _} ->
+        case get_provider(Request, Manager) of
+            self ->
                 handle_locally(Request, Manager);
-            {RemoteProviderId, #subscription{} = Sub} ->
-                gen_server2:cast(Manager, {cache_provider, Sub, RemoteProviderId}),
-                {ok, SessId} = ets_state:get(session, Manager, session_id),
-                handle_remotely(Request, RemoteProviderId, SessId);
-            {RemoteProviderId, #subscription_cancellation{id = SubId}} ->
-                gen_server2:cast(Manager, {remove_provider_cache, SubId}),
-                {ok, SessId} = ets_state:get(session, Manager, session_id),
-                handle_remotely(Request, RemoteProviderId, SessId);
-            {RemoteProviderId, _} ->
+            ProviderId ->
                 Self = oneprovider:get_id_or_undefined(),
-                case RemoteProviderId of
-                    Self ->
+                case ProviderId of
+                    Self -> % For requests with proxy filed set
                         handle_locally(Request, Manager);
                     _ ->
-                        {ok, SessId} = ets_state:get(session, Manager, session_id),
-                        handle_remotely(Request, RemoteProviderId, SessId)
+                        case Request of
+                            #subscription{} = Sub ->
+                                gen_server2:cast(Manager, {cache_provider, Sub, ProviderId}),
+                                {ok, SessId} = ets_state:get(session, Manager, session_id),
+                                handle_remotely(Request, ProviderId, SessId);
+                            #subscription_cancellation{id = SubId} ->
+                                gen_server2:cast(Manager, {remove_provider_cache, SubId}),
+                                {ok, SessId} = ets_state:get(session, Manager, session_id),
+                                handle_remotely(Request, ProviderId, SessId);
+                            _->
+                                {ok, SessId} = ets_state:get(session, Manager, session_id),
+                                handle_remotely(Request, ProviderId, SessId)
+                        end
                 end
         end
     catch
@@ -272,7 +275,7 @@ get_provider(Request, Manager) ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
                 {ok, ID} ->
-                    {ID, FileCtx};
+                    ID;
                 _ ->
                     {ok, SessId} = ets_state:get(session, Manager, session_id),
                     get_provider(Request, SessId, FileCtx)
