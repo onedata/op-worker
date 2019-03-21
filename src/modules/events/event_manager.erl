@@ -623,9 +623,8 @@ get_from_memory(Manager, DataType, Key) ->
 init_memory(SessionID) ->
     ets_state:init_collection(?STATE_ID, streams),
     ets_state:init_collection(?STATE_ID, subscriptions),
-    ets_state:init_collection(?STATE_ID, sub_to_provider),
     ets_state:init_collection(?STATE_ID, guid_to_provider),
-    ets_state:init_collection(?STATE_ID, sequencer_out_streams),
+    ets_state:init_collection(?STATE_ID, sub_to_guid),
     ets_state:save(?STATE_ID, self(), session_id, SessionID).
 
 %%--------------------------------------------------------------------
@@ -638,6 +637,6 @@ init_memory(SessionID) ->
 delete_memory() ->
     ets_state:delete_collection(?STATE_ID, streams),
     ets_state:delete_collection(?STATE_ID, subscriptions),
-    ets_state:delete_collection(?STATE_ID, sub_to_provider),
     ets_state:delete_collection(?STATE_ID, guid_to_provider),
+    ets_state:delete_collection(?STATE_ID, sub_to_guid),
     ets_state:delete(?STATE_ID, self(), session_id).
