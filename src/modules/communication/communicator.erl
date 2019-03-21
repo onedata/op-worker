@@ -32,10 +32,12 @@
 -type recipient_pid() :: undefined | pid().
 -type retries() :: non_neg_integer() | infinity.
 
--type generic_message() :: tuple().
 -type client_message() :: #client_message{}.
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
+% Generic message can by either client_message, server_message or any
+% struct that can be used as `message_body` for the first two.
+-type generic_message() :: client_message() | server_message() | tuple().
 
 -type error() :: {error, Reason :: term()}.
 

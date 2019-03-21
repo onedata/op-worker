@@ -223,7 +223,7 @@ delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId, EnableKeepalive]) ->
     process_flag(trap_exit, true),
-    ok = session:set_async_request_manager(SessionId, self()),
+    ok = session_connections:set_async_request_manager(SessionId, self()),
     EnableKeepalive andalso schedule_keepalive_msg(),
     {ok, #state{session_id = SessionId}}.
 
@@ -325,9 +325,10 @@ handle_info(heartbeat, #state{
                 heartbeat_timer = undefined
             };
         Error ->
-            ?error("Async request manager: failed to send heartbeats due to: ~p",
-                [Error]
-            ),
+            ?error("Async request manager for session ~p failed to send "
+                   "heartbeats due to: ~p", [
+                SessionId, Error
+            ]),
             State#state{heartbeat_timer = undefined}
     end,
     {noreply, schedule_workers_status_checkup(NewState)};
@@ -338,9 +339,10 @@ handle_info(keepalive, #state{session_id = SessionId} = State) ->
                 connection:send_keepalive(Conn) 
             end, Cons);
         Error ->
-            ?error("Async request manager: failed to send keepalives due to: ~p",
-                [Error]
-            )
+            ?error("Async request manager for session ~p failed to send "
+                   "keepalives due to: ~p", [
+                SessionId, Error
+            ])
     end,
     schedule_keepalive_msg(),
     {noreply, State};

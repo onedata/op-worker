@@ -13,12 +13,13 @@
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
     get_random_connection/1, get_connections/1,
-    get_async_req_manager/1
+    set_async_request_manager/2, get_async_req_manager/1
 ]).
 -export([get_new_record_and_update_fun/5, remove_connection/2]).
 -export([ensure_connected/1]).
@@ -57,6 +58,18 @@ get_connections(SessId) ->
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets async_request_manager property of session.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_async_request_manager(session:id(), ConnManager :: pid()) ->
+    ok | datastore:update_error().
+set_async_request_manager(SessionId, AsyncReqManager) ->
+    ?extract_ok(session:update(SessionId, fun(Session = #session{}) ->
+        {ok, Session#session{async_request_manager = AsyncReqManager}}
+    end)).
 
 %%--------------------------------------------------------------------
 %% @doc
