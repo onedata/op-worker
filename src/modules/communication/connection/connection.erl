@@ -197,7 +197,7 @@ close(Pid) ->
 -spec send_msg(pid(), message()) -> ok | error().
 send_msg(Pid, Msg) ->
     try
-        gen_server2:call(Pid, {send_msg, Msg})
+        gen_server2:call(Pid, {send_msg, Msg}, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
             ?debug("Connection process ~p does not exist", [Pid]),

@@ -492,7 +492,7 @@ report_response_sent(AsyncReqManager, ReqId) ->
     ok | error().
 call_async_request_manager(AsyncReqManager, Msg) ->
     try
-        gen_server2:call(AsyncReqManager, Msg)
+        gen_server2:call(AsyncReqManager, Msg, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
             ?debug("Request manager process ~p does not exist", [
