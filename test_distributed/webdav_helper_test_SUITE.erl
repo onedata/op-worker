@@ -337,10 +337,10 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     WebDAVConfig = ?config(webdav, ?config(webdav, ?config(storages, Config))),
-    UserCtx = helper:new_webdav_user_ctx(
+    {ok, UserCtx} = helper:new_webdav_user_ctx(
         atom_to_binary(?config(credentials_type, WebDAVConfig), utf8),
         atom_to_binary(?config(credentials, WebDAVConfig), utf8)),
-    Helper = helper:new_webdav_helper(
+    {ok, Helper} = helper:new_webdav_helper(
         atom_to_binary(?config(endpoint, WebDAVConfig), utf8),
         #{
             <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8)
