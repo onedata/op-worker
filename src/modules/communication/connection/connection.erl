@@ -90,6 +90,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -724,8 +725,26 @@ handle_client_message(#state{
 } = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, SessId),
-        connection_utils:maybe_create_proxied_session(PeerId, Msg),
-        route_message(State, Msg)
+        case connection_utils:maybe_create_proxied_session(PeerId, Msg) of
+            ok ->
+                route_message(State, Msg);
+            Error ->
+                ?error("Failed to create proxied session for ~p due to: ~p", [
+                    clproto_utils:msg_to_string(Msg), Error
+                ]),
+                % Respond with eacces error if request has msg_id
+                % (msg_id means that peer awaits answer)
+                case Msg#client_message.message_id of
+                    undefined ->
+                        {ok, State};
+                    _ ->
+                        ServerMsg = #server_message{
+                            message_id = Msg#client_message.message_id,
+                            message_body = #status{code = ?EACCES}
+                        },
+                        send_response(State, ServerMsg)
+                end
+        end
     catch Type:Reason ->
         ?error("Client message handling error - ~p:~p", [Type, Reason]),
         {ok, State}
@@ -746,28 +765,34 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 
 %% @private
 -spec route_message(state(), message()) -> {ok, state()} | error().
-route_message(#state{session_id = SessionId, reply_to = ReplyTo} = State, Msg) ->
+route_message(#state{reply_to = ReplyTo} = State, Msg) ->
     case router:route_message(Msg, ReplyTo) of
         ok ->
             {ok, State};
         {ok, ServerMsg} ->
-            case send_server_message(State, ServerMsg) of
-                {ok, _NewState} = Ans ->
-                    Ans;
-                % Serialization errors should not break ready connection
-                {error, serialization_failed} ->
-                    {ok, State};
-                Error ->
-                    % Before reporting error and closing connection
-                    % try to send msg via other connections
-                    connection_api:send(SessionId, ServerMsg, [self()]),
-                    Error
-            end;
+            send_response(State, ServerMsg);
         {error, Reason} ->
             ?error("Message ~s handling error: ~p", [
                 clproto_utils:msg_to_string(Msg), Reason
             ]),
             {ok, State}
+    end.
+
+
+%% @private
+-spec send_response(state(), server_message()) -> {ok, state()} | error().
+send_response(#state{session_id = SessionId} = State, ServerMsg) ->
+    case send_server_message(State, ServerMsg) of
+        {ok, _NewState} = Ans ->
+            Ans;
+        % Serialization errors should not break ready connection
+        {error, serialization_failed} ->
+            {ok, State};
+        Error ->
+            % Before reporting error and closing connection
+            % try to send msg via other connections
+            connection_api:send(SessionId, ServerMsg, [self()]),
+            Error
     end.
 
 

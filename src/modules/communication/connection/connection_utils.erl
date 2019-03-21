@@ -120,15 +120,19 @@ fill_effective_session_info(Msg, SessionId) ->
 %% Creates proxy session if requested by peer.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_create_proxied_session(od_provider:id(), #client_message{}) -> ok.
+-spec maybe_create_proxied_session(od_provider:id(), #client_message{}) ->
+    ok | {error, term()}.
 maybe_create_proxied_session(ProviderId, #client_message{
     effective_session_id = EffSessionId,
     effective_session_auth = Auth
 }) when EffSessionId =/= undefined ->
-    {ok, _} = session_manager:reuse_or_create_proxied_session(
+    Res = session_manager:reuse_or_create_proxied_session(
         EffSessionId, ProviderId, Auth, fuse
     ),
-    ok;
+    case Res of
+        {ok, _} -> ok;
+        Error -> Error
+    end;
 maybe_create_proxied_session(_, _) ->
     ok.
 
