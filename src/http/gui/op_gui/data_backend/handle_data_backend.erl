@@ -54,11 +54,11 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(ModelType, HandleId) ->
     case ModelType of
         <<"handle">> ->
-            SessionId = gui_session:get_session_id(),
+            SessionId = op_gui_session:get_session_id(),
             handle_record(SessionId, HandleId);
         <<"handle-public">> ->
             public_handle_record(HandleId)
@@ -71,9 +71,9 @@ find_record(ModelType, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(_) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -82,9 +82,9 @@ find_all(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(_, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -93,9 +93,9 @@ query(_, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(_, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -104,11 +104,11 @@ query_record(_, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"handle-public">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 create_record(<<"handle">>, Data) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     HandleServiceId = proplists:get_value(<<"handleService">>, Data, <<"">>),
     Metadata = proplists:get_value(<<"metadataString">>, Data, <<"">>),
     ShareId = proplists:get_value(<<"share">>, Data, <<"">>),
@@ -119,7 +119,7 @@ create_record(<<"handle">>, Data) ->
     NewShareData = lists:keyreplace(
         <<"handle">>, 1, ShareData, {<<"handle">>, HandleId}
     ),
-    gui_async:push_updated(<<"share">>, NewShareData),
+    op_gui_async:push_updated(<<"share">>, NewShareData),
     {ok, #document{value = #od_handle{
         public_handle = PublicHandle
     }}} = handle_logic:get(SessionId, HandleId),
@@ -139,9 +139,9 @@ create_record(<<"handle">>, Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(_, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -150,9 +150,9 @@ update_record(_, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(_, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -166,7 +166,7 @@ delete_record(_, _Id) ->
 handle_record(SessionId, HandleId) ->
     case handle_logic:get(SessionId, HandleId) of
         {error, _} ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         {ok, #document{value = HandleRecord}} ->
             #od_handle{
                 handle_service = HandleServiceId,
@@ -194,7 +194,7 @@ handle_record(SessionId, HandleId) ->
 public_handle_record(HandleId) ->
     case handle_logic:get_public_data(?GUEST_SESS_ID, HandleId) of
         {error, _} ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         {ok, #document{value = HandleRecord}} ->
             #od_handle{
                 public_handle = PublicHandle,

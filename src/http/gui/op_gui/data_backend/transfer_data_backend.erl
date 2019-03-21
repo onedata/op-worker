@@ -63,7 +63,7 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"transfer">>, StateAndTransferId) ->
     transfer_record(StateAndTransferId);
 
@@ -83,9 +83,9 @@ find_record(<<"transfer-current-stat">>, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(_ResourceType) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -94,9 +94,9 @@ find_all(_ResourceType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -105,9 +105,9 @@ query(_ResourceType, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -116,9 +116,9 @@ query_record(_ResourceType, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"transfer">>, Data) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     FileGuid = proplists:get_value(<<"dataSourceIdentifier">>, Data),
     ReplicatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"replicatingProvider">>, Data
@@ -154,7 +154,7 @@ create_record(<<"transfer">>, Data) ->
                 ?WAITING_TRANSFERS_STATE, TransferId
             ));
         {error, ?EACCES} ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         {error, Error} ->
             ?error("Failed to schedule transfer{"
             "~n\tfile=~p,"
@@ -166,7 +166,7 @@ create_record(<<"transfer">>, Data) ->
                 ReplicatingProvider, EvictingProvider,
                 Error
             ]),
-            gui_error:internal_server_error()
+            op_gui_error:internal_server_error()
     end.
 
 
@@ -177,9 +177,9 @@ create_record(<<"transfer">>, Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(_ResourceType, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -188,9 +188,9 @@ update_record(_ResourceType, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(_ResourceType, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -198,14 +198,14 @@ delete_record(_ResourceType, _Id) ->
 %% Cancel transfer of given id.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_transfer(binary()) -> ok | gui_error:error_result().
+-spec cancel_transfer(binary()) -> ok | op_gui_error:error_result().
 cancel_transfer(StateAndTransferId) ->
     {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     case transfer:cancel(TransferId) of
         ok ->
             ok;
         {error, already_ended} ->
-            gui_error:report_error(<<
+            op_gui_error:report_error(<<
                 "Given transfer could not be cancelled "
                 "because it has already ended."
             >>)
@@ -218,7 +218,7 @@ cancel_transfer(StateAndTransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rerun_transfer(SessionId :: session:id(), StateAndTransferId :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 rerun_transfer(SessionId, StateAndTransferId) ->
     {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     {ok, UserId} = session:get_user_id(SessionId),
@@ -230,7 +230,7 @@ rerun_transfer(SessionId, StateAndTransferId) ->
                 )}
             ]};
         {error, not_ended} ->
-            gui_error:report_error(<<
+            op_gui_error:report_error(<<
                 "Given transfer could not be rerun "
                 "because it has not ended yet."
             >>)
@@ -246,7 +246,7 @@ rerun_transfer(SessionId, StateAndTransferId) ->
 -spec list_transfers(od_space:id(), State :: binary(),
     StartFromIndex :: null | transfer_links:link_key(),
     Offset :: integer(), Limit :: transfer:list_limit()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 list_transfers(SpaceId, State, StartFromIndex, Offset, Limit) ->
     StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
     {ok, TransferIds} = case State of
@@ -270,7 +270,7 @@ list_transfers(SpaceId, State, StartFromIndex, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_transfers_for_file(fslogic_worker:file_guid()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 get_transfers_for_file(FileGuid) ->
     {ok, #{
         ongoing := Ongoing,
@@ -297,7 +297,7 @@ get_transfers_for_file(FileGuid) ->
 -spec transfer_record(binary()) -> {ok, proplists:proplist()}.
 transfer_record(StateAndTransferId) ->
     {State, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     {ok, TransferDoc = #document{value = Transfer = #transfer{
         replicating_provider = ReplicatingProviderId,
         evicting_provider = EvictingProviderId,

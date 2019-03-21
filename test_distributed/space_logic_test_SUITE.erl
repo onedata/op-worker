@@ -360,7 +360,7 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
     ?assertMatch(
         false,
-        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_INVITE_USER])
+        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

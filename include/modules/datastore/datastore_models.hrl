@@ -128,6 +128,7 @@
 
     % Direct relations to other entities
     spaces = #{} :: maps:map(od_space:id(), Size :: integer()),
+    cluster = undefined :: undefined | binary(),
 
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
@@ -180,6 +181,11 @@
 
 -record(authorization_nonce, {
     timestamp :: integer()
+}).
+
+-record(file_download_code, {
+    session_id :: session:id(),
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% Identity containing user_id

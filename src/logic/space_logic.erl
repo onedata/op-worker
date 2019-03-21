@@ -17,19 +17,21 @@
 -module(space_logic).
 -author("Lukasz Opiola").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -export([get/2, get_protected_data/2]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privilege/4]).
 -export([get_eff_groups/2, get_shares/2]).
--export([get_provider_ids/2, get_providers_supports/2,
-    get_provider_support/2, get_provider_support/3]).
+-export([get_provider_ids/2, get_providers_supports/2]).
+-export([get_support_size/1]).
 -export([is_supported/2, is_supported/3]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
@@ -173,17 +175,15 @@ get_providers_supports(SessionId, SpaceId) ->
     end.
 
 
--spec get_provider_support(gs_client_worker:client(), od_space:id()) ->
-    integer() | gs_protocol:error().
-get_provider_support(SessionId, SpaceId) ->
-    get_provider_support(SessionId, SpaceId, oneprovider:get_id()).
-
--spec get_provider_support(gs_client_worker:client(), od_space:id(),
-    od_provider:id()) -> integer() | gs_protocol:error().
-get_provider_support(SessionId, SpaceId, ProviderId) ->
-    case space_logic:get_providers_supports(SessionId, SpaceId) of
+%% @doc Returns the space support size of this provider
+-spec get_support_size(od_space:id()) -> {ok, integer()} | gs_protocol:error().
+get_support_size(SpaceId) ->
+    case get_providers_supports(?ROOT_SESS_ID, SpaceId) of
         {ok, SupportsMap} ->
-            maps:get(ProviderId, SupportsMap);
+            case maps:find(oneprovider:get_id(), SupportsMap) of
+                error -> ?ERROR_NOT_FOUND;
+                {ok, Size} -> {ok, Size}
+            end;
         {error, _} = Error ->
             Error
     end.

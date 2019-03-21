@@ -61,11 +61,11 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(ModelType, ShareId) ->
     case ModelType of
         <<"share">> ->
-            SessionId = gui_session:get_session_id(),
+            SessionId = op_gui_session:get_session_id(),
             share_record(SessionId, ShareId);
         <<"share-public">> ->
             public_share_record(ShareId)
@@ -78,11 +78,11 @@ find_record(ModelType, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(<<"share-public">>) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 find_all(<<"share">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -91,9 +91,9 @@ find_all(<<"share">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(_, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -102,9 +102,9 @@ query(_, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(_, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -113,9 +113,9 @@ query_record(_, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(_, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -125,16 +125,16 @@ create_record(_, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(<<"share-public">>, _ShareId, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     case Name of
         undefined ->
             ok;
         <<"">> ->
-            gui_error:report_warning(
+            op_gui_error:report_warning(
                 <<"Cannot set share name to empty string.">>);
         NewName ->
             case share_logic:update_name(SessionId, ShareId, NewName) of
@@ -146,13 +146,13 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
                     FileDataNewName = lists:keyreplace(
                         <<"name">>, 1, FileData, {<<"name">>, NewName}
                     ),
-                    gui_async:push_updated(<<"file-shared">>, FileDataNewName),
+                    op_gui_async:push_updated(<<"file-shared">>, FileDataNewName),
                     ok;
                 {error, {403, <<>>, <<>>}} ->
-                    gui_error:report_warning(<<"You do not have permissions to "
+                    op_gui_error:report_warning(<<"You do not have permissions to "
                     "manage shares in this space.">>);
                 _ ->
-                    gui_error:report_warning(
+                    op_gui_error:report_warning(
                         <<"Cannot change share name due to unknown error.">>)
             end
     end.
@@ -164,19 +164,19 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(<<"share-public">>, _ShareId) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"share">>, ShareId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     case logical_file_manager:remove_share(SessionId, ShareId) of
         ok ->
             ok;
         {error, ?EACCES} ->
-            gui_error:report_warning(<<"You do not have permissions to "
+            op_gui_error:report_warning(<<"You do not have permissions to "
             "manage shares in this space.">>);
         _ ->
-            gui_error:report_warning(
+            op_gui_error:report_warning(
                 <<"Cannot remove share due to unknown error.">>)
     end.
 
@@ -191,7 +191,7 @@ delete_record(<<"share">>, ShareId) ->
 share_record(SessionId, ShareId) ->
     case share_logic:get(SessionId, ShareId) of
         {error, _} ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         {ok, #document{value = ShareRecord}} ->
             #od_share{
                 name = Name,
@@ -208,7 +208,7 @@ share_record(SessionId, ShareId) ->
                 {<<"dataSpace">>, SpaceId},
                 {<<"publicUrl">>, PublicURL},
                 {<<"handle">>, gs_protocol:undefined_to_null(HandleId)},
-                {<<"user">>, gui_session:get_user_id()}
+                {<<"user">>, op_gui_session:get_user_id()}
             ]}
     end.
 
@@ -222,7 +222,7 @@ share_record(SessionId, ShareId) ->
 public_share_record(ShareId) ->
     case share_logic:get_public_data(?GUEST_SESS_ID, ShareId) of
         {error, _} ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         {ok, #document{value = ShareRecord}} ->
             #od_share{
                 name = Name,

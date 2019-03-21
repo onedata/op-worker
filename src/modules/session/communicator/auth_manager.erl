@@ -19,6 +19,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([handle_handshake/2, get_handshake_error/1]).
@@ -98,11 +99,24 @@ handle_client_handshake(Req = #client_handshake_request{session_id = SessId, aut
     when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
 
     assert_client_compatibility(Req, IpAddress),
-    {ok, #document{
-        value = Iden = #user_identity{user_id = UserId}
-    }} = user_identity:get_or_fetch(Auth),
-    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
-    {UserId, SessId}.
+
+    case user_identity:get_or_fetch(Auth) of
+        ?ERROR_UNAUTHORIZED ->
+            throw(bad_macaroon);
+        ?ERROR_FORBIDDEN ->
+            throw(invalid_provider);
+        ?ERROR_BAD_MACAROON ->
+            throw(bad_macaroon);
+        ?ERROR_MACAROON_INVALID ->
+            throw(bad_macaroon);
+        ?ERROR_MACAROON_EXPIRED ->
+            throw(bad_macaroon);
+        ?ERROR_MACAROON_TTL_TO_LONG(_) ->
+            throw(bad_macaroon);
+        {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
+            {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
+            {UserId, SessId}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

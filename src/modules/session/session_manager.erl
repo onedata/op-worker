@@ -22,7 +22,8 @@
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
 -export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
--export([create_gui_session/2, create_root_session/0, create_guest_session/0]).
+-export([reuse_or_create_gui_session/2]).
+-export([create_root_session/0, create_guest_session/0]).
 -export([remove_session/1]).
 
 %% Test API
@@ -110,13 +111,11 @@ reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
+-spec reuse_or_create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
-create_gui_session(Iden, Auth) ->
-    SessId = datastore_utils:gen_key(),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui,
-        connections = []},
-    start_session(#document{key = SessId, value = Sess}, gui).
+reuse_or_create_gui_session(Iden, Auth) ->
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({Iden, Auth})),
+    reuse_or_create_session(SessId, gui, Iden, Auth, []).
 
 %%--------------------------------------------------------------------
 %% @doc

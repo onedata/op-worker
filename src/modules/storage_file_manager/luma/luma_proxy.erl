@@ -97,11 +97,11 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
 %%-------------------------------------------------------------------
 -spec get_request_headers(luma_config:config()) -> map().
 get_request_headers(#luma_config{api_key = undefined}) ->
-    #{<<"Content-Type">> => <<"application/json">>};
+    #{<<"content-type">> => <<"application/json">>};
 get_request_headers(#luma_config{api_key = APIKey}) ->
     #{
-        <<"Content-Type">> => <<"application/json">>,
-        <<"X-Auth-Token">> => APIKey
+        <<"content-type">> => <<"application/json">>,
+        <<"x-auth-token">> => APIKey
     }.
 
 %%%===================================================================

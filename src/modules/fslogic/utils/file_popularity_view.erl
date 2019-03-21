@@ -112,7 +112,7 @@ query(SpaceId, IndexToken, Limit) ->
 example_query(SpaceId) ->
     str_utils:format_bin(
         "curl -sS -k -H \"X-Auth-Token:$TOKEN\" -X GET https://~s/api/v3/oneprovider/spaces/~s/indexes/file-popularity/query?limit=10",
-        [oneprovider:get_node_hostname(), SpaceId]
+        [oneprovider:get_domain(), SpaceId]
     ).
 
 

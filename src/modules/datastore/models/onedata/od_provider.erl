@@ -100,7 +100,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -143,6 +143,25 @@ get_record_struct(3) ->
         {online, boolean},
 
         {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {name, string},
+        {admin_email, string},
+        {subdomain_delegation, boolean},
+        {domain, string},
+        {subdomain, string},
+        {latitude, float},
+        {longitude, float},
+        {online, boolean},
+
+        {spaces, #{string => integer}},
+        {cluster, string},
 
         {eff_users, [string]},
         {eff_groups, [string]},
@@ -192,20 +211,58 @@ upgrade_record(2, Provider) ->
         #{}
     } = Provider,
     #{host := Domain} = url_utils:parse(hd(Urls)),
-    {3, #od_provider{
+    {3, {
+        od_provider,
+        Name,
+        undefined,
+        false,
+        Domain,
+        undefined,
+        0.0,
+        0.0,
+        false,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(3, Provider) ->
+    {
+        od_provider,
+        Name,
+        AdminEmail,
+        SubdomainDelegation,
+        Domain,
+        Subdomain,
+        Latitude,
+        Longitude,
+        Online,
+
+        Spaces,
+
+        EffUsers,
+        EffGroups,
+
+        _CacheState
+    } = Provider,
+    {4, #od_provider{
         name = Name,
-        admin_email = undefined,
-        subdomain_delegation = false,
+        admin_email = AdminEmail,
+        subdomain_delegation = SubdomainDelegation,
         domain = Domain,
-        subdomain = undefined,
-        latitude = 0.0,
-        longitude = 0.0,
-        online = false,
+        subdomain = Subdomain,
+        latitude = Latitude,
+        longitude = Longitude,
+        online = Online,
 
-        spaces = #{},
+        spaces = Spaces,
+        cluster = undefined,
 
-        eff_users = [],
-        eff_groups = [],
+        eff_users = EffUsers,
+        eff_groups = EffGroups,
 
         cache_state = #{}
     }}.

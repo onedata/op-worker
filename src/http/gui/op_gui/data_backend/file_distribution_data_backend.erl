@@ -63,9 +63,9 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"file-distribution">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -74,9 +74,9 @@ find_record(<<"file-distribution">>, _Id) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(<<"file-distribution">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -85,9 +85,9 @@ find_all(<<"file-distribution">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
     ),
@@ -142,9 +142,9 @@ query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(<<"file-distribution">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -153,9 +153,9 @@ query_record(<<"file-distribution">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"file-distribution">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -165,9 +165,9 @@ create_record(<<"file-distribution">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(<<"file-distribution">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -176,9 +176,9 @@ update_record(<<"file-distribution">>, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(<<"file-distribution">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 %%%===================================================================
 %%% Internal functions

@@ -31,6 +31,7 @@ get_models() -> [
     od_handle,
     provider_auth,
     authorization_nonce,
+    file_download_code,
     subscription,
     file_subscription,
     session,

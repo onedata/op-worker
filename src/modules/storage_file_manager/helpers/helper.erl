@@ -345,7 +345,7 @@ validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
     check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
-validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, GroupCtx) ->
+validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
     ok;
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
     {error, {group_ctx_not_supported, HelperName}}.

@@ -293,6 +293,13 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
+    ExpProviderId = rpc:call(Node, oneprovider, get_id, []),
+    ?assertMatch(
+        {ok, ?PROVIDER_CLUSTER(ExpProviderId)},
+        rpc:call(Node, provider_logic, get_cluster, [])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
     % Name is within private scope
     ExpectedSpaces = maps:keys(?PROVIDER_SPACES_VALUE(?PROVIDER_1)),
     ?assertMatch(

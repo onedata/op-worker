@@ -21,6 +21,7 @@
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% API
@@ -165,7 +166,7 @@ clean_test_users_and_spaces(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, space_storage]),
+        space_logic, provider_logic, cluster_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -185,7 +186,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, space_storage]),
+        provider_logic, cluster_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -616,22 +617,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    %% Setup storage
-    lists:foreach(fun({SpaceId, _}) ->
-        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
-    end, SpacesSetup),
-    lists:foreach(fun({SpaceId, SpaceConfig}) ->
-        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
-        lists:foreach(fun({PID, ProviderConfig}) ->
-            Domain = proplists:get_value(PID, DomainMappings),
-            case get_same_domain_workers(Config, Domain) of
-                [Worker | _] ->
-                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
-                _ -> ok
-            end
-        end, Providers0)
-    end, SpacesSetup),
-
     Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
         DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
         {SpaceId, DisplayName}
@@ -704,6 +689,23 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
+    cluster_logic_mock_setup(AllWorkers),
+
+    %% Setup storage
+    lists:foreach(fun({SpaceId, _}) ->
+        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
+    end, SpacesSetup),
+    lists:foreach(fun({SpaceId, SpaceConfig}) ->
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        lists:foreach(fun({PID, ProviderConfig}) ->
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
+                _ -> ok
+            end
+        end, Providers0)
+    end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
@@ -963,6 +965,14 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
         {ok, Providers}
     end),
 
+    test_utils:mock_expect(Workers, space_logic, get_support_size, fun(SpaceId) ->
+        {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        case maps:find(oneprovider:get_id(), Providers) of
+            error -> ?ERROR_NOT_FOUND;
+            {ok, Size} -> {ok, Size}
+        end
+    end),
+
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(Client, SpaceId, UserId, Privilege) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(Client, SpaceId),
         lists:member(Privilege, maps:get(UserId, EffUsers, []))
@@ -982,7 +992,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -1047,6 +1057,14 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
             Spaces ->
                 lists:member(SpaceId, Spaces)
         end
+    end,
+
+    HasEffUserFun = fun(?ROOT_SESS_ID, ProviderId, UserId) ->
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
+        lists:any(fun(SpaceId) ->
+            {ok, Users} = space_logic:get_eff_users(?ROOT_SESS_ID, SpaceId),
+            maps:is_key(UserId, Users)
+        end, Spaces)
     end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, get, GetProviderFun),
@@ -1120,6 +1138,16 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
 
+    test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
+        fun(UserId) ->
+            HasEffUserFun(?ROOT_SESS_ID, oneprovider:get_id(), UserId)
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
+        HasEffUserFun
+    ),
+
+
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         fun(SpaceId) ->
             SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
@@ -1161,6 +1189,19 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
         VerifyProviderIdentityFun).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks cluster_logic module.
+%% @end
+%%--------------------------------------------------------------------
+-spec cluster_logic_mock_setup(Workers :: node() | [node()]) -> ok.
+cluster_logic_mock_setup(AllWorkers) ->
+    test_utils:mock_new(AllWorkers, cluster_logic),
+    test_utils:mock_expect(AllWorkers, cluster_logic, update_version_info, fun(_, _, _) ->
+        ok
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

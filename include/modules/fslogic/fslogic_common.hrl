@@ -36,6 +36,7 @@
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
+-define(GUEST_IDENTITY, #user_identity{user_id = ?GUEST_USER_ID}).
 
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 

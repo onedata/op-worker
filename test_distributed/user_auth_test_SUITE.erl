@@ -64,11 +64,13 @@ macaroon_authentication(Config) ->
 
 init_per_testcase(_Case, Config) ->
     ssl:start(),
+    mock_provider_logic(Config),
     mock_space_logic(Config),
     mock_user_logic(Config),
     Config.
 
 end_per_testcase(_Case, Config) ->
+    unmock_provider_logic(Config),
     unmock_space_logic(Config),
     unmock_user_logic(Config),
     ssl:stop().
@@ -144,6 +146,18 @@ receive_server_message(IgnoredMsgList) ->
     after timer:seconds(5) ->
         {error, timeout}
     end.
+
+mock_provider_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, provider_logic, []),
+    test_utils:mock_expect(Workers, provider_logic, has_eff_user,
+        fun(UserId) ->
+            UserId =:= ?USER_ID
+        end).
+
+unmock_provider_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, provider_logic).
 
 mock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),

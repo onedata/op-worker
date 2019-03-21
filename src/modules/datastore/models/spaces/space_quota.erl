@@ -151,7 +151,7 @@ current_size(SpaceId) ->
 available_size(SpaceId) ->
     try
         CSize = ?MODULE:current_size(SpaceId),
-        SupSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
+        {ok, SupSize} = space_logic:get_support_size(SpaceId),
         SupSize - CSize
     catch
         _:Reason ->

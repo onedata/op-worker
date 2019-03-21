@@ -62,20 +62,20 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"space">>, SpaceId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     % Check if the user belongs to this space -
     % he should be able to get protected space data.
     case space_logic:get_protected_data(SessionId, SpaceId) of
         {ok, _} ->
             {ok, space_record(SpaceId)};
         _ ->
-            gui_error:unauthorized()
+            op_gui_error:unauthorized()
     end;
 
 find_record(RecordType, RecordId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     SpaceId = case RecordType of
         <<"space-user-list">> ->
             RecordId;
@@ -97,7 +97,7 @@ find_record(RecordType, RecordId) ->
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
             Id
     end,
-    UserId = gui_session:get_user_id(),
+    UserId = op_gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
     Authorized = space_logic:has_eff_privilege(
@@ -105,7 +105,7 @@ find_record(RecordType, RecordId) ->
     ),
     case Authorized of
         false ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         true ->
             case RecordType of
                 <<"space-user-list">> ->
@@ -132,9 +132,9 @@ find_record(RecordType, RecordId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(<<"space">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -143,9 +143,9 @@ find_all(<<"space">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(<<"space">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -154,9 +154,9 @@ query(<<"space">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(<<"space">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -165,9 +165,9 @@ query_record(<<"space">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"space">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -177,9 +177,9 @@ create_record(<<"space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(_ResourceType, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -188,9 +188,9 @@ update_record(_ResourceType, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(<<"space">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%%===================================================================
@@ -205,10 +205,10 @@ delete_record(<<"space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     % Check if that user has view privileges in that space
     HasViewPrivileges = space_logic:has_eff_privilege(
-        SessionId, SpaceId, gui_session:get_user_id(), ?SPACE_VIEW
+        SessionId, SpaceId, op_gui_session:get_user_id(), ?SPACE_VIEW
     ),
     space_record(SpaceId, HasViewPrivileges).
 
@@ -222,8 +222,8 @@ space_record(SpaceId) ->
 -spec space_record(SpaceId :: binary(), HasViewPrivileges :: boolean()) ->
     proplists:proplist().
 space_record(SpaceId, HasViewPrivileges) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
+    SessionId = op_gui_session:get_session_id(),
+    UserId = op_gui_session:get_user_id(),
     {ok, #document{value = #od_space{
         name = Name,
         providers = Providers
@@ -298,7 +298,7 @@ space_record(SpaceId, HasViewPrivileges) ->
 %%--------------------------------------------------------------------
 -spec space_user_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_user_list_record(SpaceId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     {ok, EffUsers} = space_logic:get_eff_users(SessionId, SpaceId),
     [
         {<<"id">>, SpaceId},
@@ -314,7 +314,7 @@ space_user_list_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_group_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_group_list_record(SpaceId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     {ok, EffGroups} = space_logic:get_eff_groups(SessionId, SpaceId),
     [
         {<<"id">>, SpaceId},
@@ -330,7 +330,7 @@ space_group_list_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_provider_list_record(SpaceId :: binary()) -> proplists:proplist().
 space_provider_list_record(SpaceId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     {ok, Providers} = space_logic:get_provider_ids(SessionId, SpaceId),
     [
         {<<"id">>, SpaceId},

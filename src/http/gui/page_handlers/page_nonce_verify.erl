@@ -26,7 +26,7 @@
 %% {@link dynamic_page_behaviour} callback handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(new_gui:method(), cowboy_req:req()) -> cowboy_req:req().
+-spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
     Nonce = proplists:get_value(<<"nonce">>, cowboy_req:parse_qs(Req), <<"">>),
     Status = case authorization_nonce:verify(Nonce) of

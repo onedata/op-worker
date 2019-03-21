@@ -269,7 +269,7 @@ expected_configuration(Node) ->
         <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
         <<"name">> => Name,
         <<"domain">> => Domain,
-        <<"onezoneDomain">> => list_to_binary(rpc:call(Node, oneprovider, get_oz_domain, [])),
+        <<"onezoneDomain">> => rpc:call(Node, oneprovider, get_oz_domain, []),
         <<"version">> => rpc:call(Node, oneprovider, get_version, []),
         <<"build">> => rpc:call(Node, oneprovider, get_build, []),
         <<"compatibleOnezoneVersions">> => to_binaries(CompOzVersions),

@@ -79,7 +79,7 @@ gather_configuration() ->
     end,
     OnezoneDomain = case ProviderId of
         undefined -> undefined;
-        _ -> list_to_binary(oneprovider:get_oz_domain())
+        _ -> oneprovider:get_oz_domain()
     end,
     CompOzVersions = application:get_env(?APP_NAME, compatible_oz_versions, []),
     CompOpVersions = application:get_env(?APP_NAME, compatible_op_versions, []),
