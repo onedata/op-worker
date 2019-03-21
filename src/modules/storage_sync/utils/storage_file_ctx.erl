@@ -221,7 +221,9 @@ get_xattr(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}, XattrName) ->
         {error, ?ENOTSUP} ->
             throw(?ENOTSUP);
         {error, ?ENOENT} ->
-            throw(?ENOENT)
+            throw(?ENOENT);
+        {error, ?ENODATA} ->
+            throw(?ENODATA)
     end.
 
 %%%===================================================================
