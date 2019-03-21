@@ -442,7 +442,7 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
                     ]),
                     NoConsError;
                 Error ->
-                    ?error("Failed to send response ~p to peer ~p due to: ~p", [
+                    ?error("Failed to send response ~s to peer ~p due to: ~p", [
                         clproto_utils:msg_to_string(Msg), SessionId, Error
                     ]),
                     Error

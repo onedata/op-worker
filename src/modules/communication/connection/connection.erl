@@ -202,17 +202,17 @@ send_msg(Pid, Msg) ->
             ?debug("Connection process ~p does not exist", [Pid]),
             {error, no_connection};
         exit:{normal, _} ->
-            ?debug("Exit of connection process ~p for message ~p", [
+            ?debug("Exit of connection process ~p for message ~s", [
                 Pid, clproto_utils:msg_to_string(Msg)
             ]),
             {error, no_connection};
         exit:{timeout, _} ->
-            ?debug("Timeout of connection process ~p for message ~p", [
+            ?debug("Timeout of connection process ~p for message ~s", [
                 Pid, clproto_utils:msg_to_string(Msg)
             ]),
             ?ERROR_TIMEOUT;
         Type:Reason ->
-            ?error("Connection ~p cannot send msg ~p due to ~p:~p", [
+            ?error("Connection ~p cannot send msg ~s due to ~p:~p", [
                 Pid, clproto_utils:msg_to_string(Msg), Type, Reason
             ]),
             {error, Reason}
@@ -764,7 +764,7 @@ route_message(#state{session_id = SessionId, reply_to = ReplyTo} = State, Msg) -
                     Error
             end;
         {error, Reason} ->
-            ?error("Message ~p handling error: ~p", [
+            ?error("Message ~s handling error: ~p", [
                 clproto_utils:msg_to_string(Msg), Reason
             ]),
             {ok, State}
@@ -778,7 +778,7 @@ send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
 send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
     send_server_message(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
-    ?warning_stacktrace("Attempt to send msg ~p via wrong connection ~p", [
+    ?warning_stacktrace("Attempt to send msg ~s via wrong connection ~p", [
         clproto_utils:msg_to_string(Msg), ConnType
     ]),
     {error, sending_msg_via_wrong_conn_type}.
@@ -793,7 +793,7 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
         socket_send(State, Data)
     catch
         _:Reason ->
-            ?error_stacktrace("Unable to serialize client_message ~p due to: ~p", [
+            ?error_stacktrace("Unable to serialize client_message ~s due to: ~p", [
                 clproto_utils:msg_to_string(ClientMsg), Reason
             ]),
             {error, serialization_failed}
@@ -809,7 +809,7 @@ send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
         socket_send(State, Data)
     catch
         _:Reason ->
-            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [
+            ?error_stacktrace("Unable to serialize server_message ~s due to: ~p", [
                 clproto_utils:msg_to_string(ServerMsg), Reason
             ]),
             {error, serialization_failed}

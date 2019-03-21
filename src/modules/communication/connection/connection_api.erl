@@ -59,7 +59,7 @@ communicate(SessionId, RawMsg) ->
                    "connections", [SessionId]),
             NoConsError;
         Error ->
-            ?error("Failed to communicate msg ~p to peer ~p due to: ~p", [
+            ?error("Failed to communicate msg ~s to peer ~p due to: ~p", [
                 clproto_utils:msg_to_string(Msg), SessionId, Error
             ]),
             Error
@@ -99,7 +99,7 @@ send(SessionId, Msg, ExcludedCons) ->
                    "connections", [SessionId]),
             NoConsError;
         Error ->
-            ?error("Failed to send msg ~p to peer ~p due to: ~p", [
+            ?error("Failed to send msg ~s to peer ~p due to: ~p", [
                 clproto_utils:msg_to_string(Msg), SessionId, Error
             ]),
             Error

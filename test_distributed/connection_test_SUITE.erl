@@ -566,7 +566,7 @@ sending_client_msg_via_incoming_connection_should_fail(Config) ->
 
     % when
     ?assertMatch(
-        {error, sending_msg_via_wrong_connection},
+        {error, sending_msg_via_wrong_conn_type},
         send_sync_msg(Worker1, SessionId, ClientMsg)
     ),
 
