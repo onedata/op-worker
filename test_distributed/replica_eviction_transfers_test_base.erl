@@ -813,7 +813,8 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config, Type, 
         {ok, _, 1} = logical_file_manager:write(Handle, 1, <<"#">>),
         ok = logical_file_manager:fsync(Handle),
         ok = logical_file_manager:release(Handle),
-        meck:passthrough([FileCtx, Blocks, AllowedVV])
+        % meck:passthrough does not work called functions use other mocked functions inside
+        erlang:apply(meck_util:original_name(replica_deletion_req), delete_blocks, [FileCtx, Blocks, AllowedVV])
     end),
 
     transfers_test_mechanism:run_test(
