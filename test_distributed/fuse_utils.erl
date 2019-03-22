@@ -35,7 +35,7 @@
     connect_via_macaroon/3, connect_via_macaroon/4
 ]).
 -export([connect_and_upgrade_proto/2]).
--export([receive_server_message/0, receive_server_message/1]).
+-export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
 
 %% Fuse request messages
 -export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2, 
@@ -45,7 +45,7 @@
 %% Subscription messages
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4, 
     generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
--export([generate_subscription_cancellation_message/3]).
+-export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
 
 %% ProxyIO messages
 -export([generate_write_message/5, generate_read_message/5]).
@@ -287,6 +287,10 @@ generate_file_location_changed_subscription_message(StreamId, SequenceNumber, Su
     },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
+generate_quota_exceeded_subscription_message(StreamId, SequenceNumber, SubId) ->
+    Type = {quota_exceeded, #'QuotaExceededSubscription'{}},
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+    
 generate_subscription_message(StreamId, SequenceNumber, SubId, Type) ->
     Message = #'ClientMessage'{
         message_stream = #'MessageStream'{stream_id = StreamId, sequence_number = SequenceNumber},

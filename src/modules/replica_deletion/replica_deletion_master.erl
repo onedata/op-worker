@@ -5,10 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% gen_server responsible for requesting support for deletion of files
-%%% from other providers. It is responsible for limiting number of
+%%% gen_server responsible for requesting support for deletion of files,
+%%% in the given space, from other providers.
+%%% It is responsible for limiting number of
 %%% concurrent requests so that remote provider won't be flooded with them.
-%%% One such server is started per node.
+%%% One such server is started in the cluster.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_deletion_master).
@@ -331,7 +332,7 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
         queues = Queues#{ReportId => QueuePerId2},
         ids_queue = queue:in(ReportId, IdsQueue)
     }, ?DIE_AFTER};
-handle_cast(finished, State = #state{
+handle_cast(?FINISHED, State = #state{
     queues = Queues,
     ids_queue = IdsQueue,
     active_tasks = ActiveTasks
@@ -352,12 +353,10 @@ handle_cast(finished, State = #state{
             },
             handle_cast(Task, State2)
     end;
-handle_cast({cancel, ReportId}, State = #state{ids_to_cancel = CancelledIds}) ->
+handle_cast(?CANCEL(ReportId), State = #state{ids_to_cancel = CancelledIds}) ->
     {noreply, State#state{ids_to_cancel = gb_sets:add(ReportId, CancelledIds)}, ?DIE_AFTER};
-handle_cast({cancel_done, ReportId}, State = #state{ids_to_cancel = CancelledIds}) ->
+handle_cast(?CANCEL_DONE(ReportId), State = #state{ids_to_cancel = CancelledIds}) ->
     {noreply, State#state{ids_to_cancel = gb_sets:delete_any(ReportId, CancelledIds)}, ?DIE_AFTER};
-handle_cast(fix, State) ->
-    {noreply, State#state{active_tasks = 0, queues = #{}, ids_queue = queue:new()}, ?DIE_AFTER};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State, ?DIE_AFTER}.

@@ -17,7 +17,7 @@
 
 %% API
 -export([compare/2, merge_location_versions/2, bump_version/1, version_diff/2,
-    replica_id_is_greater/2, get_local_version/1, get_version_of_provider/2]).
+    replica_id_is_greater/2, get_provider_version/1, get_version/3]).
 
 -type replica_id() :: {oneprovider:id(), file_location:id()}.
 -type version_vector() :: #{{binary(), binary()} => non_neg_integer()}.
@@ -94,26 +94,32 @@ replica_id_is_greater(LocalDoc, ExternalDoc) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns visible version of the replica for given ProviderId.
+%% Returns version of the replica for {ProviderId, LocationId} in
+%% given version vector.
 %% @end
 %%-------------------------------------------------------------------
-get_version_of_provider(#document{value = FileLocation}, ProviderId) ->
-    get_version_of_provider(FileLocation, ProviderId);
-get_version_of_provider(#file_location{uuid = FileUuid, version_vector = VV}, ProviderId) ->
-    LocationId = file_location:id(FileUuid, ProviderId),
+-spec get_version(file_location:id(), oneprovider:id(), version_vector()) ->
+    non_neg_integer().
+get_version(LocationId, ProviderId, VV) ->
     ReplicaId = {ProviderId, LocationId},
     get_version(ReplicaId, VV).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local version of the replica.
+%% Returns version of the replica for the owner provider of
+%% the file_location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_version(file_location:record()) -> non_neg_integer().
-get_local_version(#document{value = FileLocation}) ->
-    get_local_version(FileLocation);
-get_local_version(FL = #file_location{provider_id = ProviderId}) ->
-    get_version_of_provider(FL, ProviderId).
+-spec get_provider_version(file_location:record()) -> non_neg_integer().
+get_provider_version(#document{value = FileLocation}) ->
+    get_provider_version(FileLocation);
+get_provider_version(#file_location{
+    uuid = FileUuid,
+    version_vector = VV,
+    provider_id = ProviderId
+}) ->
+    LocationId = file_location:id(FileUuid, ProviderId),
+    get_version(LocationId, ProviderId, VV).
 
 %%%===================================================================
 %%% Internal functions

@@ -1,32 +1,34 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @author Konrad Zemek
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing ids of files that should be read by proxy.
+%%% Model for caching a local helper handle.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_force_proxy).
--author("Rafal Slota").
+-module(helper_handle).
+-author("Konrad Zemek").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
+
 
 %% API
--export([save/1, get/1, delete/1]).
+-export([create/4, get/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
 
--type key() :: datastore:key().
--type record() :: #file_force_proxy{}.
+-type id() :: datastore:key().
+-type record() :: #helper_handle{}.
 -type doc() :: datastore_doc:doc(record()).
+-export_type([doc/0]).
 
 -define(CTX, #{
     model => ?MODULE,
+    routing => local,
     disc_driver => undefined
 }).
 
@@ -36,30 +38,38 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves file force proxy.
+%% Creates and caches helper handle.
 %% @end
 %%--------------------------------------------------------------------
--spec save(doc()) -> {ok, key()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+-spec create(session:id(), od_user:id(), od_space:id(), storage:doc()) ->
+    {ok, doc()}.
+create(SessionId, UserId, SpaceId, StorageDoc) ->
+    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
+    HelperName = helper:get_name(Helper),
+    {ok, UserCtx} = luma:get_server_user_ctx(
+        SessionId, UserId, undefined, SpaceId, StorageDoc, HelperName
+    ),
+    HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
+    HelperDoc = #document{value = HelperHandle},
+    datastore_model:create(?CTX, HelperDoc).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file force proxy.
+%% Returns helper handle by ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get(key()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
-    datastore_model:get(?CTX, Key).
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(HandleId) ->
+    datastore_model:get(?CTX, HandleId).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes file force proxy.
+%% Deletes helper handle by ID.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(key()) -> ok | {error, term()}.
-delete(Key) ->
-    datastore_model:delete(?CTX, Key).
+-spec delete(id()) -> ok | {error, term()}.
+delete(HandleId) ->
+    datastore_model:delete(?CTX, HandleId).
 
 %%%===================================================================
 %%% datastore_model callbacks

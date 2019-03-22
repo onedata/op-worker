@@ -388,8 +388,8 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     GlusterFSConfig = ?config(glusterfs, ?config(glusterfs, ?config(storages, Config))),
-    UserCtx = helper:new_glusterfs_user_ctx(0, 0),
-    Helper = helper:new_glusterfs_helper(
+    {ok, UserCtx} = helper:new_glusterfs_user_ctx(0, 0),
+    {ok, Helper} = helper:new_glusterfs_helper(
         ?GLUSTERFS_VOLUME,
         atom_to_binary(?config(host_name, GlusterFSConfig), utf8),
         #{

@@ -32,7 +32,8 @@
 %%--------------------------------------------------------------------
 -spec get(file_ctx:ctx()) -> [#access_control_entity{}].
 get(FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?ACL_KEY) of
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case custom_metadata:get_xattr_metadata(FileUuid, ?ACL_KEY, false) of
         {ok, Val} ->
             acl_logic:from_json_format_to_acl(Val);
         {error, not_found} ->
@@ -46,4 +47,5 @@ get(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec exists(file_ctx:ctx()) -> boolean().
 exists(FileCtx) ->
-    xattr:exists_by_name(FileCtx, ?ACL_XATTR_NAME).
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    custom_metadata:exists_xattr_metadata(FileUuid, ?ACL_XATTR_NAME).

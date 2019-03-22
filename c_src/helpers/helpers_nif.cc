@@ -254,7 +254,8 @@ std::map<std::error_code, nifpp::str_atom> error_to_atom = {
     {make_sys_error_code(std::errc::too_many_links), "emlink"},
     {make_sys_error_code(std::errc::too_many_symbolic_link_levels), "eloop"},
     {make_sys_error_code(std::errc::value_too_large), "eoverflow"},
-    {make_sys_error_code(std::errc::wrong_protocol_type), "eprototype"}};
+    {make_sys_error_code(std::errc::wrong_protocol_type), "eprototype"},
+    {make_sys_error_code(EKEYEXPIRED), "ekeyexpired"}};
 /** @} */
 
 /**
@@ -527,6 +528,15 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     return nifpp::make(env, std::make_tuple(ok, resource));
 }
 
+ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
+{
+    handle_result(ctx,
+        helper->refreshParams(
+            one::helpers::StorageHelperParams::create(helper->name(), args)));
+
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM getattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
 {
     handle_result(ctx, helper->getattr(file));
@@ -685,6 +695,15 @@ ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM refresh_helper_params(
+    NifCTX ctx, file_handle_ptr handle, helper_args_t args)
+{
+    handle_result(ctx,
+        handle->refreshHelperParams(one::helpers::StorageHelperParams::create(
+            handle->helper()->name(), args)));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM start_monitoring(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -718,6 +737,12 @@ static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
         nifpp::register_resource<file_handle_ptr>(
             env, nullptr, "file_handle_ptr"));
+}
+
+static ERL_NIF_TERM sh_refresh_params(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(refresh_params, env, argv);
 }
 
 static ERL_NIF_TERM sh_readdir(
@@ -831,6 +856,12 @@ static ERL_NIF_TERM sh_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     return wrap(read, env, argv);
 }
 
+static ERL_NIF_TERM sh_refresh_helper_params(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(refresh_helper_params, env, argv);
+}
+
 static ERL_NIF_TERM sh_write(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -857,16 +888,19 @@ static ERL_NIF_TERM sh_fsync(
 
 static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"start_monitoring", 0, start_monitoring},
-    {"stop_monitoring", 0, stop_monitoring}, {"getattr", 2, sh_getattr},
-    {"access", 3, sh_access}, {"readdir", 4, sh_readdir},
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 3, sh_unlink},
-    {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
-    {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
-    {"chown", 4, sh_chown}, {"truncate", 4, sh_truncate},
-    {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
-    {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
-    {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
-    {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync}};
+    {"stop_monitoring", 0, stop_monitoring},
+    {"refresh_params", 2, sh_refresh_params},
+    {"refresh_helper_params", 2, sh_refresh_helper_params},
+    {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
+    {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
+    {"unlink", 3, sh_unlink}, {"rmdir", 2, sh_rmdir},
+    {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
+    {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
+    {"truncate", 4, sh_truncate}, {"setxattr", 6, sh_setxattr},
+    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
+    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
+    {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
+    {"fsync", 2, sh_fsync}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
