@@ -102,8 +102,12 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
     Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
-    {ok, #document{value = #user_identity{} = Iden}} = user_identity:get_or_fetch(Auth),
-    reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia).
+    case user_identity:get_or_fetch(Auth) of
+        {ok, #document{value = #user_identity{} = Iden}} ->
+            reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia);
+        Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------

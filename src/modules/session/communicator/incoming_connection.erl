@@ -18,6 +18,7 @@
 -include("timeouts.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -345,18 +346,39 @@ handle_handshake(#state{socket = Socket} = State, ClientMsg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_normal_message(state(), #client_message{}) -> state().
-handle_normal_message(State = #state{peer_id = ProviderId,
-    wait_map = WaitMap, wait_pids = Pids}, Msg) ->
+handle_normal_message(State = #state{peer_id = ProviderId}, Msg) ->
     case Msg of
         %% If message comes from provider and proxy session is requested - proceed
         %% with authorization and switch context to the proxy session.
-        #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}
-            when ProxySessionId =/= undefined ->
-            {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse);
+        #client_message{
+            message_id = MsgId,
+            proxy_session_id = ProxySessionId,
+            proxy_session_auth = Auth
+        } when ProxySessionId =/= undefined ->
+            case session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse) of
+                {ok, _} ->
+                    route_message(Msg, State);
+                {error, Reason} ->
+                    ?error("Failed to create proxy session due to: ~p", [Reason]),
+                    case MsgId of
+                        undefined ->
+                            State;
+                        _ ->
+                            ServerMsg = #server_message{
+                                message_id = MsgId,
+                                message_body = #status{code = ?EACCES}
+                            },
+                            {_, NewState} = send_server_message(State, ServerMsg),
+                            NewState
+                    end
+            end;
         _ ->
-            ok
-    end,
+            route_message(Msg, State)
+    end.
 
+
+-spec route_message(#client_message{}, state()) -> state().
+route_message(Msg, #state{wait_map = WaitMap, wait_pids = Pids} = State) ->
     case router:route_message(Msg) of
         ok ->
             State;
@@ -372,7 +394,6 @@ handle_normal_message(State = #state{peer_id = ProviderId,
             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
             State#state{continue = false}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @private
