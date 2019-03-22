@@ -144,7 +144,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args) ->
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
-    {Before, _SizesBefore} = get_memory_pools_entries_and_sizes(Worker1),
+    {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
 
     Filename = generator:gen_name(),
     {ParentGuid, DirSubs} = maybe_create_directory(Sock, SpaceGuid, Directory),
@@ -163,8 +163,8 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args) ->
 
     timer:sleep(timer:seconds(30)),
 
-    {After, _SizesAfter} = get_memory_pools_entries_and_sizes(Worker1),
-    Res = get_documents_diff(Worker1, After, Before),
+    {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
+    Res = pool_utils:get_documents_diff(Worker1, After, Before),
     ?assertEqual([], Res).
 
 %%%===================================================================
@@ -257,41 +257,13 @@ cancel_subscriptions(Sock, StreamId, Subs) ->
         ok = ssl:send(Sock, fuse_test_utils:generate_subscription_cancellation_message(StreamId,?SeqID,SubId))
     end, Subs).
 
-get_memory_pools_entries_and_sizes(Worker) ->
-    MemoryPools = rpc:call(Worker, datastore_multiplier, get_names, [memory]),
-    Entries = lists:map(fun(Pool) ->
-        PoolName = list_to_atom("datastore_cache_active_pool_" ++ atom_to_list(Pool)),
-        rpc:call(Worker, ets, foldl, [fun(Entry, Acc) -> Acc ++ [Entry] end, [], PoolName])
-    end, MemoryPools),
-    Sizes = lists:map(fun(Slot) -> rpc:call(Worker, datastore_cache_manager, get_size, [Slot]) end, MemoryPools),
-    {Entries, Sizes}.
-
-get_documents_diff(Worker, After, Before) ->
-    Ans = lists:flatten(lists:zipwith(fun(A,B) ->
-        Diff = A--B,
-        lists:map(fun({Key, Driver, DriverCtx}) ->
-            rpc:call(Worker, Driver, get, [DriverCtx, Key])
-        end, [{Key, Driver, DriverCtx} || {_,Key,_,_,Driver, DriverCtx} <- Diff]) 
-    end, After, Before)),
-    lists:filter(fun
-        ({ok, #document{value = #links_node{model = luma_cache}}}) -> false;
-        ({ok, #document{value = #links_forest{model = luma_cache}}}) -> false;
-        ({ok, #document{value = #links_node{model = task_pool}}}) -> false;
-        ({ok, #document{value = #links_forest{model = task_pool}}}) -> false;
-        ({ok, #document{value = #task_pool{}}}) -> false;
-        ({ok, #document{value = #permissions_cache{}}}) -> false;
-        ({ok, #document{value = #permissions_cache_helper{}}}) -> false;
-        ({ok, #document{value = #permissions_cache_helper2{}}}) -> false;
-        (_) -> true
-    end, Ans).
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
