@@ -339,15 +339,12 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
+    {ok, UserCtx} = helper:new_posix_user_ctx(0, 0),
+    {ok, Helper} = helper:new_posix_helper(list_to_binary(TmpDir), #{}, UserCtx,
+        ?CANONICAL_STORAGE_PATH),
     StorageDoc = storage:new(
         <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
-        [helper:new_posix_helper(
-            list_to_binary(TmpDir),
-            #{},
-            helper:new_posix_user_ctx(0, 0),
-            ?CANONICAL_STORAGE_PATH
-        )]
-    ),
+        [Helper]),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
@@ -775,7 +772,7 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, user_logic),
+    test_utils:mock_new(Workers, user_logic, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{

@@ -26,7 +26,7 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    acquire_idp_access_token_test/1
+    fetch_idp_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -38,7 +38,7 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    acquire_idp_access_token_test
+    fetch_idp_access_token_test
 ]).
 
 %%%===================================================================
@@ -561,7 +561,7 @@ convenience_functions_test(Config) ->
     ok.
 
 
-acquire_idp_access_token_test(Config) ->
+fetch_idp_access_token_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
@@ -570,19 +570,19 @@ acquire_idp_access_token_test(Config) ->
 
     ?assertMatch(
         {ok, {?MOCK_IDP_ACCESS_TOKEN, _Ttl}},
-        rpc:call(Node, user_logic, acquire_idp_access_token, [User1Sess, ?USER_1, ?MOCK_IDP])
+        rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, ?USER_1, ?MOCK_IDP])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ?assertMatch(
         ?ERROR_NOT_FOUND,
-        rpc:call(Node, user_logic, acquire_idp_access_token, [User1Sess, <<"wrongId">>, ?MOCK_IDP])
+        rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, <<"wrongId">>, ?MOCK_IDP])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ?assertMatch(
         ?ERROR_NOT_FOUND,
-        rpc:call(Node, user_logic, acquire_idp_access_token, [User1Sess, ?USER_1, <<"wrongId">>])
+        rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, ?USER_1, <<"wrongId">>])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
 

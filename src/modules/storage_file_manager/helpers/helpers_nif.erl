@@ -27,10 +27,11 @@
 %% API
 -export([init/0]).
 -export([get_handle/2]).
--export([getattr/2, access/3, mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3,
-    removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
-    fsync/2, readdir/4]).
+-export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
+    mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
+    chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
+    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
+    readdir/4]).
 -export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
@@ -46,6 +47,12 @@
 -spec get_handle(helpers:name(), helpers:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
 get_handle(_Name, _Params) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec refresh_params(helper_handle(), maps:map()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+refresh_params(_Handle, _Args) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -157,6 +164,12 @@ listxattr(_Handle, _FileId) ->
 -spec open(helper_handle(), helpers:file_id(), Flags :: [open_flag()]) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 open(_Handle, _FileId, _Flags) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec refresh_helper_params(file_handle(), maps:map()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+refresh_helper_params(_Handle, _Args) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

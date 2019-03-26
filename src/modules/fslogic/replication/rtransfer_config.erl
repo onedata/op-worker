@@ -14,14 +14,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/rtransfer/rtransfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(RTRANSFER_PORT, proplists:get_value(server_port,
-                                            application:get_env(rtransfer_link, transfer, []),
-                                            6665)).
 
 -define(MOCK, application:get_env(?APP_NAME, rtransfer_mock, false)).
 
@@ -99,10 +97,11 @@ fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
 %% Returns a list of node addresses for a given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_nodes(ProviderId :: binary()) -> rtransfer_link:address().
+-spec get_nodes(ProviderId :: binary()) -> [rtransfer_link:address()].
 get_nodes(ProviderId) ->
     {ok, Nodes} = provider_logic:get_nodes(ProviderId),
-    [{Hostname, ?RTRANSFER_PORT} || Hostname <- Nodes].
+    {ok, RtransferPort} = provider_logic:get_rtransfer_port(ProviderId),
+    [{Hostname, RtransferPort} || Hostname <- Nodes].
 
 %%--------------------------------------------------------------------
 %% @doc

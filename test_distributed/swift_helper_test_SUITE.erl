@@ -233,11 +233,11 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
 
-    UserCtx = helper:new_swift_user_ctx(
+    {ok, UserCtx} = helper:new_swift_user_ctx(
         atom_to_binary(?config(user_name, SwiftConfig), utf8),
         atom_to_binary(?config(password, SwiftConfig), utf8)
     ),
-    Helper = helper:new_swift_helper(
+    {ok, Helper} = helper:new_swift_helper(
         <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v2.0/tokens">>,
         ?SWIFT_CONTAINER_NAME,

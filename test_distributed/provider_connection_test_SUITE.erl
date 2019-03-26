@@ -262,6 +262,8 @@ expected_configuration(Node) ->
     {ok, CompOzVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oz_versions),
     {ok, CompOpVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_op_versions),
     {ok, CompOcVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oc_versions),
+    {ok, TransferConfig} = test_utils:get_env(Node, rtransfer_link, transfer),
+    RtransferPort = proplists:get_value(server_port, TransferConfig),
     {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
     {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
 
@@ -272,6 +274,7 @@ expected_configuration(Node) ->
         <<"onezoneDomain">> => list_to_binary(rpc:call(Node, oneprovider, get_oz_domain, [])),
         <<"version">> => rpc:call(Node, oneprovider, get_version, []),
         <<"build">> => rpc:call(Node, oneprovider, get_build, []),
+        <<"rtransferPort">> => RtransferPort,
         <<"compatibleOnezoneVersions">> => to_binaries(CompOzVersions),
         <<"compatibleOneproviderVersions">> => to_binaries(CompOpVersions),
         <<"compatibleOneclientVersions">> => to_binaries(CompOcVersions)

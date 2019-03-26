@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -37,7 +38,9 @@
     empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
     
     file_with_suffix_is_deleted_from_storage_after_deletion/1,
-    deleted_open_file_with_suffix_is_deleted_from_storage_after_release/1
+    deleted_open_file_with_suffix_is_deleted_from_storage_after_release/1,
+    sufix_in_metadata_and_storage_test/1,
+    sufix_in_dir_metadata_test/1
 ]).
 
 -define(ATTEMPTS, 60).
@@ -64,7 +67,9 @@ all() -> [
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file,
 
     file_with_suffix_is_deleted_from_storage_after_deletion,
-    deleted_open_file_with_suffix_is_deleted_from_storage_after_release
+    deleted_open_file_with_suffix_is_deleted_from_storage_after_release,
+    sufix_in_metadata_and_storage_test,
+    sufix_in_dir_metadata_test
 ].
 
 %%%===================================================================
@@ -381,7 +386,10 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
         {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
         List
     end,
-    {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
+    StorageFiles= case list_dir(Worker1, StorageSpacePathW1) of
+        {ok, Files} -> Files;
+        {error, _} -> []
+    end,
     ListStorageDir = fun() ->
         {ok, List} = list_dir(Worker1, StorageSpacePathW1),
         lists:sort(List -- StorageFiles)
@@ -393,7 +401,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
 
     StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
     Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
-    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?FILE_WITH_SUFFIX(FileName, Uuid)),
+    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
@@ -407,7 +415,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
     {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
     
-    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))],
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))],
 
     ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
     
@@ -433,12 +441,159 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     end,
 
     ?assertEqual([{Guid2, FileName}], ListDir(Worker1, SessionId1, SpacePath), ?ATTEMPTS),
-    ?assertEqual([binary_to_list(?FILE_WITH_SUFFIX(FileName, Uuid))], ListStorageDir(), ?ATTEMPTS),
+    ?assertEqual([binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))], ListStorageDir(), ?ATTEMPTS),
 
     ok = lfm_proxy:unlink(Worker2, SessionId2, {path, FilePath}),
 
     ?assertEqual([], ListDir(Worker1, SessionId1, SpacePath), ?ATTEMPTS),
     ?assertEqual([], ListStorageDir(), ?ATTEMPTS).
+
+sufix_in_metadata_and_storage_test(Config) ->
+    [Worker2, Worker1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+
+    SpacePath = <<"/space1">>,
+    FileName = generator:gen_name(),
+    FilePath = <<SpacePath/binary, "/",  FileName/binary>>,
+    StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
+
+    ListDir = fun(Worker, Session, Path) ->
+        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        List
+              end,
+    {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
+    ListStorageDir = fun() ->
+        {ok, List} = list_dir(Worker1, StorageSpacePathW1),
+        lists:sort(List -- StorageFiles)
+    end,
+
+    % create files
+    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath, 8#664),
+    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
+
+    StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
+    Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
+    StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
+
+    ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
+
+    % open, write and read
+    Content1 = <<"data_file1">>,
+    Content2 = <<"data_file2">>,
+
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
+
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))],
+
+    ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
+
+    {ok, _} = lfm_proxy:write(Worker1, Handle1, 0, Content1),
+    {ok, _} = lfm_proxy:write(Worker1, Handle2, 0, Content2),
+
+    ?assertMatch({ok, Content1}, lfm_proxy:read(Worker1, Handle1, 0, byte_size(Content1)), ?ATTEMPTS),
+    ?assertMatch({ok, Content2}, lfm_proxy:read(Worker1, Handle2, 0, byte_size(Content2)), ?ATTEMPTS),
+
+    % check data on storage
+    ?assertMatch({ok, Content1}, read_file(Worker1, StorageFilePath1)),
+    ?assertMatch({ok, Content2}, read_file(Worker1, StorageFilePath2)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle1)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId1, {guid, Guid1})),
+
+    [{_, Name}] = ListDir(Worker1, SessionId1, SpacePath),
+    ?assertEqual(FileName, Name),
+    % File on storage is not renamed currently
+%%    ?assertEqual([Name], ListStorageDir()),
+
+    ok = lfm_proxy:close_all(Worker1),
+    ok = lfm_proxy:unlink(Worker1, SessionId1, {path, FilePath}).
+
+sufix_in_dir_metadata_test(Config) ->
+    [Worker2, Worker1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+
+    SpacePath = <<"/space1">>,
+    DirName = generator:gen_name(),
+    FileName = generator:gen_name(),
+    DirPath = <<SpacePath/binary, "/",  DirName/binary>>,
+    FilePath = <<DirPath/binary, "/",  FileName/binary>>,
+    StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
+
+    ListDir = fun(Worker, Session, Path) ->
+        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        List
+              end,
+
+    % create files
+    {ok, _} = lfm_proxy:mkdir(Worker1, SessionId1, DirPath, 8#777),
+    {ok, _} = lfm_proxy:mkdir(Worker2, SessionId2, DirPath, 8#777),
+    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath, 8#664),
+    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
+
+
+    DirStoragePath = storage_file_path(Worker1, SpaceId, DirName),
+    StorageFilePath1 = filename:join([DirStoragePath, FileName]),
+    Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
+    StorageFilePath2 = filename:join([DirStoragePath, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)]),
+
+    {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
+    ListStorageDir = fun() ->
+        {ok, List} = list_dir(Worker1, DirStoragePath),
+        lists:sort(List -- StorageFiles)
+                     end,
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
+
+    ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath))),
+    [{_, D1}, {_, D2}] = ListDir(Worker1, SessionId1, SpacePath),
+
+    % open, write and read
+    Content1 = <<"data_file1">>,
+    Content2 = <<"data_file2">>,
+
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
+
+    ExpectedStorageFileList = [binary_to_list(FileName), binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))],
+
+    ?assertEqual(ExpectedStorageFileList, ListStorageDir(), ?ATTEMPTS),
+
+    {ok, _} = lfm_proxy:write(Worker1, Handle1, 0, Content1),
+    {ok, _} = lfm_proxy:write(Worker1, Handle2, 0, Content2),
+
+    ?assertMatch({ok, Content1}, lfm_proxy:read(Worker1, Handle1, 0, byte_size(Content1)), ?ATTEMPTS),
+    ?assertMatch({ok, Content2}, lfm_proxy:read(Worker1, Handle2, 0, byte_size(Content2)), ?ATTEMPTS),
+
+    % check data on storage
+    ?assertMatch({ok, Content1}, read_file(Worker1, StorageFilePath1)),
+    ?assertMatch({ok, Content2}, read_file(Worker1, StorageFilePath2)),
+
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle1)),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId1,
+        {path, <<SpacePath/binary, "/",  D1/binary, "/",  FileName/binary>>},
+        <<SpacePath/binary, "/",  D2/binary, "/test">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, SessionId1,
+        <<SpacePath/binary, "/",  D1/binary, "/",  FileName/binary>>, 8#664)),
+    ?assertEqual(3, length(ListStorageDir())),
+
+    ?assertMatch(ok, lfm_proxy:rm_recursive(Worker1, SessionId1,
+        {path, <<SpacePath/binary, "/",  D2/binary, "/">>})),
+    ?assertEqual(1, length(ListStorageDir())),
+
+    ok = lfm_proxy:close_all(Worker1).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
