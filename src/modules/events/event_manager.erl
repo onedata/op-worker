@@ -266,6 +266,15 @@ code_change(_OldVsn, State, _Extra) ->
     provider() | no_return().
 get_provider(#flush_events{provider_id = ProviderId}, _Manager) ->
     ProviderId;
+get_provider(#event{type = Type}, Manager)
+    when is_record(Type, file_attr_changed_event)
+    orelse is_record(Type, file_location_changed_event)
+    orelse is_record(Type, file_perm_changed_event)
+    orelse is_record(Type, file_removed_event)
+    orelse is_record(Type, file_renamed_event)
+    orelse is_record(Type, quota_exceeded_event) ->
+    {ok, ProxyVia} = ets_state:get(session, Manager, proxy_via),
+    ProxyVia;
 get_provider(Request, Manager) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
@@ -284,15 +293,6 @@ get_provider(Request, Manager) ->
 
 -spec get_provider(Request :: term(), session:id(), file_ctx:ctx()) ->
     provider() | no_return().
-get_provider(#event{type = Type}, SessId, _FileCtx)
-    when is_record(Type, file_attr_changed_event)
-    orelse is_record(Type, file_location_changed_event)
-    orelse is_record(Type, file_perm_changed_event)
-    orelse is_record(Type, file_removed_event)
-    orelse is_record(Type, file_renamed_event)
-    orelse is_record(Type, quota_exceeded_event) ->
-    {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
-    utils:ensure_defined(ProxyVia, undefined, self);
 get_provider(_, SessId, FileCtx) ->
     ProviderId = oneprovider:get_id(),
     case file_ctx:is_root_dir_const(FileCtx) of
@@ -628,7 +628,10 @@ init_memory(SessionID) ->
     ets_state:init_collection(?STATE_ID, subscriptions),
     ets_state:init_collection(?STATE_ID, guid_to_provider),
     ets_state:init_collection(?STATE_ID, sub_to_guid),
-    ets_state:save(?STATE_ID, self(), session_id, SessionID).
+    ets_state:save(?STATE_ID, self(), session_id, SessionID),
+    {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionID),
+    ets_state:save(?STATE_ID, self(), proxy_via,
+        utils:ensure_defined(ProxyVia, undefined, self)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -642,4 +645,5 @@ delete_memory() ->
     ets_state:delete_collection(?STATE_ID, subscriptions),
     ets_state:delete_collection(?STATE_ID, guid_to_provider),
     ets_state:delete_collection(?STATE_ID, sub_to_guid),
-    ets_state:delete(?STATE_ID, self(), session_id).
+    ets_state:delete(?STATE_ID, self(), session_id),
+    ets_state:delete(?STATE_ID, self(), proxy_via).
