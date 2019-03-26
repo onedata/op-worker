@@ -75,7 +75,7 @@ redirect_to(#{qs := Qs} = Req, State, Path) ->
         <<"">> -> <<"https://", Hostname/binary, "/cdmi", Path/binary>>;
         _ -> <<"https://", Hostname/binary, "/cdmi", Path/binary, "?", Qs/binary>>
     end,
-    NewReq = cowboy_req:reply(?MOVED_PERMANENTLY, #{<<"location">> => Location}, Req),
+    NewReq = cowboy_req:reply(?HTTP_301_MOVED_PERMANENTLY, #{<<"location">> => Location}, Req),
     {stop, NewReq, State}.
 
 

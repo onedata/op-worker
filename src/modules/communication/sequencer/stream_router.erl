@@ -58,7 +58,7 @@ is_stream_message(#client_message{} = Msg) ->
     end;
 is_stream_message(#server_message{message_stream = undefined}) ->
     false;
-is_stream_message(#server_message{proxy_session_id = SessId}) ->
+is_stream_message(#server_message{effective_session_id = SessId}) ->
     case session_utils:is_provider_session_id(SessId) of
         true ->
             ignore;
@@ -72,8 +72,8 @@ is_stream_message(#server_message{proxy_session_id = SessId}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: term()) -> ok | {error, Reason :: term()}.
-route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId} = Msg) ->
-    case {session_utils:is_provider_session_id(From), is_binary(ProxySessionId)} of
+route_message(#client_message{session_id = From, effective_session_id = EffSessionId} = Msg) ->
+    case {session_utils:is_provider_session_id(From), is_binary(EffSessionId)} of
         {true, true} ->
             ProviderId = session_utils:session_id_to_provider_id(From),
             SequencerSessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
@@ -83,7 +83,7 @@ route_message(#client_message{session_id = From, proxy_session_id = ProxySession
         {false, _} ->
             sequencer:communicate_with_sequencer_manager(Msg, From)
     end;
-route_message(#server_message{proxy_session_id = Ref} = Msg) ->
+route_message(#server_message{effective_session_id = Ref} = Msg) ->
     sequencer:communicate_with_sequencer_manager(Msg, Ref).
 
 %%--------------------------------------------------------------------

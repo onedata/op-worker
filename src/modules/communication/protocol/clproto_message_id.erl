@@ -6,14 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session management model, frequently invoked by incoming tcp
-%%% connections in connection
+%%% Module providing various utility functions for handling message_id.
 %%% @end
 %%%-------------------------------------------------------------------
--module(message_id).
+-module(clproto_message_id).
 -author("Tomasz Lichon").
 
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 
 %% API
 -export([generate/1, generate/2, encode/1, decode/1]).
@@ -31,10 +30,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Generates ID with encoded handler pid.
+%% @equiv generate(Recipient, oneprovider:get_id()).
 %% @end
 %%--------------------------------------------------------------------
--spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: #message_id{}}.
+-spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: id()}.
 generate(Recipient) ->
     generate(Recipient, oneprovider:get_id()).
 
@@ -43,7 +42,8 @@ generate(Recipient) ->
 %% Generates ID with encoded handler pid and given issuer type.
 %% @end
 %%--------------------------------------------------------------------
--spec generate(Recipient :: pid() | undefined, Issuer :: issuer()) -> {ok, MsgId :: #message_id{}}.
+-spec generate(Recipient :: pid() | undefined, issuer()) ->
+    {ok, MsgId :: id()}.
 generate(undefined, Issuer) ->
     {ok, #message_id{
         issuer = Issuer,
@@ -62,12 +62,13 @@ generate(Recipient, Issuer) ->
 %% Encodes message_id to binary form.
 %% @end
 %%--------------------------------------------------------------------
--spec encode(MsgId :: #message_id{} | undefined) -> {ok, undefined | binary()}.
+-spec encode(MsgId :: undefined | id()) ->
+    {ok, EncodedMsgId :: undefined | binary()}.
 encode(undefined) ->
     {ok, undefined};
 encode(#message_id{issuer = client, recipient = undefined, id = Id}) ->
     {ok, Id};
-encode(MsgId = #message_id{}) ->
+encode(#message_id{} = MsgId) ->
     {ok, term_to_binary(MsgId)}.
 
 %%--------------------------------------------------------------------
@@ -75,7 +76,8 @@ encode(MsgId = #message_id{}) ->
 %% Decodes message_id from binary form.
 %% @end
 %%--------------------------------------------------------------------
--spec decode(Id :: binary()) -> {ok, #message_id{}}.
+-spec decode(EncodedMsgId :: undefined | binary()) ->
+    {ok, MsgId :: undefined | id()}.
 decode(undefined) ->
     {ok, undefined};
 decode(Id) ->

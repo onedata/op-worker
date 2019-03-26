@@ -169,7 +169,7 @@ evict_file_replica_internal(Req, State = #{
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),
-    Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
+    Req2 = cowboy_req:reply(?HTTP_200_OK, #{}, Response, Req),
     {stop, Req2, State}.
 
 %%--------------------------------------------------------------------
@@ -196,7 +196,7 @@ replicate_files_from_index_internal(Req, #{
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),
-    Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
+    Req2 = cowboy_req:reply(?HTTP_200_OK, #{}, Response, Req),
     {stop, Req2, State}.
 
 %%--------------------------------------------------------------------
