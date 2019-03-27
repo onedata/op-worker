@@ -191,6 +191,8 @@ release(UserCtx, FileCtx, HandleId) ->
             ok;
         {error, {not_found, _}} ->
             ok;
+        {error, not_found} ->
+            ok;
         Other ->
             Other
     end,
@@ -518,6 +520,8 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
         {error, link_not_found} ->
             ok;
         {error, {not_found, _}} ->
+            ok;
+        {error, not_found} ->
             ok;
         Other ->
             Other
