@@ -38,7 +38,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2]).
+-export([get_record_struct/1, upgrade_record/2, get_posthooks/0]).
 
 %%%===================================================================
 %%% API
@@ -80,6 +80,33 @@ delete(Key) ->
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Provider create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(save, _, {ok, ProviderDoc = #document{}}) ->
+    maybe_check_harvesters_streams(ProviderDoc);
+run_after(_Function, _Args, Result) ->
+    Result.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec maybe_check_harvesters_streams(od_provider:doc()) -> ok.
+maybe_check_harvesters_streams(#document{
+    key = ProviderId,
+    value = #od_provider{eff_harvesters = EffHarvesters}
+}) ->
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            harvest_manager:check_eff_harvesters_streams(EffHarvesters);
+        false ->
+            ok
+    end.
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -100,7 +127,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -146,6 +173,25 @@ get_record_struct(3) ->
 
         {eff_users, [string]},
         {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {name, string},
+        {admin_email, string},
+        {subdomain_delegation, boolean},
+        {domain, string},
+        {subdomain, string},
+        {latitude, float},
+        {longitude, float},
+        {online, boolean},
+
+        {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+        {eff_harvesters, [string]},
 
         {cache_state, #{atom => term}}
     ]}.
@@ -208,4 +254,51 @@ upgrade_record(2, Provider) ->
         eff_groups = [],
 
         cache_state = #{}
+    }};
+upgrade_record(3, Provider) ->
+    {
+        od_provider,
+        Name,
+        AdminEmail,
+        SubdomainDelegation,
+        Domain,
+        Subdomain,
+        Latitude,
+        Longitude,
+        Online,
+
+        Spaces,
+
+        EffUsers,
+        EffGroups,
+
+        CacheState
+    } = Provider,
+    {4, #od_provider{
+        name = Name,
+        admin_email = AdminEmail,
+        subdomain_delegation = SubdomainDelegation,
+        domain = Domain,
+        subdomain = Subdomain,
+        latitude = Latitude,
+        longitude = Longitude,
+        online = Online,
+
+        spaces = Spaces,
+
+        eff_users = EffUsers,
+        eff_groups = EffGroups,
+        eff_harvesters = [],
+
+        cache_state = CacheState
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].

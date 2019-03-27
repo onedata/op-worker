@@ -30,6 +30,12 @@ all() -> ?ALL([
     delete_entry_test
 ]).
 
+-define(FILE_ID, <<"dummyFileId">>).
+-define(PAYLOAD, #{<<"dummyKey">> => <<"dummyValue">>}).
+-define(INDICES, #{<<"dummyKey">> => <<"dummyValue">>}).
+-define(SEQ, 123).
+-define(MAX_SEQ, 456).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -37,7 +43,6 @@ all() -> ?ALL([
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    % Users other than ROOT cannot access harvester data
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     ?assertMatch(
@@ -81,19 +86,16 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ChangedData1 = Harvester1ProtectedData#{
-        <<"entryTypeField">> => ?HARVESTER_ENTRY_TYPE_FIELD2(?HARVESTER_1),
-        <<"defaultEntryType">> => ?HARVESTER_DEFAULT_ENTRY_TYPE2(?HARVESTER_1),
-        <<"acceptedEntryTypes">> => ?HARVESTER_ACCEPTED_ENTRY_TYPES2(?HARVESTER_1)
-
+        <<"indices">> => ?HARVESTER_INDICES2(?HARVESTER_1),
+        <<"spaces">> => ?HARVESTER_SPACES2(?HARVESTER_1)
     },
     PushMessage1 = #gs_push_graph{gri = Harvester1ProtectedGRI, data = ChangedData1, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
 
     ?assertMatch(
         {ok, #document{key = ?HARVESTER_1, value = #od_harvester{
-            entry_type_field = ?HARVESTER_ENTRY_TYPE_FIELD2(?HARVESTER_1),
-            default_entry_type = ?HARVESTER_DEFAULT_ENTRY_TYPE2(?HARVESTER_1),
-            accepted_entry_types = ?HARVESTER_ACCEPTED_ENTRY_TYPES2(?HARVESTER_1)
+            indices = ?HARVESTER_INDICES2(?HARVESTER_1),
+            spaces = ?HARVESTER_SPACES2(?HARVESTER_1)
         }}},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
@@ -130,12 +132,12 @@ harvest_test(Config) ->
     FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, #{}])),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, #{}])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, FileId, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     % get result is cached now
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
 
@@ -145,10 +147,10 @@ delete_entry_test(Config) ->
     FileId = <<"dummyFileId">>,
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, FileId])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, FileId, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, FileId])),
+    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, FileId, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.

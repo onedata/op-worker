@@ -54,6 +54,7 @@
 -define(HANDLE_1, <<"handle1Id">>).
 -define(HANDLE_2, <<"handle2Id">>).
 -define(HARVESTER_1, <<"harvester1Id">>).
+-define(HARVESTER_2, <<"harvester2Id">>).
 
 % User authorizations
 % Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
@@ -112,7 +113,6 @@
 -define(SPACE_PROVIDERS_VALUE(__Space), #{?PROVIDER_1 => 1000000000, ?PROVIDER_2 => 1000000000}).
 -define(SPACE_PROVIDERS_MATCHER(__Space), #{?PROVIDER_1 := 1000000000, ?PROVIDER_2 := 1000000000}).
 -define(SPACE_SHARES(__Space), [?SHARE_1, ?SHARE_2]).
--define(SPACE_HARVESTERS(__Space), [?HARVESTER_1]).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -132,6 +132,7 @@
 -define(PROVIDER_SPACES_MATCHER(__Provider), #{?SPACE_1 := 1000000000, ?SPACE_2 := 1000000000}).
 -define(PROVIDER_EFF_USERS(__Provider), [?USER_1, ?USER_2]).
 -define(PROVIDER_EFF_GROUPS(__Provider), [?GROUP_1, ?GROUP_2]).
+-define(PROVIDER_EFF_HARVESTERS(__Provider), [?HARVESTER_1, ?HARVESTER_2]).
 -define(PROVIDER_LATITUDE(__Provider), 0.0).
 -define(PROVIDER_LONGITUDE(__Provider), 0.0).
 
@@ -156,18 +157,28 @@
 -define(HANDLE_EFF_GROUPS_MATCHER(__Handle), ?GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS).
 
 % Mocked harvester data
--define(HARVESTER_ENTRY_TYPE_FIELD(__Harvester), <<"entryTypeField">>).
--define(HARVESTER_ENTRY_TYPE_FIELD2(__Harvester), <<"entryTypeField2">>).
--define(HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester), <<"defaultEntryType">>).
--define(HARVESTER_DEFAULT_ENTRY_TYPE2(__Harvester), <<"defaultEntryType2">>).
--define(HARVESTER_ACCEPTED_ENTRY_TYPES(__Harvester), [
-    ?HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester),
-    ?HARVESTER_DEFAULT_ENTRY_TYPE2(__Harvester),
-    ?HARVESTER_ENTRY_TYPE_FIELD(__Harvester)
+-define(HARVESTER_SPACE1(__Harvester), <<"harvesterSpace1">>).
+-define(HARVESTER_SPACE2(__Harvester), <<"harvesterSpace2">>).
+-define(HARVESTER_SPACE3(__Harvester), <<"harvesterSpace3">>).
+
+-define(HARVESTER_INDEX1(__Harvester), <<"harvesterIndex1">>).
+-define(HARVESTER_INDEX2(__Harvester), <<"harvesterIndex2">>).
+-define(HARVESTER_INDEX3(__Harvester), <<"harvesterIndex3">>).
+
+-define(HARVESTER_SPACES(__Harvester), [
+    ?HARVESTER_SPACE1(__Harvester)
 ]).
--define(HARVESTER_ACCEPTED_ENTRY_TYPES2(__Harvester), [
-    ?HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester),
-    ?HARVESTER_ENTRY_TYPE_FIELD2(__Harvester)
+-define(HARVESTER_SPACES2(__Harvester), [
+    ?HARVESTER_SPACE2(__Harvester),
+    ?HARVESTER_SPACE3(__Harvester)
+]).
+
+-define(HARVESTER_INDICES(__Harvester), [
+    ?HARVESTER_INDEX1(__Harvester)
+]).
+-define(HARVESTER_INDICES2(__Harvester), [
+    ?HARVESTER_INDEX2(__Harvester),
+    ?HARVESTER_INDEX3(__Harvester)
 ]).
 
 
@@ -237,8 +248,7 @@
     direct_groups = ?SPACE_DIRECT_GROUPS_MATCHER(__Space),
     eff_groups = ?SPACE_EFF_GROUPS_MATCHER(__Space),
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
-    shares = ?SPACE_SHARES(__Space),
-    harvesters = ?SPACE_HARVESTERS(__Space)
+    shares = ?SPACE_SHARES(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -247,8 +257,7 @@
     direct_groups = #{},
     eff_groups = #{},
     providers = #{},
-    shares = [],
-    harvesters = []
+    shares = []
 }}).
 
 
@@ -276,7 +285,8 @@
     online = ?PROVIDER_ONLINE(__Provider),
     spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
-    eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
+    eff_groups = ?PROVIDER_EFF_GROUPS(__Provider),
+    eff_harvesters = ?PROVIDER_EFF_HARVESTERS(__Provider)
 }}).
 -define(PROVIDER_PROTECTED_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
@@ -284,7 +294,8 @@
     online = ?PROVIDER_ONLINE(__Provider),
     spaces = #{},
     eff_users = [],
-    eff_groups = []
+    eff_groups = [],
+    eff_harvesters = []
 }}).
 
 
@@ -318,9 +329,8 @@
 }}).
 
 -define(HARVESTER_PROTECTED_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
-    entry_type_field = ?HARVESTER_ENTRY_TYPE_FIELD(__Harvester),
-    default_entry_type =  ?HARVESTER_DEFAULT_ENTRY_TYPE(__Harvester),
-    accepted_entry_types = ?HARVESTER_ACCEPTED_ENTRY_TYPES(__Harvester)
+    indices = ?HARVESTER_INDICES(__Harvester),
+    spaces = ?HARVESTER_SPACES(__Harvester)
 }}).
 
 
@@ -363,8 +373,7 @@ end).
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
-    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-    <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
@@ -376,8 +385,7 @@ end).
         <<"effectiveGroups">> => ?SPACE_EFF_GROUPS_VALUE(__SpaceId),
 
         <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-        <<"shares">> => ?SPACE_SHARES(__SpaceId),
-        <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
+        <<"shares">> => ?SPACE_SHARES(__SpaceId)
     }
 end).
 
@@ -424,6 +432,10 @@ end).
         <<"effectiveGroups">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> [];
             _ -> ?PROVIDER_EFF_GROUPS(__ProviderId)
+        end,
+        <<"effectiveHarvesters">> => case __ProviderId of
+            ?DUMMY_PROVIDER_ID -> [];
+            _ -> ?PROVIDER_EFF_HARVESTERS(__ProviderId)
         end
 
     }
@@ -458,7 +470,6 @@ end).
 
 -define(HARVESTER_PROTECTED_DATA_VALUE(__HarvesterId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = protected}),
-    <<"entryTypeField">> => ?HARVESTER_ENTRY_TYPE_FIELD(__HarvesterId),
-    <<"defaultEntryType">> => ?HARVESTER_DEFAULT_ENTRY_TYPE(__HarvesterId),
-    <<"acceptedEntryTypes">> => ?HARVESTER_ACCEPTED_ENTRY_TYPES(__HarvesterId)
+    <<"indices">> => ?HARVESTER_INDICES(__HarvesterId),
+    <<"spaces">> => ?HARVESTER_SPACES(__HarvesterId)
 }).

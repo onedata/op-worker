@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, start_child/2, terminate_child/2]).
+-export([start_link/0, start_child/3, terminate_child/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -41,14 +41,15 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
--spec start_child(od_harvester:id(), od_space:id()) -> ok.
-start_child(HarvesterId, SpaceId) ->
-    {ok, _} = supervisor:start_child(?SERVER, child_spec(HarvesterId, SpaceId)),
+-spec start_child(od_harvester:id(), od_space:id(), od_harvester:index()) -> ok.
+start_child(HarvesterId, SpaceId, IndexId) ->
+    {ok, _} = supervisor:start_child(?SERVER, child_spec(HarvesterId, SpaceId, IndexId)),
     ok.
 
--spec terminate_child(od_harvester:id(), od_space:id()) -> ok | {error, term()}.
-terminate_child(HarvesterId, SpaceId) ->
-    ChildId = child_id(HarvesterId, SpaceId),
+-spec terminate_child(od_harvester:id(), od_space:id(), od_harvester:index()) ->
+    ok | {error, term()}.
+terminate_child(HarvesterId, SpaceId, IndexId) ->
+    ChildId = child_id(HarvesterId, SpaceId, IndexId),
     ok = supervisor:terminate_child(?SERVER, ChildId),
     ok = supervisor:delete_child(?SERVER, ChildId).
 
@@ -73,15 +74,17 @@ init([]) ->
 %%% Internal functions
 %%%===================================================================
 
--spec child_id(od_harvester:id(), od_space:id()) -> child_id().
-child_id(HarvesterId, SpaceId) ->
-    {HarvesterId, SpaceId}.
+-spec child_id(od_harvester:id(), od_space:id(), od_harvester:index()) ->
+    child_id().
+child_id(HarvesterId, SpaceId, IndexId) ->
+    {HarvesterId, SpaceId, IndexId}.
 
--spec child_spec(od_harvester:id(), od_space:id()) -> supervisor:child_spec().
-child_spec(HarvesterId, SpaceId) ->
+-spec child_spec(od_harvester:id(), od_space:id(), od_harvester:index()) ->
+    supervisor:child_spec().
+child_spec(HarvesterId, SpaceId, IndexId) ->
     #{
-        id => child_id(HarvesterId, SpaceId),
-        start => {harvest_stream, start_link, [HarvesterId, SpaceId]},
+        id => child_id(HarvesterId, SpaceId, IndexId),
+        start => {harvest_stream, start_link, [HarvesterId, SpaceId, IndexId]},
         restart => transient,
         shutdown => timer:seconds(100),
         type => worker

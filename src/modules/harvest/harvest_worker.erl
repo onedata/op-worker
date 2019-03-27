@@ -76,6 +76,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
+    % todo VFS-5351 change supervision configuration after introducing backoff
     #{strategy => one_for_all, intensity => 1000, period => 3600}.
 
 %%--------------------------------------------------------------------

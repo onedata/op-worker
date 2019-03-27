@@ -103,8 +103,7 @@
                         "storage": "/mnt/st1",
                         "supported_size": 10737418240
                     }
-                },
-                "harvesters": ["harvester1"]
+                }
             },
             "space_id2": {
                 "displayed_name": "space2",
@@ -115,8 +114,7 @@
                         "storage": "/mnt/st1",
                         "supported_size": 10737418240
                     }
-                },
-                "harvesters": ["harvester1", "harvester2"]
+                }
             },
             "space_id3": {
                 "displayed_name": "space3",
@@ -127,8 +125,7 @@
                         "storage": "/mnt/st1",
                         "supported_size": 10737418240
                     }
-                },
-                "harvesters": ["harvester1"]
+                }
             },
             "space_id4": {
                 "displayed_name": "space4",
@@ -139,8 +136,7 @@
                         "storage": "/mnt/st1",
                         "supported_size": 10737418240
                     }
-                },
-                "harvesters": ["harvester1"]
+                }
             },
             "space_id5": {
                 "displayed_name": "space5",
@@ -155,8 +151,21 @@
                         "storage": "/mnt/st1",
                         "supported_size": 10737418240
                     }
-                },
-                "harvesters": ["harvester3"]
+                }
+            }
+        },
+        "harvesters": {
+            "harvester1": {
+                "spaces": ["space_id1", "space_id2", "space_id3", "space_id4"],
+                "indices": ["index11"]
+            },
+            "harvester2": {
+                "spaces": ["space_id2"],
+                "indices": ["index21", "index22", "index23"]
+            },
+            "harvester3": {
+                "spaces": ["space_id5"],
+                "indices": ["index31"]
             }
         }
     }

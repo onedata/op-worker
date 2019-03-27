@@ -577,8 +577,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
+    HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
-
 
     lists:foreach(fun({_, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
@@ -666,7 +666,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, GroupUsers),
 
-    SpacesToProviders = lists:map(fun({SpaceId, SpaceConfig}) ->
+    SpacesSupports = lists:map(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         Providers1 = lists:map(fun({CPid, Provider}) ->
             % If provider does not belong to any domain (was not started in env,
@@ -700,15 +700,29 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
-    SpacesToHarvesters = lists:map(fun({SpaceId, SpaceConfig}) ->
-        Harvesters = proplists:get_value(<<"harvesters">>, SpaceConfig, []),
-        {SpaceId, Harvesters}
-    end, SpacesSetup),
+    SpacesProviders = lists:map(fun({SpaceId, SpaceSupports}) ->
+        {SpaceId, maps:keys(SpaceSupports)}
+    end, SpacesSupports),
+
+    EffHarvestersSetup = maps:to_list(lists:foldl(
+        fun({HarvesterId, HarvesterConfig}, EffHarvestersMap0) ->
+            HarvesterSpaces = proplists:get_value(<<"spaces">>, HarvesterConfig),
+            HarvesterProviders = lists:usort(lists:flatmap(fun(SpaceId) ->
+                proplists:get_value(SpaceId, SpacesProviders, [])
+            end, HarvesterSpaces)),
+            lists:foldl(fun(ProviderId, EffHarvestersMap00) ->
+                maps:update_with(ProviderId, fun(Harvesters) ->
+                    [HarvesterId | Harvesters]
+                end, [HarvesterId], EffHarvestersMap00)
+            end, EffHarvestersMap0, HarvesterProviders)
+        end, #{}, HarvestersSetup
+    )),
 
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders, SpacesToHarvesters),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, EffHarvestersSetup),
+    harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
@@ -926,16 +940,15 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
-    [{binary(), [binary()]}]) -> ok.
-space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesToHarvesters) ->
+    [{binary(), binary()}], [{binary(), [binary()]}],
+    [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
+space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, space_logic),
 
     GetSpaceFun = fun(_, SpaceId) ->
         SpaceName = proplists:get_value(SpaceId, Spaces),
         UserIds = proplists:get_value(SpaceId, Users, []),
-        Harvesters = proplists:get_value(SpaceId, SpacesToHarvesters),
         EffUsers = maps:from_list(lists:map(fun(UID) ->
             {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
         end, UserIds)),
@@ -943,8 +956,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesToHarves
             name = SpaceName,
             providers = proplists:get_value(SpaceId, SpacesToProviders, maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])),
             eff_users = EffUsers,
-            eff_groups = #{},
-            harvesters = Harvesters
+            eff_groups = #{}
         }}}
     end,
 
@@ -988,8 +1000,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesToHarves
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
+    proplists:proplist(), proplists:proplist(), proplists:proplist()) -> ok.
+provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, EffHarvestersSetup) ->
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -1013,7 +1025,8 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                     domain = PID,  % domain is the same as Id
                     spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
                     longitude = 0.0,
-                    latitude = 0.0
+                    latitude = 0.0,
+                    eff_harvesters = proplists:get_value(PID, EffHarvestersSetup, [])
                 }}}
         end
     end,
@@ -1168,6 +1181,18 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
         VerifyProviderIdentityFun).
+
+harvester_logic_mock_setup(Workers, HarvestersSetup) ->
+    ok = test_utils:mock_new(Workers, harvester_logic),
+    ok = test_utils:mock_expect(Workers, harvester_logic, get, fun(HarvesterId) ->
+        Setup = proplists:get_value(HarvesterId, HarvestersSetup, []),
+        {ok, #document{
+            key = HarvesterId,
+            value = #od_harvester{
+                spaces = proplists:get_value(<<"spaces">>, Setup),
+                indices = proplists:get_value(<<"indices">>, Setup)
+        }}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

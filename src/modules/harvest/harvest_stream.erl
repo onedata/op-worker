@@ -14,6 +14,7 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/harvest/harvest.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -21,7 +22,7 @@
 
 
 %% API
--export([start_link/2]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -29,24 +30,30 @@
 
 -record(state, {
     id :: harvest_stream_state:id(),
+    index_id :: od_harvester:index(),
     harvester_id :: od_harvester:id(),
     space_id :: od_space:id(),
     provider_id :: od_provider:id(),
-    last_persisted_seq = 0
+    last_persisted_seq = 0 :: couchbase_changes:seq()
 }).
 
 -type state() :: #state{}.
 
 -define(MAX_NOT_PERSISTED_SEQ_GAP, 1000).
 
+% TODO VFS-5351 *backoff
+% TODO VFS-5352 * aggregate changes pushed to oz per harvester
+% TODO VFS-5352  ** main stream and "catching-up" stream
+% TODO VFS-5352  ** "catching-up" stream should checks indices' sequences and
+% TODO VFS-5352     decide whether given index is up to date with maxSeq or not
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec start_link(od_harvester:id(), od_space:id()) ->
+-spec start_link(od_harvester:id(), od_space:id(), od_harvester:index()) ->
     {ok, pid()} | {error, Reason :: term()}.
-start_link(HarvesterId, SpaceId) ->
-    gen_server:start_link(?MODULE, [HarvesterId, SpaceId], []).
+start_link(HarvesterId, SpaceId, IndexId) ->
+    gen_server:start_link(?MODULE, [HarvesterId, SpaceId, IndexId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -60,17 +67,19 @@ start_link(HarvesterId, SpaceId) ->
 -spec init(Args :: term()) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([HarvesterId, SpaceId]) ->
+init([HarvesterId, SpaceId, IndexId]) ->
     Stream = self(),
     Id = harvest_stream_state:id(HarvesterId, SpaceId),
-    Since = harvest_stream_state:get_seq(Id),
+    Since = harvest_stream_state:get_seq(Id, IndexId),
     Callback = fun(Change) -> gen_server2:cast(Stream, {change, Change}) end,
     {ok, _} = couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
         [{since, Since}, {until, infinity}], []
     ),
+    ?debug("Started harvest_stream: ~p", [{HarvesterId, SpaceId, IndexId}]),
     {ok, #state{
         id = Id,
+        index_id = IndexId,
         space_id = SpaceId,
         harvester_id = HarvesterId,
         provider_id = oneprovider:get_id()
@@ -184,6 +193,7 @@ handle_change(State, Docs) when is_list(Docs) ->
     end, State, Docs);
 handle_change(State = #state{
     id = Id,
+    index_id = IndexId,
     harvester_id = HarvesterId,
     provider_id = ProviderId
 }, #document{
@@ -195,11 +205,13 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = false
 }) when map_size(JSON) > 0 ->
-    ok = harvester_logic:submit_entry(HarvesterId, FileId, JSON),
-    ok = harvest_stream_state:set_seq(Id, Seq),
+    % todo currently errors are ignored, implement backoff VFS-5351
+    harvester_logic:submit_entry(HarvesterId, FileId, JSON, [IndexId], Seq, max_seq(Id)),
+    ok = harvest_stream_state:set_seq_and_maybe_bump_max_metadata_seq(Id, IndexId, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
     id = Id,
+    index_id = IndexId,
     harvester_id = HarvesterId,
     provider_id = ProviderId
 }, #document{
@@ -211,12 +223,21 @@ handle_change(State = #state{
     %   * onedata_json key is missing
     %   * onedata_json map is empty
     %   * custom_metadata document has_been deleted
-    ok = harvester_logic:delete_entry(HarvesterId, FileId),
-    ok = harvest_stream_state:set_seq(Id, Seq),
+    % todo currently errors are ignored, implement backoff VFS-5351
+    harvester_logic:delete_entry(HarvesterId, FileId, [IndexId], Seq, max_seq(Id)),
+    ok = harvest_stream_state:set_seq_and_maybe_bump_max_metadata_seq(Id, IndexId, Seq),
     State#state{last_persisted_seq = Seq};
-handle_change(State = #state{id = Id, last_persisted_seq = LastSeq}, #document{seq = Seq})
+handle_change(State = #state{
+    id = Id,
+    index_id = IndexId,
+    last_persisted_seq = LastSeq
+}, #document{seq = Seq})
     when (Seq - LastSeq) > ?MAX_NOT_PERSISTED_SEQ_GAP ->
-    ok = harvest_stream_state:set_seq(Id, Seq),
+    ok = harvest_stream_state:set_seq(Id, IndexId, Seq),
     State#state{last_persisted_seq = Seq};
 handle_change(State, _Doc) ->
     State.
+
+-spec max_seq(harvest_stream_state:id()) -> couchbase_changes:seq().
+max_seq(Id) ->
+    harvest_stream_state:get_max_metadata_seq(Id).

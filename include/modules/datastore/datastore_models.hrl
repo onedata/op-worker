@@ -99,8 +99,6 @@
 
     shares = [] :: [od_share:id()],
 
-    harvesters = [] :: [od_harvester:id()],
-
     cache_state = #{} :: cache_state()
 }).
 
@@ -134,6 +132,7 @@
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
+    eff_harvesters = [] :: [od_harvester:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -168,10 +167,8 @@
 }).
 
 -record(od_harvester, {
-    entry_type_field :: od_harvester:entry_type_field(),
-    default_entry_type :: undefined | od_harvester:entry_type(),
-    accepted_entry_types :: [od_harvester:entry_type()],
-
+    indices = [] :: [od_harvester:index()],
+    spaces = [] :: [od_space:id()],
     cache_state = #{} :: cache_state()
 }).
 
@@ -686,9 +683,12 @@
     providers = [] :: all | [od_provider:id()]
 }).
 
-%% Model that holds the last processed seq for given space
+%% Model that holds information about harvesting for given pair (HarvesterId, SpaceId)
 -record(harvest_stream_state, {
-    seq = 0 :: couchbase_changes:seq()
+    % max processed sequence associated with custom_metadata document
+    max_metadata_seq = 0 :: couchbase_changes:seq(),
+    % maps that holds max processed sequence numbers for each harvesting index
+    sequences = #{} :: maps:map(od_harvester:index(), couchbase_changes:seq())
 }).
 
 -endif.

@@ -151,7 +151,10 @@ mixed_get_test(Config) ->
         {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    % od_provider:save calls harvest_manager:check_eff_harvesters_streams
+    test_utils:mock_assert_num_calls(Node, harvest_manager,
+        check_eff_harvesters_streams, [?PROVIDER_EFF_HARVESTERS(?PROVIDER_1)], 1),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph), 10),
     ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
 
     % When private data is cached, any scope should always be fetched from cache
@@ -351,6 +354,12 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(_, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(Nodes, harvest_manager, [history, passthrough]),
+    ok = test_utils:mock_expect(Nodes, harvest_manager, check_eff_harvesters_streams,
+        % we don't want to start all the "harvester machinery" in this suite
+        fun(_) -> ok  end
+    ),
     logic_tests_common:init_per_testcase(Config).
 
 end_per_testcase(_, _Config) ->

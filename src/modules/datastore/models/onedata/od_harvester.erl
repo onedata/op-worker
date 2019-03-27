@@ -23,11 +23,11 @@
 -type record() :: #od_harvester{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type entry_type_field() :: binary().
--type entry_type() :: binary().
+-type index() :: binary().
+
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([entry_type_field/0, entry_type/0]).
+-export_type([index/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -38,8 +38,7 @@
 -export([save/1, get/1, delete/1, list/0]).
 
 %% datastore_model callbacks
--export([get_ctx/0]).
--export([get_record_struct/1]).
+-export([get_ctx/0, get_record_struct/1, get_posthooks/0]).
 
 %%%===================================================================
 %%% API
@@ -81,6 +80,30 @@ delete(Key) ->
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Harvester create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(save, _, {ok, HarvesterDoc = #document{}}) ->
+    start_streams(HarvesterDoc);
+run_after(_Function, _Args, Result) ->
+    Result.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec start_streams(doc()) -> ok.
+start_streams(#document{
+    key = HarvesterId,
+    value = #od_harvester{
+        spaces = Spaces,
+        indices = Indices
+}}) ->
+    harvest_manager:check_harvester_streams(HarvesterId, Spaces, Indices).
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -103,8 +126,17 @@ get_ctx() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {entry_type_field, binary},
-        {default_entry_type, binary},
-        {accepted_entry_types, [binary]},
+        {indices, [binary]},
+        {spaces, [binary]},
         {cache_state, #{atom => term}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].

@@ -106,9 +106,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
             providers = maps:get(<<"providers">>, Result),
-            shares = maps:get(<<"shares">>, Result),
-            harvesters = maps:get(<<"harvesters">>, Result)
-
+            shares = maps:get(<<"shares">>, Result)
         }
     };
 
@@ -149,7 +147,8 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             online = maps:get(<<"online">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
-            eff_groups = maps:get(<<"effectiveGroups">>, Result)
+            eff_groups = maps:get(<<"effectiveGroups">>, Result),
+            eff_harvesters = maps:get(<<"effectiveHarvesters">>, Result)
         }
     };
 
@@ -217,9 +216,8 @@ translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = protecte
     #document{
         key = Id,
         value = #od_harvester{
-            entry_type_field = maps:get(<<"entryTypeField">>, Result),
-            default_entry_type = maps:get(<<"defaultEntryType">>, Result),
-            accepted_entry_types = maps:get(<<"acceptedEntryTypes">>, Result)
+            indices = maps:get(<<"indices">>, Result),
+            spaces = maps:get(<<"spaces">>, Result)
         }
     };
 
@@ -274,8 +272,7 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
             direct_groups = #{},
             eff_groups = #{},
 
-            shares = [],
-            harvesters = []
+            shares = []
         }
     };
 
@@ -294,7 +291,8 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
             subdomain = undefined,
             spaces = #{},
             eff_users = [],
-            eff_groups = []
+            eff_groups = [],
+            eff_harvesters = []
         }
     };
 

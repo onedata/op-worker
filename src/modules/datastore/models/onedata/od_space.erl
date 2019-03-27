@@ -72,8 +72,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    ok = datastore_model:delete(?CTX, Key),
-    harvest_manager:delete_space_harvest_streams_on_all_nodes(Key).
+    ok = datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,8 +100,7 @@ run_after(update, [_, _, _, _], {ok, SpaceDoc = #document{key = SpaceId}}) ->
 run_after(save, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc),
-    maybe_notify_harvest_manager(SpaceDoc);
+    emit_monitoring_event(SpaceDoc);
 run_after(update, _, {ok, SpaceDoc = #document{}}) ->
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(SpaceDoc);
@@ -231,22 +229,4 @@ emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
     case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
         true -> monitoring_event_emitter:emit_od_space_updated(SpaceId);
         false -> ok
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% If the space is supported by given provider, the function notifies
-%% harvest_manager so that it can start/stop harvest streams according
-%% to current settings.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_notify_harvest_manager(doc()) -> ok.
-maybe_notify_harvest_manager(SpaceDoc = #document{key = SpaceId}) ->
-    case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
-        true ->
-            {ok, Harvesters} = space_logic:get_harvesters(SpaceDoc),
-            harvest_manager:update_space_harvest_streams_on_all_nodes(SpaceId, Harvesters);
-        false ->
-            ok
     end.

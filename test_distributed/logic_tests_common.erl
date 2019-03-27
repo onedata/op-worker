@@ -263,9 +263,10 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end;
 
-mock_graph_create(#gri{type = od_harvester, id = _, aspect = {entry, _}}, undefined, _Data) ->
+mock_graph_create(#gri{type = od_harvester, id = _, aspect = {create_entry, _}}, undefined, _Data) ->
+    {ok, #gs_resp_graph{data_format = undefined}};
+mock_graph_create(#gri{type = od_harvester, id = _, aspect = {delete_entry, _}}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}}.
-
 
 
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
@@ -283,10 +284,7 @@ mock_graph_delete(#gri{type = od_share, id = ShareId, aspect = instance}, ?USER_
             {ok, #gs_resp_graph{}};
         false ->
             ?ERROR_NOT_FOUND
-    end;
-mock_graph_delete(#gri{type = od_harvester, id = _, aspect = {entry, _}}, undefined) ->
-    {ok, #gs_resp_graph{}}.
-
+    end.
 
 
 mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, Authorization, AuthHint) ->

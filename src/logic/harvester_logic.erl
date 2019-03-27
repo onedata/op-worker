@@ -25,14 +25,17 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -export([get/1]).
--export([delete_entry/2]).
--export([submit_entry/3]).
+-export([get_spaces/1, get_indices/1]).
+-export([is_in_harvester/2, is_harvested/2]).
+-export([delete_entry/5]).
+-export([submit_entry/6]).
 
 % exported for CT tests
--export([submit_entry_internal/3]).
+-export([]).
 
 
--define(ENTRY(FileId), {entry, FileId}).
+-define(CREATE_ENTRY(FileId), {create_entry, FileId}).
+-define(DELETE_ENTRY(FileId), {delete_entry, FileId}).
 -define(PAYLOAD_KEY(Type), <<Type/binary, "_payload">>).
 
 %%%===================================================================
@@ -41,10 +44,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves harvester doc by given SpaceId.
+%% Retrieves harvester doc by given HarvesterId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(od_space:id()) -> {ok, od_space:doc()} | gs_protocol:error().
+-spec get(od_harvester:id()) -> {ok, od_harvester:doc()} | gs_protocol:error().
 get(HarvesterId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
@@ -52,17 +55,30 @@ get(HarvesterId) ->
         subscribe = true
     }).
 
+
+-spec get_spaces(od_harvester:doc()) -> {ok, [od_space:id()]}.
+get_spaces(#document{value = #od_harvester{spaces = Spaces}}) ->
+    {ok, Spaces}.
+
+-spec get_indices(od_harvester:doc()) -> {ok, [od_harvester:index()]}.
+get_indices(#document{value = #od_harvester{indices = Indices}}) ->
+    {ok, Indices}.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes entry for given HarvesterId and FileId in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_entry(od_harvester:id(), cdmi_id:objectid()) -> ok | gs_protocol:error().
-delete_entry(HarvesterId, FileId) ->
+-spec delete_entry(od_harvester:id(), cdmi_id:objectid(), [od_harvester:index()],
+    non_neg_integer(), non_neg_integer()) -> ok | gs_protocol:error().
+delete_entry(HarvesterId, FileId, Indices, Seq, MaxSeq) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = delete,
-        gri = #gri{type = od_harvester, id = HarvesterId, aspect = ?ENTRY(FileId),
-            scope = private}
+        operation = create,
+        gri = #gri{type = od_harvester, id = HarvesterId,
+            aspect = ?DELETE_ENTRY(FileId), scope = private
+        },
+        data = prepare_delete_payload(Indices, Seq, MaxSeq)
     }).
 
 %%--------------------------------------------------------------------
@@ -71,67 +87,55 @@ delete_entry(HarvesterId, FileId) ->
 %% HarvesterId and FileId to Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec submit_entry(od_harvester:id(), cdmi_id:objectid(), gs_protocol:json_map()) -> ok.
-submit_entry(HarvesterId, FileId, JSON) ->
-    case prepare_payload(HarvesterId, JSON) of
-        {ok, Payload} ->
-            ok = harvester_logic:submit_entry_internal(HarvesterId, FileId, Payload);
-        {error, Reason} ->
-            ?debug("Metadata of file ~p won't be harvested due to ~p.", [FileId, Reason])
+-spec submit_entry(od_harvester:id(), cdmi_id:objectid(), gs_protocol:json_map(),
+    [od_harvester:index()], non_neg_integer(), non_neg_integer()) -> ok | gs_protocol:error().
+submit_entry(HarvesterId, FileId, JSON, Indices, Seq, MaxSeq) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_harvester, id = HarvesterId,
+            aspect = ?CREATE_ENTRY(FileId), scope = private
+        },
+        data = prepare_create_payload(JSON, Indices, Seq, MaxSeq)
+    }).
+
+is_in_harvester(HarvesterId, IndexId) ->
+    case harvester_logic:get(HarvesterId) of
+        {ok, #document{value = #od_harvester{indices = Indices}}} ->
+            lists:member(IndexId, Indices);
+        _ ->
+            false
+    end.
+
+is_harvested(HarvesterId, SpaceId) ->
+    case harvester_logic:get(HarvesterId) of
+        {ok, #document{value = #od_harvester{spaces = Spaces}}} ->
+            lists:member(SpaceId, Spaces);
+        _ ->
+            false
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec submit_entry_internal(od_harvester:id(), cdmi_id:objectid(), gs_protocol:data()) ->
-    ok | gs_protocol:error().
-submit_entry_internal(HarvesterId, FileId, Data) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_harvester, id = HarvesterId,
-            aspect = ?ENTRY(FileId), scope = private},
-        data = Data
-    }).
+-spec prepare_create_payload(gs_protocol:json_map() ,[od_harvester:index()], non_neg_integer(),
+    non_neg_integer()) -> gs_protocol:data() | gs_protocol:error().
+prepare_create_payload(JSON, Indices, Seq, MaxSeq) ->
+    GenPayload = prepare_generic_payload(Indices, Seq, MaxSeq),
+    GenPayload#{
+        <<"json">> => json_utils:encode(JSON)
+    }.
 
--spec prepare_payload(od_harvester:id(), gs_protocol:json_map()) ->
-    {ok, gs_protocol:data()} | gs_protocol:error().
-prepare_payload(HarvesterId, JSON) ->
-    case harvester_logic:get(HarvesterId) of
-        {ok, #document{value = Harvester}} ->
-            case get_and_validate_type(Harvester, JSON) of
-                {ok, Type} ->
-                    Payload = json_utils:encode(#{
-                        <<"type">> => Type,
-                        ?PAYLOAD_KEY(Type) => JSON
-                    }),
-                    {ok, #{<<"payload">> => Payload}};
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, _} = Error2 ->
-            Error2
-    end.
+-spec prepare_delete_payload([od_harvester:index()], non_neg_integer(),
+    non_neg_integer()) -> gs_protocol:data() | gs_protocol:error().
+prepare_delete_payload(Indices, Seq, MaxSeq) ->
+    prepare_generic_payload(Indices, Seq, MaxSeq).
 
--spec get_and_validate_type(od_harvester:record(), gs_protocol:json_map()) ->
-    {ok, od_harvester:entry_type()} | {error, term()}.
-get_and_validate_type(Harvester = #od_harvester{
-    accepted_entry_types = AcceptedEntryTypes
-}, JSON) ->
-    case get_type(Harvester, JSON) of
-        undefined ->
-            {error, undefined_type};
-        Type ->
-            case lists:member(Type, AcceptedEntryTypes) of
-                true -> {ok, Type};
-                false -> {error, {type_not_accepted, Type}}
-            end
-    end.
-
--spec get_type(od_harvester:record(), gs_protocol:json_map()) ->
-    od_harvester:entry_type() | undefined.
-get_type(#od_harvester{
-    default_entry_type = DefaultEntryType,
-    entry_type_field = EntryTypeField
-}, JSON) ->
-    maps:get(EntryTypeField, JSON, DefaultEntryType).
+-spec prepare_generic_payload([od_harvester:index()], non_neg_integer(),
+    non_neg_integer()) -> gs_protocol:data() | gs_protocol:error().
+prepare_generic_payload(Indices, Seq, MaxSeq) ->
+    #{
+        <<"indices">> => Indices,
+        <<"seq">> => Seq,
+        <<"maxSeq">> => MaxSeq
+    }.
