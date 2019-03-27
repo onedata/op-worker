@@ -81,9 +81,13 @@ PKG_BUILD    ?= 1
 .PHONY: ostype varcheck
 
 ## Call platform dependent makefile
-ostype: varcheck setversion
+ostype: varcheck setversion set_build_version
 	$(if $(PKGERDIR),,$(error "Operating system '$(OS)' not supported by node_package"))
 	$(MAKE) -f $(PKG_ID)/node_package/priv/templates/$(PKGERDIR)/Makefile.bootstrap
+
+## Set build version
+set_build_version:
+	echo "{build_version, \"$(BUILD_VERSION)\"}." >> $(PKG_ID)/node_package/priv/templates/$(PKGERDIR)/vars.config
 
 ## Set app version
 setversion: varcheck

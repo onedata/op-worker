@@ -88,7 +88,7 @@ create_share(Req, State) ->
             error({error, Error});
         {ok, {ShareId, _}} ->
             Response = json_utils:encode(#{<<"shareId">> => ShareId}),
-            Req4 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req3),
+            Req4 = cowboy_req:reply(?HTTP_200_OK, #{}, Response, Req3),
             {stop, Req4, State3}
     end.
 

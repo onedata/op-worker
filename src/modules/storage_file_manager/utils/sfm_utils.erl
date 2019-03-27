@@ -402,7 +402,11 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
     {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
         UserCtx, Offset, ChunkSize),
     lists:foreach(fun(ChildCtx) ->
-        ok = recursive_delete(ChildCtx, UserCtx)
+        ok = case recursive_delete(ChildCtx, UserCtx) of
+            ok -> ok;
+            {error, ?ENOENT} -> ok;
+            Error -> Error
+        end
     end, ChildrenCtxs),
     case length(ChildrenCtxs) < ChunkSize of
         true ->

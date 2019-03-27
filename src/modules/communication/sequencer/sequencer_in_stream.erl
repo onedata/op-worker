@@ -189,15 +189,30 @@ handle_info(Info, StateName, State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
-| term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
-    session_id = SessId, sequencer_manager = SeqMan, is_proxy = IsProxy} = State) ->
+-spec(terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
+    StateName :: atom(), StateData :: term()) -> term()).
+terminate(Reason, StateName, #state{
+    stream_id = StmId,
+    sequence_number = SeqNum,
+    session_id = SessId,
+    sequencer_manager = SeqMan,
+    is_proxy = IsProxy
+} = State) ->
     ?log_terminate(Reason, {StateName, State}),
-    Msg = #message_acknowledgement{stream_id = StmId, sequence_number = SeqNum - 1},
-    case communicate(IsProxy, Msg, SessId, false) of
-        ok -> ok;
-        {error, _Reason2} -> SeqMan ! {send, Msg, SessId}
+    case SeqNum of
+        0 ->
+            ok;
+        _ ->
+            Msg = #message_acknowledgement{
+                stream_id = StmId,
+                sequence_number = SeqNum - 1
+            },
+            case communicate(IsProxy, Msg, SessId, false) of
+                ok ->
+                    ok;
+                {error, _Reason2} ->
+                    SeqMan ! {send, Msg, SessId}
+            end
     end,
     unregister_stream(State).
 
@@ -439,7 +454,7 @@ forward_message(#client_message{message_body = #end_of_message_stream{}},
     State#state{sequence_number = SeqNum + 1};
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
-    router:route_message(stream_router:make_message_direct(Msg)),
+    event_router:route_message(stream_router:make_message_direct(Msg)),
     State#state{sequence_number = SeqNum + 1}.
 
 
@@ -452,10 +467,10 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
 -spec communicate(IsProxy :: boolean(), Message :: term(), session:id(),
     InfinityRetry :: boolean()) -> ok | {error, Reason :: term()}.
 communicate(false, Msg, SessionID, true) ->
-    communicator:send_to_client(Msg, SessionID, #{repeats => infinity});
+    communicator:send_to_oneclient(SessionID, Msg, infinity);
 communicate(false, Msg, SessionID, _) ->
-    communicator:send_to_client(Msg, SessionID);
+    communicator:send_to_oneclient(SessionID, Msg);
 communicate(true, Msg, SessionID, true) ->
-    communicator:send_to_provider(Msg, SessionID, #{repeats => infinity});
+    communicator:send_to_provider(SessionID, Msg, undefined, infinity);
 communicate(true, Msg, SessionID, _) ->
-    communicator:send_to_provider(Msg, SessionID).
+    communicator:send_to_provider(SessionID, Msg).

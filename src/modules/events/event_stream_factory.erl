@@ -141,7 +141,7 @@ make_send_events_handler() ->
     fun
         ([], _) -> ok;
         (Evts, #{session_id := SessId}) ->
-            communicator:send_to_client(#server_message{message_body = #events{
+            communicator:send_to_oneclient(SessId, #server_message{message_body = #events{
                 events = [#event{type = Evt} || Evt <- Evts]
-            }}, SessId)
+            }})
     end.
