@@ -70,7 +70,7 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1,
+    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_file_children/5, get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
@@ -462,7 +462,17 @@ get_parent_guid(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns storage file ID (the ID of file on storage.
+%% @equiv get_storage_file_id(FileCtx, true).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
+get_storage_file_id(FileCtx) ->
+    get_storage_file_id(FileCtx, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage file ID (the ID of file on storage). If file ID does not
+%% exists it can be generated (depending on second argument).
 %% Storage file Id depends on the storage file mapping setting, currently
 %% 2 options are supported:
 %%   - canonical - which is POSIX-style file mapping including complete
@@ -472,36 +482,47 @@ get_parent_guid(FileCtx, UserCtx) ->
 %%            storage
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}) ->
+-spec get_storage_file_id(ctx(), boolean()) ->
+    {StorageFileId :: helpers:file_id() | undefined, ctx()}.
+get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case get_local_file_location_doc(FileCtx0, false) of
-        {#document{value = #file_location{file_id = ID}}, FileCtx}
-            when ID =/= undefined ->
+        {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
+            when ID =/= undefined, SFC or Generate ->
             {ID, FileCtx};
         {_, FileCtx} ->
-            {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
-            #document{value = #storage{helpers
-            = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
-            case StoragePathType of
-                ?FLAT_STORAGE_PATH ->
-                    FileId = get_flat_path_const(FileCtx),
-                    % TODO - do not get_canonical_path (fix acceptance tests before)
-                    {_, FileCtx2} = get_canonical_path(FileCtx),
-                    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
-                ?CANONICAL_STORAGE_PATH ->
-                    {FileIdTokens, FileCtx2} = get_canonical_path_tokens(FileCtx),
-                    {MiR, FileCtx3} = get_mounted_in_root(FileCtx2),
-                    FileId = case {MiR, FileIdTokens} of
-                        {true, [Root, _SpaceID | Path]} ->
-                            filename:join([Root | Path]);
-                        _ ->
-                            filename:join(FileIdTokens)
-                    end,
+            % Check if id should be generated
+            {Continue, FileCtx2} = case Generate of
+                true -> {true, FileCtx};
+                _ -> is_dir(FileCtx)
+            end,
+            case Continue of
+                true ->
+                    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx2),
+                    #document{value = #storage{helpers
+                    = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
+                    case StoragePathType of
+                        ?FLAT_STORAGE_PATH ->
+                            FileId = get_flat_path_const(FileCtx2),
+                            % TODO - do not get_canonical_path (fix acceptance tests before)
+                            {_, FileCtx3} = get_canonical_path(FileCtx2),
+                            {FileId, FileCtx3#file_ctx{storage_file_id = FileId}};
+                        ?CANONICAL_STORAGE_PATH ->
+                            {FileIdTokens, FileCtx3} = get_canonical_path_tokens(FileCtx2),
+                            {MiR, FileCtx4} = get_mounted_in_root(FileCtx3),
+                            FileId = case {MiR, FileIdTokens} of
+                                         {true, [Root, _SpaceID | Path]} ->
+                                             filename:join([Root | Path]);
+                                         _ ->
+                                             filename:join(FileIdTokens)
+                                     end,
 
-                    {FileId, FileCtx3#file_ctx{storage_file_id = FileId}}
+                            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}}
+                    end;
+                _ ->
+                    {undefined, FileCtx}
             end
     end;
-get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
+get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
 
 %%--------------------------------------------------------------------
@@ -1241,7 +1262,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
     case get_local_file_location_doc(FileCtx, IncludeBlocks) of
         {undefined, FileCtx2} ->
             {CreatedLocation, FileCtx3} =
-                sfm_utils:create_storage_file_location(FileCtx2, false),
+                location_and_link_utils:get_new_file_location_doc(FileCtx2, false, false),
             {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
             lists:foreach(fun(ChangedLocation) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)

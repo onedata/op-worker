@@ -54,7 +54,6 @@ get_models() -> [
     times,
     helper_handle,
     space_strategies,
-    file_force_proxy,
     luma_cache,
     file_popularity,
     space_transfer_stats,
@@ -70,7 +69,8 @@ get_models() -> [
     index,
     autocleaning_run,
     file_popularity_config,
-    harvest_stream_state
+    harvest_stream_state,
+    idp_access_token
 ].
 
 %%--------------------------------------------------------------------

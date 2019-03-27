@@ -221,6 +221,12 @@
     direct_io = false :: boolean()
 }).
 
+% Model used to cache idp access tokens
+-record(idp_access_token, {
+    token :: idp_access_token:token(),
+    expiration_time :: idp_access_token:expires()
+}).
+
 %% File handle used by the module
 -record(sfm_handle, {
     file_handle :: undefined | helpers:file_handle(),

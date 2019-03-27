@@ -100,14 +100,9 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
     fslogic_worker:fuse_response().
 delete_insecure(UserCtx, FileCtx, Silent) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
-    fslogic_deletion_worker:request_deletion(UserCtx, FileCtx, Silent),
-    ok = file_popularity:delete(FileUuid),
-    ok = custom_metadata:delete(FileUuid),
-    ok = file_force_proxy:delete(FileUuid),
-    ok = times:delete(FileUuid),
-    ok = transferred_file:clean_up(FileGuid),
+    fslogic_delete:check_if_opened_and_remove(UserCtx, FileCtx, Silent, false),
+    fslogic_delete:remove_auxiliary_documents(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.

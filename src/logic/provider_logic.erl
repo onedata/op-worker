@@ -18,6 +18,7 @@
 -author("Lukasz Opiola").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/gui_paths.hrl").
@@ -40,6 +41,7 @@
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
 -export([get_nodes/1, get_nodes/2]).
+-export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
 -export([zone_get_offline_access_idps/0]).
@@ -51,6 +53,7 @@
 -export([verify_provider_nonce/2]).
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
+
 
 %%%===================================================================
 %%% API
@@ -431,6 +434,28 @@ get_nodes(ProviderId, Domain) ->
                     [Domain]
             end
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves rtransfer port of given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rtransfer_port(ProviderId :: binary()) -> {ok, inet:port_number()}.
+get_rtransfer_port(ProviderId) ->
+    ResolvePort = fun() ->
+        {ok, Domain} = provider_logic:get_domain(ProviderId),
+        Port = case fetch_service_configuration({oneprovider, Domain, Domain}) of
+            {ok, #{<<"rtransferPort">> := RtransferPort}} ->
+                RtransferPort;
+            _ ->
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
+                    [to_string(ProviderId), ?RTRANSFER_PORT]),
+                ?RTRANSFER_PORT
+        end,
+        {true, Port, ?PROVIDER_NODES_CACHE_TTL}
+    end,
+    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------

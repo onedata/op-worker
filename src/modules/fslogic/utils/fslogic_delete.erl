@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Util functions for fslogic_deletion_worker
+%%% Util functions for file deletion.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_delete).
@@ -13,58 +13,90 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([remove_file_and_file_meta/3, remove_file_and_file_meta/5,
-    remove_file_handles/1]).
+-export([check_if_opened_and_remove/4, remove_opened_file/1, remove_file/4,
+    remove_file_handles/1, remove_auxiliary_documents/1, delete_all_opened_files/0]).
+
+%% Test API
+-export([process_file_links/3]).
+
+-type delete_filemeta_opts() :: boolean() | deletion_link.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv remove_file_and_file_meta(FileCtx, UserCtx, Silent, true).
+%% Checks if file is opened and deletes it or marks to be deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
-remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
-    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true, true).
+-spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(),
+    Silent :: boolean(), RemoteDelete :: boolean()) -> ok.
+% TODO VFS-5268 - prevent reimport connected with remote delete
+check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
+    try
+        FileUuid = file_ctx:get_uuid_const(FileCtx),
+        case file_handles:exists(FileUuid) of
+            true ->
+                process_file_links(FileCtx, UserCtx, RemoteDelete),
+                ok = file_handles:mark_to_remove(FileCtx);
+            _ ->
+                ok = remove_file(FileCtx, UserCtx, true, not RemoteDelete)
+        end,
+        maybe_emit_event(FileCtx, UserCtx, Silent)
+    catch
+        _:{badmatch, {error, not_found}} ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes file and file meta.
-%% If parameter Silent is true, file_removed_event will not be emitted.
-%% If parameter RemoveStorageFile is false, file will not be deleted
-%% on storage.
-%% If parameter DeleteParentLink is true, link in parent is deleted.
+%% Deletes opened file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-    boolean(), boolean()) -> ok.
-remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile,
-    DeleteParentLink) ->
-    {FileDoc = #document{value = #file_meta{
-            shares = Shares
-        }
-    }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-    ok = delete_shares(UserCtx, Shares),
+-spec remove_opened_file(file_ctx:ctx()) -> ok.
+remove_opened_file(FileCtx) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    ok = remove_file(FileCtx, UserCtx, true, deletion_link).
 
-    fslogic_times:update_mtime_ctime(ParentCtx),
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes all opened files.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_all_opened_files() -> ok.
+delete_all_opened_files() ->
+    case file_handles:list() of
+        {ok, Docs} ->
+            RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
+                Handle#file_handles.is_removed
+            end, Docs),
 
-    case RemoveStorageFile of
-        true ->
-            maybe_remove_file_on_storage(FileCtx3, UserCtx);
-        _ -> ok
-    end,
+            UserCtx = user_ctx:new(?ROOT_SESS_ID),
+            lists:foreach(fun(#document{key = FileUuid} = Doc) ->
+                try
+                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+                    FileCtx = file_ctx:new_by_guid(FileGuid),
+                    ok = remove_file(FileCtx, UserCtx, true, deletion_link)
+                catch
+                    E1:E2 ->
+                        ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p",
+                            [Doc, E1, E2])
+                end
+            end, RemovedFiles),
 
-    ok = case DeleteParentLink of
-        true ->
-            file_meta:delete(FileDoc);
-        _ ->
-            file_meta:delete_without_link(FileDoc)
-    end,
-    maybe_emit_event(FileCtx3, UserCtx, Silent).
+            lists:foreach(fun(#document{key = FileUuid}) ->
+                ok = file_handles:delete(FileUuid)
+            end, Docs);
+        Error ->
+            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error])
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,9 +108,98 @@ remove_file_handles(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     ok = file_handles:delete(FileUuid).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes auxiliary documents connected with file.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_auxiliary_documents(file_ctx:ctx()) -> ok.
+remove_auxiliary_documents(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    ok = file_popularity:delete(FileUuid),
+    ok = custom_metadata:delete(FileUuid),
+    ok = times:delete(FileUuid),
+    ok = transferred_file:clean_up(FileGuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file and file meta.
+%% If parameter RemoveStorageFile is false, file will not be deleted
+%% on storage.
+%% Parameter DeleteMetadata verifies which metadata is deleted with file.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
+    delete_filemeta_opts()) -> ok.
+remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
+    % TODO VFS-5270
+    replica_synchronizer:apply(FileCtx, fun() ->
+        {FileDoc, FileCtx4} = case DeleteFileMeta of
+            true ->
+                {FD = #document{value = #file_meta{
+                    shares = Shares
+                }}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+                {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+                ok = delete_shares(UserCtx, Shares),
+
+                fslogic_times:update_mtime_ctime(ParentCtx),
+                {FD, FileCtx3};
+            deletion_link ->
+                file_ctx:get_file_doc_including_deleted(FileCtx);
+            _ ->
+                {undefined, FileCtx}
+        end,
+
+        ok = case RemoveStorageFile of
+            true ->
+                maybe_remove_file_on_storage(FileCtx4, UserCtx);
+            _ -> ok
+        end,
+
+        case {DeleteFileMeta, RemoveStorageFile} of
+            {true, _} ->
+                ok = file_meta:delete(FileDoc);
+            {deletion_link, _} ->
+                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
+                ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
+                link_utils:remove_deletion_link(FileCtx5, ParentUuid),
+                ok;
+            {_, true} ->
+                FileUuid = file_ctx:get_uuid_const(FileCtx4),
+                LocalLocationId = file_location:local_id(FileUuid),
+                ok = fslogic_location_cache:delete_location(FileUuid, LocalLocationId);
+            _ ->
+                ok
+        end
+    end).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function adds a deletion_link for the file that is to be deleted.
+%% It can also delete normal link from parent to the file.
+%% @end
+%%-------------------------------------------------------------------
+-spec process_file_links(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
+process_file_links(FileCtx, UserCtx, KeepParentLink) ->
+    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    ParentUuid = fslogic_uuid:guid_to_uuid(ParentGuid),
+    FileCtx3 = link_utils:add_deletion_link(FileCtx2, ParentUuid),
+    ok = case KeepParentLink of
+             false ->
+                 FileUuid = file_ctx:get_uuid_const(FileCtx3),
+                 Scope = file_ctx:get_space_id_const(FileCtx3),
+                 {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
+                 file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
+             _ ->
+                 ok
+         end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -90,22 +211,23 @@ remove_file_handles(FileCtx) ->
 -spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx())
         -> ok | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
-    case remove_file_on_storage(FileCtx, UserCtx) of
-        ok -> ok;
-        {error, ?ENOENT} -> ok;
-        OtherError -> OtherError
+    try
+        case sfm_utils:recursive_delete(FileCtx, UserCtx) of
+            ok -> ok;
+            {error, ?ENOENT} -> ok;
+            OtherError -> OtherError
+        end
+    catch
+        _:{badmatch, {error, not_found}} ->
+            ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, ?ENOENT}} ->
+            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok;
+        _:{badmatch, {error, ?EROFS}} ->
+            ?warning_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
+            ok
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes given file on storage
-%% @end
-%%--------------------------------------------------------------------
--spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) ->
-    ok | {error, term()}.
-remove_file_on_storage(FileCtx, UserCtx) ->
-    sfm_utils:recursive_delete(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @private

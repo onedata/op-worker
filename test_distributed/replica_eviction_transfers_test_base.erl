@@ -742,11 +742,13 @@ eviction_should_succeed_when_remote_provider_modified_file_replica(Config, Type,
     ),
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
 
-    % bump version on WorkerP2
+    % bump version on WorkerP1
     SessionId = ?USER_SESSION(WorkerP1, ?DEFAULT_USER, Config2),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, Handle, 1, <<"#">>),
     lfm_proxy:close(WorkerP1, Handle),
+
+    ?assertVersion(2, WorkerP2, FileGuid, ProviderId1, ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
