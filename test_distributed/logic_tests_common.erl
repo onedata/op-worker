@@ -279,7 +279,7 @@ mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, und
         #{<<"workerVersion">> := #{<<"gui">> := GuiHash}} = Data,
         case is_binary(GuiHash) of
             true -> {ok, #gs_resp_graph{}};
-            false -> ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"gui">>)
+            false -> ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>)
         end
     catch _:_ ->
         ?ERROR_INTERNAL_SERVER_ERROR

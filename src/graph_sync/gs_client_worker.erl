@@ -50,6 +50,7 @@
 
 %% API
 -export([start_link/0]).
+-export([force_terminate/0]).
 -export([request/1, request/2]).
 -export([invalidate_cache/1, invalidate_cache/2]).
 -export([process_push_message/1]).
@@ -70,6 +71,22 @@
 -spec start_link() -> {ok, pid()} | gs_protocol:error().
 start_link() ->
     gen_server2:start_link(?MODULE, [], []).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Forces termination of gs_client_worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_terminate() -> ok.
+force_terminate() ->
+    case get_connection_pid() of
+        Pid when is_pid(Pid) ->
+            gen_server2:call(Pid, {terminate, normal}),
+            ok;
+        _ ->
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -189,6 +206,7 @@ handle_call(#gs_req{} = GsReq, _From, #state{client_ref = ClientRef} = State) ->
     {reply, Result, State};
 
 handle_call({terminate, Reason}, _From, State) ->
+    ?warning("Connection to Onezone terminated"),
     {stop, Reason, ok, State};
 
 handle_call(Request, _From, #state{} = State) ->
@@ -220,9 +238,6 @@ handle_cast(Request, #state{} = State) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
-    {stop, normal, State};
-handle_info(terminate, #state{} = State) ->
-    ?warning("Connection to Onezone terminated"),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),

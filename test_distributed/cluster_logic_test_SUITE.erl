@@ -41,7 +41,7 @@ update_version_info_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ?assertMatch(
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"gui">>),
+        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>),
         rpc:call(Node, cluster_logic, update_version_info, [1, 2, 3])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),

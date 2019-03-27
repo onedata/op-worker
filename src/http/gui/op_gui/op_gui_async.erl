@@ -18,7 +18,6 @@
 -export([spawn/1, kill_async_processes/0]).
 -export([get_ws_process/0]).
 -export([send/1, send/2]).
--export([push_message/1, push_message/2]).
 -export([push_created/2, push_created/3]).
 -export([push_updated/2, push_updated/3]).
 -export([push_deleted/2, push_deleted/3]).
@@ -60,7 +59,7 @@ spawn(Fun) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Kills all sync processes that have been spawned by the calling process.
+%% Kills all async processes that have been spawned by the calling process.
 %% @end
 %%--------------------------------------------------------------------
 -spec kill_async_processes() -> ok.
@@ -104,32 +103,6 @@ send(Message) ->
 -spec send(Message :: proplists:proplist(), Pid :: pid()) -> ok.
 send(Message, Pid) ->
     Pid ! {send, Message},
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends a push message to client connected via WebSocket. Push messages are
-%% used as server side events that can be received by the client and processed.
-%% This variant can be used only from a process spawned by op_gui_async:spawn in
-%% backend init callback.
-%% @end
-%%--------------------------------------------------------------------
--spec push_message(Message :: proplists:proplist()) -> ok.
-push_message(Message) ->
-    send(Message, get_ws_process()).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends a push message to client connected via WebSocket. Push messages are
-%% used as server side events that can be received by the client and processed.
-%% Pushes the message to given pid (that must be a websocket pid).
-%% @end
-%%--------------------------------------------------------------------
--spec push_message(Message :: proplists:proplist(), Pid :: pid()) -> ok.
-push_message(Message, Pid) ->
-    Pid ! {push_message, Message},
     ok.
 
 

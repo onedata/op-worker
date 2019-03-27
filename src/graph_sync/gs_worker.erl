@@ -75,13 +75,7 @@ force_connection_start() ->
 -spec terminate_connection() -> ok.
 terminate_connection() ->
     ?info("Terminating connection to Onezone (forced)"),
-    case global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME) of
-        Pid when is_pid(Pid) ->
-            Pid ! terminate,
-            ok;
-        _ ->
-            ok
-    end.
+    gs_client_worker:force_terminate().
 
 
 %%--------------------------------------------------------------------

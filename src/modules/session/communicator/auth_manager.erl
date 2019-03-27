@@ -101,18 +101,12 @@ handle_client_handshake(Req = #client_handshake_request{session_id = SessId, aut
     assert_client_compatibility(Req, IpAddress),
 
     case user_identity:get_or_fetch(Auth) of
-        ?ERROR_UNAUTHORIZED ->
-            throw(bad_macaroon);
-        ?ERROR_FORBIDDEN ->
-            throw(invalid_provider);
-        ?ERROR_BAD_MACAROON ->
-            throw(bad_macaroon);
-        ?ERROR_MACAROON_INVALID ->
-            throw(bad_macaroon);
-        ?ERROR_MACAROON_EXPIRED ->
-            throw(bad_macaroon);
-        ?ERROR_MACAROON_TTL_TO_LONG(_) ->
-            throw(bad_macaroon);
+        ?ERROR_FORBIDDEN -> throw(invalid_provider);
+        ?ERROR_UNAUTHORIZED -> throw(bad_macaroon);
+        ?ERROR_BAD_MACAROON -> throw(bad_macaroon);
+        ?ERROR_MACAROON_INVALID -> throw(bad_macaroon);
+        ?ERROR_MACAROON_EXPIRED -> throw(bad_macaroon);
+        ?ERROR_MACAROON_TTL_TO_LONG(_) -> throw(bad_macaroon);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
             {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
             {UserId, SessId}
