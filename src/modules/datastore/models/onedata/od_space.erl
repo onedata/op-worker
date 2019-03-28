@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model server as cache for od_space records
+%%% This model serves as cache for od_space records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -36,7 +36,7 @@
 }).
 
 %% API
--export([save/1, get/1, delete/1, list/0, run_after/3]).
+-export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
@@ -47,38 +47,21 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves handle.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc) ->
+-spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
+save_to_cache(Doc) ->
     ?extract_key(datastore_model:save(?CTX, Doc)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns handle.
-%% @end
-%%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
+
+-spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
+get_from_cache(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes handle.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(id()) -> ok | {error, term()}.
-delete(Key) ->
+
+-spec invalidate_cache(id()) -> ok | {error, term()}.
+invalidate_cache(Key) ->
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).

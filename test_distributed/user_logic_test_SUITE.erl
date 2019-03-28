@@ -461,7 +461,7 @@ subscribe_test(Config) ->
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage7]),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Node, od_user, get, [?USER_1])
+        rpc:call(Node, od_user, get_from_cache, [?USER_1])
     ),
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
@@ -475,7 +475,7 @@ subscribe_test(Config) ->
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage8]),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Node, od_user, get, [?USER_1])
+        rpc:call(Node, od_user, get_from_cache, [?USER_1])
     ),
 
     ok.

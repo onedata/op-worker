@@ -347,10 +347,11 @@ space_provider_list_record(SpaceId) ->
 -spec space_on_the_fly_transfer_list_record(SpaceId :: od_space:id()) ->
     proplists:proplist().
 space_on_the_fly_transfer_list_record(SpaceId) ->
-    {ok, #document{value = Space}} = od_space:get(SpaceId),
+    SessionId = op_gui_session:get_session_id(),
+    {ok, Providers} = space_logic:get_provider_ids(SessionId, SpaceId),
     Ids = lists:map(fun(ProviderId) ->
         op_gui_utils:ids_to_association(ProviderId, SpaceId)
-    end, maps:keys(Space#od_space.providers)),
+    end, Providers),
 
     [
         {<<"id">>, SpaceId},

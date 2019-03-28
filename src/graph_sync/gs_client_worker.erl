@@ -139,7 +139,7 @@ invalidate_cache(#gri{type = Type, id = Id, aspect = instance}) ->
 %%--------------------------------------------------------------------
 -spec invalidate_cache(gs_protocol:entity_type(), gs_protocol:entity_id()) -> ok.
 invalidate_cache(Type, Id) ->
-    Type:delete(Id).
+    Type:invalidate_cache(Id).
 
 
 %%%===================================================================
@@ -479,7 +479,7 @@ cache_record(ConnRef, GRI = #gri{type = Type, aspect = instance, scope = Scope},
                 scope => Scope,
                 connection_ref => ConnRef
             },
-            Type:save(put_cache_state(CacheState, Doc)),
+            Type:save_to_cache(put_cache_state(CacheState, Doc)),
             ?debug("Cached ~s", [gs_protocol:gri_to_string(GRI)]),
             ok
     end;
@@ -490,7 +490,7 @@ cache_record(_ConnRef, _GRI, _Doc) ->
 
 -spec get_from_cache(gs_protocol:gri()) -> {true, doc()} | false.
 get_from_cache(#gri{type = Type, id = Id}) ->
-    case Type:get(Id) of
+    case Type:get_from_cache(Id) of
         {ok, Doc} ->
             {true, Doc};
         _ ->
