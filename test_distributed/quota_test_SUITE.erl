@@ -12,7 +12,7 @@
 -module(quota_test_SUITE).
 -author("Rafal Slota").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -570,11 +570,11 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     SpaceSize = available_size(SupportingProvider, SpaceId),
     RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     
-    {ok, {Conn, _}} = fuse_utils:connect_via_macaroon(P1, [{active, true}], SessId(P1)),
+    {ok, {Conn, _}} = fuse_test_utils:connect_via_macaroon(P1, [{active, true}], SessId(P1)),
     SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),
     rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId(P1)]),
 
-    {FileGuid, _FileHandleId} = fuse_utils:create_file(Conn, RootGuid, Filename),
+    {FileGuid, _FileHandleId} = fuse_test_utils:create_file(Conn, RootGuid, Filename),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId(P1), {guid, FileGuid}), ?ATTEMPTS),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), {guid, FileGuid}, 0, crypto:strong_rand_bytes(SpaceSize))),
@@ -795,7 +795,7 @@ list_ended_transfers(Worker, SpaceId) ->
     List.
 
 verify_message_received(Message) ->
-    case fuse_utils:receive_server_message([], timer:seconds(10)) of
+    case fuse_test_utils:receive_server_message([], timer:seconds(10)) of
         Message -> true;
         {error, timeout} -> false;
         _ -> verify_message_received(Message)

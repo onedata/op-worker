@@ -195,7 +195,7 @@ handle_cast(#client_message{} = Msg, State) ->
     {noreply, NewState};
 
 handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
-    case get_sequencer_out_stream(Msg#server_message{proxy_session_id = SessionId}, State) of
+    case get_sequencer_out_stream(Msg#server_message{effective_session_id = SessionId}, State) of
         {ok, SeqStm} -> sequencer_out_stream:send(SeqStm, Msg);
         {error, not_found} -> ok
     end,
@@ -279,7 +279,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec ensure_sent(Msg :: term(), SessId :: session:id()) -> ok.
 ensure_sent(Msg, SessId) ->
-    case communicator:send_to_client(Msg, SessId) of
+    case communicator:send_to_oneclient(SessId, Msg) of
         ok ->
             ok;
         {error, Reason} ->

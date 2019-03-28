@@ -11,7 +11,7 @@
 -module(file_deletion_test_SUITE).
 -author("Michal Wrona").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -329,15 +329,15 @@ remove_file_on_ceph_using_client(Config0) ->
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
 
-    {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker, [{active, true}], SessionId(Worker)),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker, [{active, true}], SessionId(Worker)),
 
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
 
-    ok = ssl:send(Sock, fuse_utils:generate_delete_file_message(Guid, <<"2">>)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_delete_file_message(Guid, <<"2">>)),
     ?assertMatch(#'ServerMessage'{message_body = {
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
-    }, message_id = <<"2">>}, fuse_utils:receive_server_message()),
+    }, message_id = <<"2">>}, fuse_test_utils:receive_server_message()),
 
     ?assertMatch({error, enoent}, lfm_proxy:ls(Worker, SessionId(Worker), {guid, Guid}, 0, 0), 60),
 

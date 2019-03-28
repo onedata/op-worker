@@ -202,7 +202,7 @@ stream_space_changes(Req, State) ->
 
     State6 = ?MODULE:init_stream(State5),
     Req6 = cowboy_req:stream_reply(
-        ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req5
+        ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req5
     ),
 
     ok = stream_loop(Req6, State6),

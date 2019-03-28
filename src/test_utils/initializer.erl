@@ -15,7 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
@@ -392,7 +392,7 @@ space_storage_mock(Workers, StorageId) ->
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
     catch test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send_to_client, fun(_, _) -> ok end).
+    test_utils:mock_expect(Workers, communicator, send_to_oneclient, fun(_, _) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @doc

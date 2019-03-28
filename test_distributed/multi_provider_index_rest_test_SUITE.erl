@@ -326,7 +326,7 @@ overwriting_index_should_fail(Config) ->
     end, Workers),
 
     % overwrite
-    ?assertMatch({?CONFLICT, _}, create_index_via_rest(
+    ?assertMatch({?HTTP_409_CONFLICT, _}, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
         ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
     )),

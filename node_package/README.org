@@ -37,6 +37,7 @@ application.
    binary
  - =DEPS_DIR= - (Default: deps) Sets the deps directory of the project, most
    projects uses 'deps'.  Change this if something different is used.
+ - =BUILD_VERSION= - (Default: "") The build version of your application.
 
 ** Package and Script Variables
 
