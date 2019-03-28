@@ -559,7 +559,7 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = protected}, _) ->
+is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
 
 % Provider can access shares of spaces that it supports

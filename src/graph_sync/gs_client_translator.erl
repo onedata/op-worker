@@ -212,7 +212,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         }
     };
 
-translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = protected}, Result) ->
+translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
         value = #od_harvester{

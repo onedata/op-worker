@@ -445,15 +445,15 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
 
 mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance}, Authorization, _) ->
     Authorized = case {Authorization, GRI#gri.scope} of
-        {undefined, protected} ->
+        {undefined, private} ->
             true;
-        {?USER_GS_MACAROON_AUTH(_), protected} ->
+        {?USER_GS_MACAROON_AUTH(_), _} ->
             false
     end,
     case Authorized of
         true ->
             Data = case GRI#gri.scope of
-                protected -> ?HARVESTER_PROTECTED_DATA_VALUE(SpaceId)
+                private -> ?HARVESTER_PRIVATE_DATA_VALUE(SpaceId)
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->

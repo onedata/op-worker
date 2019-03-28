@@ -328,7 +328,7 @@
 
 }}).
 
--define(HARVESTER_PROTECTED_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
+-define(HARVESTER_PRIVATE_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
     indices = ?HARVESTER_INDICES(__Harvester),
     spaces = ?HARVESTER_SPACES(__Harvester)
 }}).
@@ -468,8 +468,8 @@ end).
     }
 end).
 
--define(HARVESTER_PROTECTED_DATA_VALUE(__HarvesterId), #{
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = protected}),
+-define(HARVESTER_PRIVATE_DATA_VALUE(__HarvesterId), #{
+    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = private}),
     <<"indices">> => ?HARVESTER_INDICES(__HarvesterId),
     <<"spaces">> => ?HARVESTER_SPACES(__HarvesterId)
 }).

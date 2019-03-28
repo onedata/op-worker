@@ -51,7 +51,7 @@
 get(HarvesterId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
-        gri = #gri{type = od_harvester, id = HarvesterId, aspect = instance, scope = protected},
+        gri = #gri{type = od_harvester, id = HarvesterId, aspect = instance, scope = private},
         subscribe = true
     }).
 
