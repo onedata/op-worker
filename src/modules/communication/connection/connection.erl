@@ -789,8 +789,12 @@ send_response(#state{session_id = SessionId} = State, ServerMsg) ->
         {error, serialization_failed} ->
             {ok, State};
         Error ->
-            % Before reporting error and closing connection
-            % try to send msg via other connections
+            % Remove this connection from the connections pool and try to send
+            % msg via other connections of this session.
+            % Removal from pool is necessary to avoid deadlock when some other
+            % connection terminates as well and tries to send msg via this one
+            % while this one tries to send via the other one.
+            session_connections:remove_connection(SessionId, self()),
             connection_api:send(SessionId, ServerMsg, [self()]),
             Error
     end.
