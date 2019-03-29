@@ -35,6 +35,7 @@
 -export([support_space/2, support_space/3]).
 -export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
+-export([get_support_size/1]).
 -export([map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
 -export([set_domain/1, set_delegated_subdomain/1]).
@@ -312,6 +313,18 @@ supports_space(SessionId, ProviderId, SpaceId) ->
             supports_space(ProviderDoc, SpaceId);
         _ ->
             false
+    end.
+
+
+-spec get_support_size(od_space:id()) -> {ok, integer()} | gs_protocol:error().
+get_support_size(SpaceId) ->
+    case get(?ROOT_SESS_ID, ?SELF) of
+        {ok, #document{value = #od_provider{spaces = #{SpaceId := SupportSize}}}} ->
+            {ok, SupportSize};
+        {ok, #document{value = #od_provider{}}} ->
+            ?ERROR_NOT_FOUND;
+        {error, _} = Error ->
+            Error
     end.
 
 
