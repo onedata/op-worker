@@ -692,9 +692,9 @@
 %% Model that holds information about harvesting for given pair (HarvesterId, SpaceId)
 -record(harvest_stream_state, {
     % max processed sequence associated with custom_metadata document
-    max_metadata_seq = 0 :: couchbase_changes:seq(),
-    % maps that holds max processed sequence numbers for each harvesting index
-    sequences = #{} :: maps:map(od_harvester:index(), couchbase_changes:seq())
+    max_relevant_seq = 0 :: couchbase_changes:seq(),
+    % maps that holds max seen sequence numbers for each harvesting index
+    seen_seqs = #{} :: maps:map(od_harvester:index(), couchbase_changes:seq())
 }).
 
 -endif.

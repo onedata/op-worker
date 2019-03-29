@@ -1183,12 +1183,14 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     ok = test_utils:mock_new(Workers, harvester_logic),
     ok = test_utils:mock_expect(Workers, harvester_logic, get, fun(HarvesterId) ->
         Setup = proplists:get_value(HarvesterId, HarvestersSetup, []),
-        {ok, #document{
+        Doc = #document{
             key = HarvesterId,
             value = #od_harvester{
                 spaces = proplists:get_value(<<"spaces">>, Setup),
                 indices = proplists:get_value(<<"indices">>, Setup)
-        }}}
+        }},
+        od_harvester:save(Doc),
+        {ok, Doc}
     end).
 
 %%--------------------------------------------------------------------

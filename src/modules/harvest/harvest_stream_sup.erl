@@ -25,8 +25,6 @@
 
 -type child_id() :: supervisor:child_id().
 
--define(SERVER, ?HARVEST_STREAM_SUP).
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -39,19 +37,19 @@
 -spec(start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor:start_link({local, ?HARVEST_STREAM_SUP}, ?MODULE, []).
 
 -spec start_child(od_harvester:id(), od_space:id(), od_harvester:index()) -> ok.
 start_child(HarvesterId, SpaceId, IndexId) ->
-    {ok, _} = supervisor:start_child(?SERVER, child_spec(HarvesterId, SpaceId, IndexId)),
+    {ok, _} = supervisor:start_child(?HARVEST_STREAM_SUP, child_spec(HarvesterId, SpaceId, IndexId)),
     ok.
 
 -spec terminate_child(od_harvester:id(), od_space:id(), od_harvester:index()) ->
     ok | {error, term()}.
 terminate_child(HarvesterId, SpaceId, IndexId) ->
     ChildId = child_id(HarvesterId, SpaceId, IndexId),
-    ok = supervisor:terminate_child(?SERVER, ChildId),
-    ok = supervisor:delete_child(?SERVER, ChildId).
+    ok = supervisor:terminate_child(?HARVEST_STREAM_SUP, ChildId),
+    ok = supervisor:delete_child(?HARVEST_STREAM_SUP, ChildId).
 
 %%%===================================================================
 %%% Supervisor callbacks

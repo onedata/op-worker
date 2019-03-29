@@ -265,7 +265,9 @@ on_connection_to_oz() ->
     % cast is used as this function is called
     % in gs_client init and a call would cause a deadlock - updating
     % ips uses the graph sync connection.
-    gen_server2:cast(?NODE_MANAGER_NAME, update_subdomain_delegation_ips).
+    gen_server2:cast(?NODE_MANAGER_NAME, update_subdomain_delegation_ips),
+    % revise harvesters when connection to onezone is established
+    harvest_manager:revise_all_streams().
 
 
 %%--------------------------------------------------------------------

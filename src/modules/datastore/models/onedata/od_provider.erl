@@ -102,7 +102,7 @@ maybe_check_harvesters_streams(#document{
 }) ->
     case oneprovider:is_self(ProviderId) of
         true ->
-            harvest_manager:check_eff_harvesters_streams(EffHarvesters);
+            harvest_manager:revise_all_streams(EffHarvesters);
         false ->
             ok
     end.

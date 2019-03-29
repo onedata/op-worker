@@ -56,6 +56,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
+    ok = test_utils:mock_new(Nodes, harvest_manager, [history, passthrough]),
 
     GetProviderId = fun() ->
         ?DUMMY_PROVIDER_ID
@@ -74,6 +75,14 @@ mock_gs_client(Config) ->
         ok
     end),
     ok = test_utils:mock_expect(Nodes, provider_logic, assert_zone_compatibility, fun() ->
+        ok
+    end),
+
+    % harvest_manager requires connection to oz to fetch eff_harvesters
+    ok = test_utils:mock_expect(Nodes, harvest_manager, revise_all_streams, fun() ->
+        ok
+    end),
+    ok = test_utils:mock_expect(Nodes, harvest_manager, revise_all_streams, fun(_) ->
         ok
     end),
 
@@ -263,7 +272,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end;
 
-mock_graph_create(#gri{type = od_harvester, id = _, aspect = {create_entry, _}}, undefined, _Data) ->
+mock_graph_create(#gri{type = od_harvester, id = _, aspect = {submit_entry, _}}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}};
 mock_graph_create(#gri{type = od_harvester, id = _, aspect = {delete_entry, _}}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}}.

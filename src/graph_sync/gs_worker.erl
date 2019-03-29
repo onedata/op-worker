@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc

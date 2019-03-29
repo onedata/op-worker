@@ -219,11 +219,12 @@ update_harvest_streams_test_base(Config, HarvestersDescription) ->
     end, 0, HarvestersConfig),
 
     Harvesters = maps:keys(HarvestersConfig),
-    {ok, D = #document{value = OD}} = rpc:call(Node, provider_logic, get, [ProviderId]),
-    rpc:call(Node, od_provider, save, [D#document{
-        value = OD#od_provider{eff_harvesters = Harvesters}
-    }]),
-
+    {ok, DP = #document{value = ODP}} = get_provider_doc(Node, ProviderId),
+    save_provider_doc(Node, DP#document{value = ODP#od_provider{eff_harvesters = Harvesters}}),
+    lists:foreach(fun(HarvesterId) ->
+        % trigger od_harvester:save
+        _  = get_harvester_doc(Node, HarvesterId)
+    end, Harvesters),
     ?assertMatch(TotalIndicesNum, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS).
 
 %%%===================================================================
@@ -294,3 +295,12 @@ whereis(Node, Name) ->
 
 random_element(List) ->
     lists:nth(rand:uniform(length(List)), List).
+
+get_harvester_doc(Node, HarvesterId) ->
+    rpc:call(Node, harvester_logic, get, [HarvesterId]).
+
+get_provider_doc(Node, ProviderId) ->
+    rpc:call(Node, provider_logic, get, [ProviderId]).
+
+save_provider_doc(Node, Doc) ->
+    rpc:call(Node, od_provider, save, [Doc]).

@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
 %%% @copyright (C) 2019 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -39,7 +40,13 @@
 
 -type state() :: #state{}.
 
--define(MAX_NOT_PERSISTED_SEQ_GAP, 1000).
+% Below constant determines how often seen sequence number will be persisted
+% per given IndexId. Value 1000 says that seq will be persisted
+% when the difference between current and previously persisted seq will
+% be greater than 1000.
+% This value is not checked when seq is associated with custom_metadata
+% document. In such case, the seq is always persisted.
+-define(IGNORED_SEQ_REPORTING_FREQUENCY, 1000).
 
 % TODO VFS-5351 *backoff
 % TODO VFS-5352 * aggregate changes pushed to oz per harvester
@@ -74,7 +81,7 @@ init([HarvesterId, SpaceId, IndexId]) ->
     Callback = fun(Change) -> gen_server2:cast(Stream, {change, Change}) end,
     {ok, _} = couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, Since}, {until, infinity}], []
+        [{since, max(Since - 1, 0)}, {until, infinity}], []
     ),
     ?debug("Started harvest_stream: ~p", [{HarvesterId, SpaceId, IndexId}]),
     {ok, #state{
@@ -142,7 +149,7 @@ handle_info(Info, #state{} = State) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
+%% @doca
 %% This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
@@ -206,8 +213,9 @@ handle_change(State = #state{
     deleted = false
 }) when map_size(JSON) > 0 ->
     % todo currently errors are ignored, implement backoff VFS-5351
-    harvester_logic:submit_entry(HarvesterId, FileId, JSON, [IndexId], Seq, max_seq(Id)),
-    ok = harvest_stream_state:set_seq_and_maybe_bump_max_metadata_seq(Id, IndexId, Seq),
+    MaxRelevantSeq = harvest_stream_state:get_max_relevant_seq(Id),
+    harvester_logic:submit_entry(HarvesterId, FileId, JSON, [IndexId], Seq, max(Seq, MaxRelevantSeq)),
+    ok = harvest_stream_state:set_seq(Id, IndexId, Seq, relevant),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
     id = Id,
@@ -220,24 +228,28 @@ handle_change(State = #state{
     mutators = [ProviderId | _]
 }) ->
     % delete entry because one of the following happened:
-    %   * onedata_json key is missing
-    %   * onedata_json map is empty
+    %   * onedata_json key is missing in #custom_metadat.value map
     %   * custom_metadata document has_been deleted
     % todo currently errors are ignored, implement backoff VFS-5351
-    harvester_logic:delete_entry(HarvesterId, FileId, [IndexId], Seq, max_seq(Id)),
-    ok = harvest_stream_state:set_seq_and_maybe_bump_max_metadata_seq(Id, IndexId, Seq),
+    MaxRelevantSeq = harvest_stream_state:get_max_relevant_seq(Id),
+    harvester_logic:delete_entry(HarvesterId, FileId, [IndexId], Seq, max(Seq, MaxRelevantSeq)),
+    ok = harvest_stream_state:set_seq(Id, IndexId, Seq, relevant),
     State#state{last_persisted_seq = Seq};
 handle_change(State = #state{
     id = Id,
     index_id = IndexId,
     last_persisted_seq = LastSeq
 }, #document{seq = Seq})
-    when (Seq - LastSeq) > ?MAX_NOT_PERSISTED_SEQ_GAP ->
-    ok = harvest_stream_state:set_seq(Id, IndexId, Seq),
+    when (Seq - LastSeq) > ?IGNORED_SEQ_REPORTING_FREQUENCY ->
+    % Only sequence numbers associated with #custom_metadata{} are persisted
+    % in harvest_stream_state each time (previous clauses).
+    % Other seen sequence numbers are not persisted every time as it would
+    % overload the db, they are persisted once per batch.
+    % The last persisted seq is cached in #state.last_persisted_seq.
+    % If the gap between Seq and #state.last_persisted_seq is greater
+    % than the defined constant (?IGNORED_SEQ_REPORTING_FREQUENCY),
+    % the Seq is persisted.
+    ok = harvest_stream_state:set_seq(Id, IndexId, Seq, ignored),
     State#state{last_persisted_seq = Seq};
 handle_change(State, _Doc) ->
     State.
-
--spec max_seq(harvest_stream_state:id()) -> couchbase_changes:seq().
-max_seq(Id) ->
-    harvest_stream_state:get_max_metadata_seq(Id).

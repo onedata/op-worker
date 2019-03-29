@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
 %%% @copyright (C) 2019 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -24,27 +25,21 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([start_link/0, check_eff_harvesters_streams/1, check_harvester_streams/3]).
-
-%% exported for RPC
--export([check_eff_harvesters_streams_internal/1, check_harvester_streams_internal/3]).
+-export([start_link/0, revise_all_streams/0, revise_all_streams/1,
+    revise_streams_of_harvester/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 % exported for tests
--export([get_harvester/1]).
+-export([]).
 
 % requests
--define(CHECK_HARVESTER_STREAMS, check_harvester_streams).
--define(CHECK_HARVESTER_STREAMS(HarvesterId, Spaces, Indices),
-    {?CHECK_HARVESTER_STREAMS, HarvesterId, Spaces, Indices}).
--define(CHECK_EFF_HARVESTERS_STREAMS, check_eff_harvesters_streams).
--define(CHECK_EFF_HARVESTERS_STREAMS(EffHarvesters),
-    {?CHECK_EFF_HARVESTERS_STREAMS, EffHarvesters}).
-
--type state() :: #{od_harvester:id() => #{od_space:id() => sets:set(od_harvester:index())}}.
+-define(REVISE_STREAMS_OF_HARVESTER(HarvesterId, Spaces, Indices),
+    {revise_streams_of_harvester, HarvesterId, Spaces, Indices}).
+-define(REVISE_ALL_STREAMS(Harvesters),
+    {revise_all_streams, Harvesters}).
 
 % helper record that identifies single harvest_stream
 -record(harvest_stream, {
@@ -53,39 +48,35 @@
     index_id :: od_harvester:index()
 }).
 
+-type state() :: #{od_harvester:id() => #{od_space:id() => sets:set(#harvest_stream{})}}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 -spec start_link() -> {ok, pid()} | {error, Reason :: term()}.
 start_link() ->
-    gen_server:start_link({local, ?HARVEST_MANAGER}, ?MODULE, [], []).
+    gen_server2:start_link({local, ?HARVEST_MANAGER}, ?MODULE, [], []).
 
--spec check_eff_harvesters_streams([od_harvester:id()]) -> ok.
-check_eff_harvesters_streams(EffHarvesters) ->
+-spec revise_all_streams() -> ok.
+revise_all_streams() ->
+    {ok, Harvesters} = provider_logic:get_eff_harvesters(),
+    revise_all_streams(Harvesters).
+
+-spec revise_all_streams([od_harvester:id()]) -> ok.
+revise_all_streams(Harvesters) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
-    rpc:multicall(Nodes, ?MODULE, check_eff_harvesters_streams_internal, [EffHarvesters]),
+    gen_server2:abcast(Nodes, ?HARVEST_MANAGER,
+        ?REVISE_ALL_STREAMS(Harvesters)),
     ok.
 
--spec check_harvester_streams(od_harvester:id(), [od_space:id()],
+-spec revise_streams_of_harvester(od_harvester:id(), [od_space:id()],
     [od_harvester:index_id()]) -> ok.
-check_harvester_streams(HarvesterId, Spaces, Indices) ->
+revise_streams_of_harvester(HarvesterId, Spaces, Indices) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
-    rpc:multicall(Nodes, ?MODULE, check_harvester_streams_internal, [HarvesterId, Spaces, Indices]),
+    gen_server2:abcast(Nodes, ?HARVEST_MANAGER,
+        ?REVISE_STREAMS_OF_HARVESTER(HarvesterId, Spaces, Indices)),
     ok.
-
-%%%===================================================================
-%%% RPC
-%%%===================================================================
-
--spec check_eff_harvesters_streams_internal([od_harvester:id()]) -> ok.
-check_eff_harvesters_streams_internal(EffHarvesters) ->
-    gen_server:cast(?HARVEST_MANAGER, ?CHECK_EFF_HARVESTERS_STREAMS(EffHarvesters)).
-
--spec check_harvester_streams_internal(od_harvester:id(), [od_space:id()],
-    [od_harvester:index_id()]) -> ok.
-check_harvester_streams_internal(HarvesterId, Spaces, Indices) ->
-    gen_server:cast(?HARVEST_MANAGER, ?CHECK_HARVESTER_STREAMS(HarvesterId, Spaces, Indices)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -119,10 +110,10 @@ handle_call(Request, _From, State) ->
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: state()) ->
     {noreply, NewState :: state()}.
-handle_cast(?CHECK_EFF_HARVESTERS_STREAMS(EffHarvesters), State) ->
-    {noreply, check_eff_harvesters_streams(EffHarvesters, State)};
-handle_cast(?CHECK_HARVESTER_STREAMS(HarvesterId, Spaces, Indices), State) ->
-    State2 = check_harvester_streams(HarvesterId, Spaces, Indices, State),
+handle_cast(?REVISE_ALL_STREAMS(Harvesters), State) ->
+    {noreply, revise_all_streams(Harvesters, State)};
+handle_cast(?REVISE_STREAMS_OF_HARVESTER(HarvesterId, Spaces, Indices), State) ->
+    State2 = revise_streams_of_harvester(HarvesterId, Spaces, Indices, State),
     {noreply, State2};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -172,49 +163,46 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function checks currently started harvest_streams according to
-%% passed CurrentEffHarvesters list. It compares the CurrentEffHarvesters
+%% This function revises currently started harvest_streams according to
+%% passed CurrentHarvesters list. It compares the CurrentHarvesters
 %% list to PreviousHarvesters. For each harvester missing in current list
 %% its streams are stopped.
-%% For each current effective harvester, it's document is fetched
-%% to trigger call to od_harvester:save and posthook that module.
-%% That posthook is responsible for notifying harvest_manager about
-%% changes in harvesters' records.
+%% For each current harvester, it's document is fetched to revise
+%% its streams.
 %% @end
 %%-------------------------------------------------------------------
--spec check_eff_harvesters_streams([od_harvester:id()], state()) -> state().
-check_eff_harvesters_streams(CurrentEffHarvesters, State) ->
+-spec revise_all_streams([od_harvester:id()], state()) -> state().
+revise_all_streams(CurrentHarvesters, State) ->
     PreviousHarvesters = maps:keys(State),
-    DeletedHarvesters = PreviousHarvesters -- CurrentEffHarvesters,
+    DeletedHarvesters = PreviousHarvesters -- CurrentHarvesters,
+    NewHarvesters = CurrentHarvesters -- PreviousHarvesters,
 
     State2 = lists:foldl(fun(HarvesterId, StateIn) ->
-        stop_harvester_streams(HarvesterId, StateIn)
+        stop_streams_of_harvester(HarvesterId, StateIn)
     end, State, DeletedHarvesters),
 
     lists:foreach(fun(HarvesterId) ->
-        % trigger call to od_harvester:save function
-        ?MODULE:get_harvester(HarvesterId)
-    end, CurrentEffHarvesters),
+        {ok, HarvesterDoc} = harvester_logic:get(HarvesterId),
+        {ok, Indices} = harvester_logic:get_indices(HarvesterDoc),
+        {ok, Spaces} = harvester_logic:get_spaces(HarvesterDoc),
+        revise_streams_of_harvester(HarvesterId, Spaces, Indices)
+    end, NewHarvesters),
     State2.
 
 
--spec get_harvester(od_harvester:id()) -> {ok, od_harvester:doc()} | {error, term()}.
-get_harvester(HarvesterId) ->
-    harvester_logic:get(HarvesterId).
-
 %%-------------------------------------------------------------------
 %% @private
-%% @equiv check_harvester_streams(HarvesterId, [], [], State).
+%% @equiv revise_streams_of_harvester(HarvesterId, [], [], State).
 %% @end
 %%-------------------------------------------------------------------
--spec stop_harvester_streams(od_harvester:id(), state()) -> state().
-stop_harvester_streams(HarvesterId, State) ->
-    check_harvester_streams(HarvesterId, [], [], State).
+-spec stop_streams_of_harvester(od_harvester:id(), state()) -> state().
+stop_streams_of_harvester(HarvesterId, State) ->
+    revise_streams_of_harvester(HarvesterId, [], [], State).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function checks currently started harvest_streams for given
+%% This function revises currently started harvest_streams for given
 %% HarvesterId, according to passed CurrentSpaces and CurrentIndices parameters.
 %% It checks which streams should be handled on given node and
 %% compares set of PreviousStreams with set of LocalCurrentStreams.
@@ -222,9 +210,9 @@ stop_harvester_streams(HarvesterId, State) ->
 %% streams that appeared in the CurrentStreams are started.
 %% @end
 %%-------------------------------------------------------------------
--spec check_harvester_streams(od_harvester:id(), [od_space:id()],
+-spec revise_streams_of_harvester(od_harvester:id(), [od_space:id()],
     [od_harvester:index()], state()) -> state().
-check_harvester_streams(HarvesterId, CurrentSpaces, CurrentIndices, State) ->
+revise_streams_of_harvester(HarvesterId, CurrentSpaces, CurrentIndices, State) ->
     PreviousStreams = maps:get(HarvesterId, State, sets:new()),
     CurrentStreamsList = generate_streams(HarvesterId, CurrentSpaces, CurrentIndices),
     LocalCurrentStreams = sets:from_list(filter_streams_to_be_handled_locally(CurrentStreamsList)),
@@ -240,7 +228,7 @@ check_harvester_streams(HarvesterId, CurrentSpaces, CurrentIndices, State) ->
 
 -spec filter_streams_to_be_handled_locally([#harvest_stream{}]) -> [#harvest_stream{}].
 filter_streams_to_be_handled_locally(HarvestStreams) ->
-    lists:filter(fun(HS) -> should_be_handled_locally(HS) end, HarvestStreams).
+    lists:filter(fun should_be_handled_locally/1, HarvestStreams).
 
 -spec should_be_handled_locally(#harvest_stream{}) -> boolean().
 should_be_handled_locally(#harvest_stream{
@@ -266,18 +254,15 @@ start_stream(#harvest_stream{
 }) ->
     harvest_stream_sup:start_child(HarvesterId, SpaceId, IndexId).
 
--spec harvest_stream(od_harvester:id(), od_space:id(), od_harvester:index()) ->
-    #harvest_stream{}.
-harvest_stream(HarvesterId, SpaceId, IndexId) ->
-    #harvest_stream{
-        harvester_id = HarvesterId,
-        space_id = SpaceId,
-        index_id = IndexId
-    }.
-
 -spec generate_streams(od_harvester:id(), [od_space:id()], [od_harvester:index()]) ->
     [#harvest_stream{}].
 generate_streams(HarvesterId, Spaces, Indices) ->
     lists:flatmap(fun(SpaceId) ->
-        [harvest_stream(HarvesterId, SpaceId, IndexId) || IndexId <- Indices]
+        lists:map(fun(IndexId) ->
+            #harvest_stream{
+                harvester_id = HarvesterId,
+                space_id = SpaceId,
+                index_id = IndexId
+            }
+        end, Indices)
     end, Spaces).

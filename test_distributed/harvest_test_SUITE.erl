@@ -469,7 +469,6 @@ init_per_testcase(default, Config) ->
     Workers = ?config(op_worker_nodes, Config2),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"), Config2),
-    mock_get_harvester(Workers),
     lists:foreach(fun(W) ->
         {ok, D} = rpc:call(W, provider_logic, get, [?PROVIDER_ID(W)]),
         % trigger od_provider posthooks
@@ -494,18 +493,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-mock_get_harvester(Nodes) ->
-    ok = test_utils:mock_new(Nodes, harvest_manager),
-    ok = test_utils:mock_expect(Nodes, harvest_manager, get_harvester, fun(HarvesterId) ->
-        case harvester_logic:get(HarvesterId) of
-            {ok, Doc} ->
-                od_harvester:save(Doc),
-                {ok, Doc};
-            Other ->
-                Other
-        end
-    end).
 
 mock_harvester_logic_submit_entry(Node) ->
     Self = self(),

@@ -87,7 +87,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
 run_after(save, _, {ok, HarvesterDoc = #document{}}) ->
-    start_streams(HarvesterDoc);
+    revise_streams_of_harvester(HarvesterDoc);
 run_after(_Function, _Args, Result) ->
     Result.
 
@@ -95,14 +95,14 @@ run_after(_Function, _Args, Result) ->
 %%% Internal functions
 %%%===================================================================
 
--spec start_streams(doc()) -> ok.
-start_streams(#document{
+-spec revise_streams_of_harvester(doc()) -> ok.
+revise_streams_of_harvester(#document{
     key = HarvesterId,
     value = #od_harvester{
         spaces = Spaces,
         indices = Indices
 }}) ->
-    harvest_manager:check_harvester_streams(HarvesterId, Spaces, Indices).
+    harvest_manager:revise_streams_of_harvester(HarvesterId, Spaces, Indices).
 
 %%%===================================================================
 %%% datastore_model callbacks
