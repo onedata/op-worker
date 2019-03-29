@@ -129,7 +129,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/1]).
 -export([delegate_and_supervise/4]).
 
 %% gen_server callbacks
@@ -175,14 +175,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server and optionally sets keepalive timeout (it should
-%% be done only for provider_outgoing sessions).
+%% Starts the async_request_manager server for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), EnableKeepalive :: boolean()) ->
-    {ok, pid()} | ignore | error().
-start_link(SessId, EnableKeepalive) ->
-    gen_server:start_link(?MODULE, [SessId, EnableKeepalive], []).
+-spec start_link(session:id()) -> {ok, pid()} | ignore | error().
+start_link(SessionId) ->
+    gen_server:start_link(?MODULE, [SessionId], []).
 
 
 %%--------------------------------------------------------------------
@@ -221,10 +219,9 @@ delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
 -spec init(Args :: term()) ->
     {ok, state()} | {ok, state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, EnableKeepalive]) ->
+init([SessionId]) ->
     process_flag(trap_exit, true),
     ok = session_connections:set_async_request_manager(SessionId, self()),
-    EnableKeepalive andalso schedule_keepalive_msg(),
     {ok, #state{session_id = SessionId}}.
 
 
@@ -332,20 +329,6 @@ handle_info(heartbeat, #state{
             State#state{heartbeat_timer = undefined}
     end,
     {noreply, schedule_workers_status_checkup(NewState)};
-handle_info(keepalive, #state{session_id = SessionId} = State) ->
-    case session_connections:get_connections(SessionId) of
-        {ok, Cons} ->
-            lists:foreach(fun(Conn) -> 
-                connection:send_keepalive(Conn) 
-            end, Cons);
-        Error ->
-            ?error("Async request manager for session ~p failed to send "
-                   "keepalives due to: ~p", [
-                SessionId, Error
-            ])
-    end,
-    schedule_keepalive_msg(),
-    {noreply, State};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -557,9 +540,3 @@ schedule_workers_status_checkup(#state{heartbeat_timer = undefined} = State) ->
     )};
 schedule_workers_status_checkup(State) ->
     State.
-
-
-%% @private
--spec schedule_keepalive_msg() -> TimerRef :: reference().
-schedule_keepalive_msg() ->
-    erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive).
