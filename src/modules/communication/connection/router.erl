@@ -27,6 +27,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
+-export([build_rib/1]).
 -export([effective_session_id/1]).
 -export([route_message/2]).
 
@@ -34,9 +35,37 @@
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
 
+-record(rib, {
+    % Used when sending responses to delegated requests. This field is set
+    % only for incoming connection. As for outgoing one it is left as
+    % undefined (outgoing connection does not have async req manager).
+    reply_to = undefined :: undefined | async_request_manager:reply_to()
+}).
+
+-type rib() ::#rib{}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds RIB (Routing Information Base) - structure containing necessary
+%% info like where to send responses to delegated requests or to which
+%% sequencer manager forward stream messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_rib(session:id()) -> rib().
+build_rib(SessionId) ->
+    ReplyTo = case session_connections:get_async_req_manager(SessionId) of
+        {ok, AsyncReqManager} ->
+            {self(), AsyncReqManager, SessionId};
+        {error, no_async_req_manager} ->
+            undefined
+    end,
+
+    #rib{reply_to = ReplyTo}.
 
 
 %%--------------------------------------------------------------------
@@ -60,7 +89,7 @@ effective_session_id(#client_message{effective_session_id = EffSessionId}) ->
 %% otherwise routes it directly
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(message(), async_request_manager:reply_to()) ->
+-spec route_message(message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_message(Msg, ReplyTo) ->
     case stream_router:is_stream_message(Msg) of
@@ -84,7 +113,7 @@ route_message(Msg, ReplyTo) ->
 %% Route message to adequate handler, this function should never throw
 %% @end
 %%--------------------------------------------------------------------
--spec route_direct_message(message(), async_request_manager:reply_to()) ->
+-spec route_direct_message(message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_direct_message(#client_message{message_id = undefined} = Msg, _) ->
     route_and_ignore_answer(Msg);
@@ -220,49 +249,49 @@ answer_or_delegate(Msg = #client_message{
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = #get_configuration{}
-}, ReplyTo) ->
+}, RIB) ->
     delegate_request(proc, fun() ->
         storage_req:get_configuration(effective_session_id(Msg))
-    end, MsgId, ReplyTo);
+    end, MsgId, RIB);
 
 answer_or_delegate(#client_message{
     message_id = MsgId,
     message_body = Request = #get_remote_document{}
-}, ReplyTo) ->
+}, RIB) ->
     delegate_request(proc, fun() ->
         datastore_remote_driver:handle(Request)
-    end, MsgId, ReplyTo);
+    end, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = FuseRequest = #fuse_request{}
-}, ReplyTo) ->
+}, RIB) ->
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    delegate_request(fslogic_worker, Req, MsgId, ReplyTo);
+    delegate_request(fslogic_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = ProviderRequest = #provider_request{}
-}, ReplyTo) ->
+}, RIB) ->
     Req = {provider_request, effective_session_id(Msg), ProviderRequest},
-    delegate_request(fslogic_worker, Req, MsgId, ReplyTo);
+    delegate_request(fslogic_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
-}, ReplyTo) ->
+}, RIB) ->
     Node = read_write_req:get_proxyio_node(fslogic_uuid:guid_to_uuid(FileGuid)),
     Req = {proxyio_request, effective_session_id(Msg), ProxyIORequest},
-    delegate_request({fslogic_worker, Node}, Req, Id, ReplyTo);
+    delegate_request({fslogic_worker, Node}, Req, Id, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = #dbsync_request{} = DBSyncRequest
-}, ReplyTo) ->
+}, RIB) ->
     Req = {dbsync_request, effective_session_id(Msg), DBSyncRequest},
-    delegate_request(dbsync_worker, Req, MsgId, ReplyTo);
+    delegate_request(dbsync_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg, _) ->
     event_router:route_message(Msg).
@@ -270,9 +299,8 @@ answer_or_delegate(Msg, _) ->
 
 %% @private
 -spec delegate_request(async_request_manager:worker_ref(), Req :: term(),
-    clproto_message_id:id(), async_request_manager:reply_to()) ->
-    ok | {ok, server_message()}.
-delegate_request(WorkerRef, Req, MsgId, ReplyTo) ->
+    clproto_message_id:id(), rib()) -> ok | {ok, server_message()}.
+delegate_request(WorkerRef, Req, MsgId, RIB) ->
     async_request_manager:delegate_and_supervise(
-        WorkerRef, Req, MsgId, ReplyTo
+        WorkerRef, Req, MsgId, RIB#rib.reply_to
     ).

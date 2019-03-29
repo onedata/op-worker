@@ -164,24 +164,9 @@ ensure_connected(SessId) ->
                     ok
             end,
 
-            {ok, Domain} = provider_logic:get_domain(ProviderId),
-            {ok, Hosts} = provider_logic:get_nodes(ProviderId),
-            lists:foreach(fun(Host) ->
-                Port = https_listener:port(),
-                critical_section:run([?MODULE, ProviderId, SessId], fun() ->
-                    % check once more to prevent races
-                    case get_random_connection(SessId) of
-                        {error, _} ->
-                            connection:connect_to_provider(
-                                    ProviderId, SessId, Domain, Host, Port,
-                                    ranch_ssl, timer:seconds(5)
-                                );
-                            _ ->
-                                ensure_connected(SessId)
-                        end
-                    end)
-                end, Hosts),
-            ok;
+            session_manager:reuse_or_create_session(SessId, provider_outgoing, #user_identity{
+                provider_id = session_utils:session_id_to_provider_id(SessId)
+            }, undefined, []);
         {ok, Pid} ->
             case utils:process_info(Pid, initial_call) of
                 undefined ->

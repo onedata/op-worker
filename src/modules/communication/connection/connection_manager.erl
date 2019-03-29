@@ -29,8 +29,20 @@
     terminate/2, code_change/3
 ]).
 
+% Definitions of renewal intervals for provider connections.
+-define(INITIAL_RENEWAL_INTERVAL, timer:seconds(2)).
+-define(RENEWAL_INTERVAL_INCREASE_RATE, 2).
+-define(MAX_RENEWAL_INTERVAL, timer:minutes(15)).
+
+-define(RENEW_CONNECTIONS_REQ, renew_connections).
+
 -record(state, {
-    session_id :: session:id()
+    session_id :: session:id(),
+    peer_id :: od_provider:id(),
+    connections = #{} :: #{reference() => {binary(), pid()}},
+
+    renewal_timer = undefined :: undefined | reference(),
+    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer()
 }).
 
 -type state() :: #state{}.
@@ -68,8 +80,13 @@ start_link(SessId) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId]) ->
     process_flag(trap_exit, true),
+    self() ! ?RENEW_CONNECTIONS_REQ,
     schedule_keepalive_msg(),
-    {ok, #state{session_id = SessionId}}.
+
+    {ok, #state{
+        session_id = SessionId,
+        peer_id = session_utils:session_id_to_provider_id(SessionId)
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -115,6 +132,8 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_info(?RENEW_CONNECTIONS_REQ, State) ->
+    {noreply, renew_connections(State#state{renewal_timer = undefined})};
 handle_info(keepalive, #state{session_id = SessionId} = State) ->
     case session_connections:get_connections(SessionId) of
         {ok, Cons} ->
@@ -164,6 +183,68 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% TODO WRITEME
+%% @end
+%%--------------------------------------------------------------------
+-spec renew_connections(state()) -> state().
+renew_connections(#state{renewal_timer = undefined} = State0) ->
+    try
+        State1 = renew_connections_insecure(State0),
+        State1#state{renewal_interval = ?INITIAL_RENEWAL_INTERVAL}
+    catch
+        Type:Reason ->
+            State2 = #state{
+                peer_id = ProviderId,
+                renewal_interval = NextRenewalInterval
+            } = schedule_next_renewal(State0),
+
+            ?warning("Failed to renew connections to peer provider(~p) "
+                     "due to ~p:~p. Next retry not sooner than ~p ms.", [
+                ProviderId, Type, Reason, NextRenewalInterval
+            ]),
+            State2
+    end;
+renew_connections(State) ->
+    State.
+
+
+%% @private
+-spec renew_connections_insecure(state()) -> state().
+renew_connections_insecure(#state{
+    session_id = SessionId,
+    peer_id = ProviderId
+} = State) ->
+    {ok, Domain} = provider_logic:get_domain(ProviderId),
+    {ok, Hosts} = provider_logic:get_nodes(ProviderId),
+
+    lists:foreach(fun(Host) ->
+        Port = https_listener:port(),
+        {ok, _} = connection:connect_to_provider(
+            ProviderId, SessionId, Domain, Host, Port,
+            ranch_ssl, timer:seconds(5)
+        )
+    end, Hosts),
+
+    State.
+
+
+%% @private
+-spec schedule_next_renewal(state()) -> state().
+schedule_next_renewal(#state{renewal_interval = Interval} = State) ->
+    TimerRef = erlang:send_after(Interval, self(), ?RENEW_CONNECTIONS_REQ),
+    NextRenewalInterval = min(
+        Interval * ?RENEWAL_INTERVAL_INCREASE_RATE,
+        ?MAX_RENEWAL_INTERVAL
+    ),
+    State#state{
+        renewal_timer = TimerRef,
+        renewal_interval = NextRenewalInterval
+    }.
 
 
 %% @private

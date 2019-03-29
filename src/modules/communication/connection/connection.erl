@@ -112,9 +112,8 @@
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
     verify_msg = true :: boolean(),
 
-    % info used when replying to delegated requests
-    % (used by async_request_manager)
-    reply_to = undefined :: undefined | async_request_manager:reply_to()
+    % routing information base - structure necessary for routing.
+    rib :: router:rib()
 }).
 
 -type state() :: #state{}.
@@ -587,7 +586,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
             provider_id = session_utils:session_id_to_provider_id(SessionId)
         }, self()
     ),
-    {ok, ReqManager} = session_connections:get_async_req_manager(SessionId),
 
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{
@@ -602,7 +600,7 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
         session_id = SessionId,
         peer_id = ProviderId,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG,
-        reply_to = {self(), ReqManager, SessionId}
+        rib = router:build_rib(SessionId)
     },
     activate_socket(State, true),
 
@@ -661,12 +659,11 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
         {PeerId, SessionId} = connection_auth:handle_handshake(
             Msg#client_message.message_body, IpAddress
         ),
-        {ok, ReqManager} = session_connections:get_async_req_manager(SessionId),
 
         NewState = State#state{
             peer_id = PeerId,
             session_id = SessionId,
-            reply_to = {self(), ReqManager, SessionId}
+            rib = router:build_rib(SessionId)
         },
         send_server_message(NewState, #server_message{
             message_body = #handshake_response{status = 'OK'}
@@ -765,8 +762,8 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 
 %% @private
 -spec route_message(state(), message()) -> {ok, state()} | error().
-route_message(#state{reply_to = ReplyTo} = State, Msg) ->
-    case router:route_message(Msg, ReplyTo) of
+route_message(#state{rib = RIB} = State, Msg) ->
+    case router:route_message(Msg, RIB) of
         ok ->
             {ok, State};
         {ok, ServerMsg} ->
