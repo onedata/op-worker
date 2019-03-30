@@ -613,22 +613,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    %% Setup storage
-    lists:foreach(fun({SpaceId, _}) ->
-        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
-    end, SpacesSetup),
-    lists:foreach(fun({SpaceId, SpaceConfig}) ->
-        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
-        lists:foreach(fun({PID, ProviderConfig}) ->
-            Domain = proplists:get_value(PID, DomainMappings),
-            case get_same_domain_workers(Config, Domain) of
-                [Worker | _] ->
-                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
-                _ -> ok
-            end
-        end, Providers0)
-    end, SpacesSetup),
-
     Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
         DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
         {SpaceId, DisplayName}
@@ -700,7 +684,23 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders),
+
+    %% Setup storage
+    lists:foreach(fun({SpaceId, _}) ->
+        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
+    end, SpacesSetup),
+    lists:foreach(fun({SpaceId, SpaceConfig}) ->
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        lists:foreach(fun({PID, ProviderConfig}) ->
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
+                _ -> ok
+            end
+        end, Providers0)
+    end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
@@ -971,11 +971,6 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
         {ok, maps:keys(Providers)}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, get_providers_supports, fun(Client, SpaceId) ->
-        {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(Client, SpaceId),
-        {ok, Providers}
-    end),
-
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(Client, SpaceId, UserId, Privilege) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(Client, SpaceId),
         lists:member(Privilege, maps:get(UserId, EffUsers, []))
@@ -994,8 +989,9 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
+    proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -1017,7 +1013,13 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
-                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
+                    spaces = maps:from_list(lists:map(fun(SpaceId) ->
+                        ProvidersSupp = proplists:get_value(
+                            SpaceId, SpacesToProviders,
+                            maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])
+                        ),
+                        {SpaceId, maps:get(PID, ProvidersSupp)}
+                    end, Spaces)),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}
@@ -1048,17 +1050,26 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end
     end,
 
+    GetSupportsFun = fun(?ROOT_SESS_ID, PID) ->
+        {ok, #document{value = #od_provider{spaces = Supports}}} = GetProviderFun(?ROOT_SESS_ID, PID),
+        {ok, Supports}
+    end,
+
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
-        {ok, #document{value = #od_provider{spaces = Spaces}}} = GetProviderFun(?ROOT_SESS_ID, PID),
-        {ok, maps:keys(Spaces)}
+        {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
+        {ok, maps:keys(Supports)}
     end,
 
     SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
-        case maps:get(ProviderId, ProvMap, undefined) of
-            undefined ->
-                false;
-            Spaces ->
-                lists:member(SpaceId, Spaces)
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
+        lists:member(SpaceId, Spaces)
+    end,
+
+    GetSupportSizeFun = fun(?ROOT_SESS_ID, PID, SpaceId) ->
+        {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
+        case maps:find(SpaceId, Supports) of
+            {ok, Support} -> {ok, Support};
+            error -> {error, not_found}
         end
     end,
 
@@ -1141,6 +1152,12 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         SupportsSpaceFun
     ),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_support_size,
+        fun(SpaceId) ->
+            GetSupportSizeFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
+        end),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,

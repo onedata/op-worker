@@ -69,26 +69,18 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
             {ok, [{<<"fileUrl">>, URL}]};
         {ok, false} ->
             gui_error:report_error(<<"Permission denied">>);
-        _ ->
-            gui_error:internal_server_error()
+        {error, ?ENOENT} ->
+            gui_error:report_error(<<"File does not exist or was deleted - try refreshing the page.">>);
+        Error ->
+            ?debug("Cannot resolve file download url for file ~p - ~p", [FileId, Error]),
+            gui_error:report_error(<<"Cannot resolve file download url - try refreshing the page.">>)
     end;
 
 % Checks if file that is displayed in shares view can be downloaded
 % (i.e. can be read by the user) and if so, returns download URL.
 handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
     {_, FileId} = op_gui_utils:association_to_ids(AssocId),
-    SessionId = gui_session:get_session_id(),
-    case logical_file_manager:check_perms(SessionId, {guid, FileId}, read) of
-        {ok, true} ->
-            Hostname = gui_ctx:get_requested_hostname(),
-            URL = str_utils:format_bin("https://~s/download/~s",
-                [Hostname, FileId]),
-            {ok, [{<<"fileUrl">>, URL}]};
-        {ok, false} ->
-            gui_error:report_error(<<"Permission denied">>);
-        _ ->
-            gui_error:internal_server_error()
-    end;
+    handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]);
 
 %%--------------------------------------------------------------------
 %% File manipulation procedures
