@@ -334,12 +334,6 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(
-        {ok, ?SPACE_PROVIDERS_MATCHER(?SPACE_1)},
-        rpc:call(Node, space_logic, get_providers_supports, [User1Sess, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % Eff users are within private scope
     ?assertMatch(
         true,
