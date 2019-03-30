@@ -14,10 +14,11 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include("proto/common/credentials.hrl").
 
 %% API
 -export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
@@ -103,9 +104,8 @@ remove_transfers(Config) ->
     end, Workers).
 
 get_space_support(Node, SpaceId) ->
-    ProviderId = transfers_test_utils:provider_id(Node),
-    {ok, Supports} = rpc:call(Node, space_logic, get_providers_supports, [<<"0">>, SpaceId]),
-    maps:get(ProviderId, Supports, 0).
+    {ok, SupportSize} = rpc:call(Node, provider_logic, get_support_size, [SpaceId]),
+    SupportSize.
 
 mock_space_occupancy(Node, SpaceId, MockedSize) ->
     CurrentSize = rpc:call(Node, space_quota, current_size, [SpaceId]),
@@ -130,7 +130,7 @@ root_name(FunctionName, Type, FileKeyType, RandomSufix) ->
     FileKeyTypeBin = str_utils:to_binary(FileKeyType),
     FunctionNameBin = str_utils:to_binary(FunctionName),
     SuffixBin = str_utils:to_binary(RandomSufix),
-    <<FunctionNameBin/binary, "_", TypeBin/binary, "_" , FileKeyTypeBin/binary, "_", SuffixBin/binary>>.
+    <<FunctionNameBin/binary, "_", TypeBin/binary, "_", FileKeyTypeBin/binary, "_", SuffixBin/binary>>.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -216,16 +216,16 @@ random_index_name(FunctionName) ->
 
 test_map_function(XattrName) ->
     <<"function (id, type, meta, ctx) {
-        if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
-            return [meta['", XattrName/binary,"'], id];
+        if(type == 'custom_metadata' && meta['", XattrName/binary, "']) {
+            return [meta['", XattrName/binary, "'], id];
         }
         return null;
     }">>.
 
 test_map_function(XattrName, XattrName2) ->
     <<"function (id, type, meta, ctx) {
-        if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
-            return [meta['", XattrName/binary,"'], [id, meta['", XattrName2/binary, "']]];
+        if(type == 'custom_metadata' && meta['", XattrName/binary, "']) {
+            return [meta['", XattrName/binary, "'], [id, meta['", XattrName2/binary, "']]];
         }
         return null;
     }">>.
@@ -235,7 +235,7 @@ test_reduce_function(XattrValue) ->
     <<"function (key, values, rereduce) {
         var filtered = [];
         for(i = 0; i < values.length; i++)
-            if(values[i][1] == ", XattrValueBin/binary ,")
+            if(values[i][1] == ", XattrValueBin/binary, ")
                 filtered.push(values[i][0]);
         return filtered;
     }">>.

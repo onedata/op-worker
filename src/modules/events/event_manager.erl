@@ -283,11 +283,14 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
             ProviderId;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {ok, ProviderIds} = space_logic:get_provider_ids(SessId, SpaceId),
-            case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
-                {_, true} -> ProviderId;
-                {[RemoteProviderId | _], _} -> RemoteProviderId;
-                {[], _} -> throw(unsupported_space)
+            case provider_logic:supports_space(SpaceId) of
+                true ->
+                    ProviderId;
+                false ->
+                    case space_logic:get_provider_ids(SessId, SpaceId) of
+                        {ok, []} -> throw(unsupported_space);
+                        {ok, [RemoteProviderId | _]} -> RemoteProviderId
+                    end
             end
     end.
 
