@@ -613,22 +613,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    %% Setup storage
-    lists:foreach(fun({SpaceId, _}) ->
-        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
-    end, SpacesSetup),
-    lists:foreach(fun({SpaceId, SpaceConfig}) ->
-        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
-        lists:foreach(fun({PID, ProviderConfig}) ->
-            Domain = proplists:get_value(PID, DomainMappings),
-            case get_same_domain_workers(Config, Domain) of
-                [Worker | _] ->
-                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
-                _ -> ok
-            end
-        end, Providers0)
-    end, SpacesSetup),
-
     Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
         DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
         {SpaceId, DisplayName}
@@ -701,6 +685,22 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders),
+
+    %% Setup storage
+    lists:foreach(fun({SpaceId, _}) ->
+        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
+    end, SpacesSetup),
+    lists:foreach(fun({SpaceId, SpaceConfig}) ->
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        lists:foreach(fun({PID, ProviderConfig}) ->
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
+                _ -> ok
+            end
+        end, Providers0)
+    end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
@@ -990,7 +990,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
-provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders) ->
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     test_utils:mock_new(AllWorkers, provider_logic),
 
