@@ -9,6 +9,19 @@
 %%% Interface for reading and manipulating od_harvester records synchronized
 %%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
 %%% if they should be served from cache or handled by Onezone.
+%%% Harvester record is associated with an  external entity that is responsible
+%%% for collecting and processing files' JSON metadata.
+%%% Harvester can collect metadata from many spaces.
+%%% Harvester can handle many different JSON schemas, in such case, many indices
+%%% should be declared, each associated with separate schema.
+%%% Harvesting progress is tracked per triple {HarvesterId, SpaceId, IndexId}
+%%% which allows to dynamically add/delete indices.
+%%% All metadata changes from given spaces are submitted to all indices,
+%%% it is harvester's responsibility to accept/reject suitable schemas.
+%%% harvest_stream processes are responsible for pushing metadata per
+%%% triple {HarvesterId, SpaceId, IndexId}
+%%% harvest_manager process is started on each node to manage harvest_streams
+%%% processes.
 %%% NOTE: This is the only valid way to interact with od_harvester records, to
 %%% ensure consistency, no direct requests to datastore or OZ REST should
 %%% be performed.

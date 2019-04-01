@@ -7,7 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for receiving changes from changes stream and
-%%% processing them. One instance is started per pair {space, harvester}.
+%%% processing them. One instance is started per triple
+%%% {HarvesterId, SpaceId, IndexId}.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvest_stream).
@@ -81,7 +82,7 @@ init([HarvesterId, SpaceId, IndexId]) ->
     Callback = fun(Change) -> gen_server2:cast(Stream, {change, Change}) end,
     {ok, _} = couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, max(Since - 1, 0)}, {until, infinity}], []
+        [{since, Since + 1}, {until, infinity}], []
     ),
     ?debug("Started harvest_stream: ~p", [{HarvesterId, SpaceId, IndexId}]),
     {ok, #state{

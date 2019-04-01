@@ -238,22 +238,22 @@ upgrade_record(2, Provider) ->
         #{}
     } = Provider,
     #{host := Domain} = url_utils:parse(hd(Urls)),
-    {3, #od_provider{
-        name = Name,
-        admin_email = undefined,
-        subdomain_delegation = false,
-        domain = Domain,
-        subdomain = undefined,
-        latitude = 0.0,
-        longitude = 0.0,
-        online = false,
+    {3, {od_provider,
+        Name,
+        undefined,
+        false,
+        Domain,
+        undefined,
+        0.0,
+        0.0,
+        false,
 
-        spaces = #{},
+        #{},
 
-        eff_users = [],
-        eff_groups = [],
+        [],
+        [],
 
-        cache_state = #{}
+        #{}
     }};
 upgrade_record(3, Provider) ->
     {

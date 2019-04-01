@@ -9,8 +9,11 @@
 %%% This worker is responsible for managing harvest streams.
 %%% It tracks changes in harvesters list for each supported space
 %%% and orders harvest_stream_sup to start/stop specific harvest streams.
-%%% It uses consistent_hashing to decide whether stream for given pair
-%%% {HarvesterId, SpaceId} should be started on current node.
+%%% Currently, one harvest stream is started per triple
+%%% {HarvesterId, SpaceId, IndexId}. Harvest stream is responsible
+%%% for tracking and pushing metdata changes to oz.
+%%% It uses consistent_hashing to decide whether stream for given triple
+%%% {HarvesterId, SpaceId, IndexId} should be started on current node.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvest_manager).

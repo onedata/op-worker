@@ -30,13 +30,14 @@
 -type id() :: binary().
 -type record() :: #harvest_stream_state{}.
 -type doc() :: datastore_doc:doc(record()).
-
--type update_mode() :: relevant | ignored.
+% below flag determines whether max_relevant_seq field should updated
+-type update_max_flag() :: relevant | ignored.
 
 -export_type([id/0, record/0]).
 
 -define(CTX, #{model => ?MODULE}).
--define(DEFAULT_SEQ, 0).
+-define(DEFAULT_SEQ, -1).
+-define(DEFAULT_MAX_RELEVANT_SEQ, 0).
 
 %%%===================================================================
 %%% API
@@ -68,7 +69,7 @@ get_max_relevant_seq(Id) ->
         {ok, #document{value = HSS}} ->
             HSS#harvest_stream_state.max_relevant_seq;
         {error, not_found} ->
-            ?DEFAULT_SEQ
+            ?DEFAULT_MAX_RELEVANT_SEQ
     end.
 
 %%--------------------------------------------------------------------
@@ -80,16 +81,16 @@ get_max_relevant_seq(Id) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_seq(id(), od_harvester:index(),
-    couchbase_changes:seq(), update_mode()) -> ok | {error, term()}.
-set_seq(Id, IndexId, Seq, UpdateMode) ->
+    couchbase_changes:seq(), update_max_flag()) -> ok | {error, term()}.
+set_seq(Id, IndexId, Seq, ShouldUpdateMax) ->
     ?extract_ok(datastore_model:update(?CTX, Id,
         fun(#harvest_stream_state{max_relevant_seq = MaxSeq, seen_seqs = Sequences}) ->
             {ok, #harvest_stream_state{
-                max_relevant_seq = max_relevant_seq(Seq, MaxSeq, UpdateMode),
+                max_relevant_seq = max_relevant_seq(Seq, MaxSeq, ShouldUpdateMax),
                 seen_seqs = Sequences#{IndexId => Seq}
             }}
         end,
-        default_doc(Id, IndexId, Seq, UpdateMode)
+        default_doc(Id, IndexId, Seq, ShouldUpdateMax)
     )).
 
 -spec id(od_harvester:id(), od_space:id()) -> id().
@@ -101,17 +102,17 @@ id(HarvesterId, SpaceId) ->
 %%%===================================================================
 
 -spec default_doc(id(), od_harvester:index(), couchbase_changes:seq(),
-    update_mode()) -> doc().
-default_doc(Id, IndexId, Seq, UpdateMode) ->
+    update_max_flag()) -> doc().
+default_doc(Id, IndexId, Seq, ShouldUpdateMax) ->
     #document{
         key = Id,
         value = #harvest_stream_state{
             seen_seqs = #{IndexId => Seq},
-            max_relevant_seq = max_relevant_seq(Seq, ?DEFAULT_SEQ, UpdateMode)
+            max_relevant_seq = max_relevant_seq(Seq, ?DEFAULT_MAX_RELEVANT_SEQ, ShouldUpdateMax)
     }}.
 
 -spec max_relevant_seq(couchbase_changes:seq(), couchbase_changes:seq(),
-    update_mode()) -> couchbase_changes:seq().
+    update_max_flag()) -> couchbase_changes:seq().
 max_relevant_seq(_NewSeq, CurrentMaxRelevantSeq, ignored) ->
     CurrentMaxRelevantSeq;
 max_relevant_seq(NewSeq, CurrentMaxRelevantSeq, relevant) when NewSeq =< CurrentMaxRelevantSeq ->
