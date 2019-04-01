@@ -10,10 +10,11 @@
 %%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
 %%% if they should be served from cache or handled by Onezone.
 %%% Harvester record is associated with an  external entity that is responsible
-%%% for collecting and processing files' JSON metadata.
+%%% for collecting and processing files' JSON metadata, stored in
+%%% custom_metadata model.
 %%% Harvester can collect metadata from many spaces.
-%%% Harvester can handle many different JSON schemas, in such case, many indices
-%%% should be declared, each associated with separate schema.
+%%% Harvester can handle many different JSON metadata schemas, in such case,
+%%% many indices should be declared, each associated with separate schema.
 %%% Harvesting progress is tracked per triple {HarvesterId, SpaceId, IndexId}
 %%% which allows to dynamically add/delete indices.
 %%% All metadata changes from given spaces are submitted to all indices,
