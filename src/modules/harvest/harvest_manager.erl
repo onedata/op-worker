@@ -11,7 +11,7 @@
 %%% and orders harvest_stream_sup to start/stop specific harvest streams.
 %%% Currently, one harvest stream is started per triple
 %%% {HarvesterId, SpaceId, IndexId}. Harvest stream is responsible
-%%% for tracking and pushing metdata changes to oz.
+%%% for tracking and pushing metadata changes to oz.
 %%% It uses consistent_hashing to decide whether stream for given triple
 %%% {HarvesterId, SpaceId, IndexId} should be started on current node.
 %%% @end

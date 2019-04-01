@@ -363,6 +363,9 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER3, _, _, ProviderId1),
     ?assertNotReceivedSubmitEntry(FileId2, ?HARVESTER3, _, _, ProviderId2),
 
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessId, {guid, Guid2}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, {guid, Guid}), ?ATTEMPTS),
+
     ok = lfm_proxy:unlink(WorkerP1, SessId, {guid, Guid2}),
     ok = lfm_proxy:unlink(WorkerP2, SessId2, {guid, Guid}),
 

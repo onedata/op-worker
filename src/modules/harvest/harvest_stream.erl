@@ -7,7 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for receiving changes from changes stream and
-%%% processing them. One instance is started per triple
+%%% processing them. It pushes changes of custom_metadata document
+%%% to Onezone
+%%% One instance is started per triple
 %%% {HarvesterId, SpaceId, IndexId}.
 %%% @end
 %%%-------------------------------------------------------------------

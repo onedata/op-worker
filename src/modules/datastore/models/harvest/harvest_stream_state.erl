@@ -30,7 +30,7 @@
 -type id() :: binary().
 -type record() :: #harvest_stream_state{}.
 -type doc() :: datastore_doc:doc(record()).
-% below flag determines whether max_relevant_seq field should updated
+% below flag determines whether max_relevant_seq field should be updated
 -type update_max_flag() :: relevant | ignored.
 
 -export_type([id/0, record/0]).
