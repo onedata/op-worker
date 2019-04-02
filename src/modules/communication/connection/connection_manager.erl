@@ -39,7 +39,7 @@
 -record(state, {
     session_id :: session:id(),
     peer_id :: od_provider:id(),
-    connections = #{} :: #{reference() => {binary(), pid()}},
+    connections = #{} :: #{pid() => binary()},
 
     renewal_timer = undefined :: undefined | reference(),
     renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer()

@@ -173,7 +173,7 @@
     Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> {ok, Pid :: pid()}.
 connect_to_provider(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
-    proc_lib:start(?MODULE, init, [
+    proc_lib:start_link(?MODULE, init, [
         ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
     ]).
 
@@ -503,46 +503,19 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
-    % Map keeping reconnect interval and time between provider connection
-    % retries; needed to implement backoff algorithm
-    Intervals = application:get_env(?APP_NAME, providers_reconnect_intervals, #{}),
-    ProviderId = session_utils:session_id_to_provider_id(SessionId),
-    NextReconnect = connection_utils:get_next_reconnect(ProviderId, Intervals),
-    case time_utils:cluster_time_seconds() >= NextReconnect of
-        false ->
-            ?debug("Discarding connection request to provider(~p) as the "
-                   "grace period has not passed yet.", [ProviderId]),
-            exit(normal);
-        true ->
-            try
-                State = connect_to_provider_internal(
-                    SessionId, ProviderId, Domain, Host, Port,
-                    Transport, Timeout
-                ),
-                ok = proc_lib:init_ack({ok, self()}),
-                connection_utils:reset_reconnect_interval(ProviderId, Intervals),
-                gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
-            catch
-                throw:incompatible_peer_op_version ->
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal);
-                throw:cannot_check_peer_op_version ->
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal);
-                throw:cannot_verify_identity ->
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal);
-                exit:normal ->
-                    ?info("Connection to peer provider(~p) closed", [ProviderId]),
-                    exit(normal);
-                Type:Reason ->
-                    ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
-                             "Next retry not sooner than ~p.", [
-                        ProviderId, Type, Reason, NextReconnect
-                    ]),
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal)
-            end
+    try
+        State = connect_to_provider_internal(
+            SessionId, ProviderId, Domain, Host, Port,
+            Transport, Timeout
+        ),
+        ok = proc_lib:init_ack({ok, self()}),
+        gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
+    catch
+        Type:Reason ->
+            ?warning("Failed to connect to peer provider ~p (~p) - ~p:~p. ", [
+                ProviderId, Host, Type, Reason
+            ]),
+            exit(Reason)
     end.
 
 
@@ -566,7 +539,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
             ]),
             throw(cannot_verify_identity)
     end,
-
     provider_logic:assert_provider_compatibility(ProviderId, Domain, Host),
 
     DomainAndIpInfo = case Domain of
@@ -579,13 +551,9 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-    self() ! {upgrade_protocol, Host},
 
-    session_manager:reuse_or_create_provider_session(
-        SessionId, provider_outgoing, #user_identity{
-            provider_id = session_utils:session_id_to_provider_id(SessionId)
-        }, self()
-    ),
+    session_connections:add_connection(SessionId, self()),
+    self() ! {upgrade_protocol, Host},
 
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{

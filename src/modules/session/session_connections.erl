@@ -21,7 +21,10 @@
     get_random_connection/1, get_connections/1,
     set_async_request_manager/2, get_async_req_manager/1
 ]).
--export([get_new_record_and_update_fun/5, remove_connection/2]).
+-export([
+    get_new_record_and_update_fun/5,
+    add_connection/2, remove_connection/2
+]).
 -export([ensure_connected/1]).
 
 %%%===================================================================
@@ -116,6 +119,15 @@ get_new_record_and_update_fun(NewCons, ProxyVia, SessType, Auth, Iden) ->
             end
     end,
     {Sess, Diff}.
+
+
+-spec add_connection(session:id(), Con :: pid()) ->
+    ok | {error, term()}.
+add_connection(SessId, Con) ->
+    ?extract_ok(session:update(SessId, fun(#session{connections = Cons} = Sess) ->
+        {ok, Sess#session{connections = [Con | Cons]}}
+    end)).
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -29,22 +29,12 @@
     maybe_create_proxied_session/2
 ]).
 -export([
-    get_next_reconnect/2,
-    postpone_next_reconnect/2,
-    reset_reconnect_interval/2
-]).
--export([
     protocol_upgrade_request/1,
     process_protocol_upgrade_request/1,
     verify_protocol_upgrade_response/1
 ]).
 
 -type message() :: #server_message{} | #client_message{}.
-
-% Definitions of reconnect intervals for provider connection.
--define(INITIAL_RECONNECT_INTERVAL_SEC, 2).
--define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
--define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
 
 %%%===================================================================
@@ -135,59 +125,6 @@ maybe_create_proxied_session(ProviderId, #client_message{
     end;
 maybe_create_proxied_session(_, _) ->
     ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns next reconnect time for specified provider.
-%% @end
-%%--------------------------------------------------------------------
--spec get_next_reconnect(od_provider:id(), Intervals :: #{}) -> integer().
-get_next_reconnect(ProviderId, Intervals) ->
-    case maps:get(ProviderId, Intervals, undefined) of
-        {NextReconnect, _Interval} ->
-            NextReconnect;
-        undefined ->
-            time_utils:cluster_time_seconds()
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Postpones the time of next reconnect in an increasing manner,
-%% according to RECONNECT_INTERVAL_INCREASE_RATE.
-%% @end
-%%--------------------------------------------------------------------
--spec postpone_next_reconnect(od_provider:id(), Intervals :: #{}) -> ok.
-postpone_next_reconnect(ProviderId, Intervals) ->
-    Interval = case maps:get(ProviderId, Intervals, undefined) of
-        {_, Val} -> Val;
-        undefined -> ?INITIAL_RECONNECT_INTERVAL_SEC
-    end,
-    NextReconnectTime = time_utils:cluster_time_seconds() + Interval,
-    NewInterval = min(
-        Interval * ?RECONNECT_INTERVAL_INCREASE_RATE,
-        ?MAX_RECONNECT_INTERVAL
-    ),
-    NewIntervals = Intervals#{ProviderId => {NextReconnectTime, NewInterval}},
-    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Resets the reconnect interval to its initial value and next reconnect to
-%% current time (which means next reconnect can be performed immediately).
-%% @end
-%%--------------------------------------------------------------------
--spec reset_reconnect_interval(od_provider:id(), Intervals :: #{}) -> ok.
-reset_reconnect_interval(ProviderId, Intervals) ->
-    NewIntervals = Intervals#{
-        ProviderId => {
-            time_utils:cluster_time_seconds(),
-            ?INITIAL_RECONNECT_INTERVAL_SEC
-        }
-    },
-    application:set_env(?APP_NAME, providers_reconnect_intervals, NewIntervals).
 
 
 %%--------------------------------------------------------------------
