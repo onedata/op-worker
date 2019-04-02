@@ -171,7 +171,7 @@
 %%--------------------------------------------------------------------
 -spec connect_to_provider(od_provider:id(), session:id(), Domain :: binary(),
     Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
-    Timeout :: non_neg_integer()) -> {ok, Pid :: pid()}.
+    Timeout :: non_neg_integer()) -> {ok, Pid :: pid()} | error().
 connect_to_provider(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     proc_lib:start_link(?MODULE, init, [
         ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
