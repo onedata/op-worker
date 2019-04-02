@@ -65,7 +65,7 @@ handle(Req, State, _Type, Status) when is_integer(Status) ->
     {stop, NewReq, State};
 handle(Req, State, _Type, {error, {Type, Error}})
     when is_binary(Type), is_binary(Error) ->
-    handle(Req, State, error, ?ERROR_REPLY(?INTERNAL_SERVER_ERROR, Type, Error));
+    handle(Req, State, error, ?ERROR_REPLY(?HTTP_500_INTERNAL_SERVER_ERROR, Type, Error));
 handle(Req, State, _Type, {Status, BodyBinary})
     when is_integer(Status) andalso is_binary(BodyBinary) ->
     NewReq = cowboy_req:reply(Status, #{}, BodyBinary, Req),
@@ -76,7 +76,7 @@ handle(Req, State, _Type, {Status, Body}) when is_integer(Status) ->
     {stop, NewReq, State};
 handle(Req, State, Type, Error) ->
     ?error_stacktrace("Unhandled exception in rest request ~p:~p", [Type, Error]),
-    NewReq = cowboy_req:reply(?INTERNAL_SERVER_ERROR, Req),
+    NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
     {stop, NewReq, State}.
 
 %%%===================================================================

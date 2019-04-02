@@ -30,8 +30,7 @@
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privilege/4]).
 -export([get_eff_groups/2, get_shares/2]).
--export([get_provider_ids/2, get_providers_supports/2]).
--export([get_support_size/1]).
+-export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
@@ -159,31 +158,6 @@ get_provider_ids(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{providers = Providers}}} ->
             {ok, maps:keys(Providers)};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_providers_supports(gs_client_worker:client(), od_space:id()) ->
-    {ok, maps:map(od_provider:id(), Size :: integer())} | gs_protocol:error().
-get_providers_supports(SessionId, SpaceId) ->
-    case get(SessionId, SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
-            {ok, Providers};
-        {error, _} = Error ->
-            Error
-    end.
-
-
-%% @doc Returns the space support size of this provider
--spec get_support_size(od_space:id()) -> {ok, integer()} | gs_protocol:error().
-get_support_size(SpaceId) ->
-    case get_providers_supports(?ROOT_SESS_ID, SpaceId) of
-        {ok, SupportsMap} ->
-            case maps:find(oneprovider:get_id(), SupportsMap) of
-                error -> ?ERROR_NOT_FOUND;
-                {ok, Size} -> {ok, Size}
-            end;
         {error, _} = Error ->
             Error
     end.

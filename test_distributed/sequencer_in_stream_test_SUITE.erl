@@ -168,7 +168,7 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     rpc:call(Worker, session, delete, [<<"session_id">>]),
     stop_sequencer_in_stream(?config(sequencer_in_stream, Config)),
-    test_utils:mock_validate_and_unload(Worker, [communicator, router,
+    test_utils:mock_validate_and_unload(Worker, [communicator, event_router,
         stream_router]).
 
 %%%===================================================================
@@ -258,8 +258,8 @@ set_sequencer_in_stream_timeouts(Worker) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, [communicator]),
-    test_utils:mock_expect(Worker, communicator, send_to_client, fun
-        (Msg, _, _) -> Self ! Msg, ok
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
+        (_, Msg, _) -> Self ! Msg, ok
     end).
 
 %%--------------------------------------------------------------------
@@ -271,8 +271,8 @@ mock_communicator(Worker) ->
 -spec mock_router(Worker :: node()) -> ok.
 mock_router(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, [router]),
-    test_utils:mock_expect(Worker, router, route_message, fun
+    test_utils:mock_new(Worker, [event_router]),
+    test_utils:mock_expect(Worker, event_router, route_message, fun
         (Msg) -> Self ! Msg, ok
     end),
     test_utils:mock_new(Worker, [stream_router]),

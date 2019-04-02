@@ -209,14 +209,19 @@
     event_manager :: undefined | pid(),
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
+    async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
     proxy_via :: oneprovider:id() | undefined,
-    response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = #{} :: maps:map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
-    transfers = [] :: [transfer:id()],
     direct_io = false :: boolean()
+}).
+
+% Model used to cache idp access tokens
+-record(idp_access_token, {
+    token :: idp_access_token:token(),
+    expiration_time :: idp_access_token:expires()
 }).
 
 %% File handle used by the module

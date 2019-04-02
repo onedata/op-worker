@@ -21,9 +21,8 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
--export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
--export([reuse_or_create_gui_session/2]).
--export([create_root_session/0, create_guest_session/0]).
+-export([reuse_or_create_provider_session/4, reuse_or_create_proxied_session/4]).
+-export([reuse_or_create_gui_session/2, create_root_session/0, create_guest_session/0]).
 -export([remove_session/1]).
 
 %% Test API
@@ -98,13 +97,15 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 %% Creates or reuses proxy session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(),
+-spec reuse_or_create_proxied_session(SessId :: session:id(), ProxyVia :: oneprovider:id(),
     Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
-reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
+reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = #user_identity{} = Iden}} ->
-            reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia);
+            reuse_or_create_session(
+                SessId, SessionType, Iden, Auth, [], ProxyVia
+            );
         Error ->
             Error
     end.
@@ -208,19 +209,22 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons) ->
 reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
     {Sess, Diff} = session_connections:get_new_record_and_update_fun(
         NewCons, ProxyVia, SessType, Auth, Iden),
-    case session:update(SessId, Diff) of
-        {ok, SessId} ->
-            {ok, SessId};
-        {error, not_found} ->
-            case start_session(#document{key = SessId, value = Sess}, SessType) of
-                {error, already_exists} ->
-                    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia);
-                Other ->
-                    Other
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    % TODO VFS-5312
+    critical_section:run([?MODULE, SessId], fun() ->
+        case session:update(SessId, Diff) of
+            {ok, SessId} ->
+                {ok, SessId};
+            {error, not_found} ->
+                case start_session(#document{key = SessId, value = Sess}, SessType) of
+                    {error, already_exists} ->
+                        reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia);
+                    Other ->
+                        Other
+                end;
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -247,6 +251,6 @@ start_session(Doc, SessType) ->
 %%--------------------------------------------------------------------
 -spec close_connections(Cons :: [pid()]) -> ok.
 close_connections(Cons) ->
-    lists:foreach(fun(Con) ->
-        Con ! disconnect
+    lists:foreach(fun(Conn) ->
+        connection:close(Conn)
     end, Cons).

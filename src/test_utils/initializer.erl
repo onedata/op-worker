@@ -15,7 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
@@ -340,15 +340,12 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
+    {ok, UserCtx} = helper:new_posix_user_ctx(0, 0),
+    {ok, Helper} = helper:new_posix_helper(list_to_binary(TmpDir), #{}, UserCtx,
+        ?CANONICAL_STORAGE_PATH),
     StorageDoc = storage:new(
         <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
-        [helper:new_posix_helper(
-            list_to_binary(TmpDir),
-            #{},
-            helper:new_posix_user_ctx(0, 0),
-            ?CANONICAL_STORAGE_PATH
-        )]
-    ),
+        [Helper]),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
@@ -396,7 +393,7 @@ space_storage_mock(Workers, StorageId) ->
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
     catch test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send_to_client, fun(_, _) -> ok end).
+    test_utils:mock_expect(Workers, communicator, send_to_oneclient, fun(_, _) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -688,7 +685,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders),
     cluster_logic_mock_setup(AllWorkers),
 
     %% Setup storage
@@ -777,7 +774,7 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, user_logic),
+    test_utils:mock_new(Workers, user_logic, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{
@@ -960,19 +957,6 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
         {ok, maps:keys(Providers)}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, get_providers_supports, fun(Client, SpaceId) ->
-        {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(Client, SpaceId),
-        {ok, Providers}
-    end),
-
-    test_utils:mock_expect(Workers, space_logic, get_support_size, fun(SpaceId) ->
-        {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
-        case maps:find(oneprovider:get_id(), Providers) of
-            error -> ?ERROR_NOT_FOUND;
-            {ok, Size} -> {ok, Size}
-        end
-    end),
-
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(Client, SpaceId, UserId, Privilege) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(Client, SpaceId),
         lists:member(Privilege, maps:get(UserId, EffUsers, []))
@@ -991,8 +975,9 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
+    proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -1014,7 +999,13 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
-                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
+                    spaces = maps:from_list(lists:map(fun(SpaceId) ->
+                        ProvidersSupp = proplists:get_value(
+                            SpaceId, SpacesToProviders,
+                            maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])
+                        ),
+                        {SpaceId, maps:get(PID, ProvidersSupp)}
+                    end, Spaces)),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}
@@ -1045,17 +1036,26 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end
     end,
 
+    GetSupportsFun = fun(?ROOT_SESS_ID, PID) ->
+        {ok, #document{value = #od_provider{spaces = Supports}}} = GetProviderFun(?ROOT_SESS_ID, PID),
+        {ok, Supports}
+    end,
+
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
-        {ok, #document{value = #od_provider{spaces = Spaces}}} = GetProviderFun(?ROOT_SESS_ID, PID),
-        {ok, maps:keys(Spaces)}
+        {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
+        {ok, maps:keys(Supports)}
     end,
 
     SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
-        case maps:get(ProviderId, ProvMap, undefined) of
-            undefined ->
-                false;
-            Spaces ->
-                lists:member(SpaceId, Spaces)
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
+        lists:member(SpaceId, Spaces)
+    end,
+
+    GetSupportSizeFun = fun(?ROOT_SESS_ID, PID, SpaceId) ->
+        {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
+        case maps:find(SpaceId, Supports) of
+            {ok, Support} -> {ok, Support};
+            error -> {error, not_found}
         end
     end,
 
@@ -1156,6 +1156,12 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup) ->
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         SupportsSpaceFun
     ),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_support_size,
+        fun(SpaceId) ->
+            GetSupportSizeFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
+        end),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,

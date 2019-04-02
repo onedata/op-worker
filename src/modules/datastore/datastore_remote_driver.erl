@@ -30,7 +30,7 @@
                  source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
--type future() :: {ok, message_id:id()} | {error, term()}.
+-type future() :: {ok, clproto_message_id:id()} | {error, term()}.
 
 
 %%%===================================================================
@@ -90,11 +90,12 @@ get_async(#{
                 {error, not_found};
             _ ->
                 SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-                communicator:communicate_with_provider(#get_remote_document{
+                Msg = #get_remote_document{
                     model = Model,
                     key = Key,
                     routing_key = RoutingKey
-                }, SessId, self())
+                },
+                communicator:send_to_provider(SessId, Msg, self())
         end
     catch
         _:Reason ->

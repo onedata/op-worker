@@ -92,7 +92,6 @@ modules_with_args() -> filter_disabled_workers([
     {gs_worker, [
         {supervisor_flags, gs_worker:supervisor_flags()}
     ]},
-    {fslogic_deletion_worker, []},
     {rtransfer_worker, [
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}

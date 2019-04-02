@@ -18,6 +18,7 @@
 -author("Lukasz Opiola").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/gui_paths.hrl").
@@ -34,12 +35,14 @@
 -export([support_space/2, support_space/3]).
 -export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
+-export([get_support_size/1]).
 -export([map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
 -export([set_domain/1, set_delegated_subdomain/1]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_subdomain_delegation_ips/0]).
 -export([get_nodes/1, get_nodes/2]).
+-export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
 -export([zone_get_offline_access_idps/0]).
@@ -51,6 +54,7 @@
 -export([verify_provider_nonce/2]).
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
+
 
 %%%===================================================================
 %%% API
@@ -315,6 +319,18 @@ supports_space(SessionId, ProviderId, SpaceId) ->
     end.
 
 
+-spec get_support_size(od_space:id()) -> {ok, integer()} | gs_protocol:error().
+get_support_size(SpaceId) ->
+    case get(?ROOT_SESS_ID, ?SELF) of
+        {ok, #document{value = #od_provider{spaces = #{SpaceId := SupportSize}}}} ->
+            {ok, SupportSize};
+        {ok, #document{value = #od_provider{}}} ->
+            ?ERROR_NOT_FOUND;
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Changes support size of this provider towards given space,
@@ -434,6 +450,28 @@ get_nodes(ProviderId, Domain) ->
                     [Domain]
             end
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves rtransfer port of given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rtransfer_port(ProviderId :: binary()) -> {ok, inet:port_number()}.
+get_rtransfer_port(ProviderId) ->
+    ResolvePort = fun() ->
+        {ok, Domain} = provider_logic:get_domain(ProviderId),
+        Port = case fetch_service_configuration({oneprovider, Domain, Domain}) of
+            {ok, #{<<"rtransferPort">> := RtransferPort}} ->
+                RtransferPort;
+            _ ->
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
+                    [to_string(ProviderId), ?RTRANSFER_PORT]),
+                ?RTRANSFER_PORT
+        end,
+        {true, Port, ?PROVIDER_NODES_CACHE_TTL}
+    end,
+    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------

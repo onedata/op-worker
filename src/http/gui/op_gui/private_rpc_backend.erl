@@ -65,9 +65,12 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
         {ok, URL} ->
             {ok, [{<<"fileUrl">>, URL}]};
         ?ERROR_FORBIDDEN ->
-            op_gui_error:report_error(<<"Permission denied">>);
-        ?ERROR_INTERNAL_SERVER_ERROR ->
-            op_gui_error:internal_server_error()
+            gui_error:report_error(<<"Permission denied">>);
+        {error, ?ENOENT} ->
+            gui_error:report_error(<<"File does not exist or was deleted - try refreshing the page.">>);
+        Error ->
+            ?debug("Cannot resolve file download url for file ~p - ~p", [FileId, Error]),
+            gui_error:report_error(<<"Cannot resolve file download url - try refreshing the page.">>)
     end;
 
 % Checks if file that is displayed in shares view can be downloaded

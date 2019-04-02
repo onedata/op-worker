@@ -51,8 +51,8 @@ get_file_download_url(SessionId, FileId) ->
             {ok, URL};
         {ok, false} ->
             ?ERROR_FORBIDDEN;
-        _ ->
-            ?ERROR_INTERNAL_SERVER_ERROR
+        Error ->
+            Error
     end.
 
 
