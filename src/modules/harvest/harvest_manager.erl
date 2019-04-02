@@ -9,6 +9,8 @@
 %%% This worker is responsible for managing harvest streams.
 %%% It tracks changes in harvesters list for each supported space
 %%% and orders harvest_stream_sup to start/stop specific harvest streams.
+%%% Streams are revised by manager when changes from onezone trigger posthooks
+%%% in od_harvester and od_provider models.
 %%% Currently, one harvest stream is started per triple
 %%% {HarvesterId, SpaceId, IndexId}. Harvest stream is responsible
 %%% for tracking and pushing metadata changes to oz.

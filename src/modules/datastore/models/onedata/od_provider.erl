@@ -86,26 +86,18 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(save, _, {ok, ProviderDoc = #document{}}) ->
-    maybe_check_harvesters_streams(ProviderDoc);
-run_after(_Function, _Args, Result) ->
-    Result.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec maybe_check_harvesters_streams(od_provider:doc()) -> ok.
-maybe_check_harvesters_streams(#document{
+run_after(save, _, {ok, #document{
     key = ProviderId,
     value = #od_provider{eff_harvesters = EffHarvesters}
-}) ->
+}}) ->
     case oneprovider:is_self(ProviderId) of
         true ->
             harvest_manager:revise_all_streams(EffHarvesters);
         false ->
             ok
-    end.
+    end;
+run_after(_Function, _Args, Result) ->
+    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks

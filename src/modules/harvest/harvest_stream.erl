@@ -216,7 +216,10 @@ handle_change(State = #state{
     mutators = [ProviderId | _],
     deleted = false
 }) when map_size(JSON) > 0 ->
+    % it is possible that we will push the same JSON many times as change
+    % may have been triggered by modification of key/value or rdf metadata
     % todo currently errors are ignored, implement backoff VFS-5351
+    % todo vfs-5357 improve tracking progress of harvesting per index
     MaxRelevantSeq = harvest_stream_state:get_max_relevant_seq(Id),
     harvester_logic:submit_entry(HarvesterId, FileId, JSON, [IndexId], Seq, max(Seq, MaxRelevantSeq)),
     ok = harvest_stream_state:set_seq(Id, IndexId, Seq, relevant),
