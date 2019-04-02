@@ -36,7 +36,7 @@
     % This field is set only for incoming connection and left as undefined
     % for outgoing one (it is used for sending requests not handling and
     % responding so it does not even have async_request_manager).
-    respond_via = undefined :: undefined | async_request_manager:reply_to()
+    respond_via = undefined :: undefined | async_request_manager:respond_via()
 }).
 
 -type rib() ::#rib{}.

@@ -154,7 +154,7 @@
 -type server_message() :: #server_message{}.
 
 -type worker_ref() :: proc | module() | {module(), node()}.
--type reply_to() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
+-type respond_via() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
 -type error() :: {error, Reason :: term()}.
 
@@ -191,7 +191,7 @@ start_link(SessionId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
-    reply_to()) -> ok | {ok, server_message()}.
+    respond_via()) -> ok | {ok, server_message()}.
 delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
     try
         ReqId = {make_ref(), MsgId},
@@ -367,7 +367,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec delegate_request_insecure(worker_ref(), term(), req_id(), reply_to()) ->
+-spec delegate_request_insecure(worker_ref(), term(), req_id(), respond_via()) ->
     ok | error().
 delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
     Pid = spawn(fun() ->
@@ -404,13 +404,13 @@ delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
 
 
 %% @private
--spec report_pending_request(reply_to(), pid(), req_id()) -> ok.
+-spec report_pending_request(respond_via(), pid(), req_id()) -> ok.
 report_pending_request({_, AsyncReqManager, _}, Pid, ReqId) ->
     gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId}).
 
 
 %% @private
--spec respond(reply_to(), req_id(), term()) -> ok | error().
+-spec respond(respond_via(), req_id(), term()) -> ok | error().
 respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
     case withhold_heartbeats(AsyncReqManager, ReqId) of
         ok ->
@@ -421,15 +421,7 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
             case send_response(Conn, SessionId, Msg) of
                 ok ->
                     report_response_sent(AsyncReqManager, ReqId);
-                {error, no_connections} = NoConsError ->
-                    ?debug("Failed to send response to ~p due to no connections", [
-                        SessionId
-                    ]),
-                    NoConsError;
                 Error ->
-                    ?error("Failed to send response ~s to peer ~p due to: ~p", [
-                        clproto_utils:msg_to_string(Msg), SessionId, Error
-                    ]),
                     Error
             end;
         Error ->
@@ -457,9 +449,7 @@ send_response(Conn, SessionId, Response) ->
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         _Error ->
-            connection_utils:send_msg_excluding_connections(
-                SessionId, Response, [Conn]
-            )
+            connection_api:send(SessionId, Response, [Conn])
     end.
 
 

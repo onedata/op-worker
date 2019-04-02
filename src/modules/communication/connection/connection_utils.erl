@@ -20,10 +20,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([
-    send_msg_excluding_connections/3,
-    send_via_any/2
-]).
+-export([send_via_any/2]).
 -export([
     fill_effective_session_info/2,
     maybe_create_proxied_session/2
@@ -40,24 +37,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Tries to send given message via any connection of specified session
-%% excluding those specified as 3rd argument.
-%% @end
-%%--------------------------------------------------------------------
--spec send_msg_excluding_connections(session:id(), message(),
-    ExcludedCons :: [pid()]) -> ok | {error, term()}.
-send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
-    case session_connections:get_connections(SessionId) of
-        {ok, AllCons} ->
-            Cons = utils:random_shuffle(AllCons -- ExcludedCons),
-            send_via_any(Msg, Cons);
-        Error ->
-            Error
-    end.
 
 
 %%--------------------------------------------------------------------

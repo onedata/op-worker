@@ -51,7 +51,7 @@
 communicate(SessionId, RawMsg) ->
     {ok, MsgId} = clproto_message_id:generate(self()),
     Msg = set_msg_id(RawMsg, MsgId),
-    case connection_utils:send_msg_excluding_connections(SessionId, Msg, []) of
+    case send_msg_excluding_connections(SessionId, Msg, []) of
         ok ->
             await_response(Msg);
         {error, no_connections} = NoConsError ->
@@ -88,10 +88,7 @@ send(SessionId, Msg) ->
 -spec send(session:id(), message(), ExcludedCons :: [pid()]) ->
     ok | {error, Reason :: term()}.
 send(SessionId, Msg, ExcludedCons) ->
-    Res = connection_utils:send_msg_excluding_connections(
-        SessionId, Msg, ExcludedCons
-    ),
-    case Res of
+    case send_msg_excluding_connections(SessionId, Msg, ExcludedCons) of
         ok ->
             ok;
         {error, no_connections} = NoConsError ->
@@ -109,6 +106,19 @@ send(SessionId, Msg, ExcludedCons) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec send_msg_excluding_connections(session:id(), message(),
+    ExcludedCons :: [pid()]) -> ok | {error, term()}.
+send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
+    case session_connections:get_connections(SessionId) of
+        {ok, AllCons} ->
+            Cons = utils:random_shuffle(AllCons -- ExcludedCons),
+            connection_utils:send_via_any(Msg, Cons);
+        Error ->
+            Error
+    end.
 
 
 %% @private
