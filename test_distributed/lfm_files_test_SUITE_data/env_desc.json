@@ -11,7 +11,13 @@
     },
     "os_configs": {
         "cfg1": {
-            "storages": [],
+            "storages": [
+                {
+                    "type": "s3",
+                    "name": "s3",
+                    "bucket": "onedata"
+                }
+            ],
             "users": [],
             "groups": {}
         }
@@ -50,5 +56,31 @@
                 }
             }
         }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "s3"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "s3",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                    "storage": "s3",
+                    "supported_size": 1000000000
+                }
+            }
+        }
     }
 }
+}
+

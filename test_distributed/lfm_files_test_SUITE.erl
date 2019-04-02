@@ -82,7 +82,9 @@
     lfm_open_multiple_times_failure_test/1,
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
-    lfm_copy_failure_multiple_users_test/1
+    lfm_copy_failure_multiple_users_test/1,
+    lfm_rmdir_test/1
+
 ]).
 
 -define(TEST_CASES, [
@@ -139,7 +141,8 @@
     lfm_open_multiple_times_failure_test,
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
-    lfm_copy_failure_multiple_users_test
+    lfm_copy_failure_multiple_users_test,
+    lfm_rmdir_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -171,6 +174,15 @@ end).
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+lfm_rmdir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    FilePath11 = <<"/s3/dir1">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, FilePath11, 8#755)),
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath11})).
+
+
 
 lfm_recreate_handle_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1561,7 +1573,10 @@ file_popularity_should_have_correct_file_size(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig),
+                                    initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+               end,
+
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 end_per_suite(Config) ->
