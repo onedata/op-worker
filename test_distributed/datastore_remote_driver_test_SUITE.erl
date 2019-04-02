@@ -49,23 +49,23 @@ all() ->
 %%%===================================================================
 
 get_remote_document_msg_should_be_serializable(_Config) ->
-    {_, ProtoMsg} = translator:translate_to_protobuf(#get_remote_document{
+    {_, ProtoMsg} = clproto_translator:translate_to_protobuf(#get_remote_document{
         model = some_model,
         key = <<"some_key">>,
         routing_key = <<"some_routing_key">>
     }),
     RawMsg = ?assertMatch(<<_/binary>>, messages:encode_msg(ProtoMsg)),
-    ?assertMatch(#get_remote_document{}, translator:translate_from_protobuf(
+    ?assertMatch(#get_remote_document{}, clproto_translator:translate_from_protobuf(
         messages:decode_msg(RawMsg, 'GetRemoteDocument')
     )).
 
 remote_document_msg_should_be_serializable(_Config) ->
-    {_, ProtoMsg} = translator:translate_to_protobuf(#remote_document{
+    {_, ProtoMsg} = clproto_translator:translate_to_protobuf(#remote_document{
         status = #status{code = ?OK},
         compressed_data = <<"some_data">>
     }),
     RawMsg = ?assertMatch(<<_/binary>>, messages:encode_msg(ProtoMsg)),
-    ?assertMatch(#remote_document{}, translator:translate_from_protobuf(
+    ?assertMatch(#remote_document{}, clproto_translator:translate_from_protobuf(
         messages:decode_msg(RawMsg, 'RemoteDocument')
     )).
 

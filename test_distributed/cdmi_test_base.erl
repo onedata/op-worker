@@ -1060,7 +1060,7 @@ moved_permanently(Config) ->
     Location1 = list_to_binary(CDMIEndpoint ++ DirName),
     {ok, Code1, Headers1, _Response1} =
         do_request(Workers, DirNameWithoutSlash, get, RequestHeaders1, []),
-    ?assertEqual(?MOVED_PERMANENTLY, Code1),
+    ?assertEqual(?HTTP_301_MOVED_PERMANENTLY, Code1),
     ?assertMatch(#{<<"location">> := Location1}, Headers1),
     %%------------------------------
 
@@ -1073,7 +1073,7 @@ moved_permanently(Config) ->
     Location2 = list_to_binary(CDMIEndpoint ++ DirName ++ "?example_qs=1"),
     {ok, Code2, Headers2, _Response2} =
         do_request(Workers, DirNameWithoutSlash ++ "?example_qs=1", get, RequestHeaders2, []),
-    ?assertEqual(?MOVED_PERMANENTLY, Code2),
+    ?assertEqual(?HTTP_301_MOVED_PERMANENTLY, Code2),
     ?assertMatch(#{<<"location">> := Location2}, Headers2),
     %%------------------------------
 
@@ -1086,7 +1086,7 @@ moved_permanently(Config) ->
     Location3 = list_to_binary(CDMIEndpoint ++ FileName),
     {ok, Code3, Headers3, _Response3} =
         do_request(Workers, FileNameWithSlash, get, RequestHeaders3, []),
-    ?assertEqual(?MOVED_PERMANENTLY, Code3),
+    ?assertEqual(?HTTP_301_MOVED_PERMANENTLY, Code3),
     ?assertMatch(#{<<"location">> := Location3}, Headers3).
 %%------------------------------
 

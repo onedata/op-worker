@@ -283,11 +283,14 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
             ProviderId;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {ok, ProviderIds} = space_logic:get_provider_ids(SessId, SpaceId),
-            case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
-                {_, true} -> ProviderId;
-                {[RemoteProviderId | _], _} -> RemoteProviderId;
-                {[], _} -> throw(unsupported_space)
+            case provider_logic:supports_space(SpaceId) of
+                true ->
+                    ProviderId;
+                false ->
+                    case space_logic:get_provider_ids(SessId, SpaceId) of
+                        {ok, []} -> throw(unsupported_space);
+                        {ok, [RemoteProviderId | _]} -> RemoteProviderId
+                    end
             end
     end.
 
@@ -367,13 +370,12 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
     #flush_events{context = Context, notify = Notify} = Request,
     #state{session_id = SessId} = State,
     {ok, Auth} = session:get_auth(SessId),
+    StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
-        message_stream = #message_stream{
-            stream_id = sequencer:term_to_stream_id(Context)
-        },
+        message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
-        proxy_session_id = SessId,
-        proxy_session_auth = Auth
+        effective_session_id = SessId,
+        effective_session_auth = Auth
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -385,7 +387,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
-    communicator:communicate_with_provider(ClientMsg, Ref, RequestTranslator),
+    communicator:stream_to_provider(Ref, ClientMsg, StreamId, RequestTranslator),
     {noreply, State};
 
 handle_remotely(#event{} = Evt, ProviderId, State) ->
@@ -395,11 +397,15 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, Auth} = session:get_auth(SessId),
-    communicator:stream_to_provider(#client_message{
-        message_body = Request,
-        proxy_session_id = SessId,
-        proxy_session_auth = Auth
-    }, session_utils:get_provider_session_id(outgoing, ProviderId), StreamId),
+    communicator:stream_to_provider(
+        session_utils:get_provider_session_id(outgoing, ProviderId),
+        #client_message{
+            message_body = Request,
+            effective_session_id = SessId,
+            effective_session_auth = Auth
+        },
+        StreamId, undefined
+    ),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
