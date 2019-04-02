@@ -189,6 +189,7 @@ maybe_write(Sock, FileGuid, HandleId, Write) ->
             ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
                 0, SubId, -SubId, FileGuid, 500)),
             fuse_test_utils:proxy_write(Sock, FileGuid, HandleId, 0, Data),
+            fuse_test_utils:emit_file_written_event(Sock, 0, SubId, FileGuid, [#file_block{offset = 0, size = byte_size(Data)}]),
             fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
             cancel_subscriptions(Sock, 0, [-SubId]),
             Data;
@@ -203,6 +204,7 @@ maybe_read(Sock, FileGuid, HandleId, ExpectedData, Read) ->
             ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
                 0, SubId1,-SubId1, FileGuid, 500)),
             ?assertMatch(ExpectedData, fuse_test_utils:proxy_read(Sock, FileGuid, HandleId, 0, byte_size(ExpectedData))),
+            fuse_test_utils:emit_file_read_event(Sock, 0, SubId1, FileGuid, [#file_block{offset = 0, size = byte_size(ExpectedData)}]),
             fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
             cancel_subscriptions(Sock, 0, [-SubId1]);
         _ ->

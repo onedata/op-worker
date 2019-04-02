@@ -56,6 +56,7 @@
 
     client_keepalive_test/1,
     heartbeats_test/1,
+    async_request_manager_memory_management_test/1,
 
     socket_timeout_test/1,
     closing_last_connection_should_cancel_all_session_transfers_test/1
@@ -76,6 +77,7 @@
 
     client_keepalive_test,
     heartbeats_test,
+    async_request_manager_memory_management_test,
 
 %%    socket_timeout_test,
     closing_last_connection_should_cancel_all_session_transfers_test
@@ -385,6 +387,40 @@ fsync_timeouts_test(Config, Sock, RootGuid) ->
     ok = ssl:send(Sock, fuse_test_utils:generate_fsync_message(RootGuid, <<"fs2">>)),
     % receive & validate
     await_status_answer(ok, <<"fs2">>, 2).
+
+
+async_request_manager_memory_management_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = crypto:strong_rand_bytes(10),
+
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, AsyncReqManager} = rpc:call(
+        Worker1, session_connections, get_async_req_manager, [SessionId]
+    ),
+
+    ReqId = <<1>>,
+    ReportRequest = fun() ->
+        gen_server2:cast(AsyncReqManager, {report_pending_req, self(), ReqId})
+    end,
+    WithholdHeartBeats = fun() ->
+        gen_server2:call(AsyncReqManager, {withhold_heartbeats, self(), ReqId})
+    end,
+    ReportResponseSent = fun() ->
+        gen_server2:call(AsyncReqManager, {response_sent, ReqId})
+    end,
+
+    lists:foreach(fun({Op1, Op2, Op3}) ->
+        assert_empty_async_req_manager_state(AsyncReqManager),
+        Op1(),
+        Op2(),
+        Op3(),
+        assert_empty_async_req_manager_state(AsyncReqManager)
+    end, [
+        {ReportRequest, WithholdHeartBeats, ReportResponseSent},
+        {WithholdHeartBeats, ReportResponseSent, ReportRequest},
+        {WithholdHeartBeats, ReportRequest, ReportResponseSent}
+    ]),
+    ok = ssl:close(Sock).
 
 
 socket_timeout_test(Config) ->
@@ -721,6 +757,22 @@ spawn_ssl_echo_client(NodeToConnect) ->
 %%%===================================================================
 %%% Test helper functions
 %%%===================================================================
+
+
+assert_empty_async_req_manager_state(AsyncReqManager) ->
+    {state,
+        _, PendingReqs, UnreportedReqs, WithheldHeartbeats, _
+    } = get_gen_server_state(AsyncReqManager),
+
+    ?assertMatch(0, maps:size(PendingReqs)),
+    ?assertMatch(0, maps:size(UnreportedReqs)),
+    ?assertMatch(0, maps:size(WithheldHeartbeats)).
+
+
+get_gen_server_state(Pid) ->
+    {status, Pid, _, [_PDict, _PStatus, _PParent, _PDbg, PMisc]} = sys:get_status(Pid),
+    [_Header, _Status, {data, [{"State", State}]}] = PMisc,
+    State.
 
 
 await_status_answer(ExpStatus, MsgId) ->
