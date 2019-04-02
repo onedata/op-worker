@@ -6,18 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module decides where to send incoming messages.
+%%% This module decides where to route received messages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(router).
 -author("Tomasz Lichon").
 
--include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
@@ -27,45 +25,28 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([build_rib/1]).
 -export([effective_session_id/1]).
--export([route_message/2]).
+-export([build_rib/1, route_message/2]).
 
+%% Routing Information Base (RIB in short) is a structure containing necessary
+%% information for routing messages. It should be created by connection process
+%% right after its start and used in following calls to router.
+-record(rib, {
+    % Used by worker processes to send responses to delegated requests.
+    % This field is set only for incoming connection and left as undefined
+    % for outgoing one (it is used for sending requests not handling and
+    % responding so it does not even have async_request_manager).
+    respond_via = undefined :: undefined | async_request_manager:reply_to()
+}).
+
+-type rib() ::#rib{}.
 -type client_message() :: #client_message{}.
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
 
--record(rib, {
-    % Used when sending responses to delegated requests. This field is set
-    % only for incoming connection. As for outgoing one it is left as
-    % undefined (outgoing connection does not have async req manager).
-    reply_to = undefined :: undefined | async_request_manager:reply_to()
-}).
-
--type rib() ::#rib{}.
-
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Builds RIB (Routing Information Base) - structure containing necessary
-%% info like where to send responses to delegated requests or to which
-%% sequencer manager forward stream messages.
-%% @end
-%%--------------------------------------------------------------------
--spec build_rib(session:id()) -> rib().
-build_rib(SessionId) ->
-    ReplyTo = case session_connections:get_async_req_manager(SessionId) of
-        {ok, AsyncReqManager} ->
-            {self(), AsyncReqManager, SessionId};
-        {error, no_async_req_manager} ->
-            undefined
-    end,
-
-    #rib{reply_to = ReplyTo}.
 
 
 %%--------------------------------------------------------------------
@@ -85,18 +66,36 @@ effective_session_id(#client_message{effective_session_id = EffSessionId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Builds RIB for calling connection process. It should be then cached
+%% by connection process and used in subsequent calls to router.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_rib(session:id()) -> rib().
+build_rib(SessionId) ->
+    RespondVia = case session_connections:get_async_req_manager(SessionId) of
+        {ok, AsyncReqManager} ->
+            {self(), AsyncReqManager, SessionId};
+        {error, no_async_req_manager} ->
+            undefined
+    end,
+
+    #rib{respond_via = RespondVia}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Check if message is sequential, if so - proxy it through sequencer,
 %% otherwise routes it directly
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
-route_message(Msg, ReplyTo) ->
+route_message(Msg, RIB) ->
     case stream_router:is_stream_message(Msg) of
         true ->
             stream_router:route_message(Msg);
         false ->
-            route_direct_message(Msg, ReplyTo);
+            route_direct_message(Msg, RIB);
         ignore ->
             ok
     end.
@@ -120,7 +119,7 @@ route_direct_message(#client_message{message_id = undefined} = Msg, _) ->
 route_direct_message(#client_message{message_id = #message_id{
     issuer = Issuer,
     recipient = Recipient
-}} = Msg, ReplyTo) ->
+}} = Msg, RIB) ->
     case oneprovider:is_self(Issuer) of
         true when Recipient =:= undefined ->
             route_and_ignore_answer(Msg);
@@ -129,7 +128,7 @@ route_direct_message(#client_message{message_id = #message_id{
             Pid ! Msg,
             ok;
         false ->
-            answer_or_delegate(Msg, ReplyTo)
+            answer_or_delegate(Msg, RIB)
     end;
 route_direct_message(#server_message{message_id = #message_id{
     issuer = Issuer,
@@ -302,5 +301,5 @@ answer_or_delegate(Msg, _) ->
     clproto_message_id:id(), rib()) -> ok | {ok, server_message()}.
 delegate_request(WorkerRef, Req, MsgId, RIB) ->
     async_request_manager:delegate_and_supervise(
-        WorkerRef, Req, MsgId, RIB#rib.reply_to
+        WorkerRef, Req, MsgId, RIB#rib.respond_via
     ).
