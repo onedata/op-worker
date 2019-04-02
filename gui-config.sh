@@ -22,6 +22,6 @@ TARGET_DIR='_build/default/lib'
 ARCHIVE_NAME='gui_static.tar.gz'
 # Image which will be used by default to get the static files. If it cannot
 # be resolved, the script will fall back to secondary.
-PRIMARY_IMAGE='docker.onedata.org/op-gui-default:ID-b58129598a' # @fixme
+PRIMARY_IMAGE='docker.onedata.org/op-gui-default:ID-d43c1ff617'
 # Image which will be used if primary image is not resolved.
 SECONDARY_IMAGE='no-secondary-image' # @fixme
