@@ -146,7 +146,6 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             latitude = maps:get(<<"latitude">>, Result),
             online = maps:get(<<"online">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
-            cluster = maps:get(<<"cluster">>, Result, undefined),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)
         }
@@ -160,8 +159,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = protected
             domain = maps:get(<<"domain">>, Result),
             longitude = maps:get(<<"longitude">>, Result),
             latitude = maps:get(<<"latitude">>, Result),
-            online = maps:get(<<"online">>, Result),
-            cluster = maps:get(<<"cluster">>, Result, undefined)
+            online = maps:get(<<"online">>, Result)
         }
     };
 

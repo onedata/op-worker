@@ -118,7 +118,7 @@ query_record(<<"system-provider">>, Data) ->
             {ok, [
                 {<<"id">>, ProviderId},
                 {<<"name">>, Provider#od_provider.name},
-                {<<"cluster">>, Provider#od_provider.cluster},
+                {<<"cluster">>, ProviderId},
                 {<<"domain">>, Provider#od_provider.domain},
                 {<<"latitude">>, Provider#od_provider.latitude},
                 {<<"longitude">>, Provider#od_provider.longitude},

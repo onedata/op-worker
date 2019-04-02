@@ -128,7 +128,6 @@
 
     % Direct relations to other entities
     spaces = #{} :: maps:map(od_space:id(), Size :: integer()),
-    cluster = undefined :: undefined | binary(),
 
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],

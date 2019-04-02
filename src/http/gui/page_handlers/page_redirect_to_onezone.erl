@@ -43,17 +43,13 @@ handle(<<"GET">>, Req) ->
 -spec redirect(cowboy_req:req(), Path :: binary()) -> cowboy_req:req().
 redirect(Req, Path) ->
     OzUrl = oneprovider:get_oz_url(),
-    case provider_logic:get_cluster() of
-        {ok, ClusterId} ->
-            cowboy_req:reply(307, #{<<"location">> => str_utils:format_bin("~s/~s/~s~s", [
-                OzUrl, onedata:service_shortname(?OP_WORKER), ClusterId, Path
-            ])}, Req);
-        ?ERROR_UNREGISTERED_PROVIDER ->
+    case oneprovider:get_id_or_undefined() of
+        undefined ->
             cowboy_req:reply(200, #{
                 <<"content-type">> => <<"text/plain">>
             }, <<"This Oneprovider instance is not yet configured.">>, Req);
-        {error, _} ->
-            cowboy_req:reply(307, #{
-                <<"location">> => OzUrl
-            }, Req)
+        ProviderId ->
+            cowboy_req:reply(307, #{<<"location">> => str_utils:format_bin("~s/~s/~s~s", [
+                OzUrl, onedata:service_shortname(?OP_WORKER), ProviderId, Path
+            ])}, Req)
     end.

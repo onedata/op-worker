@@ -29,7 +29,6 @@
 -export([to_string/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
--export([get_cluster/0]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
 -export([support_space/2, support_space/3]).
@@ -143,8 +142,7 @@ get_as_map() ->
                 domain => Record#od_provider.domain,
                 subdomain => Record#od_provider.subdomain,
                 longitude => Record#od_provider.longitude,
-                latitude => Record#od_provider.latitude,
-                cluster => Record#od_provider.cluster
+                latitude => Record#od_provider.latitude
             }};
         Error -> Error
     end.
@@ -209,21 +207,6 @@ get_name(SessionId, ProviderId) ->
     case get_protected_data(SessionId, ProviderId) of
         {ok, #document{value = #od_provider{name = Name}}} ->
             {ok, Name};
-        {error, _} = Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves provider name of this provider.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cluster() -> {ok, od_cluster:id()} | gs_protocol:error().
-get_cluster() ->
-    case get_protected_data(?ROOT_SESS_ID, ?SELF) of
-        {ok, #document{value = #od_provider{cluster = Cluster}}} ->
-            {ok, Cluster};
         {error, _} = Error ->
             Error
     end.

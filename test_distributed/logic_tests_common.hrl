@@ -123,7 +123,6 @@
 -define(PROVIDER_NAME(__Provider), __Provider).
 -define(PROVIDER_ADMIN_EMAIL(__Provider), __Provider).
 -define(PROVIDER_DOMAIN(__Provider), __Provider).
--define(PROVIDER_CLUSTER(__Provider), __Provider).
 -define(PROVIDER_ONLINE(__Provider), true).
 -define(PROVIDER_SUBDOMAIN_DELEGATION(__Provider), false).
 -define(PROVIDER_SUBDOMAIN(__Provider), undefined).
@@ -256,7 +255,6 @@
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    cluster = ?PROVIDER_CLUSTER(__Provider),
     spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
@@ -265,7 +263,6 @@
     name = ?PROVIDER_NAME(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    cluster = ?PROVIDER_CLUSTER(__Provider),
     spaces = #{},
     eff_users = [],
     eff_groups = []
@@ -381,8 +378,7 @@ end).
     <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
     <<"online">> => ?PROVIDER_ONLINE(__ProviderId),
     <<"latitude">> => ?PROVIDER_LATITUDE(__ProviderId),
-    <<"longitude">> => ?PROVIDER_LONGITUDE(__ProviderId),
-    <<"cluster">> => ?PROVIDER_CLUSTER(__ProviderId)
+    <<"longitude">> => ?PROVIDER_LONGITUDE(__ProviderId)
 }).
 -define(PROVIDER_PRIVATE_DATA_VALUE(__ProviderId), begin
     __ProtectedData = ?PROVIDER_PROTECTED_DATA_VALUE(__ProviderId),
@@ -390,7 +386,6 @@ end).
         <<"adminEmail">> => ?PROVIDER_ADMIN_EMAIL(__ProviderId),
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
-        <<"cluster">> => ?PROVIDER_CLUSTER(__ProviderId),
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
         <<"spaces">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> #{};

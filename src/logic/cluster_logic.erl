@@ -39,7 +39,7 @@
 -spec update_version_info(Release :: binary(), Build :: binary(), GuiHash :: binary()) ->
     ok | gs_protocol:error().
 update_version_info(Release, Build, GuiHash) ->
-    {ok, ClusterId} = provider_logic:get_cluster(),
+    ClusterId = oneprovider:get_id(),
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_cluster, id = ClusterId, aspect = instance},
@@ -60,7 +60,7 @@ update_version_info(Release, Build, GuiHash) ->
 %%--------------------------------------------------------------------
 -spec upload_op_worker_gui(file:filename_all()) -> ok | {error, gui_upload_failed}.
 upload_op_worker_gui(PackagePath) ->
-    {ok, ClusterId} = provider_logic:get_cluster(),
+    ClusterId = oneprovider:get_id(),
     ServiceShortname = onedata:service_shortname(?OP_WORKER),
     Result = oz_endpoint:request(
         provider,
