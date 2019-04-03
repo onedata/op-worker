@@ -314,7 +314,7 @@ handle_info(heartbeat, #state{
     pending_requests = PR,
     withheld_heartbeats = WH
 } = State) ->
-    NewState = case session_connections:get_connections(SessionId) of
+    NewState = case session_connections:list(SessionId) of
         {ok, Cons} ->
             State#state{
                 pending_requests = check_workers_status(PR, Cons, true),

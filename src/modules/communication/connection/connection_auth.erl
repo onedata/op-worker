@@ -110,7 +110,9 @@ handle_client_handshake(#client_handshake_request{
         ?ERROR_MACAROON_EXPIRED -> throw(bad_macaroon);
         ?ERROR_MACAROON_TTL_TO_LONG(_) -> throw(bad_macaroon);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
-            {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
+            {ok, _} = session_manager:reuse_or_create_fuse_session(
+                SessId, Iden, Auth
+            ),
             {UserId, SessId}
     end.
 
@@ -152,8 +154,8 @@ handle_provider_handshake(#provider_handshake_request{
 
     Identity = #user_identity{provider_id = ProviderId},
     SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_provider_session(
-        SessionId, provider_incoming, Identity, self()
+    {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
+        SessionId, Identity
     ),
     {ProviderId, SessionId}.
 

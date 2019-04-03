@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Modules that handles session connections management.
+%%% Module that handles session connections management.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_connections).
@@ -17,44 +17,44 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
+-export([register/2, deregister/2, list/1]).
 -export([
-    get_random_connection/1, get_connections/1,
-    set_async_request_manager/2, get_async_req_manager/1
+    set_async_request_manager/2, get_async_req_manager/1,
+    ensure_connected/1
 ]).
--export([
-    get_new_record_and_update_fun/5,
-    add_connection/2, remove_connection/2
-]).
--export([ensure_connected/1]).
+
+-type error() :: {error, Reason :: term()}.
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns random connection associated with session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_random_connection(session:id()) ->
-    {ok, Con :: pid()} | {error, Reason :: no_connections | term()}.
-get_random_connection(SessId) ->
-    case get_connections(SessId) of
-        {ok, []} ->
-            {error, no_connections};
-        {ok, Cons} ->
-            {ok, utils:random_element(Cons)};
-        {error, _Reason} = Error ->
-            Error
-    end.
+
+-spec register(session:id(), Conn :: pid()) -> ok | error().
+register(SessId, Conn) ->
+    Diff = fun(#session{connections = Cons} = Sess) ->
+        {ok, Sess#session{connections = [Conn | Cons]}}
+    end,
+    ?extract_ok(session:update(SessId, Diff)).
+
+
+-spec deregister(session:id(), Conn :: pid()) -> ok | error().
+deregister(SessId, Conn) ->
+    Diff = fun(#session{connections = Cons} = Sess) ->
+        NewCons = lists:filter(fun(C) -> C =/= Conn end, Cons),
+        {ok, Sess#session{connections = NewCons}}
+    end,
+    ?extract_ok(session:update(SessId, Diff)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns connections associated with session.
+%% Returns list of effective connections for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_connections(session:id()) -> {ok, [Conn :: pid()]} | {error, term()}.
-get_connections(SessId) ->
+-spec list(session:id()) -> {ok, [Conn :: pid()]} | error().
+list(SessId) ->
     case get_proxy_session(SessId) of
         {ok, #session{connections = Cons}} ->
             {ok, Cons};
@@ -62,25 +62,20 @@ get_connections(SessId) ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets async_request_manager property of session.
-%% @end
-%%--------------------------------------------------------------------
--spec set_async_request_manager(session:id(), ConnManager :: pid()) ->
-    ok | datastore:update_error().
+
+-spec set_async_request_manager(session:id(), pid()) -> ok | error().
 set_async_request_manager(SessionId, AsyncReqManager) ->
-    ?extract_ok(session:update(SessionId, fun(Session = #session{}) ->
+    ?extract_ok(session:update(SessionId, fun(#session{} = Session) ->
         {ok, Session#session{async_request_manager = AsyncReqManager}}
     end)).
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns connection manager for session.
+%% Returns effective async request manager for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_async_req_manager(session:id()) ->
-    {ok, Con :: pid()} | {error, Reason :: term()}.
+-spec get_async_req_manager(session:id()) -> {ok, pid()} | error().
 get_async_req_manager(SessId) ->
     case get_proxy_session(SessId) of
         {ok, #session{async_request_manager = undefined}} ->
@@ -91,72 +86,13 @@ get_async_req_manager(SessId) ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns new record with update function.
-%% @end
-%%--------------------------------------------------------------------
--spec get_new_record_and_update_fun(NewCons :: list(),
-    ProxyVia :: session:id() | undefined, SessType :: session:type(),
-    Auth :: session:auth() | undefined, Iden :: session:identity()) ->
-    {session:record(), UpdateFun :: datastore_doc:diff(session:record())}.
-get_new_record_and_update_fun(NewCons, ProxyVia, SessType, Auth, Iden) ->
-    Sess = #session{status = active, identity = Iden, auth = Auth,
-        connections = NewCons, type = SessType, proxy_via = ProxyVia},
-    Diff = fun
-        (#session{status = inactive}) ->
-            % TODO VFS-5126 - possible race with closing (creation when cleanup
-            % is not finished)
-            {error, not_found};
-        (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
-            case Iden of
-                ValidIden ->
-                    {ok, ExistingSess#session{
-                        connections = NewCons ++ Cons
-                    }};
-                _ ->
-                    {error, {invalid_identity, Iden}}
-            end
-    end,
-    {Sess, Diff}.
-
-
--spec add_connection(session:id(), Con :: pid()) ->
-    ok | {error, term()}.
-add_connection(SessId, Con) ->
-    ?extract_ok(session:update(SessId, fun(#session{connections = Cons} = Sess) ->
-        {ok, Sess#session{connections = [Con | Cons]}}
-    end)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes connection from session and if it was the last connection schedules
-%% session removal.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_connection(session:id(), Con :: pid()) ->
-    ok | {error, term()}.
-remove_connection(SessId, Con) ->
-    Diff = fun(#session{connections = Cons} = Sess) ->
-        NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
-        {ok, Sess#session{connections = NewCons}}
-    end,
-    case session:update(SessId, Diff) of
-        {ok, _} -> ok;
-        Other -> Other
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Ensures that there is at least one outgoing connection for given session.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_connected(session:id() | pid()) ->
-    ok | no_return().
-ensure_connected(Conn) when is_pid(Conn) ->
-    ok;
+-spec ensure_connected(session:id()) -> ok | no_return().
 ensure_connected(SessId) ->
     case get_random_connection(SessId) of
         {error, _} ->
@@ -176,29 +112,45 @@ ensure_connected(SessId) ->
                     ok
             end,
 
-            session_manager:reuse_or_create_session(SessId, provider_outgoing, #user_identity{
-                provider_id = session_utils:session_id_to_provider_id(SessId)
-            }, undefined, []);
+            session_manager:reuse_or_create_outgoing_provider_session(
+                SessId, #user_identity{provider_id = ProviderId}
+            );
         {ok, Pid} ->
             case utils:process_info(Pid, initial_call) of
                 undefined ->
-                    ok = remove_connection(SessId, Pid),
+                    ok = deregister(SessId, Pid),
                     ensure_connected(SessId);
                 _ ->
                     ok
             end
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
+-spec get_random_connection(session:id()) -> {ok, Conn :: pid()} | error().
+get_random_connection(SessId) ->
+    case list(SessId) of
+        {ok, []} ->
+            {error, no_connections};
+        {ok, Cons} ->
+            {ok, utils:random_element(Cons)};
+        Error ->
+            Error
+    end.
+
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns effective session, that is session, which is not proxied.
 %% @end
 %%--------------------------------------------------------------------
--spec get_proxy_session(session:id()) -> {ok, #session{}} | {error, term()}.
+-spec get_proxy_session(session:id()) -> {ok, #session{}} | error().
 get_proxy_session(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->

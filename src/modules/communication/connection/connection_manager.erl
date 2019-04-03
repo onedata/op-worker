@@ -139,7 +139,7 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State) ->
         connections = maps:remove(ConnPid, Cons)
     })};
 handle_info(keepalive, #state{session_id = SessionId} = State) ->
-    case session_connections:get_connections(SessionId) of
+    case session_connections:list(SessionId) of
         {ok, Cons} ->
             lists:foreach(fun(Conn) -> 
                 connection:send_keepalive(Conn) 

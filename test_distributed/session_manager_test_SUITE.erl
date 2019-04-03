@@ -61,12 +61,15 @@ session_manager_session_creation_and_reuse_test(Config) ->
     lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
             ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-                reuse_or_create_fuse_session, [SessId, Iden, Self]))
+                reuse_or_create_fuse_session, [SessId, Iden])),
+            ?assertMatch(ok, rpc:call(Worker, session_connections,
+                register, [SessId, Self]
+            ))
         end, Workers),
 
         % Check connections have been added to session
         {ok, Cons} = ?assertMatch({ok, _},
-            rpc:call(Worker1, session_connections, get_connections, [SessId]), 10),
+            rpc:call(Worker1, session_connections, list, [SessId]), 10),
         ?assertEqual(length(Answers), length(Cons))
 
     end, [
@@ -215,7 +218,7 @@ session_getters_test(Config) ->
             _ -> ?assert(is_pid(Result))
         end
     end, [{session, get_event_manager}, {session, get_sequencer_manager},
-        {session_connections, get_connections}]),
+        {session_connections, list}]),
 
     Answer = rpc:call(Worker, session, get_session_supervisor_and_node, [SessId]),
     ?assertMatch({ok, {_, _}}, Answer),
@@ -235,7 +238,11 @@ session_supervisor_child_crash_test(Config) ->
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-            reuse_or_create_fuse_session, [SessId, Iden, Self])),
+            reuse_or_create_fuse_session, [SessId, Iden])),
+        ?assertMatch(ok, rpc:call(Worker, session_connections,
+            register, [SessId, Self]
+        )),
+
 
         {ok, {SessSup, Node}} = rpc:call(Worker, session,
             get_session_supervisor_and_node, [SessId]),
@@ -305,9 +312,15 @@ init_per_testcase(Case, Config) when
 
     initializer:communicator_mock(Workers),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
-        reuse_or_create_fuse_session, [SessId1, Iden1, Self])),
+        reuse_or_create_fuse_session, [SessId1, Iden1])),
+    ?assertMatch(ok, rpc:call(hd(Workers), session_connections,
+        register, [SessId1, Self]
+    )),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
-        reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
+        reuse_or_create_fuse_session, [SessId2, Iden2])),
+    ?assertMatch(ok, rpc:call(hd(Workers), session_connections,
+        register, [SessId2, Self]
+    )),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
         remove_session, [?ROOT_SESS_ID])),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,

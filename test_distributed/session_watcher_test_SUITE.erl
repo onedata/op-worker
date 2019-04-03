@@ -62,7 +62,7 @@ session_watcher_should_remove_session_without_connections(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
-    ?call(Worker, session_connections, remove_connection, [SessId, Self]),
+    ?call(Worker, session_connections, deregister, [SessId, Self]),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
 session_watcher_should_remove_inactive_session(Config) ->
@@ -85,7 +85,10 @@ session_create_or_reuse_session_should_update_session_access_time(Config) ->
     SessId = ?config(session_id, Config),
     Accessed1 = get_session_access_time(Config),
     rpc:call(Worker, session_manager, reuse_or_create_fuse_session,
-        [SessId, undefined, self()]),
+        [SessId, undefined]),
+    rpc:call(Worker, session_connections,
+        register, [SessId, self()]
+    ),
     ?call(Worker, get, [SessId]),
     Accessed2 = get_session_access_time(Config),
     ?assert(Accessed2 - Accessed1 >= 0).

@@ -112,7 +112,7 @@ send(SessionId, Msg, ExcludedCons) ->
 -spec send_msg_excluding_connections(session:id(), message(),
     ExcludedCons :: [pid()]) -> ok | {error, term()}.
 send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
-    case session_connections:get_connections(SessionId) of
+    case session_connections:list(SessionId) of
         {ok, AllCons} ->
             Cons = utils:random_shuffle(AllCons -- ExcludedCons),
             connection_utils:send_via_any(Msg, Cons);

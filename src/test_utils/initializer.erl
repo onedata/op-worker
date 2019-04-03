@@ -198,7 +198,11 @@ clean_test_users_and_spaces_no_validate(Config) ->
     Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
 basic_session_setup(Worker, SessId, Iden, Con, Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Con])),
+        reuse_or_create_fuse_session, [SessId, Iden]
+    )),
+    ?assertMatch(ok, rpc:call(Worker, session_connections,
+        register, [SessId, Con]
+    )),
     [{session_id, SessId}, {identity, Iden} | Config].
 
 %%--------------------------------------------------------------------
@@ -273,7 +277,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     Auth = #macaroon_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
+        reuse_or_create_session, [SessId, fuse, Iden, Auth])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     [
         {{spaces, UserId}, Spaces},

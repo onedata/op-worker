@@ -334,7 +334,8 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
     case handle_handshake(State, Data) of
-        {ok, State1} ->
+        {ok, #state{session_id = SessionId} = State1} ->
+            ok = session_connections:register(SessionId, self()),
             State2 = State1#state{status = ready},
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
@@ -378,11 +379,11 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
+terminate(Reason, #state{session_id = SessionId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
-    case SessId of
+    case SessionId of
         undefined -> ok;
-        _ -> session_connections:remove_connection(SessId, self())
+        _ -> session_connections:deregister(SessionId, self())
     end,
     ssl:close(Socket),
     State.
@@ -551,8 +552,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-
-    session_connections:add_connection(SessionId, self()),
     self() ! {upgrade_protocol, Host},
 
     {Ok, Closed, Error} = Transport:messages(),
@@ -646,10 +645,10 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
 %% @private
 -spec handle_handshake_response(state(), binary()) -> {ok, state()} | error().
 handle_handshake_response(#state{
-    session_id = SessId,
+    session_id = SessionId,
     peer_id = ProviderId
 } = State, Data) ->
-    try clproto_serializer:deserialize_server_message(Data, SessId) of
+    try clproto_serializer:deserialize_server_message(Data, SessionId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider ~ts", [
                 provider_logic:to_string(ProviderId)
@@ -759,7 +758,7 @@ send_response(#state{session_id = SessionId} = State, ServerMsg) ->
             % Removal from pool is necessary to avoid deadlock when some other
             % connection terminates as well and tries to send msg via this one
             % while this one tries to send via the other one.
-            session_connections:remove_connection(SessionId, self()),
+            session_connections:deregister(SessionId, self()),
             connection_api:send(SessionId, ServerMsg, [self()]),
             Error
     end.
