@@ -24,4 +24,4 @@ ARCHIVE_NAME='gui_static.tar.gz'
 # be resolved, the script will fall back to secondary.
 PRIMARY_IMAGE='docker.onedata.org/op-gui-default:ID-d43c1ff617'
 # Image which will be used if primary image is not resolved.
-SECONDARY_IMAGE='no-secondary-image' # @fixme
+SECONDARY_IMAGE='onedata/op-gui-default:ID-d43c1ff617'
