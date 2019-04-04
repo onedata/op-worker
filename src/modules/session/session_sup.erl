@@ -88,7 +88,6 @@ child_specs(SessId, provider_incoming) ->
     ];
 child_specs(SessId, provider_outgoing) ->
     [
-        session_watcher_spec(SessId, provider_outgoing),
         sequencer_manager_sup_spec(SessId),
         event_manager_sup_spec(SessId),
         connection_manager_spec(SessId)

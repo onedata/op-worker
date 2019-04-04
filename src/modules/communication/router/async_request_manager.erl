@@ -506,10 +506,10 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
                 ?error("Async Request Manager: process ~p handling request ~p died",
                     [Pid, ReqId]
                 ),
-                connection_utils:send_via_any(?ERROR_MSG(MsgId), Cons),
+                connection_api:send_via_any(?ERROR_MSG(MsgId), Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
-                SendHeartbeats andalso connection_utils:send_via_any(
+                SendHeartbeats andalso connection_api:send_via_any(
                     ?HEARTBEAT_MSG(MsgId), Cons
                 ),
                 case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of

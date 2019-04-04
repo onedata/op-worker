@@ -17,7 +17,12 @@
 -include("proto/oneclient/server_messages.hrl").
 
 %% API
--export([msg_to_string/1]).
+-export([
+    fill_effective_session_info/2,
+    msg_to_string/1
+]).
+
+-type message() :: #client_message{} | #server_message{}.
 
 %%%===================================================================
 %%% API
@@ -26,11 +31,34 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sets effective session field in message to specified session id if
+%% this session is proxied by some other session.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_effective_session_info(message(), session:id()) -> message().
+fill_effective_session_info(Msg, SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{proxy_via = PV}}} when is_binary(PV) ->
+            case Msg of
+                #server_message{effective_session_id = undefined} ->
+                    Msg#server_message{effective_session_id = SessionId};
+                #client_message{effective_session_id = undefined} ->
+                    Msg#client_message{effective_session_id = SessionId};
+                _ ->
+                    Msg
+            end;
+        _ ->
+            Msg
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Converts client/server msg to string. If `log_whole_messages_on_errors`
 %% env variable is set whole msg is printed. Otherwise only relevant fields.
 %% @end
 %%--------------------------------------------------------------------
--spec msg_to_string(#client_message{} | #server_message{}) -> string().
+-spec msg_to_string(message()) -> string().
 msg_to_string(Request) ->
     StringifyWholeMsg = application:get_env(?APP_NAME,
         log_whole_messages_on_errors, false

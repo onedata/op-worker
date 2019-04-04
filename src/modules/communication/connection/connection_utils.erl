@@ -20,68 +20,17 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([send_via_any/2]).
--export([
-    fill_effective_session_info/2,
-    maybe_create_proxied_session/2
-]).
+-export([maybe_create_proxied_session/2]).
 -export([
     protocol_upgrade_request/1,
     process_protocol_upgrade_request/1,
     verify_protocol_upgrade_response/1
 ]).
 
--type message() :: #server_message{} | #client_message{}.
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Tries to send given message via any given connections.
-%% @end
-%%--------------------------------------------------------------------
--spec send_via_any(message(), [pid()]) -> ok | {error, term()}.
-send_via_any(_Msg, []) ->
-    {error, no_connections};
-send_via_any(Msg, [Conn]) ->
-    connection:send_msg(Conn, Msg);
-send_via_any(Msg, [Conn | Cons]) ->
-    case connection:send_msg(Conn, Msg) of
-        ok ->
-            ok;
-        {error, serialization_failed} = SerializationError ->
-            SerializationError;
-        {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
-            WrongConnError;
-        _Error ->
-            send_via_any(Msg, Cons)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Fills message with info about session to which it should be proxied.
-%% @end
-%%--------------------------------------------------------------------
--spec fill_effective_session_info(message(), session:id()) -> message().
-fill_effective_session_info(Msg, SessionId) ->
-    case session:get(SessionId) of
-        {ok, #document{value = #session{proxy_via = PV}}} when is_binary(PV) ->
-            case Msg of
-                #server_message{effective_session_id = undefined} ->
-                    Msg#server_message{effective_session_id = SessionId};
-                #client_message{effective_session_id = undefined} ->
-                    Msg#client_message{effective_session_id = SessionId};
-                _ ->
-                    Msg
-            end;
-        _ ->
-            Msg
-    end.
 
 
 %%--------------------------------------------------------------------

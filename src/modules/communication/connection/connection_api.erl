@@ -22,7 +22,7 @@
 %% API
 -export([
     communicate/2,
-    send/2, send/3
+    send/2, send/3, send_via_any/2
 ]).
 
 -type client_message() :: #client_message{}.
@@ -30,7 +30,6 @@
 -type message() :: client_message() | server_message().
 
 -define(RESPONSE_AWAITING_PERIOD, 3 * ?WORKERS_STATUS_CHECK_INTERVAL).
-
 
 %%%===================================================================
 %%% API
@@ -103,6 +102,29 @@ send(SessionId, Msg, ExcludedCons) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tries to send given message via any of specified connections.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_via_any(message(), [pid()]) -> ok | {error, term()}.
+send_via_any(_Msg, []) ->
+    {error, no_connections};
+send_via_any(Msg, [Conn]) ->
+    connection:send_msg(Conn, Msg);
+send_via_any(Msg, [Conn | Cons]) ->
+    case connection:send_msg(Conn, Msg) of
+        ok ->
+            ok;
+        {error, serialization_failed} = SerializationError ->
+            SerializationError;
+        {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
+            WrongConnError;
+        _Error ->
+            send_via_any(Msg, Cons)
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -115,7 +137,7 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
     case session_connections:list(SessionId) of
         {ok, AllCons} ->
             Cons = utils:random_shuffle(AllCons -- ExcludedCons),
-            connection_utils:send_via_any(Msg, Cons);
+            send_via_any(Msg, Cons);
         Error ->
             Error
     end.
