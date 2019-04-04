@@ -211,7 +211,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
-    ProxyVia :: session:id() | undefined) ->
+    ProxyVia :: oneprovider:id() | undefined) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
     Sess = #session{

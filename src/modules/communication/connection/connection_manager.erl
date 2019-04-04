@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% This module manages outgoing connections to peer provider.
+%%% It starts them and restarts when they fail. Also sends keepalives
+%%% through them periodically.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_manager).
@@ -145,7 +147,7 @@ handle_info(keepalive, #state{session_id = SessionId} = State) ->
                 connection:send_keepalive(Conn) 
             end, Cons);
         Error ->
-            ?error("Async request manager for session ~p failed to send "
+            ?error("Connection manager for session ~p failed to send "
                    "keepalives due to: ~p", [
                 SessionId, Error
             ])
@@ -192,7 +194,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% TODO WRITEME
+%% Connects to yet unconnected nodes of peer provider if next renewal
+%% is not scheduled yet. Otherwise does nothing.
 %% @end
 %%--------------------------------------------------------------------
 -spec renew_connections(state()) -> state().
@@ -201,72 +204,62 @@ renew_connections(#state{renewal_timer = undefined} = State) ->
         renew_connections_insecure(State)
     catch
         Type:Reason ->
-            NewState = #state{
-                peer_id = ProviderId,
-                renewal_interval = NextRenewalInterval
-            } = schedule_next_renewal(State),
-
             ?warning("Failed to renew connections to peer provider(~p) "
                      "due to ~p:~p. Next retry not sooner than ~p s.", [
-                ProviderId, Type, Reason, NextRenewalInterval / 1000
+                State#state.peer_id, Type, Reason,
+                State#state.renewal_interval / 1000
             ]),
-            NewState
+            schedule_next_renewal(State)
     end;
 renew_connections(State) ->
     State.
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Fetches peer nodes and connects to those that are not yet connected.
+%% Also resets renewal interval but only if no errors occurred. Otherwise
+%% schedules next renewal.
+%% @end
+%%--------------------------------------------------------------------
 -spec renew_connections_insecure(state()) -> state().
 renew_connections_insecure(#state{
+    session_id = SessionId,
     peer_id = ProviderId,
     connections = Cons
 } = State0) ->
-    {ok, Domain} = provider_logic:get_domain(ProviderId),
-    {ok, AllHosts} = provider_logic:get_nodes(ProviderId),
-    Hosts = AllHosts -- maps:values(Cons),
+    case provider_logic:verify_provider_identity(ProviderId) of
+        ok -> ok;
+        Error1 -> throw({cannot_verify_peer_op_identity, Error1})
+    end,
 
-    State1 = connect_to_hosts(Hosts, Domain, State0),
-    State2 = case State1#state.renewal_timer of
+    Port = https_listener:port(),
+    {ok, Domain} = provider_logic:get_domain(ProviderId),
+    {ok, [_ | _] = Hosts} = provider_logic:get_nodes(ProviderId),
+
+    State1 = lists:foldl(fun(Host, AccState) ->
+        case connection:connect_to_provider(ProviderId, SessionId,
+            Domain, Host, Port, ranch_ssl, timer:seconds(5)
+        ) of
+            {ok, Pid} ->
+                AccState#state{connections = Cons#{Pid => Host}};
+            {error, incompatible_peer_op_version} ->
+                throw(incompatible_peer_op_version);
+            {error, cannot_check_peer_op_version} ->
+                throw(cannot_check_peer_op_version);
+            Error2 ->
+                ?warning("Failed to connect to host ~p of provider ~p "
+                         "due to ~p. ", [Host, ProviderId, Error2]),
+                schedule_next_renewal(AccState)
+        end
+    end, State0, Hosts -- maps:values(Cons)),
+
+    case State1#state.renewal_timer of
         undefined ->
             State1#state{renewal_interval = ?INITIAL_RENEWAL_INTERVAL};
         _ ->
             State1
-    end,
-    case map_size(State2#state.connections) of
-        0 -> schedule_next_renewal(State2);
-        _ -> State2
-    end.
-
-
-%% @private
--spec connect_to_hosts([binary()], od_provider:domain(), state()) -> state().
-connect_to_hosts([], _Domain, State) ->
-    State;
-connect_to_hosts([Host | Hosts], Domain, #state{
-    session_id = SessionId,
-    peer_id = ProviderId,
-    connections = Cons
-} = State) ->
-    case connection:connect_to_provider(
-        ProviderId, SessionId, Domain, Host, https_listener:port(),
-        ranch_ssl, timer:seconds(5)
-    ) of
-        {ok, Pid} ->
-            connect_to_hosts(Hosts, Domain, State#state{
-                connections = Cons#{Pid => Host}
-            });
-        {error, Reason} when
-            Reason == incompatible_peer_op_version orelse
-            Reason == cannot_check_peer_op_version orelse
-            Reason == cannot_verify_identity
-        ->
-            throw(Reason);
-        Error ->
-            ?warning("Failed to connect to host ~p of provider ~p due to ~p. ", [
-                Host, ProviderId, Error
-            ]),
-            connect_to_hosts(Hosts, Domain, schedule_next_renewal(State))
     end.
 
 

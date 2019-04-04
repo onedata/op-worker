@@ -531,15 +531,6 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> state() | no_return().
 connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
-    case provider_logic:verify_provider_identity(ProviderId) of
-        ok ->
-            ok;
-        Err ->
-            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
-                ProviderId, Err
-            ]),
-            throw(cannot_verify_identity)
-    end,
     provider_logic:assert_provider_compatibility(ProviderId, Domain, Host),
 
     DomainAndIpInfo = case Domain of

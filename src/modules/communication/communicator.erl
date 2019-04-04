@@ -196,8 +196,6 @@ send_to_peer(SessionId, Msg, Retries) ->
     case connection_api:send(SessionId, Msg) of
         ok ->
             ok;
-        {error, no_connections} = NoConnectionsError ->
-            NoConnectionsError;
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_peer(SessionId, Msg, retries_left(Retries))
