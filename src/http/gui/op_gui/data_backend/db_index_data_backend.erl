@@ -1,29 +1,27 @@
 %%%-------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2015-2016 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the data-space model used in Ember application.
+%%% db-index model for ember app.
 %%% @end
 %%%-------------------------------------------------------------------
--module(user_data_backend).
+-module(db_index_data_backend).
 -behavior(data_backend_behaviour).
--author("Lukasz Opiola").
+-author("Bartosz Walkowicz").
 
--include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
+
+%% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([user_record/2]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -55,15 +53,9 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"user">>, UserId) ->
-    SessionId = gui_session:get_session_id(),
-    case gui_session:get_user_id() of
-        UserId ->
-            {ok, user_record(SessionId, UserId)};
-        _ ->
-            gui_error:unauthorized()
-    end.
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+find_record(<<"db-index">>, RecordId) ->
+    db_index_record(RecordId).
 
 
 %%--------------------------------------------------------------------
@@ -72,9 +64,9 @@ find_record(<<"user">>, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"user">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
+find_all(_ResourceType) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -83,9 +75,9 @@ find_all(<<"user">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
-query(<<"user">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
+query(_ResourceType, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -94,9 +86,9 @@ query(<<"user">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-query_record(<<"user">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+query_record(_ResourceType, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -105,9 +97,9 @@ query_record(<<"user">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"user">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+create_record(_ResourceType, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -117,9 +109,9 @@ create_record(<<"user">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
-update_record(<<"user">>, _UserId, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    ok | op_gui_error:error_result().
+update_record(_ResourceType, _Id, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -128,52 +120,40 @@ update_record(<<"user">>, _UserId, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
-delete_record(<<"user">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    ok | op_gui_error:error_result().
+delete_record(_ResourceType, _Id) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%%===================================================================
-%%% API
+%%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Returns a client-compliant user record based on space id.
+%% Returns a client-compliant db index record based on space id and index name.
 %% @end
 %%--------------------------------------------------------------------
--spec user_record(SessionId :: session:id(), UserId :: od_user:id()) ->
-    proplists:proplist().
-user_record(SessionId, UserId) ->
-    {ok, #document{value = #od_user{
-        name = Name,
-        default_space = DefaultSpaceValue,
-        eff_spaces = EffSpaces,
-        eff_handle_services = EffHServices
-    }}} = user_logic:get(SessionId, UserId),
-    DefaultSpace = case DefaultSpaceValue of
-        undefined -> null;
-        _ -> DefaultSpaceValue
-    end,
-    Shares = lists:foldl(
-        fun(SpaceId, Acc) ->
-            % Make sure that user is allowed to view shares in this space
-            Authorized = space_logic:has_eff_privilege(
-                SessionId, SpaceId, UserId, ?SPACE_VIEW
-            ),
-            case Authorized of
-                true ->
-                    {ok, ShareIds} = space_logic:get_shares(SessionId, SpaceId),
-                    ShareIds ++ Acc;
-                false ->
-                    Acc
-            end
-        end, [], EffSpaces),
-    [
-        {<<"id">>, UserId},
-        {<<"name">>, Name},
-        {<<"defaultSpaceId">>, gs_protocol:undefined_to_null(DefaultSpace)},
-        {<<"spaces">>, EffSpaces},
-        {<<"shares">>, Shares},
-        {<<"handleServices">>, EffHServices}
-    ].
+-spec db_index_record(IndexId :: binary()) -> {ok, proplists:proplist()}.
+db_index_record(IndexId) ->
+    {ok, #document{value = #index{
+        name = IndexName,
+        space_id = SpaceId,
+        index_options = IndexOptions,
+        providers = Providers,
+        map_function = MapFunction,
+        reduce_function = ReduceFunction,
+        spatial = Spatial
+    }}} = index:get(IndexId),
+
+    {ok, [
+        {<<"id">>, IndexId},
+        {<<"name">>, IndexName},
+        {<<"space">>, SpaceId},
+        {<<"indexOptions">>, {IndexOptions}},
+        {<<"providers">>, Providers},
+        {<<"mapFunction">>, MapFunction},
+        {<<"reduceFunction">>, utils:ensure_defined(ReduceFunction, undefined, null)},
+        {<<"spatial">>, Spatial}
+    ]}.

@@ -6,18 +6,32 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles GUI session manipulation.
+%%% This module handles GUI authentication and session manipulation.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_gui_session).
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("gui/include/gui_session.hrl").
 
--export([log_in/3, log_out/1, get/1, get_user_id/1]).
--export([put_value/3, get_value/2, get_value/3, update_value/4]).
+-export([
+    authenticate/1,
+    initialize/3,
+    is_logged_in/0,
+    set_session_id/1, get_session_id/0,
+    set_user_id/1, get_user_id/0,
+    set_requested_host/1, get_requested_host/0
+]).
+-export([
+    put_value/3,
+    get_value/2, get_value/3,
+    update_value/4
+]).
 
 %%%===================================================================
 %%% API
@@ -25,66 +39,119 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Logs given user in, creating new session and setting the session cookie in
-%% http response.
+%% Authenticates a client based on cowboy Req object.
 %% @end
 %%--------------------------------------------------------------------
--spec log_in(session:identity(), session:auth(), cowboy_req:req()) ->
-    cowboy_req:req().
-log_in(Identity, Auth, Req) ->
-    {ok, SessionId} = session_manager:create_gui_session(Identity, Auth),
-    put_value(SessionId, gui_session_user_id, Identity#user_identity.user_id),
-    set_session_cookie(SessionId, session_utils:session_ttl(), Req).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Logs out the user that performed given request, deletes the session and
-%% clears the session cookie.
-%% @end
-%%--------------------------------------------------------------------
--spec log_out(cowboy_req:req()) -> cowboy_req:req().
-log_out(Req) ->
-    case get_session_cookie(Req) of
+-spec authenticate(cowboy_req:req()) ->
+    {ok, session:identity(), session:auth()} | false | {error, term()}.
+authenticate(Req) ->
+    case resolve_auth(Req) of
         undefined ->
-            Req;
-        SessionId ->
-            session_manager:remove_session(SessionId),
-            unset_session_cookie(Req)
+            false;
+        Macaroon ->
+            Auth = #macaroon_auth{macaroon = Macaroon},
+            case user_identity:get_or_fetch(Auth) of
+                {error, _} ->
+                    ?ERROR_UNAUTHORIZED;
+                {ok, #document{value = Identity}} ->
+                    {ok, Identity, Auth}
+            end
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves the session by given session id or http request.
+%% Initializes a GUI session based on identity and auth, attaches
+%% session id and corresponding user id to the current process.
 %% @end
 %%--------------------------------------------------------------------
--spec get(session:id() | cowboy_req:req()) -> {ok, session:doc()} | {error, term()}.
-get(SessionId) when is_binary(SessionId) ->
-    session:get(SessionId);
-get(Req) ->
-    case get_session_cookie(Req) of
-        undefined ->
-            {error, not_found};
-        SessionId ->
-            ?MODULE:get(SessionId)
-    end.
+-spec initialize(session:identity(), session:auth(), Host :: binary()) ->
+    session:id().
+initialize(?GUEST_IDENTITY, ?GUEST_AUTH, Host) ->
+    set_session_id(?GUEST_SESS_ID),
+    set_user_id(?GUEST_USER_ID),
+    set_requested_host(Host),
+    ?GUEST_SESS_ID;
+initialize(Identity, Auth, Host) ->
+    {ok, SessionId} = session_manager:reuse_or_create_gui_session(Identity, Auth),
+    set_session_id(SessionId),
+    set_user_id(Identity#user_identity.user_id),
+    set_requested_host(Host),
+    SessionId.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the user id of currents session owner, or error if there is no
-%% valid session.
+%% Predicate saying if current process is attached to a session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(cowboy_req:req()) -> {ok, od_user:id()} |  {error, term()}.
-get_user_id(Req) ->
-    case ?MODULE:get(Req) of
-        {error, not_found} ->
-            {error, not_logged_in};
-        {ok, Session} ->
-            session:get_user_id(Session)
-    end.
+-spec is_logged_in() -> boolean().
+is_logged_in() ->
+    get_session_id() /= undefined.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Attaches given session id to current process.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_session_id(session:id()) -> ok.
+set_session_id(SessionId) ->
+    put(op_gui_session_id, SessionId),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the session id which is attached to the current process.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_session_id() -> session:id().
+get_session_id() ->
+    get(op_gui_session_id).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Attaches given user id to current process.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_user_id(od_user:id()) -> ok.
+set_user_id(UserId) ->
+    put(op_gui_user_id, UserId),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the user id which is attached to the current process.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id() -> od_user:id().
+get_user_id() ->
+    get(op_gui_user_id).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Attaches given host to current process. Host is the server hostname
+%% requested by the client (present in the Host header).
+%% @end
+%%--------------------------------------------------------------------
+-spec set_requested_host(binary()) -> ok.
+set_requested_host(Host) ->
+    put(op_gui_requested_host, Host),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the host which is attached to the current process.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_requested_host() -> binary().
+get_requested_host() ->
+    get(op_gui_requested_host).
 
 
 %%--------------------------------------------------------------------
@@ -148,7 +215,7 @@ update_value(SessionId, Key, UpdateFun, InitialValue) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% {@link gui_session_plugin_behaviour} callback update_session/2.
+%% Updates the memory stored in the session record according to MemoryUpdateFun.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_session(SessId :: binary(),
@@ -165,42 +232,18 @@ update_session(SessionId, MemoryUpdateFun) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Returns the value of session cookie sent by the client, or undefined.
+%% Resolves authorization carried by given request - by X-Auth-Token header
+%% or in "token" query param.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_cookie(cowboy_req:req()) -> undefined | binary().
-get_session_cookie(Req) ->
-    Cookies = cowboy_req:parse_cookies(Req),
-    case proplists:get_value(?SESSION_COOKIE_KEY, Cookies, ?NO_SESSION) of
-        ?NO_SESSION -> undefined;
-        Cookie -> Cookie
+-spec resolve_auth(cowboy_req:req()) -> undefined | binary().
+resolve_auth(Req) ->
+    case cowboy_req:header(<<"x-auth-token">>, Req, undefined) of
+        undefined ->
+            QueryParams = cowboy_req:parse_qs(Req),
+            proplists:get_value(<<"token">>, QueryParams, undefined);
+        Macaroon ->
+            Macaroon
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets the value of session cookie in the response to client request.
-%% @end
-%%--------------------------------------------------------------------
--spec set_session_cookie(SessionId :: binary(), TTL :: integer(), cowboy_req:req()) ->
-    cowboy_req:req().
-set_session_cookie(SessionId, TTL, Req) ->
-    Options = #{
-        path => <<"/">>,
-        max_age => TTL,
-        secure => true,
-        http_only => true
-    },
-    cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req, Options).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Clears the value of session cookie in the response to client request
-%% (effectively clearing his session).
-%% @end
-%%--------------------------------------------------------------------
--spec unset_session_cookie(cowboy_req:req()) -> cowboy_req:req().
-unset_session_cookie(Req) ->
-    set_session_cookie(?NO_SESSION, 0, Req).

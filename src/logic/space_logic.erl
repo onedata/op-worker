@@ -17,11 +17,13 @@
 -module(space_logic).
 -author("Lukasz Opiola").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -export([get/2, get_protected_data/2]).
 -export([get_name/2]).

@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -546,8 +547,7 @@ get_transfer_stats(RequestedTransferType, SpaceId) ->
         _ ->
             [RequestedTransferType]
     end,
-    {ok, #document{value = Space}} = od_space:get(SpaceId),
-    SupportingProviders = maps:keys(Space#od_space.providers),
+    {ok, SupportingProviders} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId),
 
     lists:foldl(fun(TransferType, TransferStatsMap) ->
         TransferStats = lists:foldl(fun(Provider, OldTransferStats) ->

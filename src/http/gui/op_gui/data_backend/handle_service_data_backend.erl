@@ -1,24 +1,24 @@
 %%%-------------------------------------------------------------------
-%%% @author Bartosz Walkowicz
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% db-index model for ember app.
+%%% the handle_service model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(db_index_data_backend).
+-module(handle_service_data_backend).
 -behavior(data_backend_behaviour).
--author("Bartosz Walkowicz").
+-author("Lukasz Opiola").
 
+-include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
-
-%% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
@@ -53,9 +53,19 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"db-index">>, RecordId) ->
-    db_index_record(RecordId).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+find_record(<<"handle-service">>, HandleServiceId) ->
+    SessionId = op_gui_session:get_session_id(),
+    UserId = op_gui_session:get_user_id(),
+    {ok, #document{
+        value = #od_handle_service{
+            name = Name
+        }}} = handle_service_logic:get(SessionId, HandleServiceId),
+    {ok, [
+        {<<"id">>, HandleServiceId},
+        {<<"name">>, Name},
+        {<<"user">>, UserId}
+    ]}.
 
 
 %%--------------------------------------------------------------------
@@ -64,9 +74,9 @@ find_record(<<"db-index">>, RecordId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(_ResourceType) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
+find_all(<<"handle-service">>) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -75,9 +85,9 @@ find_all(_ResourceType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
-query(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
+query(<<"handle-service">>, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -86,9 +96,9 @@ query(_ResourceType, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-query_record(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+query_record(<<"handle-service">>, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -97,9 +107,9 @@ query_record(_ResourceType, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-create_record(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+create_record(<<"handle-service">>, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -109,9 +119,9 @@ create_record(_ResourceType, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
-update_record(_ResourceType, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    ok | op_gui_error:error_result().
+update_record(<<"handle-service">>, _Id, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -120,40 +130,6 @@ update_record(_ResourceType, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
-delete_record(_ResourceType, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant db index record based on space id and index name.
-%% @end
-%%--------------------------------------------------------------------
--spec db_index_record(IndexId :: binary()) -> {ok, proplists:proplist()}.
-db_index_record(IndexId) ->
-    {ok, #document{value = #index{
-        name = IndexName,
-        space_id = SpaceId,
-        index_options = IndexOptions,
-        providers = Providers,
-        map_function = MapFunction,
-        reduce_function = ReduceFunction,
-        spatial = Spatial
-    }}} = index:get(IndexId),
-
-    {ok, [
-        {<<"id">>, IndexId},
-        {<<"name">>, IndexName},
-        {<<"space">>, SpaceId},
-        {<<"indexOptions">>, {IndexOptions}},
-        {<<"providers">>, Providers},
-        {<<"mapFunction">>, MapFunction},
-        {<<"reduceFunction">>, utils:ensure_defined(ReduceFunction, undefined, null)},
-        {<<"spatial">>, Spatial}
-    ]}.
+    ok | op_gui_error:error_result().
+delete_record(<<"handle-service">>, _Id) ->
+    op_gui_error:report_error(<<"Not implemented">>).

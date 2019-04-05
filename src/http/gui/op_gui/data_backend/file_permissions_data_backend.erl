@@ -54,9 +54,9 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"file-permission">>, FileId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     file_permissions_record(SessionId, FileId).
 
 
@@ -66,9 +66,9 @@ find_record(<<"file-permission">>, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(<<"file-permission">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -77,9 +77,9 @@ find_all(<<"file-permission">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(<<"file-permission">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -88,9 +88,9 @@ query(<<"file-permission">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(<<"file-permission">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -99,9 +99,9 @@ query_record(<<"file-permission">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"file-permission">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -111,10 +111,10 @@ create_record(<<"file-permission">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(<<"file-permission">>, FileId, Data) ->
     try
-        SessId = gui_session:get_session_id(),
+        SessId = op_gui_session:get_session_id(),
         Type = proplists:get_value(<<"type">>, Data),
         case Type of
             <<"acl">> ->
@@ -124,7 +124,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
                     ok ->
                         ok;
                     {error, ?EACCES} ->
-                        gui_error:report_warning(
+                        op_gui_error:report_warning(
                             <<"Cannot change ACL - access denied.">>
                         )
                 end;
@@ -148,16 +148,16 @@ update_record(<<"file-permission">>, FileId, Data) ->
                         case logical_file_manager:set_perms(
                             SessId, {guid, FileId}, PosixValue) of
                             {error, ?EACCES} ->
-                                gui_error:report_warning(<<"Cannot set "
+                                op_gui_error:report_warning(<<"Cannot set "
                                 "permissions - access denied.">>);
                             {error, ?EPERM} ->
-                                gui_error:report_warning(<<"Cannot set "
+                                op_gui_error:report_warning(<<"Cannot set "
                                 "permissions - access denied.">>);
                             ok ->
                                 ok
                         end;
                     false ->
-                        gui_error:report_warning(<<"Cannot change permissions, "
+                        op_gui_error:report_warning(<<"Cannot change permissions, "
                         "invalid octal value.">>)
                 end
         end
@@ -165,7 +165,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
         ?error_stacktrace("Cannot set permissions for file ~p - ~p:~p", [
             FileId, Error, Message
         ]),
-        gui_error:report_warning(
+        op_gui_error:report_warning(
             <<"Cannot change permissions due to unknown error.">>)
     end.
 
@@ -176,9 +176,9 @@ update_record(<<"file-permission">>, FileId, Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(<<"file-permission">>, _FileId) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%%===================================================================
@@ -200,7 +200,7 @@ delete_record(<<"file-permission">>, _FileId) ->
 file_permissions_record(SessId, FileId) ->
     case logical_file_manager:stat(SessId, {guid, FileId}) of
         {error, ?ENOENT} ->
-            gui_error:report_error(<<"No such file or directory.">>);
+            op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, #file_attr{mode = PermissionsAttr}} ->
             PosixValue = integer_to_binary((PermissionsAttr rem 8#1000), 8),
             GetAclResult = logical_file_manager:get_acl(SessId, {guid, FileId}),

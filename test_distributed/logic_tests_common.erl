@@ -76,6 +76,9 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, provider_logic, assert_zone_compatibility, fun() ->
         ok
     end),
+    ok = test_utils:mock_expect(Nodes, provider_logic, has_eff_user, fun(UserId) ->
+        lists:member(UserId, [?USER_1, ?USER_2, ?USER_3])
+    end),
 
     % Mock macaroons handling
     ok = test_utils:mock_expect(Nodes, onedata_macaroons, serialize, fun(M) ->
@@ -125,7 +128,7 @@ create_user_session(Config, UserId) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     Auth = ?USER_INTERNAL_MACAROON_AUTH(UserId),
     {ok, #document{value = Identity}} = rpc:call(Node, user_identity, get_or_fetch, [Auth]),
-    {ok, SessionId} = rpc:call(Node, session_manager, create_gui_session, [Identity, Auth]),
+    {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [Identity, Auth]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).
     rpc:call(Node, user_logic, get, [SessionId, ?SELF]),
@@ -269,6 +272,17 @@ mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER
             {ok, #gs_resp_graph{}};
         _ ->
             ?ERROR_BAD_VALUE_BINARY(<<"name">>)
+    end;
+mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, undefined, Data) ->
+    % undefined Authorization means asking with provider's auth
+    try
+        #{<<"workerVersion">> := #{<<"gui">> := GuiHash}} = Data,
+        case is_binary(GuiHash) of
+            true -> {ok, #gs_resp_graph{}};
+            false -> ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>)
+        end
+    catch _:_ ->
+        ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
 
