@@ -234,20 +234,16 @@ renew_connections_insecure(#state{
         Error1 -> throw({cannot_verify_peer_op_identity, Error1})
     end,
 
-    Port = https_listener:port(),
     {ok, Domain} = provider_logic:get_domain(ProviderId),
+    provider_logic:assert_provider_compatibility(ProviderId, Domain, Domain),
+
+    Port = https_listener:port(),
     {ok, [_ | _] = Hosts} = provider_logic:get_nodes(ProviderId),
 
     State1 = lists:foldl(fun(Host, AccState) ->
-        case connection:connect_to_provider(ProviderId, SessionId,
-            Domain, Host, Port, ranch_ssl, timer:seconds(5)
-        ) of
+        case connection:start_link(ProviderId, SessionId, Domain, Host, Port) of
             {ok, Pid} ->
                 AccState#state{connections = Cons#{Pid => Host}};
-            {error, incompatible_peer_op_version} ->
-                throw(incompatible_peer_op_version);
-            {error, cannot_check_peer_op_version} ->
-                throw(cannot_check_peer_op_version);
             Error2 ->
                 ?warning("Failed to connect to host ~p of provider ~p "
                          "due to ~p. ", [Host, ProviderId, Error2]),

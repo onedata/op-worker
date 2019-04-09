@@ -137,8 +137,9 @@
 
 %% API
 -export([
-    connect_to_provider/7,
+    start_link/5, start_link/7,
     close/1,
+
     send_msg/2,
     send_keepalive/1
 ]).
@@ -166,13 +167,27 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% @equiv start_link(ProviderId, SessionId, Domain, Host, Port, ranch_ssl,
+%% timer:seconds(5)).
+%% @end
+%%--------------------------------------------------------------------
+-spec start_link(od_provider:id(), session:id(), Domain :: binary(),
+    Host :: binary(), Port :: non_neg_integer()) -> {ok, pid()} | error().
+start_link(ProviderId, SessionId, Domain, Host, Port) ->
+    start_link(ProviderId, SessionId, Domain, Host, Port,
+        ranch_ssl, timer:seconds(5)
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Starts an connection to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_to_provider(od_provider:id(), session:id(), Domain :: binary(),
+-spec start_link(od_provider:id(), session:id(), Domain :: binary(),
     Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
-    Timeout :: non_neg_integer()) -> {ok, Pid :: pid()} | error().
-connect_to_provider(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
+    Timeout :: non_neg_integer()) -> {ok, pid()} | error().
+start_link(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     proc_lib:start_link(?MODULE, init, [
         ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
     ]).
@@ -505,7 +520,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     no_return().
 init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     try
-        State = connect_to_provider_internal(
+        State = connect_to_provider(
             SessionId, ProviderId, Domain, Host, Port,
             Transport, Timeout
         ),
@@ -526,13 +541,11 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
 %% Attempts to connect to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_to_provider_internal(session:id(), od_provider:id(),
+-spec connect_to_provider(session:id(), od_provider:id(),
     Domain :: binary(), Host :: binary(),
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> state() | no_return().
-connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
-    provider_logic:assert_provider_compatibility(ProviderId, Domain, Host),
-
+connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
     DomainAndIpInfo = case Domain of
         Host -> str_utils:format("@ ~s:~b", [Host, Port]);
         _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])

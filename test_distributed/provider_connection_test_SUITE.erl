@@ -56,7 +56,7 @@ incompatible_providers_should_not_connect(Config) ->
     % providers should start connecting right after init_per_testcase
     % (spaces creation); just in case wait some time before checking
     % that connection failed
-    timer:sleep(30 * 1000),
+    timer:sleep(timer:seconds(30)),
 
     % There are 2 providers and 3 nodes:
     %   * P1 -> 1 node
@@ -243,8 +243,14 @@ connection_exists(Provider, PeerProvider) ->
     PeerProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(PeerProvider)),
     IncomingSessId = get_provider_session_id(Provider, incoming, PeerProviderId),
     OutgoingSessId = get_provider_session_id(Provider, outgoing, PeerProviderId),
-    session_exists(Provider, IncomingSessId)
-        orelse session_exists(Provider, OutgoingSessId).
+
+    IncomingConnExists = session_exists(Provider, IncomingSessId),
+    % Outgoing session is always created but will fail to make any connection
+    % in case of providers incompatibilities.
+    OutgoingConnExists = session_exists(Provider, OutgoingSessId) andalso
+        list_session_connections(Provider, OutgoingSessId) =/= [],
+
+    IncomingConnExists orelse OutgoingConnExists.
 
 
 get_provider_session_id(Worker, Type, ProviderId) ->
@@ -255,6 +261,11 @@ get_provider_session_id(Worker, Type, ProviderId) ->
 
 session_exists(Provider, SessId) ->
     rpc:call(Provider, session, exists, [SessId]).
+
+
+list_session_connections(Provider, SessId) ->
+    {ok, Cons} = rpc:call(Provider, session_connections, list, [SessId]),
+    Cons.
 
 
 -spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
