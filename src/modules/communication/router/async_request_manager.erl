@@ -187,15 +187,15 @@ start_link(SessionId) ->
 %% @doc
 %% Delegates handling of request to specified worker or spawned process
 %% (if worker_ref is `proc`). When worker finishes it's work,
-%% it will send result using given ReplyTo info.
+%% it will send result using given RespondVia info.
 %% @end
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
     respond_via()) -> ok | {ok, server_message()}.
-delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
+delegate_and_supervise(WorkerRef, Req, MsgId, RespondVia) ->
     try
         ReqId = {make_ref(), MsgId},
-        ok = delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo)
+        ok = delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia)
     catch
         Type:Error ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
@@ -369,7 +369,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 -spec delegate_request_insecure(worker_ref(), term(), req_id(), respond_via()) ->
     ok | error().
-delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
+delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
     Pid = spawn(fun() ->
         Response = try
             HandlerFun()
@@ -380,24 +380,24 @@ delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
                 ]),
                 #processing_status{code = 'ERROR'}
         end,
-        respond(ReplyTo, ReqId, Response)
+        respond(RespondVia, ReqId, Response)
     end),
-    report_pending_request(ReplyTo, Pid, ReqId);
+    report_pending_request(RespondVia, Pid, ReqId);
 
-delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
+delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
     ReplyFun =
         fun
             ({ok, Response}) ->
-                respond(ReplyTo, ReqId, Response);
+                respond(RespondVia, ReqId, Response);
             ({error, Reason}) ->
                 ?error("Failed to handle delegated request ~p due to ~p", [
                     ReqId, Reason
                 ]),
-                respond(ReplyTo, ReqId, #processing_status{code = 'ERROR'})
+                respond(RespondVia, ReqId, #processing_status{code = 'ERROR'})
         end,
     case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
         Pid when is_pid(Pid) ->
-            report_pending_request(ReplyTo, Pid, ReqId);
+            report_pending_request(RespondVia, Pid, ReqId);
         Error ->
             Error
     end.

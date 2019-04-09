@@ -30,14 +30,14 @@
 %%% - ready - indicates that connection is in operational mode,
 %%%           so that it can send and receive messages.
 %%%
-%%% More detailed transitions between statuses for each connection and
+%%% More detailed transitions between statuses for each connection type and
 %%% message flow is depicted on diagram below.
 %%%
 %%%              INCOMING              |              OUTGOING
 %%%                                    |
 %%%                                    |             Provider B
 %%%                                    |                 |
-%%%                                    |        0: connect_to_provider
+%%%                                    |           0: start_link
 %%%                                    |                 |
 %%%                                    |                 v
 %%%           Provider A          1: protocol      +------------+
@@ -181,7 +181,7 @@ start_link(ProviderId, SessionId, Domain, Host, Port) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts an connection to peer provider.
+%% Starts an outgoing connection to peer provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(od_provider:id(), session:id(), Domain :: binary(),
@@ -524,6 +524,7 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
             SessionId, ProviderId, Domain, Host, Port,
             Transport, Timeout
         ),
+        self() ! {upgrade_protocol, Host},
         ok = proc_lib:init_ack({ok, self()}),
         gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
     catch
@@ -556,7 +557,6 @@ connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeou
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-    self() ! {upgrade_protocol, Host},
 
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{
@@ -641,7 +641,8 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
         })
     catch Type:Reason ->
         ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
-        send_server_message(State, connection_auth:get_handshake_error(Reason)),
+        ErrorMsg = connection_auth:get_handshake_error_msg(Reason),
+        send_server_message(State, ErrorMsg),
         {error, Reason}
     end.
 

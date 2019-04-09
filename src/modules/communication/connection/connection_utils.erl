@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module providing various utility function for connection/communicator.
+%%% Various connection utility function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_utils).
