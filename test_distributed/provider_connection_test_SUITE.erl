@@ -31,6 +31,7 @@
 
 -export([
     incompatible_providers_should_not_connect/1,
+    provider_should_reconnect_after_loss_of_connection/1,
     deprecated_configuration_endpoint_is_served/1,
     configuration_endpoints_give_same_results/1,
     provider_logic_should_correctly_resolve_nodes_to_connect/1
@@ -39,11 +40,13 @@
 all() ->
     ?ALL([
         incompatible_providers_should_not_connect,
+        provider_should_reconnect_after_loss_of_connection,
         deprecated_configuration_endpoint_is_served,
         configuration_endpoints_give_same_results,
         provider_logic_should_correctly_resolve_nodes_to_connect
     ]).
 
+-define(ATTEMPTS, 90).
 
 %%%===================================================================
 %%% Test functions
@@ -77,10 +80,37 @@ incompatible_providers_should_not_connect(Config) ->
     rpc:multicall(Nodes, application, set_env, [
         ?APP_NAME, compatible_op_versions, [AppVersion]
     ]),
-    ?assertMatch(true, connection_exists(P1, P2), 90),
-    ?assertMatch(true, connection_exists(P2, P1), 90),
+    ?assertMatch(true, connection_exists(P1, P2), ?ATTEMPTS),
+    ?assertMatch(true, connection_exists(P2, P1), ?ATTEMPTS),
 
     ok.
+
+
+provider_should_reconnect_after_loss_of_connection(Config) ->
+    % There are 2 providers and 3 nodes:
+    %   * P1 -> 1 node
+    %   * P2 -> 2 nodes
+    Nodes = ?config(op_worker_nodes, Config),
+    [Domain1, Domain2] = lists:usort([?GET_DOMAIN(N) || N <- Nodes]),
+    P1Worker = hd([N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain1]),
+    P2 = initializer:domain_to_provider_id(Domain2),
+    OutgoingSessId = get_provider_session_id(P1Worker, outgoing, P2),
+
+    % undo initializer mock for get_nodes and reset connections
+    GetNodesFun = fun(PID) ->
+        {ok, IPsAtoms} = inet:getaddrs(binary_to_list(PID), inet),
+        {ok, [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms]}
+    end,
+    test_utils:mock_expect(Nodes, provider_logic, get_nodes, GetNodesFun),
+    Cons = list_session_connections(P1Worker, OutgoingSessId),
+    lists:foreach(fun(Conn) -> connection:close(Conn) end, Cons),
+    timer:sleep(timer:seconds(2)),
+
+    [Conn2, Conn1] = ?assertMatch([_, _], list_session_connections(P1Worker, OutgoingSessId), ?ATTEMPTS),
+    connection:close(Conn1),
+    [Conn3, _] = ?assertMatch([_Conn3, Conn2], list_session_connections(P1Worker, OutgoingSessId), ?ATTEMPTS),
+
+    ?assertNotEqual(Conn1, Conn3).
 
 
 deprecated_configuration_endpoint_is_served(Config) ->

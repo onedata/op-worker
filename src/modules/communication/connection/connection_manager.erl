@@ -240,10 +240,10 @@ renew_connections_insecure(#state{
     Port = https_listener:port(),
     {ok, [_ | _] = Hosts} = provider_logic:get_nodes(ProviderId),
 
-    State1 = lists:foldl(fun(Host, AccState) ->
+    State1 = lists:foldl(fun(Host, #state{connections = AccCons} = AccState) ->
         case connection:start_link(ProviderId, SessionId, Domain, Host, Port) of
             {ok, Pid} ->
-                AccState#state{connections = Cons#{Pid => Host}};
+                AccState#state{connections = AccCons#{Pid => Host}};
             Error2 ->
                 ?warning("Failed to connect to host ~p of provider ~p "
                          "due to ~p. ", [Host, ProviderId, Error2]),
