@@ -6,9 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module manages outgoing connections to peer provider.
-%%% It starts them and restarts when they fail. Also sends keepalives
-%%% through them periodically.
+%%% This module implements gen_server behaviour and is responsible for
+%%% management of connections for outgoing provider session. It starts
+%%% such connections, monitors them and restarts if they fail.
+%%% Outgoing provider sessions should be created immediately after discovering
+%%% new peer (provider supporting the same space as this provider) and
+%%% terminated when when there is no more cooperation point left
+%%% (peer unsupports spaces that we support).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_manager).
@@ -170,8 +174,10 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     state()) -> term().
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, #state{connections = Cons}) ->
+    lists:foreach(fun(Conn) ->
+        connection:close(Conn)
+    end, maps:keys(Cons)).
 
 
 %%--------------------------------------------------------------------
@@ -194,8 +200,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Connects to yet unconnected nodes of peer provider if next renewal
-%% is not scheduled yet. Otherwise does nothing.
+%% Connects to peer nodes with witch he is not yet connected if next
+%% renewal is not scheduled. Otherwise does nothing.
 %% @end
 %%--------------------------------------------------------------------
 -spec renew_connections(state()) -> state().
@@ -218,9 +224,10 @@ renew_connections(State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Fetches peer nodes and connects to those that are not yet connected.
-%% Also resets renewal interval but only if no errors occurred. Otherwise
-%% schedules next renewal.
+%% Verifies peer identity and compatibility. Then, if everything is alright,
+%% attempts to connects to those peer nodes with which he is not yet connected.
+%% In case of errors while connecting to nodes schedules next renewal and if
+%% no such errors occurred resets renewal interval.
 %% @end
 %%--------------------------------------------------------------------
 -spec renew_connections_insecure(state()) -> state().
