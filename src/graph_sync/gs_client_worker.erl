@@ -51,6 +51,7 @@
 
 %% API
 -export([start_link/0]).
+-export([force_terminate/0]).
 -export([request/1, request/2]).
 -export([invalidate_cache/1, invalidate_cache/2]).
 -export([process_push_message/1]).
@@ -71,6 +72,22 @@
 -spec start_link() -> {ok, pid()} | gs_protocol:error().
 start_link() ->
     gen_server2:start_link(?MODULE, [], []).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Forces termination of gs_client_worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_terminate() -> ok.
+force_terminate() ->
+    case get_connection_pid() of
+        Pid when is_pid(Pid) ->
+            gen_server2:call(Pid, {terminate, normal}),
+            ok;
+        _ ->
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -123,7 +140,7 @@ invalidate_cache(#gri{type = Type, id = Id, aspect = instance}) ->
 %%--------------------------------------------------------------------
 -spec invalidate_cache(gs_protocol:entity_type(), gs_protocol:entity_id()) -> ok.
 invalidate_cache(Type, Id) ->
-    Type:delete(Id).
+    Type:invalidate_cache(Id).
 
 
 %%%===================================================================
@@ -145,9 +162,25 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to Onezone: ~p", [ClientRef]),
-            oneprovider:on_connection_to_oz(),
+            ?info("Started connection to Onezone: ~p, running post-init procedures", [
+                ClientRef
+            ]),
+            % Post-init procedures are run in different process to avoid deadlocks.
+            spawn(fun() -> try
+                oneprovider:on_connect_to_oz()
+            catch Type:Message ->
+                ?error_stacktrace(
+                    "Connection to Onezone lost due to unexpected error in post-init - ~p:~p",
+                    [Type, Message]
+                ),
+                % Kill the connection to Onezone, which will cause a reconnection and retry
+                gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME}, {terminate, normal})
+            end end),
             {ok, #state{client_ref = ClientRef}};
+        {error, unauthorized} ->
+            ?info("Unauthorized to start connection to Onezone"),
+            oneprovider:on_deregister(),
+            {stop, normal};
         {error, _} = Error ->
             ?warning("Cannot start connection to Onezone: ~p", [Error]),
             {stop, normal}
@@ -174,6 +207,7 @@ handle_call(#gs_req{} = GsReq, _From, #state{client_ref = ClientRef} = State) ->
     {reply, Result, State};
 
 handle_call({terminate, Reason}, _From, State) ->
+    ?warning("Connection to Onezone terminated"),
     {stop, Reason, ok, State};
 
 handle_call(Request, _From, #state{} = State) ->
@@ -245,6 +279,13 @@ process_push_message(#gs_push_error{error = Error}) ->
     ?error("Unexpected graph sync error: ~p", [Error]);
 
 process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
+    ProviderId = oneprovider:get_id_or_undefined(),
+    case GRI of
+        #gri{type = od_provider, id = ProviderId, aspect = instance} ->
+            oneprovider:on_deregister();
+        _ -> ok
+    end,
+
     invalidate_cache(GRI),
     ?debug("Entity deleted in OZ: ~s", [gs_protocol:gri_to_string(GRI)]);
 
@@ -263,9 +304,7 @@ start_gs_connection() ->
         provider_logic:assert_zone_compatibility(),
 
         Port = ?GS_CHANNEL_PORT,
-        Address = "wss://" ++ oneprovider:get_oz_domain() ++
-            ":" ++ integer_to_list(Port) ++ ?GS_CHANNEL_PATH,
-
+        Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
         {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
@@ -441,7 +480,7 @@ cache_record(ConnRef, GRI = #gri{type = Type, aspect = instance, scope = Scope},
                 scope => Scope,
                 connection_ref => ConnRef
             },
-            Type:save(put_cache_state(CacheState, Doc)),
+            Type:save_to_cache(put_cache_state(CacheState, Doc)),
             ?debug("Cached ~s", [gs_protocol:gri_to_string(GRI)]),
             ok
     end;
@@ -452,7 +491,7 @@ cache_record(_ConnRef, _GRI, _Doc) ->
 
 -spec get_from_cache(gs_protocol:gri()) -> {true, doc()} | false.
 get_from_cache(#gri{type = Type, id = Id}) ->
-    case Type:get(Id) of
+    case Type:get_from_cache(Id) of
         {ok, Doc} ->
             {true, Doc};
         _ ->

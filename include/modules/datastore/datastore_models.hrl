@@ -189,6 +189,11 @@
     timestamp :: integer()
 }).
 
+-record(file_download_code, {
+    session_id :: session:id(),
+    file_guid :: fslogic_worker:file_guid()
+}).
+
 %% Identity containing user_id
 -record(user_identity, {
     user_id :: undefined | od_user:id(),

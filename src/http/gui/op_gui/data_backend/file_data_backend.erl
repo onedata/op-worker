@@ -70,9 +70,9 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"file">>, FileId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     try
         file_record(SessionId, FileId)
     catch T:M ->
@@ -82,7 +82,7 @@ find_record(<<"file">>, FileId) ->
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
 find_record(<<"file-shared">>, AssocId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     file_record(<<"file-shared">>, SessionId, AssocId);
 find_record(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
@@ -95,13 +95,13 @@ find_record(<<"file-public">>, AssocId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(<<"file">>) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 find_all(<<"file-shared">>) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 find_all(<<"file-public">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -110,13 +110,13 @@ find_all(<<"file-public">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 query(<<"file-shared">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 query(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -125,13 +125,13 @@ query(<<"file-public">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 query_record(<<"file-shared">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 query_record(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -140,14 +140,14 @@ query_record(<<"file-public">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"file">>, _Data) ->
     % Files are created via an RPC call
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 create_record(<<"file-shared">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 create_record(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -157,14 +157,14 @@ create_record(<<"file-public">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(<<"file-shared">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
     try
-        SessionId = gui_session:get_session_id(),
+        SessionId = op_gui_session:get_session_id(),
         {ok, OldPath} = logical_file_manager:get_file_path(
             SessionId, FileId
         ),
@@ -174,21 +174,21 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
             {ok, _} ->
                 ok;
             {error, ?EPERM} ->
-                gui_error:report_warning(<<"Permission denied.">>);
+                op_gui_error:report_warning(<<"Permission denied.">>);
             {error, ?EACCES} ->
-                gui_error:report_warning(<<"Access denied.">>);
+                op_gui_error:report_warning(<<"Access denied.">>);
             {error, ?EINVAL} ->
-                gui_error:report_warning(<<"Invalid argument.">>)
+                op_gui_error:report_warning(<<"Invalid argument.">>)
         end
     catch Error:Message ->
         ?error_stacktrace("Cannot rename file via GUI - ~p:~p", [
             Error, Message
         ]),
-        gui_error:report_warning(
+        op_gui_error:report_warning(
             <<"Cannot rename file due to unknown error.">>)
     end;
 update_record(<<"file">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -197,20 +197,20 @@ update_record(<<"file">>, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(<<"file-shared">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file-public">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file">>, FileId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
             modify_ls_cache(remove, FileId, ParentId),
             ok;
         {error, ?EACCES} ->
-            gui_error:report_warning(
+            op_gui_error:report_warning(
                 <<"Cannot remove file or directory - access denied.">>)
     end.
 
@@ -258,7 +258,7 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         value = #od_share{
             name = Name,
             root_file = RootFileId
-        }}} = share_logic:get(gui_session:get_session_id(), ShareId),
+        }}} = share_logic:get(op_gui_session:get_session_id(), ShareId),
     FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
@@ -310,7 +310,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
     end,
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
         {error, ?ENOENT} ->
-            gui_error:report_error(<<"No such file or directory.">>);
+            op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, FileAttr} ->
             #file_attr{
                 name = Name,
@@ -441,12 +441,12 @@ create_file(SessionId, Name, ParentId, Type) ->
                 {ok, FileData} = file_record(
                     <<"file">>, SessionId, ParentId, true, NewChildrenCount
                 ),
-                gui_async:push_updated(<<"file">>, FileData),
+                op_gui_async:push_updated(<<"file">>, FileData),
                 {ok, FileId};
             {error, ?EPERM} ->
-                gui_error:report_warning(<<"Permission denied.">>);
+                op_gui_error:report_warning(<<"Permission denied.">>);
             {error, ?EACCES} ->
-                gui_error:report_warning(<<"Access denied.">>)
+                op_gui_error:report_warning(<<"Access denied.">>)
         end
     catch Error:Message ->
         ?error_stacktrace(
@@ -454,9 +454,9 @@ create_file(SessionId, Name, ParentId, Type) ->
         ),
         case Type of
             <<"dir">> ->
-                gui_error:report_warning(<<"Failed to create new directory.">>);
+                op_gui_error:report_warning(<<"Failed to create new directory.">>);
             <<"file">> ->
-                gui_error:report_warning(<<"Failed to create new file.">>)
+                op_gui_error:report_warning(<<"Failed to create new file.">>)
         end
     end.
 
@@ -482,7 +482,7 @@ report_file_upload(FileId, ParentId) ->
 %%--------------------------------------------------------------------
 -spec report_file_batch_complete(DirId :: fslogic_worker:file_guid()) -> ok.
 report_file_batch_complete(DirId) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     LsSubCacheName = ls_sub_cache_name(),
     [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
         LsSubCacheName, {DirId, last_children_count}
@@ -490,7 +490,7 @@ report_file_batch_complete(DirId) ->
     {ok, FileData} = file_record(
         <<"file">>, SessionId, DirId, true, LastChCount
     ),
-    gui_async:push_updated(<<"file">>, FileData),
+    op_gui_async:push_updated(<<"file">>, FileData),
     ok.
 
 
@@ -517,7 +517,7 @@ fetch_more_dir_children(SessionId, Props) ->
         FileModelType, SessionId, DirId, true, CurrentChCount + ChChunkSize
     ),
     NewChCount = proplists:get_value(<<"children">>, FileData),
-    gui_async:push_updated(FileModelType, FileData),
+    op_gui_async:push_updated(FileModelType, FileData),
     {ok, [{<<"newChildrenCount">>, length(NewChCount)}]}.
 
 
@@ -533,7 +533,7 @@ fetch_more_dir_children(SessionId, Props) ->
 %%--------------------------------------------------------------------
 -spec get_user_root_dir_uuid() -> fslogic_worker:file_guid().
 get_user_root_dir_uuid() ->
-    fslogic_uuid:user_root_dir_guid(gui_session:get_user_id()).
+    fslogic_uuid:user_root_dir_guid(op_gui_session:get_user_id()).
 
 
 %%--------------------------------------------------------------------
@@ -747,6 +747,6 @@ release_lock() ->
 %%--------------------------------------------------------------------
 -spec ls_sub_cache_name() -> ets:tid().
 ls_sub_cache_name() ->
-    WSPid = gui_async:get_ws_process(),
+    WSPid = op_gui_async:get_ws_process(),
     [{WSPid, LsSubCache}] = ets:lookup(?LS_CACHE_ETS, WSPid),
     LsSubCache.

@@ -121,30 +121,24 @@ adding_space_to_harvester_should_start_new_stream(Config) ->
 
 harvest_stream_should_be_stopped_when_harvester_is_deleted(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Timeout = 10,
-    test_utils:set_env(Nodes, ?APP_NAME, harvest_stream_healthcheck_interval, timer:seconds(Timeout)),
     update_harvest_streams_test_base(Config, #{?HARVESTER_1 => #{indices => 1, spaces => 1}}),
     ?assertMatch(1, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS),
     update_harvest_streams_test_base(Config, #{}),
-    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), Timeout).
+    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS).
 
 harvest_stream_should_be_stopped_when_index_is_deleted_from_harvester(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Timeout = 10,
-    test_utils:set_env(Nodes, ?APP_NAME, harvest_stream_healthcheck_interval, timer:seconds(Timeout)),
     update_harvest_streams_test_base(Config, #{?HARVESTER_1 => #{indices => 1, spaces => 1}}),
     ?assertMatch(1, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS),
     update_harvest_streams_test_base(Config, #{?HARVESTER_1 => #{indices => 0, spaces => 1}}),
-    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), Timeout).
+    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS).
 
 harvest_stream_should_be_stopped_when_space_is_deleted_from_harvester(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Timeout = 10,
-    test_utils:set_env(Nodes, ?APP_NAME, harvest_stream_healthcheck_interval, timer:seconds(Timeout)),
     update_harvest_streams_test_base(Config, #{?HARVESTER_1 => #{indices => 1, spaces => 1}}),
     ?assertMatch(1, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS),
     update_harvest_streams_test_base(Config, #{?HARVESTER_1 => #{indices => 1, spaces => 0}}),
-    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), Timeout).
+    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS).
 
 start_stop_streams_mixed_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
@@ -222,7 +216,7 @@ update_harvest_streams_test_base(Config, HarvestersDescription) ->
     {ok, DP = #document{value = ODP}} = get_provider_doc(Node, ProviderId),
     save_provider_doc(Node, DP#document{value = ODP#od_provider{eff_harvesters = Harvesters}}),
     lists:foreach(fun(HarvesterId) ->
-        % trigger od_harvester:save
+        % trigger od_harvester:save_to_cache
         _  = get_harvester_doc(Node, HarvesterId)
     end, Harvesters),
     ?assertMatch(TotalIndicesNum, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS).
@@ -280,7 +274,7 @@ harvesters_config(HarvestersDescription) ->
 
 mock_harvester_logic_get(Nodes, HarvestersConfig) ->
     ok = test_utils:mock_expect(Nodes, harvester_logic, get, fun(HarvesterId) ->
-        od_harvester:save(maps:get(HarvesterId, HarvestersConfig)),
+        od_harvester:save_to_cache(maps:get(HarvesterId, HarvestersConfig)),
         {ok, maps:get(HarvesterId, HarvestersConfig)}
     end).
 
@@ -303,4 +297,4 @@ get_provider_doc(Node, ProviderId) ->
     rpc:call(Node, provider_logic, get, [ProviderId]).
 
 save_provider_doc(Node, Doc) ->
-    rpc:call(Node, od_provider, save, [Doc]).
+    rpc:call(Node, od_provider, save_to_cache, [Doc]).

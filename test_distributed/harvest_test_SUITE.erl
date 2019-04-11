@@ -475,7 +475,7 @@ init_per_testcase(default, Config) ->
     lists:foreach(fun(W) ->
         {ok, D} = rpc:call(W, provider_logic, get, [?PROVIDER_ID(W)]),
         % trigger od_provider posthooks
-        rpc:call(W, od_provider, save, [D])
+        rpc:call(W, od_provider, save_to_cache, [D])
     end, Workers),
     lfm_proxy:init(ConfigWithSessionInfo);
 

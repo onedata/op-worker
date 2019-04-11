@@ -16,6 +16,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([handle/2]).
@@ -30,28 +31,22 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
-    ok | {ok, ResponseData :: term()} | gui_error:error_result().
+    ok | {ok, ResponseData :: term()} | op_gui_error:error_result().
 % Checks if file can be downloaded (i.e. can be read by the user) and if so,
 % returns download URL.
 handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
     {_, FileId} = op_gui_utils:association_to_ids(AssocId),
-    PermsCheckAnswer = logical_file_manager:check_perms(
-        ?GUEST_SESS_ID, {guid, FileId}, read
-    ),
-    case PermsCheckAnswer of
-        {ok, true} ->
-            Hostname = gui_ctx:get_requested_hostname(),
-            URL = str_utils:format_bin("https://~s/download/~s",
-                [Hostname, FileId]),
+    case page_file_download:get_file_download_url(?GUEST_SESS_ID, FileId) of
+        {ok, URL} ->
             {ok, [{<<"fileUrl">>, URL}]};
-        {ok, false} ->
-            gui_error:report_error(<<"Permission denied">>);
-        _ ->
-            gui_error:internal_server_error()
+        ?ERROR_FORBIDDEN ->
+            op_gui_error:report_error(<<"Permission denied">>);
+        ?ERROR_INTERNAL_SERVER_ERROR ->
+            op_gui_error:internal_server_error()
     end;
 
 handle(<<"fetchMoreDirChildren">>, Props) ->
     file_data_backend:fetch_more_dir_children(?ROOT_SESS_ID, Props);
 
 handle(_, _) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).

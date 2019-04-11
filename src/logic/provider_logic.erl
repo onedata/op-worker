@@ -31,7 +31,7 @@
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
--export([has_eff_user/2, has_eff_user/3]).
+-export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
 -export([support_space/2, support_space/3]).
 -export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
@@ -259,10 +259,13 @@ get_spaces(SessionId, ProviderId) ->
     end.
 
 
+-spec has_eff_user(od_user:id()) -> boolean().
+has_eff_user(UserId) ->
+    has_eff_user(?ROOT_SESS_ID, ?SELF, UserId).
+
 -spec has_eff_user(od_provider:doc(), od_user:id()) -> boolean().
 has_eff_user(#document{value = #od_provider{eff_users = EffUsers}}, UserId) ->
     lists:member(UserId, EffUsers).
-
 
 -spec has_eff_user(gs_client_worker:client(), od_provider:id(), od_user:id()) ->
     boolean().
@@ -375,7 +378,7 @@ update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain() ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:domain()} | gs_protocol:error().
 get_domain() ->
     get_domain(?ROOT_SESS_ID, ?SELF).
 
@@ -385,7 +388,7 @@ get_domain() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain(od_provider:id()) ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:domain()} | gs_protocol:error().
 get_domain(ProviderId) ->
     get_domain(?ROOT_SESS_ID, ProviderId).
 

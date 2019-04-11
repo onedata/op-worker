@@ -21,6 +21,7 @@
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% API
@@ -165,7 +166,7 @@ clean_test_users_and_spaces(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, space_storage]),
+        space_logic, provider_logic, cluster_logic, harvester_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -185,7 +186,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, space_storage]),
+        provider_logic, cluster_logic, harvester_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -521,7 +522,7 @@ mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
     test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
-        {ok, _} = od_share:save(#document{key = ShareId, value = #od_share{
+        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid
@@ -529,10 +530,10 @@ mock_share_logic(Config) ->
         {ok, ShareId}
     end),
     test_utils:mock_expect(Workers, share_logic, get, fun(_Auth, ShareId) ->
-        od_share:get(ShareId)
+        od_share:get_from_cache(ShareId)
     end),
     test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
-        ok = od_share:delete(ShareId)
+        ok = od_share:invalidate_cache(ShareId)
     end).
 
 -spec unmock_share_logic(proplists:proplist()) -> ok.
@@ -703,6 +704,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, EffHarvestersSetup),
+    cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
     %% Setup storage
@@ -1080,6 +1082,14 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         end
     end,
 
+    HasEffUserFun = fun(?ROOT_SESS_ID, ProviderId, UserId) ->
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
+        lists:any(fun(SpaceId) ->
+            {ok, Users} = space_logic:get_eff_users(?ROOT_SESS_ID, SpaceId),
+            maps:is_key(UserId, Users)
+        end, Spaces)
+    end,
+
     test_utils:mock_expect(AllWorkers, provider_logic, get, GetProviderFun),
 
     test_utils:mock_expect(AllWorkers, provider_logic, get,
@@ -1151,6 +1161,16 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         end),
 
 
+    test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
+        fun(UserId) ->
+            HasEffUserFun(?ROOT_SESS_ID, oneprovider:get_id(), UserId)
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
+        HasEffUserFun
+    ),
+
+
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         fun(SpaceId) ->
             SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
@@ -1199,6 +1219,27 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
         VerifyProviderIdentityFun).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks cluster_logic module.
+%% @end
+%%--------------------------------------------------------------------
+-spec cluster_logic_mock_setup(Workers :: node() | [node()]) -> ok.
+cluster_logic_mock_setup(AllWorkers) ->
+    test_utils:mock_new(AllWorkers, cluster_logic),
+    test_utils:mock_expect(AllWorkers, cluster_logic, update_version_info, fun(_, _, _) ->
+        ok
+    end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks harvester_logic module.
+%% @end
+%%--------------------------------------------------------------------
+-spec harvester_logic_mock_setup(Workers :: node() | [node()],
+    proplists:proplist()) -> ok.
 harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     ok = test_utils:mock_new(Workers, harvester_logic),
     ok = test_utils:mock_expect(Workers, harvester_logic, get, fun(HarvesterId) ->
@@ -1208,8 +1249,8 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
             value = #od_harvester{
                 spaces = proplists:get_value(<<"spaces">>, Setup),
                 indices = proplists:get_value(<<"indices">>, Setup)
-        }},
-        od_harvester:save(Doc),
+            }},
+        od_harvester:save_to_cache(Doc),
         {ok, Doc}
     end).
 
