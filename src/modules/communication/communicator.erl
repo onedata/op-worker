@@ -106,7 +106,6 @@ send_to_provider(SessionId, Msg, RecipientPid) ->
 -spec send_to_provider(session:id(), generic_message(), recipient_pid(),
     retries()) -> ok | {ok | clproto_message_id:id()} | error().
 send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
-    session_connections:ensure_connected(SessionId),
     {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
     Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
     case {send_to_peer(SessionId, Msg2, Retries), RecipientPid} of
@@ -144,7 +143,6 @@ communicate_with_provider(SessionId, Msg) ->
 -spec communicate_with_provider(session:id(), generic_message(), retries()) ->
     {ok, message()} | error().
 communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
-    session_connections:ensure_connected(SessionId),
     Msg1 = clproto_utils:fill_effective_session_info(Msg0, SessionId),
     case communicate_with_peer(SessionId, Msg1, Retries) of
         {ok, _} = Ans ->
@@ -168,7 +166,6 @@ communicate_with_provider(SessionId, Msg, Retries) ->
     sequencer:stream_id(), recipient_pid()) ->
     ok | {ok | clproto_message_id:id()} | error().
 stream_to_provider(SessionId, #client_message{} = Msg0, StmId, RecipientPid) ->
-    session_connections:ensure_connected(SessionId),
     {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
     case {sequencer:send_message(Msg, StmId, SessionId), RecipientPid} of
         {ok, undefined} ->

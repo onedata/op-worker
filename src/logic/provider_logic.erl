@@ -52,6 +52,8 @@
 -export([assert_provider_compatibility/3]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
+-export([start_session_with_peers/2]).
+-export([terminate_session_with_peer/1]).
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
@@ -925,6 +927,40 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
         {error, Error} ->
             error(Error)
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reuses or creates outgoing provider session with each peer provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_session_with_peers(ThisProviderId :: od_provider:id(),
+    [od_provider:id()]) -> ok.
+start_session_with_peers(ThisProviderId, PeerProviders) ->
+    lists:foreach(fun(PeerProviderId) ->
+        case PeerProviderId == ThisProviderId of
+            true ->
+                ok;
+            false ->
+                SessionId = session_utils:get_provider_session_id(
+                    outgoing, PeerProviderId
+                ),
+                session_manager:reuse_or_create_outgoing_provider_session(
+                    SessionId, #user_identity{provider_id = PeerProviderId}
+                )
+        end
+    end, PeerProviders).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates outgoing provider session with specified peer provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate_session_with_peer(od_provider:id()) -> ok | {error, term()}.
+terminate_session_with_peer(PeerProviderId) ->
+    SessId = session_utils:get_provider_session_id(outgoing, PeerProviderId),
+    session_manager:remove_session(SessId).
 
 
 %%%===================================================================

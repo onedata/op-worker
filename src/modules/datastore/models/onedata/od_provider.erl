@@ -38,7 +38,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2]).
+-export([get_record_struct/1, upgrade_record/2, get_posthooks/0]).
 
 %%%===================================================================
 %%% API
@@ -62,6 +62,26 @@ invalidate_cache(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provider create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(save, _, {ok, #document{
+    key = ProviderId,
+    value = #od_provider{eff_peers = EffPeers}
+}}) ->
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            provider_logic:start_session_with_peers(ProviderId, EffPeers);
+        false ->
+            ok
+    end;
+run_after(_Function, _Args, Result) ->
+    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -248,3 +268,13 @@ upgrade_record(3, Provider) ->
 
         cache_state = CacheState
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].

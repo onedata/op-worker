@@ -18,10 +18,7 @@
 
 %% API
 -export([register/2, deregister/2, list/1]).
--export([
-    set_async_request_manager/2, get_async_req_manager/1,
-    ensure_connected/1
-]).
+-export([set_async_request_manager/2, get_async_req_manager/1]).
 
 -type error() :: {error, Reason :: term()}.
 
@@ -87,61 +84,9 @@ get_async_req_manager(SessId) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Ensures that there is at least one outgoing connection for given session.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_connected(session:id()) -> ok | no_return().
-ensure_connected(SessId) ->
-    case get_random_connection(SessId) of
-        {error, _} ->
-            ProviderId = case session:get(SessId) of
-                {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(
-                    ProxyVia) ->
-                    ProxyVia;
-                _ ->
-                    session_utils:session_id_to_provider_id(SessId)
-            end,
-
-            case oneprovider:get_id() of
-                ProviderId ->
-                    ?warning("Provider attempted to connect to itself, skipping connection."),
-                    erlang:error(connection_loop_detected);
-                _ ->
-                    ok
-            end,
-
-            session_manager:reuse_or_create_outgoing_provider_session(
-                SessId, #user_identity{provider_id = ProviderId}
-            );
-        {ok, Pid} ->
-            case utils:process_info(Pid, initial_call) of
-                undefined ->
-                    ok = deregister(SessId, Pid),
-                    ensure_connected(SessId);
-                _ ->
-                    ok
-            end
-    end.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec get_random_connection(session:id()) -> {ok, Conn :: pid()} | error().
-get_random_connection(SessId) ->
-    case list(SessId) of
-        {ok, []} ->
-            {error, no_connections};
-        {ok, Cons} ->
-            {ok, utils:random_element(Cons)};
-        Error ->
-            Error
-    end.
 
 
 %%--------------------------------------------------------------------
