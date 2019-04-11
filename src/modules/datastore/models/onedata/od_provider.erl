@@ -147,6 +147,7 @@ get_record_struct(4) ->
 
         {eff_users, [string]},
         {eff_groups, [string]},
+        {eff_peers, [string]}, % new field
 
         {cache_state, #{atom => term}}
     ]}.
@@ -193,20 +194,57 @@ upgrade_record(2, Provider) ->
         #{}
     } = Provider,
     #{host := Domain} = url_utils:parse(hd(Urls)),
-    {3, #od_provider{
+    {3, {od_provider, 
+        Name,
+        undefined,
+        false,
+        Domain,
+        undefined,
+        0.0,
+        0.0,
+        false,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(3, Provider) ->
+    {
+        od_provider,
+        Name,
+        AdminEmail,
+        SubdomainDelegation,
+        Domain,
+        Subdomain,
+        Latitude,
+        Longitude,
+        Online,
+
+        Spaces,
+
+        EffUsers,
+        EffGroups,
+
+        CacheState
+    } = Provider,
+    {4, #od_provider{
         name = Name,
-        admin_email = undefined,
-        subdomain_delegation = false,
+        admin_email = AdminEmail,
+        subdomain_delegation = SubdomainDelegation,
         domain = Domain,
-        subdomain = undefined,
-        latitude = 0.0,
-        longitude = 0.0,
-        online = false,
+        subdomain = Subdomain,
+        latitude = Latitude,
+        longitude = Longitude,
+        online = Online,
 
-        spaces = #{},
+        spaces = Spaces,
 
-        eff_users = [],
-        eff_groups = [],
+        eff_users = EffUsers,
+        eff_groups = EffGroups,
+        eff_peers = [],
 
-        cache_state = #{}
+        cache_state = CacheState
     }}.
