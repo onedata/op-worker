@@ -47,7 +47,6 @@
   share_child_read_test/1,
   share_permission_denied_test/1,
   echo_loop_test/1,
-  storage_file_creation_should_be_delayed_until_open/1,
   delayed_creation_should_not_prevent_mv/1,
   delayed_creation_should_not_prevent_truncate/1,
   new_file_should_not_have_popularity_doc/1,
@@ -103,7 +102,6 @@
   share_child_read_test,
   share_permission_denied_test,
   echo_loop_test,
-  storage_file_creation_should_be_delayed_until_open,
   delayed_creation_should_not_prevent_mv,
   delayed_creation_should_not_prevent_truncate,
   new_file_should_not_have_popularity_doc,
@@ -282,9 +280,6 @@ share_child_read_test(Config) ->
 
 share_permission_denied_test(Config) ->
    lfm_files_test_base:share_permission_denied(Config).
-
-storage_file_creation_should_be_delayed_until_open(Config) ->
-   lfm_files_test_base:storage_file_creation_should_be_delayed_until_open(Config).
 
 delayed_creation_should_not_prevent_mv(Config) ->
    lfm_files_test_base:delayed_creation_should_not_prevent_mv(Config).
