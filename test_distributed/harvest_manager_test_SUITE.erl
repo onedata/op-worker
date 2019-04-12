@@ -30,6 +30,7 @@
     manager_and_stream_sup_should_be_started/1,
     manager_should_be_restarted_when_stream_supervisor_dies/1,
     stream_supervisor_should_be_restarted/1,
+    no_harvest_stream_should_be_started_if_space_is_not_supported/1,
     one_harvest_stream_should_be_started_for_one_index/1,
     harvest_stream_should_be_started_for_each_index_one_space_one_harvester/1,
     harvest_stream_should_be_started_for_each_index_many_spaces_one_harvester/1,
@@ -46,6 +47,7 @@ all() -> ?ALL([
     manager_and_stream_sup_should_be_started,
     manager_should_be_restarted_when_stream_supervisor_dies,
     stream_supervisor_should_be_restarted,
+    no_harvest_stream_should_be_started_if_space_is_not_supported,
     one_harvest_stream_should_be_started_for_one_index,
     harvest_stream_should_be_started_for_each_index_one_space_one_harvester,
     harvest_stream_should_be_started_for_each_index_many_spaces_one_harvester,
@@ -75,6 +77,24 @@ manager_should_be_restarted_when_stream_supervisor_dies(Config) ->
 stream_supervisor_should_be_restarted(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Node) -> stream_supervisor_should_be_restarted(Config, Node) end, Nodes).
+
+no_harvest_stream_should_be_started_if_space_is_not_supported(Config) ->
+    [Node1 | _] = Nodes = ?config(op_worker_nodes, Config),
+    Node = random_element(Nodes),
+    ProviderId = provider_id(Node1),
+    {HarvestersConfig, _Spaces} = harvesters_and_spaces_config(#{
+        ?HARVESTER_1 => #{indices => 1, spaces => 1}
+    }),
+    mock_harvester_logic_get(Nodes, HarvestersConfig),
+
+    Harvesters = maps:keys(HarvestersConfig),
+    {ok, DP = #document{value = ODP}} = get_provider_doc(Node, ProviderId),
+    save_provider_doc(Node, DP#document{value = ODP#od_provider{eff_harvesters = Harvesters}}),
+    lists:foreach(fun(HarvesterId) ->
+        % trigger od_harvester:save_to_cache
+        _  = get_harvester_doc(Node, HarvesterId)
+    end, Harvesters),
+    ?assertMatch(0, count_active_children(Nodes, harvest_stream_sup), ?ATTEMPTS).
 
 one_harvest_stream_should_be_started_for_one_index(Config) ->
     update_harvest_streams_test_base(Config, #{
@@ -205,8 +225,9 @@ update_harvest_streams_test_base(Config, HarvestersDescription) ->
     [Node1 | _] = Nodes = ?config(op_worker_nodes, Config),
     Node = random_element(Nodes),
     ProviderId = provider_id(Node1),
-    HarvestersConfig = harvesters_config(HarvestersDescription),
+    {HarvestersConfig, Spaces} = harvesters_and_spaces_config(HarvestersDescription),
     mock_harvester_logic_get(Nodes, HarvestersConfig),
+    mock_provider_logic_supports_space(Nodes, Spaces),
 
     TotalIndicesNum = maps:fold(fun(_, #document{value=OH}, AccIn) ->
         length(OH#od_harvester.indices) * length(OH#od_harvester.spaces) + AccIn
@@ -259,18 +280,25 @@ end_per_suite(_Config) ->
 provider_id(Node) ->
     rpc:call(Node, oneprovider, get_id, []).
 
-harvesters_config(HarvestersDescription) ->
-    maps:fold(fun(HarvesterId, HarvesterConfig, HarvestersConfigIn) ->
-        HarvestersConfigIn#{
+harvesters_and_spaces_config(HarvestersDescription) ->
+    {HC, S} = maps:fold(fun(HarvesterId, HarvesterConfig, {HarvestersConfigIn, SpacesIn}) ->
+        Spaces = [<<"space", (integer_to_binary(I))/binary>> || I <- lists:seq(1, maps:get(spaces, HarvesterConfig, 0))],
+        Indices = [<<"index", (integer_to_binary(I))/binary>> || I <- lists:seq(1, maps:get(indices, HarvesterConfig, 0))],
+        HarvestersConfig2 = HarvestersConfigIn#{
             HarvesterId => #document{
                 key = HarvesterId,
                 value = #od_harvester{
-                    indices = [<<"index", (integer_to_binary(I))/binary>> || I <- lists:seq(1, maps:get(indices, HarvesterConfig, 0))],
-                    spaces = [<<"space", (integer_to_binary(I))/binary>> || I <- lists:seq(1, maps:get(spaces, HarvesterConfig, 0))]
-                }
-            }
-        }
-    end, #{}, HarvestersDescription).
+                    indices = Indices,
+                    spaces = Spaces
+        }}},
+        {HarvestersConfig2, SpacesIn ++ Spaces}
+    end, {#{}, []}, HarvestersDescription),
+    {HC, lists:usort(S)}.
+
+mock_provider_logic_supports_space(Nodes, Spaces) ->
+    ok = test_utils:mock_expect(Nodes, provider_logic, supports_space, fun(SpaceId) ->
+        lists:member(SpaceId, Spaces)
+    end).
 
 mock_harvester_logic_get(Nodes, HarvestersConfig) ->
     ok = test_utils:mock_expect(Nodes, harvester_logic, get, fun(HarvesterId) ->
