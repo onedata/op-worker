@@ -398,7 +398,8 @@ end).
         <<"effectiveGroups">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> [];
             _ -> ?PROVIDER_EFF_GROUPS(__ProviderId)
-        end
+        end,
+        <<"effectivePeers">> => []
 
     }
 end).
