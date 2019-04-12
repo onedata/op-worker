@@ -63,7 +63,6 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 %%%===================================================================
 
 manager_test(Config) ->
-    % TODO - przetestowac na wielu node'ach
     [Worker | _] = ?config(op_worker_nodes, Config),
     StmId = 1,
     {ok, SessId} = session_setup(Worker),
@@ -114,7 +113,7 @@ manager_test(Config) ->
         {ok, AnsTime} = ?assertMatch({ok, _}, RecAns),
         Acc + AnsTime
     end, 0, Messages2),
-        ct:print("Ans2 ~p", [Ans2]),
+    ct:print("Ans2 ~p", [Ans2]),
 
     session_teardown(Worker, SessId),
     ok.

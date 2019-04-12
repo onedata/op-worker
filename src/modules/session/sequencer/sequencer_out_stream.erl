@@ -136,7 +136,6 @@ handle_cast(#message_acknowledgement{} = Request, #state{} = State) ->
     {noreply, handle_request(Request, State)};
 
 handle_cast(#server_message{} = Request, #state{session_id = SessionId} = State) ->
-    % TODO - sprawdzic po co ustawiamy tu to session id
     {noreply, handle_request(Request#server_message{proxy_session_id = SessionId}, State)};
 
 handle_cast(#client_message{} = Request, State) ->

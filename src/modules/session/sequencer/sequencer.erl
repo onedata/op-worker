@@ -88,7 +88,6 @@ communicate_with_sequencer_manager(Msg, Ref, _) when is_pid(Ref) ->
     sequencer_manager:handle(Ref, Msg);
 
 communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
-    % TODO - pid manager'a powinien byc w polaczeniu
     case {session:get_sequencer_manager(Ref), EnsureConnected} of
         {{ok, ManPid}, _} -> communicate_with_sequencer_manager(Msg, ManPid);
         {{error, not_found}, true} ->

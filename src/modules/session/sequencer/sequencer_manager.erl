@@ -71,7 +71,6 @@ start_link(SeqManSup, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(pid(), term()) -> ok.
-% TODO - moze zamiast na wielu node'ach od razu robic rpca na node na ktorym jest sesja?
 handle(Manager, #client_message{message_body = #message_stream_reset{
     stream_id = undefined} = Msg}) ->
     ?debug("Handling ~p by sequencer manager", [Msg]),

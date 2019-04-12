@@ -17,8 +17,6 @@
 
 -behaviour(gen_server).
 
-% TODO - ogarnac to co Bartek mowil (ze wcale nie pada sesja z managerem i test jest zly)
-
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -304,9 +302,7 @@ get_provider(_, SessId, FileCtx) ->
             case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
                 {_, true} -> self;
                 {[RemoteProviderId | _], _} -> RemoteProviderId;
-                {[], _} ->
-                    % TODO - logowanie i handlowanie bledow
-                    throw(unsupported_space)
+                {[], _} -> throw(unsupported_space)
             end
     end.
 
@@ -391,7 +387,6 @@ handle_in_process(#subscription{id = Id} = Sub, #state{} = State) ->
     cache_provider(Sub, self);
 
 handle_in_process(#subscription_cancellation{id = SubId}, _State) ->
-    % TODO - zalatwic kwestie defaultow
     case get_from_memory(subscriptions, SubId) of
         {ok, StmKey} ->
             case get_from_memory(streams, StmKey) of
