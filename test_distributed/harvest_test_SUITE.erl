@@ -98,7 +98,7 @@ all() ->
     <<(str_utils:to_binary(?FUNCTION))/binary, "_", (integer_to_binary(rand:uniform(?RAND_RANGE)))/binary>>).
 
 -define(RAND_RANGE, 1000000000).
--define(ATTEMPTS, 15).
+-define(ATTEMPTS, 20).
 -define(TIMEOUT, timer:seconds(?ATTEMPTS)).
 
 -define(PROVIDER_ID(Node), rpc:call(Node, oneprovider, get_id, [])).

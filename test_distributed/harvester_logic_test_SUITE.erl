@@ -131,10 +131,14 @@ harvest_test(Config) ->
     
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, ?FILE_ID, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
+    ?assertMatch({ok, _},
+        rpc:call(Node, harvester_logic, submit_entry,
+            [?HARVESTER_1, ?FILE_ID, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, submit_entry, [?HARVESTER_1, ?FILE_ID, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
+    ?assertMatch({ok, _},
+        rpc:call(Node, harvester_logic, submit_entry,
+            [?HARVESTER_1, ?FILE_ID, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     % get result is cached now
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
@@ -145,10 +149,14 @@ delete_entry_test(Config) ->
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, ?FILE_ID, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
+    ?assertMatch({ok, _},
+        rpc:call(Node, harvester_logic, delete_entry,
+            [?HARVESTER_1, ?FILE_ID, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(ok, rpc:call(Node, harvester_logic, delete_entry, [?HARVESTER_1, ?FILE_ID, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
+    ?assertMatch({ok, _},
+        rpc:call(Node, harvester_logic, delete_entry,
+            [?HARVESTER_1, ?FILE_ID, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.

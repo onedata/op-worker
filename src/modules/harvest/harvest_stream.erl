@@ -232,8 +232,8 @@ restore_normal_operation(State = #state{id = Id, index_id = IndexId, space_id = 
     }.
 
 
-    -spec handle_change_and_schedule_retry_on_error(state(), datastore:doc() | [datastore:doc()]) ->
-    {noreply, state()} | {stop, term(), state()}.
+-spec handle_change_and_schedule_retry_on_error(state(),
+    datastore:doc() | [datastore:doc()]) -> state().
 handle_change_and_schedule_retry_on_error(State = #state{retry_status = RetryStatus}, []) ->
     % all docs were successfully handled, ensure we are not in_retry_mode
     State#state{
