@@ -35,6 +35,9 @@
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
 
+% Exported for rpc
+-export([start_outgoing_provider_sessions/2]).
+
 -define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
 
 -define(DUMMY_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
@@ -1198,7 +1201,28 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, Spac
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        VerifyProviderIdentityFun).
+        VerifyProviderIdentityFun
+    ),
+
+    lists:foreach(fun({_, SpaceConfig}) ->
+        ProviderIds = lists:map(fun({CPid, _}) ->
+            domain_to_provider_id(proplists:get_value(CPid, DomainMappings))
+        end, proplists:get_value(<<"providers">>, SpaceConfig)),
+        lists:foreach(fun(ProviderId) ->
+            rpc:multicall(AllWorkers, initializer,
+                start_outgoing_provider_sessions, [ProviderId, ProviderIds]
+            )
+        end, ProviderIds)
+    end, SpacesSetup).
+
+
+start_outgoing_provider_sessions(ProviderId, PeerProviders) ->
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            provider_logic:start_session_with_peers(ProviderId, PeerProviders);
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
