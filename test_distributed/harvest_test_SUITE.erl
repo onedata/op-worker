@@ -37,8 +37,8 @@
     changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester/1,
     each_provider_should_submit_only_local_changes_to_the_harvester/1,
     each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test/1,
-    restart_harvest_stream_on_submit_entry_failure_test/1,
-    restart_harvest_stream_on_delete_entry_failure_test/1
+    submit_entry_failure_test/1,
+    delete_entry_failure_test/1
 ]).
 
 all() ->
@@ -52,9 +52,9 @@ all() ->
         changes_should_be_submitted_to_all_indices_subscribed_for_the_space,
         changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester,
         each_provider_should_submit_only_local_changes_to_the_harvester,
-        each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test
-%%        restart_harvest_stream_on_submit_entry_failure_test,   TODO VFS-5351 implement backoff,
-%%        restart_harvest_stream_on_delete_entry_failure_test    TODO VFS-5351 implement backoff,
+        each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test,
+        submit_entry_failure_test,
+        delete_entry_failure_test
     ]).
 
 -define(SPACE_ID1, <<"space_id1">>).
@@ -98,7 +98,7 @@ all() ->
     <<(str_utils:to_binary(?FUNCTION))/binary, "_", (integer_to_binary(rand:uniform(?RAND_RANGE)))/binary>>).
 
 -define(RAND_RANGE, 1000000000).
--define(ATTEMPTS, 10).
+-define(ATTEMPTS, 15).
 -define(TIMEOUT, timer:seconds(?ATTEMPTS)).
 
 -define(PROVIDER_ID(Node), rpc:call(Node, oneprovider, get_id, [])).
@@ -376,7 +376,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     ?assertNotReceivedDeleteEntry(FileId, ?HARVESTER3, [?INDEX31], ProviderId1),
     ?assertNotReceivedDeleteEntry(FileId2, ?HARVESTER3, [?INDEX31], ProviderId2).
 
-restart_harvest_stream_on_submit_entry_failure_test(Config) ->
+submit_entry_failure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -403,8 +403,8 @@ restart_harvest_stream_on_submit_entry_failure_test(Config) ->
 
     mock_harvester_logic_submit_entry(Worker),
 
-    % harvest_stream should have been restarted
-    ?assertNotEqual(HSPid1,
+    % harvest_stream should not have been restarted
+    ?assertEqual(HSPid1,
         get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1, ?INDEX11)),
 
     % previously sent change should not be submitted
@@ -413,7 +413,7 @@ restart_harvest_stream_on_submit_entry_failure_test(Config) ->
     % missing change should be submitted
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON2, [?INDEX11], ProviderId1).
 
-restart_harvest_stream_on_delete_entry_failure_test(Config) ->
+delete_entry_failure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -436,12 +436,12 @@ restart_harvest_stream_on_delete_entry_failure_test(Config) ->
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
 
     % change should not be submitted as connection to onezone failed
-    ?assertNotReceivedDeleteEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ProviderId1),
+    ?assertNotReceivedDeleteEntry(FileId, ?HARVESTER1, [?INDEX11], ProviderId1),
 
     mock_harvester_logic_delete_entry(Worker),
 
-    % harvest_stream should have been restarted
-    ?assertNotEqual(HSPid1,
+    % harvest_stream should not have been restarted
+    ?assertEqual(HSPid1,
         get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1, ?INDEX11)),
 
     % previously sent change should not be submitted
@@ -462,8 +462,8 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(Case, Config) when
-    Case =:= restart_harvest_stream_on_submit_entry_failure_test;
-    Case =:= restart_harvest_stream_on_delete_entry_failure_test
+    Case =:= submit_entry_failure_test;
+    Case =:= delete_entry_failure_test
     ->
     init_per_testcase(default, Config);
 
@@ -477,6 +477,7 @@ init_per_testcase(default, Config) ->
         % trigger od_provider posthooks
         rpc:call(W, od_provider, save_to_cache, [D])
     end, Workers),
+    mock_space_quota_checks(Workers),
     lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->
@@ -489,6 +490,10 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, harvester_logic),
+    lists:foreach(fun(W) ->
+        SupervisorPid = whereis(W, harvest_stream_sup),
+        exit(SupervisorPid, kill)
+    end, Workers),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
@@ -497,12 +502,15 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
+whereis(Node, Name) ->
+    rpc:call(Node, erlang, whereis, [Name]).
+
 mock_harvester_logic_submit_entry(Node) ->
     Self = self(),
     ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
         fun(HarvesterId, FileId, JSON, Indices, _Seq, _MaxSeq) ->
             Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, JSON, Indices, oneprovider:get_id()),
-            ok
+            {ok, []}
         end
     ).
 
@@ -511,7 +519,7 @@ mock_harvester_logic_delete_entry(Node) ->
     ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
         fun(HarvesterId, FileId, Indices, _Seq, _MaxSeq) ->
             Self ! ?DELETE_ENTRY(FileId, HarvesterId, Indices, oneprovider:get_id()),
-            ok
+            {ok, []}
         end
     ).
 
@@ -528,6 +536,11 @@ mock_harvester_logic_delete_entry_failure(Node) ->
             {error, test_error}
         end
     ).
+
+mock_space_quota_checks(Node) ->
+    % mock space_quota to mock error logs due to some test environment issues
+    ok = test_utils:mock_new(Node, space_quota),
+    ok = test_utils:mock_expect(Node, space_quota, get_disabled_spaces, fun() -> {ok, []} end).
 
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
