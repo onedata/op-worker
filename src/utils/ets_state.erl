@@ -50,10 +50,7 @@ terminate(TableIdentifier) ->
 -spec save(TableIdentifier :: atom(), Owner :: pid(),
     Key :: term(), Value ::  term()) -> ok.
 save(TableIdentifier, Owner, Key, Value) ->
-    Nodes = consistent_hasing:get_all_nodes(),
-    lists:foreach(fun(Node) ->
-        true = rpc:call(Node, ets, insert, [TableIdentifier, {{Owner, Key}, Value}])
-    end, Nodes),
+    true = ets:insert(TableIdentifier, {{Owner, Key}, Value}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -64,7 +61,7 @@ save(TableIdentifier, Owner, Key, Value) ->
 -spec get(TableIdentifier :: atom(), Owner :: pid(), Key :: term()) ->
     {ok, Value :: term()} | error.
 get(TableIdentifier, Owner, Key) ->
-    case ets:lookup(TableIdentifier, {Owner, Key}) of
+    case rpc:call(node(Owner), ets, lookup, [TableIdentifier, {Owner, Key}]) of
         [{_, Value}] -> {ok, Value};
         _ -> error
     end.
@@ -76,10 +73,7 @@ get(TableIdentifier, Owner, Key) ->
 %%--------------------------------------------------------------------
 -spec delete(TableIdentifier :: atom(), Owner :: pid(), Key :: term()) -> ok.
 delete(TableIdentifier, Owner, Key) ->
-    Nodes = consistent_hasing:get_all_nodes(),
-    lists:foreach(fun(Node) ->
-        true = rpc:call(Node, ets, delete, [TableIdentifier, {Owner, Key}])
-    end, Nodes),
+    true = ets:delete(TableIdentifier, {Owner, Key}),
     ok.
 
 %%%===================================================================
