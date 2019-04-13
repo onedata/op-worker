@@ -112,7 +112,7 @@ update_index_reduce_fun(Req, State) ->
 
     case index:update_reduce_function(SpaceId, IndexName, ReduceFunction) of
         ok ->
-            {stop, cowboy_req:reply(?HTTP_OK, Req4), State4};
+            {stop, cowboy_req:reply(?HTTP_200_OK, Req4), State4};
         {error, not_found} ->
             throw(?ERROR_INDEX_NOT_FOUND)
     end.

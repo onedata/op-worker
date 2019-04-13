@@ -9,7 +9,7 @@
 %%% Client and provider authentication library.
 %%% @end
 %%%-------------------------------------------------------------------
--module(auth_manager).
+-module(connection_auth).
 -author("Tomasz Lichon").
 -author("Michal Wrzeszcz").
 
@@ -73,7 +73,7 @@ get_handshake_error({badmatch, {error, Error}}) ->
 get_handshake_error({Code, Error, _Description}) when is_integer(Code) ->
     #server_message{
         message_body = #handshake_response{
-            status = translator:translate_handshake_error(Error)
+            status = clproto_translator:translate_handshake_error(Error)
         }
     };
 get_handshake_error(_) ->
@@ -94,14 +94,19 @@ get_handshake_error(_) ->
 %%--------------------------------------------------------------------
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
-handle_client_handshake(#client_handshake_request{session_id = SessId, auth = Auth, version = Version}, IpAddress)
-    when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
+handle_client_handshake(#client_handshake_request{
+    session_id = SessId,
+    auth = Auth,
+    version = Version
+}, IpAddress) when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
 
     assert_client_compatibility(Version, IpAddress),
     {ok, #document{
         value = Iden = #user_identity{user_id = UserId}
     }} = user_identity:get_or_fetch(Auth),
-    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
+    {ok, _} = session_manager:reuse_or_create_fuse_session(
+        SessId, Iden, Auth, self()
+    ),
     {UserId, SessId}.
 
 %%--------------------------------------------------------------------
@@ -109,17 +114,21 @@ handle_client_handshake(#client_handshake_request{session_id = SessId, auth = Au
 %% Handles provider handshake request
 %% @end
 %%--------------------------------------------------------------------
--spec handle_provider_handshake(#provider_handshake_request{}, IpAddress :: inet:ip_address()) ->
+-spec handle_provider_handshake(#provider_handshake_request{}, inet:ip_address()) ->
     {od_provider:id(), session:id()} | no_return().
-handle_provider_handshake(#provider_handshake_request{provider_id = ProviderId, nonce = Nonce}, IpAddress)
-    when is_binary(ProviderId) andalso is_binary(Nonce) ->
+handle_provider_handshake(#provider_handshake_request{
+    provider_id = ProviderId,
+    nonce = Nonce
+}, IpAddress) when is_binary(ProviderId) andalso is_binary(Nonce) ->
 
     case provider_logic:verify_provider_identity(ProviderId) of
         ok ->
             ok;
         Error ->
-            ?debug("Discarding provider connection from ~ts @ ~s as its identity cannot be verified: ~p", [
-                provider_logic:to_string(ProviderId), inet_parse:ntoa(IpAddress), Error
+            ?debug("Discarding provider connection from ~ts @ ~s as its "
+                   "identity cannot be verified: ~p", [
+                provider_logic:to_string(ProviderId),
+                inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_provider)
     end,
@@ -128,40 +137,45 @@ handle_provider_handshake(#provider_handshake_request{provider_id = ProviderId, 
         ok ->
             ok;
         Error1 ->
-            ?debug("Discarding provider connection from ~ts @ ~s as its nonce cannot be verified: ~p", [
-                provider_logic:to_string(ProviderId), inet_parse:ntoa(IpAddress), Error1
+            ?debug("Discarding provider connection from ~ts @ ~s as its "
+                   "nonce cannot be verified: ~p", [
+                provider_logic:to_string(ProviderId),
+                inet_parse:ntoa(IpAddress), Error1
             ]),
             throw(invalid_nonce)
     end,
 
     Identity = #user_identity{provider_id = ProviderId},
     SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, self()),
+    {ok, _} = session_manager:reuse_or_create_provider_session(
+        SessionId, provider_incoming, Identity, self()
+    ),
     {ProviderId, SessionId}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Check if client is of compatible version.
+%% Checks if client is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_client_compatibility(string() | binary(), inet:ip_address()) -> ok | no_return().
-assert_client_compatibility(ClientVersion, IpAddress) when is_binary(ClientVersion) ->
-    assert_client_compatibility(binary_to_list(ClientVersion), IpAddress);
-assert_client_compatibility(ClientVersion, IpAddress) ->
+-spec assert_client_compatibility(string() | binary(), inet:ip_address()) ->
+    ok | no_return().
+assert_client_compatibility(ClientVer, IpAddress) when is_binary(ClientVer) ->
+    assert_client_compatibility(binary_to_list(ClientVer), IpAddress);
+assert_client_compatibility(ClientVer, IpAddress) ->
     {ok, CompatibleClientVersions} = application:get_env(
         ?APP_NAME, compatible_oc_versions
     ),
     % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
     % of matching whole build version we check only prefix
-    Pred = fun(Ver) -> lists:prefix(Ver, ClientVersion) end,
+    Pred = fun(Ver) -> lists:prefix(Ver, ClientVer) end,
     case lists:any(Pred, CompatibleClientVersions) of
         true ->
             ok;
         false ->
             ?debug("Discarding connection from oneclient @ ~s because of "
-            "incompatible version (~s). Version must be one of: ~p", [
-                inet_parse:ntoa(IpAddress), ClientVersion, CompatibleClientVersions
+                   "incompatible version (~s). Version must be one of: ~p", [
+                inet_parse:ntoa(IpAddress), ClientVer, CompatibleClientVersions
             ]),
             throw(incompatible_client_version)
     end.

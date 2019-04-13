@@ -292,17 +292,19 @@ get_provider(Request, Manager) ->
 -spec get_provider(Request :: term(), session:id(), file_ctx:ctx()) ->
     provider() | no_return().
 get_provider(_, SessId, FileCtx) ->
-    ProviderId = oneprovider:get_id(),
     case file_ctx:is_root_dir_const(FileCtx) of
         true ->
-            ProviderId;
+            self;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {ok, ProviderIds} = space_logic:get_provider_ids(SessId, SpaceId),
-            case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
-                {_, true} -> self;
-                {[RemoteProviderId | _], _} -> RemoteProviderId;
-                {[], _} -> throw(unsupported_space)
+            case provider_logic:supports_space(SpaceId) of
+                true ->
+                    self;
+                false ->
+                    case space_logic:get_provider_ids(SessId, SpaceId) of
+                        {ok, []} -> throw(unsupported_space);
+                        {ok, [RemoteProviderId | _]} -> RemoteProviderId
+                    end
             end
     end.
 
@@ -416,13 +418,12 @@ handle_in_process(Request, _State) ->
 handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     #flush_events{context = Context, notify = Notify} = Request,
     {ok, Auth} = session:get_auth(SessId),
+    StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
-        message_stream = #message_stream{
-            stream_id = sequencer:term_to_stream_id(Context)
-        },
+        message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
-        proxy_session_id = SessId,
-        proxy_session_auth = Auth
+        effective_session_id = SessId,
+        effective_session_auth = Auth
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -434,7 +435,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
-    communicator:communicate_with_provider(ClientMsg, Ref, RequestTranslator),
+    communicator:stream_to_provider(Ref, ClientMsg, StreamId, RequestTranslator),
     ok;
 
 handle_remotely(#event{} = Evt, ProviderId, SessId) ->
@@ -444,11 +445,15 @@ handle_remotely(Request, ProviderId, SessId) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, Auth} = session:get_auth(SessId),
-    communicator:stream_to_provider(#client_message{
-        message_body = Request,
-        proxy_session_id = SessId,
-        proxy_session_auth = Auth
-    }, session_utils:get_provider_session_id(outgoing, ProviderId), StreamId),
+    communicator:stream_to_provider(
+        session_utils:get_provider_session_id(outgoing, ProviderId),
+        #client_message{
+            message_body = Request,
+            effective_session_id = SessId,
+            effective_session_auth = Auth
+        },
+        StreamId, undefined
+    ),
     ok.
 
 %%--------------------------------------------------------------------

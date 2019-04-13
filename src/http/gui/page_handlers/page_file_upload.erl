@@ -25,7 +25,7 @@
 -define(MAX_UNIQUE_FILENAME_COUNTER, 20).
 
 % Maximum time a process will be waiting for chunk 1 to generate file handle.
--define(MAX_WAIT_FOR_FILE_HANDLE, 30000).
+-define(MAX_WAIT_FOR_FILE_HANDLE, 60000).
 
 % Interval between retries to resolve file handle.
 -define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).

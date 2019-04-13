@@ -105,7 +105,7 @@ stream_cdmi(Req, #{path := Path, auth := Auth} = State, Size, Range,
     ),
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-    Req2 = cowboy_req:stream_reply(?HTTP_OK, #{
+    Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
         <<"content-length">> => integer_to_binary(StreamSize)
     }, Req),
     cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),

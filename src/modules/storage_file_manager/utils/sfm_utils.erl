@@ -254,6 +254,10 @@ delete_storage_dir(FileCtx, UserCtx) ->
                     % todo VFS-4997
                     spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
                     ok;
+                {error,'Function not implemented'} = Error ->
+                    % Some helpers do not support rmdir
+                    ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+                    ok;
                 Error ->
                     ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
                     Error
@@ -402,7 +406,11 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
     {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
         UserCtx, Offset, ChunkSize),
     lists:foreach(fun(ChildCtx) ->
-        ok = recursive_delete(ChildCtx, UserCtx)
+        ok = case recursive_delete(ChildCtx, UserCtx) of
+            ok -> ok;
+            {error, ?ENOENT} -> ok;
+            Error -> Error
+        end
     end, ChildrenCtxs),
     case length(ChildrenCtxs) < ChunkSize of
         true ->

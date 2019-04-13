@@ -9,13 +9,13 @@
 %%% Utility functions for tests using fuse client
 %%% @end
 %%%-------------------------------------------------------------------
--module(fuse_utils).
+-module(fuse_test_utils).
 -author("Michal Stanisz").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -31,8 +31,12 @@
 -include_lib("clproto/include/messages.hrl").
 
 -export([
+    connect_as_provider/3, connect_as_client/4,
+
     connect_via_macaroon/1, connect_via_macaroon/2,
-    connect_via_macaroon/3, connect_via_macaroon/4
+    connect_via_macaroon/3, connect_via_macaroon/4,
+
+    generate_msg_id/0
 ]).
 -export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
@@ -46,6 +50,9 @@
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4, 
     generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
 -export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
+
+%% Misc messages
+-export([generate_ping_message/0, generate_ping_message/1]).
 
 %% ProxyIO messages
 -export([generate_write_message/5, generate_read_message/5]).
@@ -63,7 +70,13 @@
     emit_file_written_event/5,
     get_configuration/1, get_configuration/2,
     get_subscriptions/1, get_subscriptions/2, get_subscriptions/3,
-    flush_events/3, flush_events/4
+    flush_events/3, flush_events/4,
+
+    get_protocol_version/1, get_protocol_version/2,
+    generate_rtransfer_conn_secret/1, generate_rtransfer_conn_secret/2,
+    get_rtransfer_nodes_ips/1, get_rtransfer_nodes_ips/2,
+
+    ping/1, ping/2
 ]).
 
 -define(ID, erlang:unique_integer([positive, monotonic])).
@@ -75,6 +88,82 @@
 %% ====================================================================
 %% API
 %% ====================================================================
+
+generate_msg_id() -> ?MSG_ID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using a providerId and nonce.
+%% @end
+%%--------------------------------------------------------------------
+connect_as_provider(Node, ProviderId, Nonce) ->
+    HandshakeReqMsg = #'ClientMessage'{
+        message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
+            provider_id = ProviderId,
+            nonce = Nonce
+        }
+        }},
+    RawMsg = messages:encode_msg(HandshakeReqMsg),
+
+    % when
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, RawMsg),
+
+    % then
+    % then
+    #'ServerMessage'{
+        message_body = {handshake_response, #'HandshakeResponse'{
+            status = Status
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_body = {handshake_response, _}
+    }, fuse_test_utils:receive_server_message()),
+
+    case Status of
+        'OK' ->
+            {ok, Sock};
+        _ ->
+            ok = ssl:close(Sock),
+            {error, Status}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using a macaroon, sessionId and version.
+%% @end
+%%--------------------------------------------------------------------
+connect_as_client(Node, SessId, Macaroon, Version) ->
+    MacaroonAuthMessage = #'ClientMessage'{
+        message_body = {client_handshake_request, #'ClientHandshakeRequest'{
+            session_id = SessId,
+            macaroon = Macaroon,
+            version = Version
+        }
+        }},
+    RawMsg = messages:encode_msg(MacaroonAuthMessage),
+
+    % when
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, RawMsg),
+
+    % then
+    #'ServerMessage'{
+        message_body = {handshake_response, #'HandshakeResponse'{
+            status = Status
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_body = {handshake_response, _}
+    }, fuse_test_utils:receive_server_message()),
+
+    case Status of
+        'OK' ->
+            {ok, Sock};
+        _ ->
+            ok = ssl:close(Sock),
+            {error, Status}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -157,9 +246,9 @@ connect_and_upgrade_proto(Hostname, Port) ->
     {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
         {active, once}, {reuse_sessions, false}
     ], timer:minutes(1))),
-    ssl:send(Sock, protocol_utils:protocol_upgrade_request(list_to_binary(Hostname))),
+    ssl:send(Sock, connection_utils:protocol_upgrade_request(list_to_binary(Hostname))),
     receive {ssl, Sock, Data} ->
-        ?assert(protocol_utils:verify_protocol_upgrade_response(Data)),
+        ?assert(connection_utils:verify_protocol_upgrade_response(Data)),
         ssl:setopts(Sock, [{active, once}, {packet, 4}]),
         {ok, Sock}
     after timer:minutes(1) ->
@@ -341,7 +430,7 @@ create_file(Sock, RootGuid, Filename) ->
     create_file(Sock, RootGuid, Filename, ?MSG_ID).
 
 create_file(Sock, RootGuid, Filename, MsgId) ->
-    ok = ssl:send(Sock, fuse_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_created, #'FileCreated'{
             handle_id = HandleId,
@@ -350,20 +439,20 @@ create_file(Sock, RootGuid, Filename, MsgId) ->
     }} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
     {FileGuid, HandleId}.
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
 
 create_directory(Sock, RootGuid, Dirname, MsgId) ->
-    ok = ssl:send(Sock, fuse_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_dir_message(RootGuid, MsgId, Dirname)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {dir, #'Dir'{uuid = DirId}}
     }}} = ?assertMatch(#'ServerMessage'{
         message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
         message_id = MsgId
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
     DirId.
 
 open(Conn, FileGuid) ->
@@ -450,7 +539,7 @@ ls(Conn, DirId) ->
     ls(Conn, DirId, ?MSG_ID).
 
 ls(Conn, DirId, MsgId) ->
-    ok = ssl:send(Conn, fuse_utils:generate_get_children_message(DirId, MsgId)),
+    ok = ssl:send(Conn, fuse_test_utils:generate_get_children_message(DirId, MsgId)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_children, #'FileChildren'{
             child_links = ChildLinks
@@ -460,7 +549,7 @@ ls(Conn, DirId, MsgId) ->
             status = #'Status'{code = ok}}
         },
         message_id = MsgId
-    }, fuse_utils:receive_server_message()),
+    }, fuse_test_utils:receive_server_message()),
     ChildLinks.
     
 
@@ -574,3 +663,99 @@ flush_events(Conn, ProviderId, SubscriptionId, MsgId, Code) ->
     ?assertMatch(#'ServerMessage'{message_body = {status, #'Status'{
         code = Code
     }}, message_id = MsgId}, receive_server_message([], 10), ?ATTEMPTS).
+
+
+get_protocol_version(Conn) ->
+    get_protocol_version(Conn, ?MSG_ID).
+
+get_protocol_version(Conn, MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {get_protocol_version, #'GetProtocolVersion'{}}
+    },
+    RawMsg = messages:encode_msg(Msg),
+    ok = ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{message_body = {_, #'ProtocolVersion'{
+        major = Major, minor = Minor
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {protocol_version, #'ProtocolVersion'{}}
+    }, fuse_test_utils:receive_server_message()),
+
+    {Major, Minor}.
+
+
+generate_rtransfer_conn_secret(Conn) ->
+    generate_rtransfer_conn_secret(Conn, ?MSG_ID).
+
+generate_rtransfer_conn_secret(Conn, MsgId) ->
+    ClientMsg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {generate_rtransfer_conn_secret, #'GenerateRTransferConnSecret'{
+            secret = <<>>
+        }}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{
+        message_body = {rtransfer_conn_secret, #'RTransferConnSecret'{
+            secret = Secret
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {rtransfer_conn_secret, #'RTransferConnSecret'{}}
+    }, fuse_test_utils:receive_server_message()),
+
+    Secret.
+
+
+get_rtransfer_nodes_ips(Conn) ->
+    get_rtransfer_nodes_ips(Conn, ?MSG_ID).
+
+get_rtransfer_nodes_ips(Conn, MsgId) ->
+    ClientMsg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {get_rtransfer_nodes_ips, #'GetRTransferNodesIPs'{}}
+    },
+    RawMsg = messages:encode_msg(ClientMsg),
+    ssl:send(Conn, RawMsg),
+
+    #'ServerMessage'{
+        message_body = {rtransfer_nodes_ips, #'RTransferNodesIPs'{
+            nodes = RespNodes
+        }}
+    } = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {rtransfer_nodes_ips, #'RTransferNodesIPs'{}}
+    }, fuse_test_utils:receive_server_message()),
+
+    RespNodes.
+
+
+generate_ping_message() ->
+    generate_ping_message(?MSG_ID).
+
+generate_ping_message(MsgId) ->
+    Msg = #'ClientMessage'{
+        message_id = MsgId,
+        message_body = {ping, #'Ping'{}}
+    },
+    messages:encode_msg(Msg).
+
+
+ping(Conn) ->
+    ping(Conn, ?MSG_ID).
+
+ping(Conn, MsgId) ->
+    Ping = generate_ping_message(MsgId),
+
+    ssl:send(Conn, Ping),
+
+    ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {pong, #'Pong'{}}
+    }, fuse_test_utils:receive_server_message()),
+
+    ok.

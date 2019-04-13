@@ -15,7 +15,7 @@
 
 %% Message ID containing recipient for remote response.
 -record(message_id, {
-    issuer :: undefined | message_id:issuer(),
+    issuer :: undefined | clproto_message_id:issuer(),
     id :: undefined | binary(),
     recipient :: binary() | undefined % pid encoded with term_to_binary,
     % decode only if pid is local

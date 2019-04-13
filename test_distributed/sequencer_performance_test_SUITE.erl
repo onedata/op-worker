@@ -264,7 +264,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, router,
+    test_utils:mock_validate_and_unload(Workers, [communicator, event_router,
         stream_router]).
 
 %%%===================================================================
@@ -341,8 +341,8 @@ client_message(SessId, StmId, SeqNum) ->
 mock_communicator(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, [communicator]),
-    test_utils:mock_expect(Workers, communicator, send_to_client, fun
-        (Msg, _, _) -> Self ! Msg, ok
+    test_utils:mock_expect(Workers, communicator, send_to_oneclient, fun
+        (_, Msg, _) -> Self ! Msg, ok
     end).
 
 %%--------------------------------------------------------------------
@@ -354,8 +354,8 @@ mock_communicator(Workers) ->
 -spec mock_router(Workers :: [node()]) -> ok.
 mock_router(Workers) ->
     Self = self(),
-    test_utils:mock_new(Workers, [router]),
-    test_utils:mock_expect(Workers, router, route_message, fun
+    test_utils:mock_new(Workers, [event_router]),
+    test_utils:mock_expect(Workers, event_router, route_message, fun
         (Msg) -> Self ! Msg
     end),
     test_utils:mock_new(Workers, [stream_router]),
