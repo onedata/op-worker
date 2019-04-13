@@ -97,7 +97,7 @@ many_files_test_base(Config, TestScenario) ->
             Pids = lists:map(fun(_) ->
                 spawn_link(fun() ->
                     try
-                        {ok, {Sock, _}} = fuse_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+                        {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
                         Master ! {start_ans, ok},
                         slave_loop(Config, Sock, SpaceGuid, Master)
                     catch
@@ -121,7 +121,7 @@ many_files_test_base(Config, TestScenario) ->
                 end
             end, Pids),
 
-            {Before, _SizesBefore} = client_simulation_test_base:get_memory_pools_entries_and_sizes(Worker1),
+            {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
             put(memory_pools, Before),
             put(slave_pids, Pids),
 
@@ -151,9 +151,9 @@ many_files_test_base(Config, TestScenario) ->
     timer:sleep(timer:seconds(30)),
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {After, _SizesAfter} = client_simulation_test_base:get_memory_pools_entries_and_sizes(Worker1),
+    {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
     MemPoolsBefore = get(memory_pools),
-    Res = client_simulation_test_base:get_documents_diff(Worker1, After, MemPoolsBefore),
+    Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore),
 %%    ?assertEqual([], Res),
     ct:print("Docs number ~p", [length(Res)]),
     client_simulation_test_base:verify_streams(Config).

@@ -136,7 +136,7 @@ handle_cast(#message_acknowledgement{} = Request, #state{} = State) ->
     {noreply, handle_request(Request, State)};
 
 handle_cast(#server_message{} = Request, #state{session_id = SessionId} = State) ->
-    {noreply, handle_request(Request#server_message{proxy_session_id = SessionId}, State)};
+    {noreply, handle_request(Request#server_message{effective_session_id = SessionId}, State)};
 
 handle_cast(#client_message{} = Request, State) ->
     {noreply, handle_request(Request, State)};
