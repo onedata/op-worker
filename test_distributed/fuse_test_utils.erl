@@ -79,7 +79,7 @@
     ping/1, ping/2
 ]).
 
--define(ID, erlang:unique_integer([positive, monotonic])).
+-define(ID, generate_msg_id()).
 -define(MSG_ID, integer_to_binary(?ID)).
 -define(IRRELEVANT_FIELD_VALUE, <<"needless">>).
 
@@ -89,7 +89,13 @@
 %% API
 %% ====================================================================
 
-generate_msg_id() -> ?MSG_ID.
+generate_msg_id() ->
+    ID = case get(msg_id_generator) of
+        undefined -> 1;
+        Value -> Value + 1
+    end,
+    put(msg_id_generator, ID),
+    ID.
 
 %%--------------------------------------------------------------------
 %% @doc

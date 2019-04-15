@@ -26,7 +26,8 @@
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, erlang:unique_integer([positive, monotonic]) - 2).
+-define(SeqID, generate_seq()).
+-define(MsgID, integer_to_binary(fuse_test_utils:generate_msg_id())).
 
 %%%===================================================================
 %%% API
@@ -84,6 +85,14 @@ get_guid(Worker, SessId, Path) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+generate_seq() ->
+    ID = case get(seq_generator) of
+             undefined -> 0;
+             Value -> Value + 1
+         end,
+    put(seq_generator, ID),
+    ID.
 
 maybe_create_directory(Sock, SpaceGuid, Directory) ->
     case Directory of
@@ -150,14 +159,14 @@ maybe_unsub(Sock, Subs, Unsub) ->
     end.
 
 create_new_file_subscriptions(Sock, Guid, StreamId) ->
-    Subs = [Sub1, Sub2, Sub3] = [?SeqID, ?SeqID, ?SeqID],
+    [Sub1, Sub2, Sub3] = [?SeqID, ?SeqID, ?SeqID],
     ok = ssl:send(Sock, fuse_test_utils:generate_file_removed_subscription_message(
         StreamId, Sub1, -Sub1, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_renamed_subscription_message(
         StreamId, Sub2, -Sub2, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_attr_changed_subscription_message(
         StreamId, Sub3, -Sub3, Guid, 500)),
-    Subs.
+    [-Sub1, -Sub2, -Sub3].
 
 cancel_subscriptions(Sock, StreamId, Subs) ->
     lists:foreach(fun(SubId) ->
