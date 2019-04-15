@@ -120,8 +120,8 @@ events_aggregation_manager_error_test(Config) ->
     events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker),
     test_utils:mock_unload(Workers, event_manager).
 
-events_aggregation_manager_error_test2(Config) ->
-    %TODO - test event manager test other way
+events_aggregation_manager_error_test2(_Config) ->
+    %TODO VFS-5383 - test event manager test other way
     ok.
 %%    Workers = ?config(op_worker_nodes, Config),
 %%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 5),

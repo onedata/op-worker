@@ -47,7 +47,7 @@ simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
 
     ExpectedData = maybe_write(Sock, FileGuid, HandleId, Write),
     maybe_read(Sock, FileGuid, HandleId, ExpectedData, Read),
-    % TODO - check if streams are defined
+    % TODO VFS-5363 - check if streams are defined
 %%    verify_streams(Config),
     maybe_release(Sock, FileGuid, HandleId, Release),
     maybe_ls(Sock, ParentGuid, Directory),

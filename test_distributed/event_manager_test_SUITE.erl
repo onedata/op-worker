@@ -88,7 +88,6 @@ event_manager_should_unregister_event_stream(Config) ->
     ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
-    timer:sleep(100),
     [Worker | _] = ?config(op_worker_nodes, Config),
     Mgr = ?config(event_manager, Config),
     spawn(Worker, fun() -> event_manager:handle(Mgr, #event{type = stream_1}) end),

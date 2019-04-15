@@ -67,7 +67,7 @@ start_link(SeqManSup, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles message or sends to sequencer_manager.
+%% Handles message (in the calling process) or sends to sequencer_manager.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(pid(), term()) -> ok.
@@ -433,7 +433,7 @@ get_stream(Manager, StreamType, StmId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gets all streams from state.
+%% Gets all streams of given type from state.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_streams(Manager :: pid(), stream_type()) -> {ok, streams()} | error.
