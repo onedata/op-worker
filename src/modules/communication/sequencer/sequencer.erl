@@ -108,6 +108,7 @@ communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
     case {session:get_sequencer_manager(Ref), EnsureConnected} of
         {{ok, ManPid}, _} -> communicate_with_sequencer_manager(Msg, ManPid);
         {{error, not_found}, true} ->
+            session_connections:ensure_connected(Ref),
             communicate_with_sequencer_manager(Msg, Ref);
         {{error, Reason}, _} -> {error, Reason}
     end.

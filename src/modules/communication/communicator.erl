@@ -69,7 +69,7 @@ send_to_oneclient(SessionId, Msg) ->
     ok | error().
 send_to_oneclient(SessionId, #server_message{} = Msg0, Retries) ->
     Msg1 = clproto_utils:fill_effective_session_info(Msg0, SessionId),
-    send_to_peer(SessionId, Msg1, Retries);
+    send_to_oneclient_internal(SessionId, Msg1, Retries);
 send_to_oneclient(SessionId, Msg, RetriesLeft) ->
     ServerMsg = #server_message{message_body = Msg},
     send_to_oneclient(SessionId, ServerMsg, RetriesLeft).
@@ -108,7 +108,7 @@ send_to_provider(SessionId, Msg, RecipientPid) ->
 send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
     {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
     Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
-    case {send_to_peer(SessionId, Msg2, Retries), RecipientPid} of
+    case {send_to_provider_internal(SessionId, Msg2, Retries), RecipientPid} of
         {ok, undefined} ->
             ok;
         {ok, _} ->
@@ -144,7 +144,7 @@ communicate_with_provider(SessionId, Msg) ->
     {ok, message()} | error().
 communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
     Msg1 = clproto_utils:fill_effective_session_info(Msg0, SessionId),
-    case communicate_with_peer(SessionId, Msg1, Retries) of
+    case communicate_with_provider_internal(SessionId, Msg1, Retries) of
         {ok, _} = Ans ->
             Ans;
         {error, no_connections} ->
@@ -186,31 +186,59 @@ stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
 
 
 %% @private
--spec send_to_peer(session:id(), message(), retries()) -> ok | error().
-send_to_peer(SessionId, Msg, 0) ->
+-spec send_to_oneclient_internal(session:id(), server_message(), retries()) ->
+    ok | error().
+send_to_oneclient_internal(SessionId, Msg, 0) ->
     connection_api:send(SessionId, Msg);
-send_to_peer(SessionId, Msg, Retries) ->
+send_to_oneclient_internal(SessionId, Msg, Retries) ->
     case connection_api:send(SessionId, Msg) of
         ok ->
             ok;
+        {error, no_connections} = NoConnectionsError ->
+            NoConnectionsError;
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_peer(SessionId, Msg, retries_left(Retries))
+            send_to_oneclient_internal(SessionId, Msg, retries_left(Retries))
     end.
 
 
 %% @private
--spec communicate_with_peer(session:id(), client_message(), retries()) ->
-    {ok, message()} | error().
-communicate_with_peer(SessionId, Msg, 0) ->
+-spec send_to_provider_internal(session:id(), client_message(), retries()) ->
+    ok | error().
+send_to_provider_internal(SessionId, Msg, 0) ->
+    connection_api:send(SessionId, Msg);
+send_to_provider_internal(SessionId, Msg, Retries) ->
+    case connection_api:send(SessionId, Msg) of
+        ok ->
+            ok;
+        {error, not_found} ->
+            session_connections:ensure_connected(SessionId),
+            timer:sleep(?SEND_RETRY_DELAY),
+            send_to_provider_internal(SessionId, Msg, retries_left(Retries));
+        {error, _Reason} ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            send_to_provider_internal(SessionId, Msg, retries_left(Retries))
+    end.
+
+
+%% @private
+-spec communicate_with_provider_internal(session:id(), client_message(),
+    retries()) -> {ok, message()} | error().
+communicate_with_provider_internal(SessionId, Msg, 0) ->
     connection_api:communicate(SessionId, Msg);
-communicate_with_peer(SessionId, Msg, Retries) ->
+communicate_with_provider_internal(SessionId, Msg, Retries) ->
     case connection_api:communicate(SessionId, Msg) of
         {ok, _Response} = Ans ->
             Ans;
+        {error, not_found} ->
+            session_connections:ensure_connected(SessionId),
+            timer:sleep(?SEND_RETRY_DELAY),
+            RetriesLeft = retries_left(Retries),
+            communicate_with_provider_internal(SessionId, Msg, RetriesLeft);
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            communicate_with_peer(SessionId, Msg, retries_left(Retries))
+            RetriesLeft = retries_left(Retries),
+            communicate_with_provider_internal(SessionId, Msg, RetriesLeft)
     end.
 
 

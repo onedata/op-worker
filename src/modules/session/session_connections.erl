@@ -19,6 +19,7 @@
 %% API
 -export([register/2, deregister/2, list/1]).
 -export([set_async_request_manager/2, get_async_req_manager/1]).
+-export([ensure_connected/1]).
 
 -type error() :: {error, Reason :: term()}.
 
@@ -82,6 +83,37 @@ get_async_req_manager(SessId) ->
         Error ->
             Error
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Ensures that outgoing session to peer provider is started.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_connected(session:id()) -> ok | no_return().
+ensure_connected(SessId) ->
+    ProviderId = case session:get(SessId) of
+        {ok, #document{
+            value = #session{proxy_via = ProxyVia}}
+        } when is_binary(ProxyVia) ->
+            ProxyVia;
+        _ ->
+            session_utils:session_id_to_provider_id(SessId)
+    end,
+
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            ?warning("Provider attempted to connect to itself, "
+                     "skipping connection."),
+            erlang:error(connection_loop_detected);
+        false ->
+            ok
+    end,
+
+    session_manager:reuse_or_create_outgoing_provider_session(
+        SessId, #user_identity{provider_id = ProviderId}
+    ),
+    ok.
 
 
 %%%===================================================================
