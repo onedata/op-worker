@@ -152,7 +152,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
-    Res = pool_utils:get_documents_diff(Worker1, After, Before),
+    Res = pool_utils:get_documents_diff(Worker1, After, Before, Close),
     ?assertEqual([], Res),
 
     client_simulation_test_base:verify_streams(Config).
