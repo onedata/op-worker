@@ -10,9 +10,11 @@
 %%% management of connections for outgoing provider session. It starts
 %%% such connections, monitors them and restarts if they fail.
 %%% Outgoing provider sessions should be created immediately after discovering
-%%% new peer (provider supporting the same space as this provider) and
-%%% terminated when when there is no more cooperation point left
-%%% (peer unsupports spaces that we support).
+%%% new peer (provider supporting the same space as this provider) or after
+%%% failed attempt to send msg (in case of proxy).
+%%% It also sends keepalives to keep connections alive but only to effective
+%%% peers. If some connection dies due to timeout it terminates entire session
+%%% (because of keepalives only proxy session connections should timeout).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_manager).
@@ -140,21 +142,18 @@ handle_cast(Request, State) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_info(?RENEW_CONNECTIONS_REQ, State) ->
     {noreply, renew_connections(State#state{renewal_timer = undefined})};
+handle_info({'EXIT', _ConnPid, timeout}, State) ->
+    {stop, normal, State};
 handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State) ->
     {noreply, renew_connections(State#state{
         connections = maps:remove(ConnPid, Cons)
     })};
-handle_info(keepalive, #state{session_id = SessionId} = State) ->
-    case session_connections:list(SessionId) of
-        {ok, Cons} ->
-            lists:foreach(fun(Conn) -> 
-                connection:send_keepalive(Conn) 
-            end, Cons);
-        Error ->
-            ?error("Connection manager for session ~p failed to send "
-                   "keepalives due to: ~p", [
-                SessionId, Error
-            ])
+handle_info(keepalive, State) ->
+    case provider_logic:is_effective_peer(State#state.peer_id) of
+        true ->
+            send_keepalives(State#state.session_id);
+        _ ->
+            ok
     end,
     schedule_keepalive_msg(),
     {noreply, State};
@@ -174,10 +173,10 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     state()) -> term().
-terminate(_Reason, #state{connections = Cons}) ->
-    lists:foreach(fun(Conn) ->
-        connection:close(Conn)
-    end, maps:keys(Cons)).
+terminate(Reason, #state{session_id = SessId, connections = Cons} = State) ->
+    ?log_terminate(Reason, State),
+    lists:foreach(fun(Conn) -> unlink(Conn) end, maps:keys(Cons)),
+    spawn(fun() -> session_manager:remove_session(SessId) end).
 
 
 %%--------------------------------------------------------------------
@@ -287,3 +286,20 @@ schedule_next_renewal(State) ->
 -spec schedule_keepalive_msg() -> TimerRef :: reference().
 schedule_keepalive_msg() ->
     erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive).
+
+
+%% @private
+-spec send_keepalives(session:id()) -> ok.
+send_keepalives(SessionId) ->
+    case session_connections:list(SessionId) of
+        {ok, Cons} ->
+            lists:foreach(fun(Conn) ->
+                connection:send_keepalive(Conn)
+            end, Cons);
+        Error ->
+            ?error("Connection manager for session ~p failed to send "
+                   "keepalives due to: ~p", [
+                SessionId, Error
+            ]),
+            ok
+    end.

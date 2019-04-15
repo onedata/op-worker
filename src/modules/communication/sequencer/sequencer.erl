@@ -12,6 +12,7 @@
 -module(sequencer).
 -author("Krzysztof Trzepla").
 
+-include("timeouts.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
@@ -66,7 +67,7 @@ send_message(#server_message{} = Msg, StmId, Ref) ->
 send_message(#client_message{} = Msg, StmId, Ref) ->
     communicate_with_sequencer_manager(Msg#client_message{
         message_stream = #message_stream{stream_id = StmId}
-    }, Ref);
+    }, Ref, true);
 
 send_message(Msg, StmId, Ref) ->
     send_message(#server_message{message_body = Msg}, StmId, Ref).
@@ -109,6 +110,7 @@ communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
         {{ok, ManPid}, _} -> communicate_with_sequencer_manager(Msg, ManPid);
         {{error, not_found}, true} ->
             session_connections:ensure_connected(Ref),
+            timer:sleep(?SEND_RETRY_DELAY),
             communicate_with_sequencer_manager(Msg, Ref);
         {{error, Reason}, _} -> {error, Reason}
     end.

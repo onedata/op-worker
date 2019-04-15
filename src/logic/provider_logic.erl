@@ -52,6 +52,7 @@
 -export([assert_provider_compatibility/3]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
+-export([is_effective_peer/1]).
 -export([start_session_with_peers/2]).
 -export([terminate_session_with_peer/1]).
 
@@ -926,6 +927,21 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
             throw(cannot_check_peer_op_version);
         {error, Error} ->
             error(Error)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if specified provider is one of this provider's effective peers.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_effective_peer(od_provider:id()) -> boolean() | gs_protocol:error().
+is_effective_peer(ProviderId) ->
+    case ?MODULE:get() of
+        {ok, #document{value = #od_provider{eff_peers = PeerProviders}}} ->
+            lists:member(ProviderId, PeerProviders);
+        Error ->
+            Error
     end.
 
 

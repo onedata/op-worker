@@ -303,8 +303,6 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(disconnect, State) ->
-    {stop, normal, State};
 handle_cast(send_keepalive, State) ->
     case socket_send(State, ?CLIENT_KEEPALIVE_MSG) of
         {ok, NewState} ->
@@ -312,6 +310,8 @@ handle_cast(send_keepalive, State) ->
         Error ->
             {stop, Error, State}
     end;
+handle_cast(disconnect, State) ->
+    {stop, normal, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -376,7 +376,7 @@ handle_info({Closed, _}, State = #state{closed = Closed}) ->
 
 handle_info(timeout, State = #state{socket = Socket}) ->
     ?warning("Connection ~p timeout", [Socket]),
-    {stop, normal, State};
+    {stop, timeout, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
