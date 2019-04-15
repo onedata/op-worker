@@ -26,13 +26,14 @@
 -include("timeouts.hrl").
 
 %% API
--export([start_link/2, send/2]).
+-export([start_link/2, handle/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 -type stream_id() :: sequencer:stream_id().
+-type stream_type() :: sequencer_in_streams | sequencer_out_streams.
 -type streams() :: #{stream_id() => pid()}.
 
 %% sequencer manager state:
@@ -40,17 +41,15 @@
 %% sequencer_manager_sup     - pid of sequencer manager supervisor
 %% sequencer_in_stream_sup   - pid of incoming sequencer stream supervisor
 %% sequencer_out_stream_sup  - pid of outgoing sequencer stream supervisor
-%% sequencer_in_streams      - mapping from stream ID to an incoming sequencer stream pid
-%% sequencer_out_streams     - mapping from stream ID to an outgoing sequencer stream pid
 -record(state, {
     session_id :: session:id(),
     sequencer_manager_sup :: pid(),
     sequencer_in_stream_sup :: undefined | pid(),
-    sequencer_out_stream_sup :: undefined | pid(),
-    sequencer_in_streams = #{} :: streams(),
-    sequencer_out_streams = #{} :: streams()
+    sequencer_out_stream_sup :: undefined | pid()
 }).
 
+-define(TIMEOUT, timer:minutes(1)).
+-define(STATE_ID, session).
 
 %%%===================================================================
 %%% API
@@ -68,12 +67,65 @@ start_link(SeqManSup, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to sequencer_manager.
+%% Handles message (in the calling process) or sends to sequencer_manager.
 %% @end
 %%--------------------------------------------------------------------
--spec send(pid(), term()) -> ok.
-send(Manager, Message) ->
-    gen_server2:call(Manager, Message, timer:minutes(1)).
+-spec handle(pid(), term()) -> ok.
+handle(Manager, #client_message{message_body = #message_stream_reset{
+    stream_id = undefined} = Msg}) ->
+    ?debug("Handling ~p by sequencer manager", [Msg]),
+    {ok, Stms} = get_streams(Manager, sequencer_out_streams),
+    maps:map(fun(_, SeqStm) ->
+        sequencer_out_stream:send(SeqStm, Msg)
+    end, Stms),
+    ok;
+
+handle(Manager, #client_message{message_body = #message_stream_reset{
+    stream_id = StmId} = Msg}) ->
+    ?debug("Handling ~p by sequencer manager", [Msg]),
+    forward_to_sequencer_out_stream(Msg, StmId, Manager),
+    ok;
+
+handle(Manager, #client_message{message_body = #message_request{
+    stream_id = StmId} = Msg}) ->
+    ?debug("Handling ~p by sequencer manager", [Msg]),
+    forward_to_sequencer_out_stream(Msg, StmId, Manager),
+    ok;
+
+handle(Manager, #client_message{message_body = #message_acknowledgement{
+    stream_id = StmId} = Msg}) ->
+    ?debug("Handling ~p by sequencer manager", [Msg]),
+    forward_to_sequencer_out_stream(Msg, StmId, Manager),
+    ok;
+
+%% Handle outgoing messages
+handle(Manager, #client_message{message_stream = #message_stream{sequence_number = undefined}} = Msg) ->
+    {ok, SeqStm} = get_or_create_sequencer_out_stream(Msg, Manager),
+    sequencer_out_stream:send(SeqStm, Msg),
+    ok;
+
+%% Handle incoming messages
+handle(Manager, #client_message{} = Msg) ->
+    {ok, SeqStm} = get_or_create_sequencer_in_stream(Msg, Manager),
+    sequencer_in_stream:send(SeqStm, Msg),
+    ok;
+
+handle(Manager, #server_message{message_stream = #message_stream{
+    stream_id = StmId}} = Msg) ->
+    forward_to_sequencer_out_stream(Msg, StmId, Manager),
+    ok;
+
+% Test call
+handle(Manager, {close_stream, StmId}) ->
+    ?debug("Closing stream ~p", [StmId]),
+    forward_to_sequencer_out_stream(#server_message{
+        message_stream = #message_stream{stream_id = StmId},
+        message_body = #end_of_message_stream{}
+    }, StmId, Manager),
+    ok;
+
+handle(Manager, Message) ->
+    gen_server2:call(Manager, Message, ?TIMEOUT).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -95,6 +147,7 @@ send(Manager, Message) ->
 init([SeqManSup, SessId]) ->
     ?debug("Initializing sequencer manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
+    init_state(),
     Self = self(),
     {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{sequencer_manager = Self}}
@@ -115,11 +168,20 @@ init([SeqManSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
+% Test call
 handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     StmId = generate_stream_id(),
     ?debug("Opening stream ~p in sequencer manager for session ~p", [StmId, SessId]),
-    {ok, _, NewState} = create_sequencer_out_stream(StmId, State),
-    {reply, {ok, StmId}, NewState};
+    {ok, _} = create_sequencer_out_stream(StmId, State),
+    {reply, {ok, StmId}, State};
+
+handle_call({create_in_stream, StmId}, _From, State) ->
+    {ok, SeqStm} = create_sequencer_in_stream(StmId, State),
+    {reply, {ok, SeqStm}, State};
+
+handle_call({create_out_stream, StmId}, _From, State) ->
+    {ok, SeqStm} = create_sequencer_out_stream(StmId, State),
+    {reply, {ok, SeqStm}, State};
 
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
@@ -135,70 +197,22 @@ handle_call(Request, From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({register_in_stream, StmId, Stm}, #state{sequencer_in_streams = Stms} = State) ->
-    {noreply, State#state{sequencer_in_streams = maps:put(StmId, Stm, Stms)}};
-
-handle_cast({register_out_stream, StmId, Stm}, #state{sequencer_out_streams = Stms} = State) ->
-    {noreply, State#state{sequencer_out_streams = maps:put(StmId, Stm, Stms)}};
-
-handle_cast({unregister_in_stream, StmId}, #state{sequencer_in_streams = Stms} = State) ->
-    {noreply, State#state{sequencer_in_streams = maps:remove(StmId, Stms)}};
-
-handle_cast({unregister_out_stream, StmId}, #state{sequencer_out_streams = Stms} = State) ->
-    {noreply, State#state{sequencer_out_streams = maps:remove(StmId, Stms)}};
-
-handle_cast({close_stream, StmId}, #state{session_id = SessId} = State) ->
-    ?debug("Closing stream ~p in sequencer manager for session ~p", [StmId, SessId]),
-    forward_to_sequencer_out_stream(#server_message{
-        message_stream = #message_stream{stream_id = StmId},
-        message_body = #end_of_message_stream{}
-    }, StmId, State),
+% Refresh state in case of stream restart
+handle_cast({register_in_stream, StmId, Stm}, State) ->
+    add_stream(sequencer_in_streams, StmId, Stm),
     {noreply, State};
 
-handle_cast(#client_message{message_body = #message_stream_reset{
-    stream_id = undefined} = Msg}, #state{sequencer_out_streams = Stms,
-    session_id = SessId} = State) ->
-    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
-    maps:map(fun(_, SeqStm) ->
-        sequencer_out_stream:send(SeqStm, Msg)
-    end, Stms),
+% Refresh state in case of stream restart
+handle_cast({register_out_stream, StmId, Stm}, State) ->
+    add_stream(sequencer_out_streams, StmId, Stm),
     {noreply, State};
 
-handle_cast(#client_message{message_body = #message_stream_reset{
-    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
-    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
-    forward_to_sequencer_out_stream(Msg, StmId, State),
+handle_cast({unregister_in_stream, StmId}, State) ->
+    remove_stream(sequencer_in_streams, StmId),
     {noreply, State};
 
-handle_cast(#client_message{message_body = #message_request{
-    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
-    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
-    forward_to_sequencer_out_stream(Msg, StmId, State),
-    {noreply, State};
-
-handle_cast(#client_message{message_body = #message_acknowledgement{
-    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
-    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
-    forward_to_sequencer_out_stream(Msg, StmId, State),
-    {noreply, State};
-
-%% Handle outgoing messages
-handle_cast(#client_message{message_stream = #message_stream{sequence_number = undefined}} = Msg, State) ->
-    {ok, SeqStm, NewState} = get_or_create_sequencer_out_stream(Msg, State),
-    sequencer_out_stream:send(SeqStm, Msg),
-    {noreply, NewState};
-
-%% Handle incoming messages
-handle_cast(#client_message{} = Msg, State) ->
-    {ok, SeqStm, NewState} = get_or_create_sequencer_in_stream(Msg, State),
-    sequencer_in_stream:send(SeqStm, Msg),
-    {noreply, NewState};
-
-handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
-    case get_sequencer_out_stream(Msg#server_message{effective_session_id = SessionId}, State) of
-        {ok, SeqStm} -> sequencer_out_stream:send(SeqStm, Msg);
-        {error, not_found} -> ok
-    end,
+handle_cast({unregister_out_stream, StmId}, State) ->
+    remove_stream(sequencer_out_streams, StmId),
     {noreply, State};
 
 handle_cast(Request, State) ->
@@ -251,6 +265,7 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
+    delete_state(),
     session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{sequencer_manager = undefined}}
     end).
@@ -291,41 +306,18 @@ ensure_sent(Msg, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns sequencer stream for outgoing messages associated with provided stream ID.
-%% @end
-%%--------------------------------------------------------------------
--spec get_sequencer_out_stream(Ref :: #server_message{} | stream_id(),
-    State :: #state{}) -> {ok, SeqStm :: pid()} | {error, not_found}.
-get_sequencer_out_stream(#server_message{message_stream = #message_stream{
-    stream_id = StmId}}, State) ->
-    get_sequencer_out_stream(StmId, State);
-
-get_sequencer_out_stream(StmId, #state{session_id = SessId,
-    sequencer_out_streams = Stms}) ->
-    case maps:find(StmId, Stms) of
-        {ok, SeqStm} ->
-            {ok, SeqStm};
-        error ->
-            ?warning("Sequencer out stream not found for stream ~p and "
-            "session: ~p", [StmId, SessId]),
-            {error, not_found}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Returns sequencer stream for outgoing messages associated with provided
 %% stream ID. If stream does not exist creates one.
 %% @see create_sequencer_out_stream/2
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_create_sequencer_out_stream(Msg :: #client_message{},
-    State :: #state{}) -> {ok, SeqStm :: pid(), NewState :: #state{}}.
+    Manager :: pid()) -> {ok, SeqStm :: pid()}.
 get_or_create_sequencer_out_stream(#client_message{message_stream = #message_stream{
-    stream_id = StmId}}, #state{sequencer_out_streams = Stms} = State) ->
-    case maps:find(StmId, Stms) of
-        {ok, SeqStm} -> {ok, SeqStm, State};
-        error -> create_sequencer_out_stream(StmId, State)
+    stream_id = StmId}}, Manager) ->
+    case get_stream(Manager, sequencer_out_streams, StmId) of
+        {ok, SeqStm} -> {ok, SeqStm};
+        error -> gen_server2:call(Manager, {create_out_stream, StmId}, ?TIMEOUT)
     end.
 
 
@@ -336,13 +328,14 @@ get_or_create_sequencer_out_stream(#client_message{message_stream = #message_str
 %% @end
 %%--------------------------------------------------------------------
 -spec create_sequencer_out_stream(StmId :: stream_id(), State :: #state{}) ->
-    {ok, SeqStm :: pid(), NewState :: #state{}}.
+    {ok, SeqStm :: pid()}.
 create_sequencer_out_stream(StmId, #state{sequencer_out_stream_sup = SeqStmSup,
-    sequencer_out_streams = Stms, session_id = SessId} = State) ->
+    session_id = SessId}) ->
     {ok, SeqStm} = sequencer_stream_sup:start_sequencer_stream(
         SeqStmSup, self(), StmId, SessId
     ),
-    {ok, SeqStm, State#state{sequencer_out_streams = maps:put(StmId, SeqStm, Stms)}}.
+    add_stream(sequencer_out_streams, StmId, SeqStm),
+    {ok, SeqStm}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -351,11 +344,11 @@ create_sequencer_out_stream(StmId, #state{sequencer_out_stream_sup = SeqStmSup,
 %% @end
 %%--------------------------------------------------------------------
 -spec forward_to_sequencer_out_stream(Msg :: term(), StmId :: stream_id(),
-    State :: #state{}) -> ok.
-forward_to_sequencer_out_stream(Msg, StmId, State) ->
-    case get_sequencer_out_stream(StmId, State) of
+    Manager :: pid()) -> ok.
+forward_to_sequencer_out_stream(Msg, StmId, Manager) ->
+    case get_stream(Manager, sequencer_out_streams, StmId) of
         {ok, SeqStm} -> sequencer_out_stream:send(SeqStm, Msg);
-        {error, not_found} -> ok
+        error -> ok
     end.
 
 %%--------------------------------------------------------------------
@@ -367,12 +360,12 @@ forward_to_sequencer_out_stream(Msg, StmId, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_create_sequencer_in_stream(Msg :: #client_message{},
-    State :: #state{}) -> {ok, SeqStm :: pid(), NewState :: #state{}}.
+    Manager :: pid()) -> {ok, SeqStm :: pid()}.
 get_or_create_sequencer_in_stream(#client_message{message_stream = #message_stream{
-    stream_id = StmId}}, #state{sequencer_in_streams = Stms} = State) ->
-    case maps:find(StmId, Stms) of
-        {ok, SeqStm} -> {ok, SeqStm, State};
-        error -> create_sequencer_in_stream(StmId, State)
+    stream_id = StmId}}, Manager) ->
+    case get_stream(Manager, sequencer_in_streams, StmId) of
+        {ok, SeqStm} -> {ok, SeqStm};
+        error -> gen_server2:call(Manager, {create_in_stream, StmId}, ?TIMEOUT)
     end.
 
 %%--------------------------------------------------------------------
@@ -382,13 +375,14 @@ get_or_create_sequencer_in_stream(#client_message{message_stream = #message_stre
 %% @end
 %%--------------------------------------------------------------------
 -spec create_sequencer_in_stream(StmId :: stream_id(), State :: #state{}) ->
-    {ok, SeqStm :: pid(), NewState :: #state{}}.
+    {ok, SeqStm :: pid()}.
 create_sequencer_in_stream(StmId, #state{sequencer_in_stream_sup = SeqStmSup,
-    sequencer_in_streams = Stms, session_id = SessId} = State) ->
+    session_id = SessId}) ->
     {ok, SeqStm} = sequencer_stream_sup:start_sequencer_stream(
         SeqStmSup, self(), StmId, SessId
     ),
-    {ok, SeqStm, State#state{sequencer_in_streams = maps:put(StmId, SeqStm, Stms)}}.
+    add_stream(sequencer_in_streams, StmId, SeqStm),
+    {ok, SeqStm}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -401,3 +395,69 @@ create_sequencer_in_stream(StmId, #state{sequencer_in_stream_sup = SeqStmSup,
 generate_stream_id() ->
     erlang:unique_integer([monotonic, positive]) .
 
+%%%===================================================================
+%%% Internal functions for streams storing in state
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves stream in state.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_stream(stream_type(), stream_id(), Stream :: pid()) -> ok.
+add_stream(StreamType, StmId, SeqStm) ->
+    ets_state:add_to_collection(?STATE_ID, StreamType, StmId, SeqStm).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes stream from state.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_stream(stream_type(), stream_id()) -> ok.
+remove_stream(StreamType, StmId) ->
+    ets_state:remove_from_collection(?STATE_ID, StreamType, StmId).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets stream from state.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_stream(Manager :: pid(), stream_type(), stream_id()) ->
+    {ok, Streams :: pid()} | error.
+get_stream(Manager, StreamType, StmId) ->
+    ets_state:get_from_collection(?STATE_ID, Manager, StreamType, StmId).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets all streams of given type from state.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_streams(Manager :: pid(), stream_type()) -> {ok, streams()} | error.
+get_streams(Manager, StreamType) ->
+    ets_state:get_collection(?STATE_ID, Manager, StreamType).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes maps in state.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_state() -> ok.
+init_state() ->
+    ets_state:init_collection(?STATE_ID, sequencer_in_streams),
+    ets_state:init_collection(?STATE_ID, sequencer_out_streams).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes all data from state.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_state() -> ok.
+delete_state() ->
+    ets_state:delete_collection(?STATE_ID, sequencer_in_streams),
+    ets_state:delete_collection(?STATE_ID, sequencer_out_streams).

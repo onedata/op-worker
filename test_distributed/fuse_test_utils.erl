@@ -233,9 +233,9 @@ connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
 
     % then
     RM = receive_server_message(),
-    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
         status = 'OK'
-    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+    }}},
         RM
     ),
     ssl:setopts(Sock, ActiveOpt),

@@ -23,10 +23,14 @@
 
 %% tests
 -export([
-  route_message_should_forward_messages_in_right_order/1,
-  route_message_should_work_for_multiple_streams/1,
-  route_message_should_forward_messages_in_right_order_base/1,
-  route_message_should_work_for_multiple_streams_base/1]).
+    route_message_should_forward_messages_in_right_order/1,
+    route_message_should_work_for_multiple_streams/1,
+    route_message_should_forward_messages_in_right_order_base/1,
+    route_message_should_work_for_multiple_streams_base/1,
+    manager_test/1]).
+
+%% for rpc
+-export([manager_test_on_node/2]).
 
 -define(TEST_CASES, [
     route_message_should_forward_messages_in_right_order,
@@ -57,6 +61,69 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+manager_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    StmId = 1,
+    {ok, SessId} = session_setup(Worker),
+    MsgNum = 2000,
+    ProcNum = 100,
+
+    InitMessage = client_message(SessId, StmId, 0),
+    ?assertEqual(ok, rpc:call(Worker, sequencer,
+        communicate_with_sequencer_manager, [InitMessage, SessId, true])),
+
+    Messages = lists:map(fun(SeqNum) ->
+        client_message(SessId, StmId, SeqNum)
+    end, lists:seq(1, MsgNum)),
+
+    {ok, Manager} = ?assertMatch({ok, _},
+        rpc:call(Worker, session, get_sequencer_manager, [SessId])),
+
+    {ok, Ans} = ?assertMatch({ok, _},
+        rpc:call(Worker, ?MODULE, manager_test_on_node, [Manager, Messages])),
+    ct:print("Ans ~p", [Ans]),
+
+    lists:foreach(fun(StmId) ->
+        InitMessage2 = client_message(SessId, StmId, 0),
+        ?assertEqual(ok, rpc:call(Worker, sequencer,
+            communicate_with_sequencer_manager, [InitMessage2, SessId, true]))
+    end, lists:seq(2, ProcNum + 1)),
+
+    Messages2 = lists:map(fun(StmId) ->
+        lists:map(fun(SeqNum) ->
+            client_message(SessId, StmId, SeqNum)
+        end, lists:seq(1, MsgNum))
+    end, lists:seq(2, ProcNum + 1)),
+
+    Master = self(),
+    lists:foreach(fun(MessagesList) ->
+        spawn(fun() ->
+            RpcAns = rpc:call(Worker, ?MODULE, manager_test_on_node, [Manager, MessagesList]),
+            Master ! {rpc_ans, RpcAns}
+        end)
+    end, Messages2),
+
+    Ans2 = lists:foldl(fun(_, Acc) ->
+        RecAns = receive
+                     {rpc_ans, RpcAns} -> RpcAns
+                 after
+                     timer:seconds(30) -> timeout
+                 end,
+        {ok, AnsTime} = ?assertMatch({ok, _}, RecAns),
+        Acc + AnsTime
+    end, 0, Messages2),
+    ct:print("Ans2 ~p", [Ans2]),
+
+    session_teardown(Worker, SessId),
+    ok.
+
+manager_test_on_node(Manager, Messages) ->
+    Start = os:timestamp(),
+    lists:foreach(fun(Msg) ->
+        ok = sequencer_manager:handle(Manager, Msg)
+    end, Messages),
+    {ok, timer:now_diff(os:timestamp(), Start)}.
 
 route_message_should_forward_messages_in_right_order(Config) ->
   ?PERFORMANCE(Config, [
