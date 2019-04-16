@@ -26,7 +26,7 @@
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, generate_seq()).
+-define(SeqID, erlang:unique_integer([positive, monotonic]) - 1).
 -define(MsgID, integer_to_binary(fuse_test_utils:generate_msg_id())).
 
 %%%===================================================================
@@ -98,14 +98,6 @@ get_guid(Worker, SessId, Path) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-generate_seq() ->
-    ID = case get(seq_generator) of
-             undefined -> 0;
-             Value -> Value + 1
-         end,
-    put(seq_generator, ID),
-    ID.
 
 maybe_create_directory(Sock, SpaceGuid, Directory) ->
     case Directory of

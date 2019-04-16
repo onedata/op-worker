@@ -54,8 +54,8 @@ stress_test_base(Config) ->
 many_files_stress_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, proc_num}, {value, 1}, {description, "Processes number sending messages in parallel"}],
-            [{name, proc_repeats_num}, {value, 100}, {description, "Repeats by each process"}],
+            [{name, proc_num}, {value, 20}, {description, "Processes number sending messages in parallel"}],
+            [{name, proc_repeats_num}, {value, 50}, {description, "Repeats by each process"}],
             [{name, timeout}, {value, timer:minutes(1)}, {description, "Timeout"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
