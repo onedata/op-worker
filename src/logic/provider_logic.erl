@@ -53,7 +53,7 @@
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 -export([is_effective_peer/1]).
--export([start_session_with_peers/2]).
+-export([start_session_with_peer/1]).
 -export([terminate_session_with_peer/1]).
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
@@ -947,25 +947,16 @@ is_effective_peer(ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reuses or creates outgoing provider session with each peer provider.
+%% Reuses or creates outgoing provider session with specified provider.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_with_peers(ThisProviderId :: od_provider:id(),
-    [od_provider:id()]) -> ok.
-start_session_with_peers(ThisProviderId, PeerProviders) ->
-    lists:foreach(fun(PeerProviderId) ->
-        case PeerProviderId == ThisProviderId of
-            true ->
-                ok;
-            false ->
-                SessionId = session_utils:get_provider_session_id(
-                    outgoing, PeerProviderId
-                ),
-                session_manager:reuse_or_create_outgoing_provider_session(
-                    SessionId, #user_identity{provider_id = PeerProviderId}
-                )
-        end
-    end, PeerProviders).
+-spec start_session_with_peer(od_provider:id()) ->
+    {ok, session:id()} | {error, term()}.
+start_session_with_peer(ProviderId) ->
+    SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
+    session_manager:reuse_or_create_outgoing_provider_session(
+        SessionId, #user_identity{provider_id = ProviderId}
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -974,9 +965,9 @@ start_session_with_peers(ThisProviderId, PeerProviders) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate_session_with_peer(od_provider:id()) -> ok | {error, term()}.
-terminate_session_with_peer(PeerProviderId) ->
-    SessId = session_utils:get_provider_session_id(outgoing, PeerProviderId),
-    session_manager:remove_session(SessId).
+terminate_session_with_peer(ProviderId) ->
+    SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
+    session_manager:remove_session(SessionId).
 
 
 %%%===================================================================

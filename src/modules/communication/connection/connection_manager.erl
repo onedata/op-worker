@@ -40,7 +40,8 @@
 % Definitions of renewal intervals for provider connections.
 -define(INITIAL_RENEWAL_INTERVAL, timer:seconds(2)).
 -define(RENEWAL_INTERVAL_INCREASE_RATE, 2).
--define(MAX_RENEWAL_INTERVAL, timer:minutes(15)).
+% timer:minutes(15) - defined like that to use in patter matching
+-define(MAX_RENEWAL_INTERVAL, 900000).
 
 -define(RENEW_CONNECTIONS_REQ, renew_connections).
 
@@ -141,17 +142,28 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info(?RENEW_CONNECTIONS_REQ, State) ->
-    {noreply, renew_connections(State#state{renewal_timer = undefined})};
+    case renew_connections(State#state{renewal_timer = undefined}) of
+        {ok, NewState} ->
+            {noreply, NewState};
+        {error, peer_down} ->
+            {stop, normal, State}
+    end;
 handle_info({'EXIT', _ConnPid, timeout}, State) ->
     {stop, normal, State};
-handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State) ->
-    {noreply, renew_connections(State#state{
-        connections = maps:remove(ConnPid, Cons)
-    })};
-handle_info(keepalive, State) ->
-    case provider_logic:is_effective_peer(State#state.peer_id) of
+handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State0) ->
+    State1 = State0#state{connections = maps:remove(ConnPid, Cons)},
+    case renew_connections(State1) of
+        {ok, State2} ->
+            {noreply, State2};
+        {error, peer_down} ->
+            {stop, normal, State1}
+    end;
+handle_info(keepalive, #state{peer_id = PeerId, connections = Cons} = State) ->
+    case provider_logic:is_effective_peer(PeerId) of
         true ->
-            send_keepalives(State#state.session_id);
+            lists:foreach(fun(Conn) ->
+                connection:send_keepalive(Conn)
+            end, maps:keys(Cons));
         _ ->
             ok
     end,
@@ -200,13 +212,26 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 %% @doc
 %% Connects to peer nodes with witch he is not yet connected if next
-%% renewal is not scheduled. Otherwise does nothing.
+%% renewal is not scheduled. Returns error if it is another failed attempt
+%% and it is a proxy session (not meant to be kept forever).
 %% @end
 %%--------------------------------------------------------------------
--spec renew_connections(state()) -> state().
+-spec renew_connections(state()) -> {ok, state()} | {error, peer_down}.
 renew_connections(#state{renewal_timer = undefined} = State) ->
     try
-        renew_connections_insecure(State)
+        case renew_connections_insecure(State) of
+            #state{
+                peer_id = PeerId,
+                renewal_interval = ?MAX_RENEWAL_INTERVAL,
+                connections = Cons
+            } = State1 when map_size(Cons) == 0 ->
+                case provider_logic:is_effective_peer(PeerId) of
+                    true -> {ok, State1};
+                    _ -> {error, peer_down}
+                end;
+            State2 ->
+                {ok, State2}
+        end
     catch
         Type:Reason ->
             ?warning("Failed to renew connections to peer provider(~p) "
@@ -286,20 +311,3 @@ schedule_next_renewal(State) ->
 -spec schedule_keepalive_msg() -> TimerRef :: reference().
 schedule_keepalive_msg() ->
     erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive).
-
-
-%% @private
--spec send_keepalives(session:id()) -> ok.
-send_keepalives(SessionId) ->
-    case session_connections:list(SessionId) of
-        {ok, Cons} ->
-            lists:foreach(fun(Conn) ->
-                connection:send_keepalive(Conn)
-            end, Cons);
-        Error ->
-            ?error("Connection manager for session ~p failed to send "
-                   "keepalives due to: ~p", [
-                SessionId, Error
-            ]),
-            ok
-    end.

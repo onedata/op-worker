@@ -76,7 +76,14 @@ run_after(save, _, {ok, #document{
 }}) ->
     case oneprovider:is_self(ProviderId) of
         true ->
-            provider_logic:start_session_with_peers(ProviderId, EffPeers);
+            lists:foreach(fun(PeerProviderId) ->
+                case PeerProviderId of
+                    ProviderId ->
+                        ok;
+                    _ ->
+                        provider_logic:start_session_with_peer(PeerProviderId)
+                end
+            end, EffPeers);
         false ->
             ok
     end;

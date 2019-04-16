@@ -1219,7 +1219,14 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, Spac
 start_outgoing_provider_sessions(ProviderId, PeerProviders) ->
     case oneprovider:is_self(ProviderId) of
         true ->
-            provider_logic:start_session_with_peers(ProviderId, PeerProviders);
+            lists:foreach(fun(PeerProviderId) ->
+                case PeerProviderId of
+                    ProviderId ->
+                        ok;
+                    _ ->
+                        provider_logic:start_session_with_peer(PeerProviderId)
+                end
+            end, PeerProviders);
         false ->
             ok
     end.
