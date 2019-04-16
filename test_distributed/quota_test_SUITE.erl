@@ -40,13 +40,13 @@
     unlink_should_unlock_space/1,
     rename_should_unlock_space/1,
     rename_bigger_then_quota_should_fail/1,
-    
+
     % multiple providers tests
     multiprovider_test/1,
     remove_file_on_remote_provider_should_unlock_space/1,
     replicate_file_smaller_than_quota_should_not_fail/1,
     replicate_file_bigger_than_quota_should_fail/1,
-    
+
     % gui upload tests
     quota_updated_on_gui_upload/1,
     failed_gui_upload_test/1,
@@ -416,8 +416,9 @@ rename_bigger_then_quota_should_fail(Config) ->
 multiprovider_test(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    
+    SessId = fun(Worker) ->
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+
     {ok, _} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     {ok, _} = create_file(P2, SessId(P2), f(<<"space3">>, File2)),
 
@@ -436,11 +437,12 @@ multiprovider_test(Config) ->
 remove_file_on_remote_provider_should_unlock_space(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    
+    SessId = fun(Worker) ->
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+
     {ok, _} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     {ok, _} = create_file(P1, SessId(P1), f(<<"space3">>, File2)),
-    
+
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(20))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, SessId(P1), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(20))),
 
@@ -455,19 +457,23 @@ remove_file_on_remote_provider_should_unlock_space(Config) ->
 replicate_file_smaller_than_quota_should_not_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} =
         gen_test_env(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    
+    SessId = fun(Worker) ->
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(20))),
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}]},
+        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
+
     {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2)),
-    
+
     % wait for replication to finish
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id3">>]), ?ATTEMPTS),
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_ongoing_transfers, [<<"space_id3">>]), ?ATTEMPTS),
     ?assertEqual(true, lists:member(Tid, list_ended_transfers(P1, <<"space_id3">>)), ?ATTEMPTS),
-    
-    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}, #{<<"totalBlocksSize">> := 20}]}, 
-        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), 30),
+
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}, #{<<"totalBlocksSize">> := 20}]},
+        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
 
     ok = fsync(P2, SessId(P2), f(<<"space3">>, File1)),
     ?assertEqual(20, current_size(P1, <<"space_id3">>), ?ATTEMPTS),
@@ -484,40 +490,43 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
 replicate_file_bigger_than_quota_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    
+    SessId = fun(Worker) ->
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+
     % How many bytes can be written above quota
-    Tolerance = 100*1024*1024, % 100 MB
+    Tolerance = 100 * 1024 * 1024, % 100 MB
     MaxSize = 1000000000,
-    
+
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space5">>, File1)),
     {ok, _} = create_file(P2, SessId(P2), f(<<"space5">>, File2)),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space5">>, File1), 0, crypto:strong_rand_bytes(MaxSize))),
     % Make sure that there is not enough space left in destination space
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(<<"space5">>, File2), 0, crypto:strong_rand_bytes(Tolerance))),
-    
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := MaxSize}]},
+        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
+
     {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2)),
-    
+
     % wait for replication to finish
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id5">>]), ?ATTEMPTS),
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_ongoing_transfers, [<<"space_id5">>]), ?ATTEMPTS),
     ?assertEqual(true, lists:member(Tid, list_ended_transfers(P1, <<"space_id5">>)), ?ATTEMPTS),
-    
+
     ok = fsync(P2, SessId(P2), f(<<"space5">>, File1)),
     ?assertEqual(true, available_size(P2, <<"space_id5">>) > -Tolerance, ?ATTEMPTS),
     T = rpc:call(P1, transfer, get, [Tid]),
     ?assertMatch(#transfer{replication_status = failed}, T).
-    
+
 
 quota_updated_on_gui_upload(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    
+
     {ok, #file_attr{guid = Guid}} = lfm_proxy:stat(P1, SessId(P1), {path, <<"/space3">>}),
-    
+
     do_multipart(P1, SessId(P1), 1, 20, 1, Guid, File1),
-    
+
     {ok, _} = lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)),
     {ok, FileHandle} = lfm_proxy:open(P1, SessId(P1), f(<<"space3">>, File1), rdwr),
     ok = lfm_proxy:fsync(P1, FileHandle),
@@ -534,17 +543,17 @@ failed_gui_upload_test(Config) ->
         gen_test_env(Config),
 
     {ok, #file_attr{guid = Guid}} = lfm_proxy:stat(P1, User1, {path, <<"/space4">>}),
-    
+
     FileSize = 500*1024*1024, % 500 MB
 
     ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(P1)),
     % Upload File1 500MB to space4
     do_multipart(P1, User1, 100, 1048576, 5, Guid, File1),
-    
+
     {ok, FileHandle} = lfm_proxy:open(P1, User1, f(<<"space4">>, File1), rdwr),
     ok = lfm_proxy:fsync(P1, FileHandle),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),
-    
+
     % Upload File2 800MB to space4
     do_multipart(P1, User1, 160, 1048576, 5, Guid, File2),
     ok = lfm_proxy:fsync(P1, User1, f(<<"space4">>, File2), ProviderId),
@@ -569,7 +578,7 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
 
     SpaceSize = available_size(SupportingProvider, SpaceId),
     RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    
+
     {ok, {Conn, _}} = fuse_test_utils:connect_via_macaroon(P1, [{active, true}], SessId(P1)),
     SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),
     rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId(P1)]),
@@ -579,7 +588,7 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId(P1), {guid, FileGuid}), ?ATTEMPTS),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), {guid, FileGuid}, 0, crypto:strong_rand_bytes(SpaceSize))),
     ?assertMatch(0, available_size(SupportingProvider, SpaceId), ?ATTEMPTS),
-    
+
     ExpectedMessage = #'ServerMessage'{
         message_body = {events, #'Events'{
             events = [#'Event'{
@@ -619,24 +628,24 @@ init_per_testcase(Case, Config) when
         end
     ),
     init_per_testcase(default, Config);
-    
-init_per_testcase(Case, Config) when 
+
+init_per_testcase(Case, Config) when
     Case =:= quota_updated_on_gui_upload;
     Case =:= failed_gui_upload_test ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, cow_multipart),
     ok = test_utils:mock_new(Workers, cowboy_req),
-    ok = test_utils:mock_expect(Workers, cow_multipart, form_data, 
+    ok = test_utils:mock_expect(Workers, cow_multipart, form_data,
         fun(_) -> {file, ok, ok, ok} end),
-    ok = test_utils:mock_expect(Workers, cowboy_req, read_part_body, 
-        fun F(#{left := 1}=Req, Opts) -> 
+    ok = test_utils:mock_expect(Workers, cowboy_req, read_part_body,
+        fun F(#{left := 1}=Req, Opts) ->
                 F(maps:remove(left, Req), Opts);
-            F(#{left := Left, size := Size} = Req, _Opts) -> 
+            F(#{left := Left, size := Size} = Req, _Opts) ->
                 {more, crypto:strong_rand_bytes(Size), Req#{left => Left-1}};
-            F(#{size := Size}=Req, _Opts) -> 
+            F(#{size := Size}=Req, _Opts) ->
                 {ok, crypto:strong_rand_bytes(Size), Req#{done => true}}
         end),
-    ok = test_utils:mock_expect(Workers, cowboy_req, read_part, 
+    ok = test_utils:mock_expect(Workers, cowboy_req, read_part,
         fun (#{done := true} = Req) -> {done, Req}; (Req) -> {ok, [], Req} end),
     init_per_testcase(default, Config);
 
@@ -651,7 +660,7 @@ end_per_testcase(Case, Config) when
     test_utils:mock_unload(Workers, cowboy_req),
     test_utils:mock_unload(Workers, cow_multipart),
     end_per_testcase(all, Config);
-    
+
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -723,11 +732,11 @@ fsync(Worker, SessionId, FileKey) ->
 
 gen_test_env(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    Workers1 = lists:filter(fun(W) -> 
-        case re:run(atom_to_list(W), "p1") of 
-            nomatch -> false; 
+    Workers1 = lists:filter(fun(W) ->
+        case re:run(atom_to_list(W), "p1") of
+            nomatch -> false;
             _ -> true
-        end 
+        end
     end, Workers),
     Workers2 = Workers -- Workers1,
     P1 = lists:last(Workers1),
@@ -764,9 +773,9 @@ do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, ParentGuid,
     ChunkSize = PartsNumber*PartSize,
     ParamsProp = [{<<"resumableIdentifier">>, <<"id">>}, {<<"parentId">>, ParentGuid},
         {<<"resumableFilename">>, FileName}, {<<"resumableChunkSize">>, integer_to_binary(ChunkSize)}],
-    
+
     utils:pforeach(fun(Chunk) ->
-        rpc:call(Worker, page_file_upload, multipart, [#{size => PartSize, left => PartsNumber}, SessionId, 
+        rpc:call(Worker, page_file_upload, multipart, [#{size => PartSize, left => PartsNumber}, SessionId,
             [{<<"resumableChunkNumber">>, integer_to_binary(Chunk)} | ParamsProp]])
     end, lists:seq(1,ChunksNumber)).
 
