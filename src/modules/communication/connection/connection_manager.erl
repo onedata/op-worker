@@ -226,8 +226,10 @@ renew_connections(#state{renewal_timer = undefined} = State) ->
                 connections = Cons
             } = State1 when map_size(Cons) == 0 ->
                 case provider_logic:is_effective_peer(PeerId) of
-                    true -> {ok, State1};
-                    _ -> {error, peer_down}
+                    true ->
+                        {ok, State1};
+                    _ ->
+                        {error, peer_down}
                 end;
             State2 ->
                 {ok, State2}
@@ -239,10 +241,10 @@ renew_connections(#state{renewal_timer = undefined} = State) ->
                 State#state.peer_id, Type, Reason,
                 State#state.renewal_interval / 1000
             ]),
-            schedule_next_renewal(State)
+            {ok, schedule_next_renewal(State)}
     end;
 renew_connections(State) ->
-    State.
+    {ok, State}.
 
 
 %%--------------------------------------------------------------------

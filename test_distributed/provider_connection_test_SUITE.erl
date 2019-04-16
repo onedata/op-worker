@@ -32,6 +32,7 @@
 -export([
     incompatible_providers_should_not_connect/1,
     provider_should_reconnect_after_loss_of_connection/1,
+    after_connection_timeout_session_is_terminated/1,
     deprecated_configuration_endpoint_is_served/1,
     configuration_endpoints_give_same_results/1,
     provider_logic_should_correctly_resolve_nodes_to_connect/1
@@ -41,6 +42,7 @@ all() ->
     ?ALL([
         incompatible_providers_should_not_connect,
         provider_should_reconnect_after_loss_of_connection,
+        after_connection_timeout_session_is_terminated,
         deprecated_configuration_endpoint_is_served,
         configuration_endpoints_give_same_results,
         provider_logic_should_correctly_resolve_nodes_to_connect
@@ -111,6 +113,32 @@ provider_should_reconnect_after_loss_of_connection(Config) ->
     [Conn3, _] = ?assertMatch([_Conn3, Conn2], list_session_connections(P1Worker, OutgoingSessId), ?ATTEMPTS),
 
     ?assertNotEqual(Conn1, Conn3).
+
+
+after_connection_timeout_session_is_terminated(Config) ->
+    % There are 2 providers and 3 nodes:
+    %   * P1 -> 1 node
+    %   * P2 -> 2 nodes
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, session_connections),
+    test_utils:mock_expect(Nodes, session_connections, ensure_connected, fun(_) -> ok end),
+
+    [Domain1, Domain2] = lists:usort([?GET_DOMAIN(N) || N <- Nodes]),
+    P1 = hd([N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain1]),
+    P2Id = initializer:domain_to_provider_id(Domain2),
+    OutgoingSessId = get_provider_session_id(P1, outgoing, P2Id),
+
+    % when one of session connection timeouts
+    [Conn2, Conn1] = ?assertMatch([_, _], list_session_connections(P1, OutgoingSessId), ?ATTEMPTS),
+    Conn1 ! timeout,
+
+    % then entire session and it's connections should be terminated
+    ?assertMatch(false, session_exists(P1, OutgoingSessId), ?ATTEMPTS),
+    ?assertMatch(false, rpc:call(P1, erlang, is_process_alive, [Conn1])),
+    ?assertMatch(false, rpc:call(P1, erlang, is_process_alive, [Conn2])),
+    ?assertMatch({error, not_found}, list_session_connections(P1, OutgoingSessId), ?ATTEMPTS),
+
+    test_utils:mock_unload(Nodes, [session_connections]).
 
 
 deprecated_configuration_endpoint_is_served(Config) ->
@@ -294,8 +322,12 @@ session_exists(Provider, SessId) ->
 
 
 list_session_connections(Provider, SessId) ->
-    {ok, Cons} = rpc:call(Provider, session_connections, list, [SessId]),
-    Cons.
+    case rpc:call(Provider, session_connections, list, [SessId]) of
+        {ok, Cons} ->
+            Cons;
+        Error ->
+            Error
+    end.
 
 
 -spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
