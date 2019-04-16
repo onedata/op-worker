@@ -155,7 +155,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
     Res = pool_utils:get_documents_diff(Worker1, After, Before, Close),
     ?assertEqual([], Res),
 
-    client_simulation_test_base:verify_streams(Config).
+    client_simulation_test_base:verify_streams(Config, Close).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

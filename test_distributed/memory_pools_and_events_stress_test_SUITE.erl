@@ -35,8 +35,6 @@ all() ->
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, erlang:unique_integer([positive, monotonic]) - 2).
-
 %%%===================================================================
 %%% Tests
 %%%===================================================================
@@ -56,8 +54,8 @@ stress_test_base(Config) ->
 many_files_stress_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, proc_num}, {value, 2}, {description, "Processes number sending messages in parallel"}],
-            [{name, proc_repeats_num}, {value, 2}, {description, "Repeats by each process"}],
+            [{name, proc_num}, {value, 1}, {description, "Processes number sending messages in parallel"}],
+            [{name, proc_repeats_num}, {value, 100}, {description, "Repeats by each process"}],
             [{name, timeout}, {value, timer:minutes(1)}, {description, "Timeout"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
@@ -68,8 +66,8 @@ many_files_stress_test_base(Config) ->
 long_file_usage_stress_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, proc_num}, {value, 2}, {description, "Processes number sending messages in parallel"}],
-            [{name, proc_repeats_num}, {value, 2}, {description, "Repeats by each process"}],
+            [{name, proc_num}, {value, 1}, {description, "Processes number sending messages in parallel"}],
+            [{name, proc_repeats_num}, {value, 1}, {description, "Repeats by each process"}],
             [{name, timeout}, {value, timer:minutes(1)}, {description, "Timeout"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
@@ -148,15 +146,15 @@ many_files_test_base(Config, TestScenario) ->
                         {line, ?LINE}]})
         end
     end, SlavePids),
-    timer:sleep(timer:seconds(30)),
+    timer:sleep(timer:seconds(30)), % Events are async
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
     MemPoolsBefore = get(memory_pools),
-    Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore),
-%%    ?assertEqual([], Res),
-    ct:print("Docs number ~p", [length(Res)]),
-    client_simulation_test_base:verify_streams(Config).
+    Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore, false),
+    ?assertEqual([], Res),
+%%    ct:print("Docs number ~p", [{length(Res), Res}]),
+    client_simulation_test_base:verify_streams(Config, false).
 
 %%%===================================================================
 %%% Internal functions

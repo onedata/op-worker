@@ -262,7 +262,8 @@ connect_and_upgrade_proto(Hostname, Port) ->
     end.
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset, subscription, message_request]).
+    receive_server_message([message_stream_reset, subscription, message_request,
+        message_acknowledgement, processing_status]).
 
 receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).

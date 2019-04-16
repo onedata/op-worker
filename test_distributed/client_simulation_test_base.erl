@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 -export([init_per_suite/1, init_per_testcase/1, end_per_testcase/1]).
--export([simulate_client/5, verify_streams/1, get_guid/3]).
+-export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
@@ -59,19 +59,32 @@ simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
         _ -> ok
     end.
 
-verify_streams([]) ->
+verify_streams(Workers) ->
+    verify_streams(Workers, true).
+
+verify_streams([], _SessionClosed) ->
     ok;
-verify_streams([Worker | Workers]) when is_atom(Worker) ->
+verify_streams([Worker | Workers], SessionClosed) when is_atom(Worker) ->
     Check = rpc:call(Worker, ets, tab2list, [session]),
 
     case get({init, Worker}) of
         undefined -> put({init, Worker}, Check);
-        InitCheck -> ct:print("Ets size ~p", [length(Check -- InitCheck)])
+        InitCheck ->
+            Diff = Check -- InitCheck,
+            case SessionClosed of
+                true ->
+                    ?assertEqual([], Diff);
+                _ ->
+                    case length(Diff) =< 2 of
+                        true -> ok; % two elements for with ref for sequencer_in_stream may exist if session is open
+                        _ -> ?assertEqual([], Diff)
+                    end
+            end
     end,
-    verify_streams(Workers);
-verify_streams(Config) ->
+    verify_streams(Workers, SessionClosed);
+verify_streams(Config, SessionClosed) ->
     Workers = ?config(op_worker_nodes, Config),
-    verify_streams(Workers).
+    verify_streams(Workers, SessionClosed).
 
 get_guid(Worker, SessId, Path) ->
     #fuse_response{fuse_response = #guid{guid = Guid}} =
