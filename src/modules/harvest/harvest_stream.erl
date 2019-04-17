@@ -133,21 +133,21 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(_Request, #state{mode = RetryStatus} = State)
-    when RetryStatus =:= retry orelse RetryStatus =:= resuming ->
+handle_cast(_Request, #state{mode = Mode} = State)
+    when Mode =:= retry orelse Mode =:= resuming ->
     % ignore because stream is in retry mode
     {noreply, State};
 handle_cast({change, {ok, end_of_stream}}, State = #state{mode = retry}) ->
-    % all changes sent by changes_stream before stopping it has already arrived
+    % all changes sent by changes_stream before stopping it have already arrived
     {noreply, State#state{changes_flushed = true}};
 handle_cast({change, {ok, end_of_stream}}, State = #state{mode = resuming}) ->
-    % all changes sent by changes_stream before stopping it has already arrived
+    % all changes sent by changes_stream before stopping it have already arrived
     % and retry is finished, so we can get back to normal operation
     {noreply, enter_stream_mode(State)};
 handle_cast({change, {ok, end_of_stream}}, State = #state{mode = stream}) ->
     {stop, normal, State};
 handle_cast({change, {ok, DocOrDocs}}, State = #state{mode = stream}) ->
-    {noreply, handle_change_and_enter_retry_mode_on_error(State, DocOrDocs)};
+    {noreply, consume_change_and_enter_retry_mode_on_error(State, DocOrDocs)};
 handle_cast({change, {error, _Seq, Reason}}, State = #state{mode = stream}) ->
     {stop, Reason, State};
 handle_cast(Request, #state{} = State) ->
@@ -170,7 +170,7 @@ handle_info({timeout, _TimerRef, ?RETRY}, State = #state{
     docs_to_retry = DocOrDocs,
     changes_flushed = ChangesFlushed
 }) ->
-    State2 = handle_change_and_enter_retry_mode_on_error(State, DocOrDocs),
+    State2 = consume_change_and_enter_retry_mode_on_error(State, DocOrDocs),
     case ChangesFlushed andalso (State2#state.mode =:= resuming) of
         true ->
             {noreply, enter_stream_mode(State2)};
@@ -238,23 +238,23 @@ enter_stream_mode(State = #state{id = Id, index_id = IndexId, space_id = SpaceId
     }.
 
 
--spec handle_change_and_enter_retry_mode_on_error(state(),
+-spec consume_change_and_enter_retry_mode_on_error(state(),
     datastore:doc() | [datastore:doc()]) -> state().
-handle_change_and_enter_retry_mode_on_error(State = #state{mode = RetryStatus}, []) ->
-    % all docs were successfully handled, ensure we are not in_retry_mode
+consume_change_and_enter_retry_mode_on_error(State = #state{mode = Mode}, []) ->
+    % all docs were successfully handled, ensure we are not in 'retry' mode
     State#state{
-        mode = maybe_enter_resuming_mode(RetryStatus),
+        mode = maybe_enter_resuming_mode(Mode),
         backoff = undefined
     };
-handle_change_and_enter_retry_mode_on_error(State = #state{
+consume_change_and_enter_retry_mode_on_error(State = #state{
     id = Id,
     harvester_id = HarvesterId,
     space_id = SpaceId,
     stream = Stream
 }, Docs = [Doc | RestDocs]) ->
     try
-        State2 = handle_change(State, Doc),
-        handle_change_and_enter_retry_mode_on_error(State2, RestDocs)
+        State2 = consume_change(State, Doc),
+        consume_change_and_enter_retry_mode_on_error(State2, RestDocs)
     catch
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
@@ -263,31 +263,12 @@ handle_change_and_enter_retry_mode_on_error(State = #state{
             catch gen_server:stop(Stream),
             enter_retry_mode(Docs, State)
     end;
-handle_change_and_enter_retry_mode_on_error(State = #state{
-    id = Id,
-    harvester_id = HarvesterId,
-    space_id = SpaceId,
-    stream = Stream,
-    mode = RetryStatus
-}, Doc) ->
-    try
-        State2 = handle_change(State, Doc),
-        State2#state{
-            mode = maybe_enter_resuming_mode(RetryStatus),
-            backoff = undefined
-        }
-    catch
-        Error:Reason ->
-            ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
-            "handling changes for harvester ~p in space ~p",
-                [Error, Reason, Id, HarvesterId, SpaceId]),
-            catch gen_server:stop(Stream),
-            enter_retry_mode(Doc, State)
-    end.
+consume_change_and_enter_retry_mode_on_error(State, Doc = #document{}) ->
+    consume_change_and_enter_retry_mode_on_error(State, [Doc]).
 
 
--spec handle_change(state(), datastore:doc()) -> state().
-handle_change(State = #state{
+-spec consume_change(state(), datastore:doc()) -> state().
+consume_change(State = #state{
     id = Id,
     index_id = IndexId,
     harvester_id = HarvesterId,
@@ -309,7 +290,7 @@ handle_change(State = #state{
     {ok, [] = _FailedIndices} = harvester_logic:submit_entry(HarvesterId, FileId, JSON, [IndexId], Seq, max(Seq, MaxRelevantSeq)),
     ok = harvest_stream_state:set_seq(Id, IndexId, Seq, relevant),
     State#state{last_persisted_seq = Seq};
-handle_change(State = #state{
+consume_change(State = #state{
     id = Id,
     index_id = IndexId,
     harvester_id = HarvesterId,
@@ -328,7 +309,7 @@ handle_change(State = #state{
     {ok, [] = _FailedIndices} = harvester_logic:delete_entry(HarvesterId, FileId, [IndexId], Seq, max(Seq, MaxRelevantSeq)),
     ok = harvest_stream_state:set_seq(Id, IndexId, Seq, relevant),
     State#state{last_persisted_seq = Seq};
-handle_change(State = #state{
+consume_change(State = #state{
     id = Id,
     index_id = IndexId,
     last_persisted_seq = LastSeq
@@ -344,7 +325,7 @@ handle_change(State = #state{
     % the Seq is persisted.
     ok = harvest_stream_state:set_seq(Id, IndexId, Seq, ignored),
     State#state{last_persisted_seq = Seq};
-handle_change(State, _Doc) ->
+consume_change(State, _Doc) ->
     State.
 
 
