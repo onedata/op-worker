@@ -40,8 +40,8 @@
     space_id :: od_space:id(),
     provider_id :: od_provider:id(),
     last_persisted_seq = 0 :: couchbase_changes:seq(),
-    stream :: pid(),
-    retry_status = off :: retry_status(),
+    stream :: undefined | pid(),
+    mode = stream :: mode(),
     % flag that informs whether all changes received in retry mode were flushed
     changes_flushed = false :: boolean(),
     docs_to_retry = [] :: datastore:doc() | [datastore:doc()],
@@ -49,7 +49,7 @@
 }).
 
 -type state() :: #state{}.
--type retry_status() :: on | off | done.
+-type mode() :: stream | retry | resuming.
 
 
 % Below constant determines how often seen sequence number will be persisted
@@ -93,17 +93,16 @@ start_link(HarvesterId, SpaceId, IndexId) ->
     {stop, Reason :: term()} | ignore.
 init([HarvesterId, SpaceId, IndexId]) ->
     Id = harvest_stream_state:id(HarvesterId, SpaceId),
-    LastProcessedSeq = harvest_stream_state:get_seq(Id, IndexId),
-    {ok, StreamPid} = start_changes_stream(SpaceId, LastProcessedSeq + 1),
-    ?debug("Started harvest_stream: ~p", [{HarvesterId, SpaceId, IndexId}]),
-    {ok, #state{
+    State = #state{
         id = Id,
         index_id = IndexId,
         space_id = SpaceId,
         harvester_id = HarvesterId,
-        provider_id = oneprovider:get_id(),
-        stream = StreamPid
-    }}.
+        provider_id = oneprovider:get_id()
+    },
+    State2 = enter_stream_mode(State),
+    ?debug("Started harvest_stream: ~p", [{HarvesterId, SpaceId, IndexId}]),
+    {ok, State2}.
 
 
 %%--------------------------------------------------------------------
@@ -134,22 +133,22 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(_Request, #state{retry_status = RetryStatus} = State)
-    when RetryStatus =:= on orelse RetryStatus =:= done ->
+handle_cast(_Request, #state{mode = RetryStatus} = State)
+    when RetryStatus =:= retry orelse RetryStatus =:= resuming ->
     % ignore because stream is in retry mode
     {noreply, State};
-handle_cast({change, {ok, end_of_stream}}, State = #state{retry_status = on}) ->
+handle_cast({change, {ok, end_of_stream}}, State = #state{mode = retry}) ->
     % all changes sent by changes_stream before stopping it has already arrived
     {noreply, State#state{changes_flushed = true}};
-handle_cast({change, {ok, end_of_stream}}, State = #state{retry_status = done}) ->
+handle_cast({change, {ok, end_of_stream}}, State = #state{mode = resuming}) ->
     % all changes sent by changes_stream before stopping it has already arrived
     % and retry is finished, so we can get back to normal operation
-    {noreply, restore_normal_operation(State)};
-handle_cast({change, {ok, end_of_stream}}, State = #state{retry_status = off}) ->
+    {noreply, enter_stream_mode(State)};
+handle_cast({change, {ok, end_of_stream}}, State = #state{mode = stream}) ->
     {stop, normal, State};
-handle_cast({change, {ok, DocOrDocs}}, State = #state{retry_status = off}) ->
-    {noreply, handle_change_and_schedule_retry_on_error(State, DocOrDocs)};
-handle_cast({change, {error, _Seq, Reason}}, State = #state{retry_status = off}) ->
+handle_cast({change, {ok, DocOrDocs}}, State = #state{mode = stream}) ->
+    {noreply, handle_change_and_enter_retry_mode_on_error(State, DocOrDocs)};
+handle_cast({change, {error, _Seq, Reason}}, State = #state{mode = stream}) ->
     {stop, Reason, State};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -167,14 +166,14 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({timeout, _TimerRef, ?RETRY}, State = #state{
-    retry_status = on,
+    mode = retry,
     docs_to_retry = DocOrDocs,
     changes_flushed = ChangesFlushed
 }) ->
-    State2 = handle_change_and_schedule_retry_on_error(State, DocOrDocs),
-    case ChangesFlushed andalso (State2#state.retry_status =:= done) of
+    State2 = handle_change_and_enter_retry_mode_on_error(State, DocOrDocs),
+    case ChangesFlushed andalso (State2#state.mode =:= resuming) of
         true ->
-            {noreply, restore_normal_operation(State2)};
+            {noreply, enter_stream_mode(State2)};
         false ->
             {noreply, State2}
     end;
@@ -223,24 +222,31 @@ start_changes_stream(SpaceId, Since) ->
         [{since, Since}, {until, infinity}], []
     ).
 
-restore_normal_operation(State = #state{id = Id, index_id = IndexId, space_id = SpaceId}) ->
-    LastProcessedSeq = harvest_stream_state:get_seq(Id, IndexId),
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Start/restart changes stream and mark mode as `stream`.
+%% @end
+%%-------------------------------------------------------------------
+-spec enter_stream_mode(state()) -> state().
+enter_stream_mode(State = #state{id = Id, index_id = IndexId, space_id = SpaceId}) ->
+    LastProcessedSeq = harvest_stream_state:get_seen_seq(Id, IndexId),
     {ok, StreamPid} = start_changes_stream(SpaceId, LastProcessedSeq + 1),
     State#state{
-        retry_status = off,
+        mode = stream,
         stream = StreamPid
     }.
 
 
--spec handle_change_and_schedule_retry_on_error(state(),
+-spec handle_change_and_enter_retry_mode_on_error(state(),
     datastore:doc() | [datastore:doc()]) -> state().
-handle_change_and_schedule_retry_on_error(State = #state{retry_status = RetryStatus}, []) ->
+handle_change_and_enter_retry_mode_on_error(State = #state{mode = RetryStatus}, []) ->
     % all docs were successfully handled, ensure we are not in_retry_mode
     State#state{
-        retry_status = maybe_mark_status_done(RetryStatus),
+        mode = maybe_enter_resuming_mode(RetryStatus),
         backoff = undefined
     };
-handle_change_and_schedule_retry_on_error(State = #state{
+handle_change_and_enter_retry_mode_on_error(State = #state{
     id = Id,
     harvester_id = HarvesterId,
     space_id = SpaceId,
@@ -248,26 +254,26 @@ handle_change_and_schedule_retry_on_error(State = #state{
 }, Docs = [Doc | RestDocs]) ->
     try
         State2 = handle_change(State, Doc),
-        handle_change_and_schedule_retry_on_error(State2, RestDocs)
+        handle_change_and_enter_retry_mode_on_error(State2, RestDocs)
     catch
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
             "handling changes for harvester ~p in space ~p",
                 [Error, Reason, Id, HarvesterId, SpaceId]),
             catch gen_server:stop(Stream),
-            schedule_retry(Docs, State)
+            enter_retry_mode(Docs, State)
     end;
-handle_change_and_schedule_retry_on_error(State = #state{
+handle_change_and_enter_retry_mode_on_error(State = #state{
     id = Id,
     harvester_id = HarvesterId,
     space_id = SpaceId,
     stream = Stream,
-    retry_status = RetryStatus
+    mode = RetryStatus
 }, Doc) ->
     try
         State2 = handle_change(State, Doc),
         State2#state{
-            retry_status = maybe_mark_status_done(RetryStatus),
+            mode = maybe_enter_resuming_mode(RetryStatus),
             backoff = undefined
         }
     catch
@@ -276,7 +282,7 @@ handle_change_and_schedule_retry_on_error(State = #state{
             "handling changes for harvester ~p in space ~p",
                 [Error, Reason, Id, HarvesterId, SpaceId]),
             catch gen_server:stop(Stream),
-            schedule_retry(Doc, State)
+            enter_retry_mode(Doc, State)
     end.
 
 
@@ -342,27 +348,27 @@ handle_change(State, _Doc) ->
     State.
 
 
--spec schedule_retry(datastore:doc() | [datastore:doc()], state()) -> state().
-schedule_retry(DocOrDocs, State = #state{backoff = undefined}) ->
+-spec enter_retry_mode(datastore:doc() | [datastore:doc()], state()) -> state().
+enter_retry_mode(DocOrDocs, State = #state{backoff = undefined}) ->
     B0 = backoff:init(?MIN_BACKOFF_INTERVAL, ?MAX_BACKOFF_INTERVAL, self(), ?RETRY),
     B1 = backoff:type(B0, jitter),
     ?error("Next retry after: ~p seconds", [?MIN_BACKOFF_INTERVAL /1000]),
     backoff:fire(B1),
     State#state{
         docs_to_retry = DocOrDocs,
-        retry_status = on,
+        mode = retry,
         backoff = B1
     };
-schedule_retry(DocOrDocs, State = #state{backoff = B}) ->
+enter_retry_mode(DocOrDocs, State = #state{backoff = B}) ->
     {Value, B2} = backoff:fail(B),
     ?error("Next retry after: ~p seconds", [Value /1000]),
     backoff:fire(B2),
     State#state{
         docs_to_retry = DocOrDocs,
-        retry_status = on,
+        mode = retry,
         backoff = B2
     }.
 
--spec maybe_mark_status_done(retry_status()) -> retry_status().
-maybe_mark_status_done(off) -> off;
-maybe_mark_status_done(on) -> done.
+-spec maybe_enter_resuming_mode(mode()) -> mode().
+maybe_enter_resuming_mode(stream) -> stream;
+maybe_enter_resuming_mode(retry) -> resuming.

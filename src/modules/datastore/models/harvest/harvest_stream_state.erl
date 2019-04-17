@@ -22,7 +22,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get_seq/2, get_max_relevant_seq/1, set_seq/4, id/2]).
+-export([get_seen_seq/2, get_max_relevant_seq/1, set_seq/4, id/2]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1]).
@@ -51,8 +51,8 @@
 %% Returns last seen sequence number for given IndexId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_seq(id(), index()) -> seq().
-get_seq(Id, IndexId) ->
+-spec get_seen_seq(id(), index()) -> seq().
+get_seen_seq(Id, IndexId) ->
     case datastore_model:get(?CTX, Id) of
         {ok, #document{value = #harvest_stream_state{seen_seqs = Seqs}}} ->
             maps:get(IndexId, Seqs, ?DEFAULT_SEQ);
