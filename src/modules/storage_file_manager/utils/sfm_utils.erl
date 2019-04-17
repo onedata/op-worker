@@ -254,6 +254,10 @@ delete_storage_dir(FileCtx, UserCtx) ->
                     % todo VFS-4997
                     spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
                     ok;
+                {error,'Function not implemented'} = Error ->
+                    % Some helpers do not support rmdir
+                    ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+                    ok;
                 Error ->
                     ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
                     Error

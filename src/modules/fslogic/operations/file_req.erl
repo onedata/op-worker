@@ -211,7 +211,10 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
-            erlang:Error(Reason)
+            case Reason of
+                {badmatch, {error, not_found}} -> erlang:Error(?ECANCELED);
+                _ -> erlang:Error(Reason)
+            end
     end.
 
 %%--------------------------------------------------------------------

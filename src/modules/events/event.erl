@@ -271,10 +271,10 @@ subtract_unique(ListA, ListB) ->
 %%--------------------------------------------------------------------
 -spec send_to_event_manager(Manager :: pid(), Message :: term(), RetryCounter :: non_neg_integer()) -> ok.
 send_to_event_manager(Manager, Message, 0) ->
-    ok = event_manager:send(Manager, Message);
+    ok = event_manager:handle(Manager, Message);
 send_to_event_manager(Manager, Message, RetryCounter) ->
     try
-        ok = event_manager:send(Manager, Message)
+        ok = event_manager:handle(Manager, Message)
     catch
         exit:{timeout, _} ->
             ?debug("Timeout of event manager for message ~p, retry", [Message]),
