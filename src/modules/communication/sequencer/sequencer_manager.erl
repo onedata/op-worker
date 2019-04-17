@@ -176,12 +176,22 @@ handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     {reply, {ok, StmId}, State};
 
 handle_call({create_in_stream, StmId}, _From, State) ->
-    {ok, SeqStm} = create_sequencer_in_stream(StmId, State),
-    {reply, {ok, SeqStm}, State};
+    case get_stream(self(), sequencer_in_streams, StmId) of
+        {ok, SeqStm} ->
+            {reply, {ok, SeqStm}, State};
+        error ->
+            {ok, SeqStm} = create_sequencer_in_stream(StmId, State),
+            {reply, {ok, SeqStm}, State}
+    end;
 
 handle_call({create_out_stream, StmId}, _From, State) ->
-    {ok, SeqStm} = create_sequencer_out_stream(StmId, State),
-    {reply, {ok, SeqStm}, State};
+    case get_stream(self(), sequencer_out_streams, StmId) of
+        {ok, SeqStm} ->
+            {reply, {ok, SeqStm}, State};
+        error ->
+            {ok, SeqStm} = create_sequencer_out_stream(StmId, State),
+            {reply, {ok, SeqStm}, State}
+    end;
 
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),

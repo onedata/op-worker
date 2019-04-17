@@ -35,8 +35,6 @@ all() ->
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, erlang:unique_integer([positive, monotonic]) - 2).
-
 %%%===================================================================
 %%% Tests
 %%%===================================================================
@@ -56,8 +54,8 @@ stress_test_base(Config) ->
 many_files_stress_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, proc_num}, {value, 2}, {description, "Processes number sending messages in parallel"}],
-            [{name, proc_repeats_num}, {value, 2}, {description, "Repeats by each process"}],
+            [{name, proc_num}, {value, 20}, {description, "Processes number sending messages in parallel"}],
+            [{name, proc_repeats_num}, {value, 100}, {description, "Repeats by each process"}],
             [{name, timeout}, {value, timer:minutes(1)}, {description, "Timeout"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
@@ -68,8 +66,8 @@ many_files_stress_test_base(Config) ->
 long_file_usage_stress_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, proc_num}, {value, 2}, {description, "Processes number sending messages in parallel"}],
-            [{name, proc_repeats_num}, {value, 2}, {description, "Repeats by each process"}],
+            [{name, proc_num}, {value, 20}, {description, "Processes number sending messages in parallel"}],
+            [{name, proc_repeats_num}, {value, 500}, {description, "Repeats by each process"}],
             [{name, timeout}, {value, timer:minutes(1)}, {description, "Timeout"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
@@ -90,7 +88,6 @@ many_files_test_base(Config, TestScenario) ->
                 generator:gen_name(), 8#755)),
             ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-            client_simulation_test_base:verify_streams(Config),
             ProcNum = ?config(proc_num, Config),
             Master = self(),
 
@@ -98,8 +95,7 @@ many_files_test_base(Config, TestScenario) ->
                 spawn_link(fun() ->
                     try
                         {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-                        Master ! {start_ans, ok},
-                        slave_loop(Config, Sock, SpaceGuid, Master)
+                        start_slave(Config, Sock, SpaceGuid, Master, TestScenario)
                     catch
                         E1:E2 ->
                             Master ! {start_ans, {E1, E2, erlang:get_stacktrace()}}
@@ -121,6 +117,7 @@ many_files_test_base(Config, TestScenario) ->
                 end
             end, Pids),
 
+            client_simulation_test_base:verify_streams(Config),
             {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
             put(memory_pools, Before),
             put(slave_pids, Pids),
@@ -131,7 +128,7 @@ many_files_test_base(Config, TestScenario) ->
     end,
 
     lists:foreach(fun(Pid) ->
-        Pid ! TestScenario
+        Pid ! do_test
     end, SlavePids),
 
     lists:foreach(fun(Pid) ->
@@ -148,23 +145,33 @@ many_files_test_base(Config, TestScenario) ->
                         {line, ?LINE}]})
         end
     end, SlavePids),
-    timer:sleep(timer:seconds(30)),
+    timer:sleep(timer:seconds(30)), % Events are async
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     {After, _SizesAfter} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
     MemPoolsBefore = get(memory_pools),
-    Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore),
-%%    ?assertEqual([], Res),
-    ct:print("Docs number ~p", [length(Res)]),
-    client_simulation_test_base:verify_streams(Config).
+    Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore, false),
+    ?assertEqual([], Res),
+%%    ct:print("Docs number ~p", [{length(Res), Res}]),
+    client_simulation_test_base:verify_streams(Config, false).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-slave_loop(Config, Sock, SpaceGuid, Master) ->
+start_slave(Config, Sock, SpaceGuid, Master, test_many) ->
+    Master ! {start_ans, ok},
+    many_files_slave_loop(Config, Sock, SpaceGuid, Master);
+start_slave(Config, Sock, SpaceGuid, Master, test_long_usage) ->
+    {FileGuid, HandleId, SubId} =
+        client_simulation_test_base:prepare_file(Sock, SpaceGuid),
+    timer:sleep(5000),
+    Master ! {start_ans, ok},
+    long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master).
+
+many_files_slave_loop(Config, Sock, SpaceGuid, Master) ->
     receive
-        test_many ->
+        do_test ->
             try
                 Args = [write, read, release, unsub],
                 Repeats = ?config(proc_repeats_num, Config),
@@ -176,10 +183,23 @@ slave_loop(Config, Sock, SpaceGuid, Master) ->
                 E1:E2 ->
                     Master ! {test_ans, {E1, E2, erlang:get_stacktrace()}}
             end,
-            slave_loop(Config, Sock, SpaceGuid, Master);
-        test_long_usage ->
-            Master ! {test_ans, ok},
-            slave_loop(Config, Sock, SpaceGuid, Master)
+            many_files_slave_loop(Config, Sock, SpaceGuid, Master)
+    end.
+
+long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master) ->
+    receive
+        do_test ->
+            try
+                Repeats = ?config(proc_repeats_num, Config),
+                lists:foreach(fun(_) ->
+                    client_simulation_test_base:use_file(Sock, FileGuid, HandleId, SubId)
+                end, lists:seq(1, Repeats)),
+                Master ! {test_ans, ok}
+            catch
+                E1:E2 ->
+                    Master ! {test_ans, {E1, E2, erlang:get_stacktrace()}}
+            end,
+            long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master)
     end.
 
 %%%===================================================================

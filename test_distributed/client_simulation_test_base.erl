@@ -21,12 +21,14 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 -export([init_per_suite/1, init_per_testcase/1, end_per_testcase/1]).
--export([simulate_client/5, verify_streams/1, get_guid/3]).
+-export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
+-export([prepare_file/2, use_file/4]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, erlang:unique_integer([positive, monotonic]) - 2).
+-define(SeqID, erlang:unique_integer([positive, monotonic]) - 1).
+-define(MsgID, integer_to_binary(fuse_test_utils:generate_msg_id())).
 
 %%%===================================================================
 %%% API
@@ -58,19 +60,54 @@ simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
         _ -> ok
     end.
 
-verify_streams([]) ->
+prepare_file(Sock, SpaceGuid) ->
+    Filename = generator:gen_name(),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, SpaceGuid, Filename),
+     create_new_file_subscriptions(Sock, FileGuid, 0),
+    fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
+
+    SubId = ?SeqID,
+    ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
+        0, SubId, -SubId, FileGuid, 500)),
+
+    {FileGuid, HandleId, SubId}.
+
+use_file(Sock, FileGuid, HandleId, SubId) ->
+    Data = <<"test_data">>,
+    fuse_test_utils:proxy_write(Sock, FileGuid, HandleId, 0, Data),
+    fuse_test_utils:emit_file_written_event(Sock, 0, SubId, FileGuid, [#file_block{offset = 0, size = byte_size(Data)}]),
+
+    ?assertMatch(Data, fuse_test_utils:proxy_read(Sock, FileGuid, HandleId, 0, byte_size(Data))),
+    fuse_test_utils:emit_file_read_event(Sock, 0, SubId, FileGuid, [#file_block{offset = 0, size = byte_size(Data)}]),
+
+    fuse_test_utils:fsync(Sock, FileGuid, HandleId, false).
+
+verify_streams(Workers) ->
+    verify_streams(Workers, true).
+
+verify_streams([], _SessionClosed) ->
     ok;
-verify_streams([Worker | Workers]) when is_atom(Worker) ->
+verify_streams([Worker | Workers], SessionClosed) when is_atom(Worker) ->
     Check = rpc:call(Worker, ets, tab2list, [session]),
 
     case get({init, Worker}) of
         undefined -> put({init, Worker}, Check);
-        InitCheck -> ct:print("Ets size ~p", [length(Check -- InitCheck)])
+        InitCheck ->
+            Diff = Check -- InitCheck,
+            case SessionClosed of
+                true ->
+                    ?assertEqual([], Diff);
+                _ ->
+                    case length(Diff) =< 2 of
+                        true -> ok; % two elements for with ref for sequencer_in_stream may exist if session is open
+                        _ -> ?assertEqual([], Diff)
+                    end
+            end
     end,
-    verify_streams(Workers);
-verify_streams(Config) ->
+    verify_streams(Workers, SessionClosed);
+verify_streams(Config, SessionClosed) ->
     Workers = ?config(op_worker_nodes, Config),
-    verify_streams(Workers).
+    verify_streams(Workers, SessionClosed).
 
 get_guid(Worker, SessId, Path) ->
     #fuse_response{fuse_response = #guid{guid = Guid}} =
@@ -150,14 +187,14 @@ maybe_unsub(Sock, Subs, Unsub) ->
     end.
 
 create_new_file_subscriptions(Sock, Guid, StreamId) ->
-    Subs = [Sub1, Sub2, Sub3] = [?SeqID, ?SeqID, ?SeqID],
+    [Seq1, Seq2, Seq3] = [?SeqID, ?SeqID, ?SeqID],
     ok = ssl:send(Sock, fuse_test_utils:generate_file_removed_subscription_message(
-        StreamId, Sub1, -Sub1, Guid)),
+        StreamId, Seq1, -Seq1, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_renamed_subscription_message(
-        StreamId, Sub2, -Sub2, Guid)),
+        StreamId, Seq2, -Seq2, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_attr_changed_subscription_message(
-        StreamId, Sub3, -Sub3, Guid, 500)),
-    Subs.
+        StreamId, Seq3, -Seq3, Guid, 500)),
+    [-Seq1, -Seq2, -Seq3]. % Return subscription numbers (opposite to sequence numbers)
 
 cancel_subscriptions(Sock, StreamId, Subs) ->
     lists:foreach(fun(SubId) ->
