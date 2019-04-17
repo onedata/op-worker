@@ -22,6 +22,7 @@
 
 -export([init_per_suite/1, init_per_testcase/1, end_per_testcase/1]).
 -export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
+-export([prepare_file/2, use_file/4]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
@@ -58,6 +59,28 @@ simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
         true -> ssl:close(Sock);
         _ -> ok
     end.
+
+prepare_file(Sock, SpaceGuid) ->
+    Filename = generator:gen_name(),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, SpaceGuid, Filename),
+     create_new_file_subscriptions(Sock, FileGuid, 0),
+    fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
+
+    SubId = ?SeqID,
+    ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
+        0, SubId, -SubId, FileGuid, 500)),
+
+    {FileGuid, HandleId, SubId}.
+
+use_file(Sock, FileGuid, HandleId, SubId) ->
+    Data = <<"test_data">>,
+    fuse_test_utils:proxy_write(Sock, FileGuid, HandleId, 0, Data),
+    fuse_test_utils:emit_file_written_event(Sock, 0, SubId, FileGuid, [#file_block{offset = 0, size = byte_size(Data)}]),
+
+    ?assertMatch(Data, fuse_test_utils:proxy_read(Sock, FileGuid, HandleId, 0, byte_size(Data))),
+    fuse_test_utils:emit_file_read_event(Sock, 0, SubId, FileGuid, [#file_block{offset = 0, size = byte_size(Data)}]),
+
+    fuse_test_utils:fsync(Sock, FileGuid, HandleId, false).
 
 verify_streams(Workers) ->
     verify_streams(Workers, true).
