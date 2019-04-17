@@ -18,16 +18,6 @@
 -define(DEPRECATED_ZONE_CONFIGURATION_PATH, "/configuration").
 -define(ZONE_CONFIGURATION_PATH, "/api/v3/onezone/configuration").
 
-% Endpoint for logging in
--define(LOGIN_PATH, "/login.html").
-
-% Endpoint for logging out
--define(LOGOUT_PATH, "/logout.html").
-
-% Endpoint for logging in via Onezone
--define(VALIDATE_LOGIN_PATH, "/onezone-login/consume").
--define(VALIDATE_LOGIN_PATH_DEPRECATED, "/validate_login.html").
-
 % Endpoint for nagios healthcheck
 -define(NAGIOS_PATH, "/nagios").
 
@@ -46,11 +36,18 @@
 %% Endpoint used to verify authorization nonces issued by this provider
 -define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
 
+% Endpoint for a dummy favicon used to check connectivity in GUI
+-define(FAVICON_PATH, "/favicon.ico").
+
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 
 %% Protocol name for HTTP upgrade headers on client protocol endpoint
 -define(CLIENT_PROTOCOL_UPGRADE_NAME, "clproto").
+
+% Endpoint for viewing public shares
+-define(SHARE_ID_BINDING, share_id).
+-define(PUBLIC_SHARE_COWBOY_ROUTE, "/share/:share_id").
 
 -endif.
 

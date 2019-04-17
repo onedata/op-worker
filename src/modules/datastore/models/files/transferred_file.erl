@@ -330,7 +330,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
 %%%===================================================================
 
 %% @private
--spec file_guid_to_id(file_meta:guid()) -> id().
+-spec file_guid_to_id(fslogic_worker:file_guid()) -> id().
 file_guid_to_id(FileGuid) ->
     datastore_utils:gen_key(<<>>, FileGuid).
 

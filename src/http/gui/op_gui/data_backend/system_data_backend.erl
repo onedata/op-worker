@@ -65,15 +65,15 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"system-provider">>, _ProviderId) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 
 find_record(<<"system-user">>, _UserId) ->
-    gui_error:report_error(<<"Not implemented">>);
+    op_gui_error:report_error(<<"Not implemented">>);
 
 find_record(<<"system-group">>, _GroupId) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -82,9 +82,9 @@ find_record(<<"system-group">>, _GroupId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 find_all(_ResourceType) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -93,9 +93,9 @@ find_all(_ResourceType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -104,12 +104,12 @@ query(_ResourceType, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 query_record(<<"system-provider">>, Data) ->
     ProviderId = proplists:get_value(<<"id">>, Data),
     case provider_logic:get_protected_data(?ROOT_SESS_ID, ProviderId) of
         ?ERROR_FORBIDDEN ->
-            gui_error:unauthorized();
+            op_gui_error:unauthorized();
         {ok, #document{value = Provider}} ->
             Status = case Provider#od_provider.online of
                 true -> <<"online">>;
@@ -118,6 +118,8 @@ query_record(<<"system-provider">>, Data) ->
             {ok, [
                 {<<"id">>, ProviderId},
                 {<<"name">>, Provider#od_provider.name},
+                {<<"cluster">>, ProviderId},
+                {<<"domain">>, Provider#od_provider.domain},
                 {<<"latitude">>, Provider#od_provider.latitude},
                 {<<"longitude">>, Provider#od_provider.longitude},
                 {<<"status">>, Status}
@@ -125,42 +127,39 @@ query_record(<<"system-provider">>, Data) ->
     end;
 
 query_record(<<"system-user">>, Data) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     UserId = proplists:get_value(<<"id">>, Data),
-    [{EntityType, EntityId}] = proplists:get_value(<<"context">>, Data),
-    AuthHint = case EntityType of
-        <<"od_group">> -> ?THROUGH_GROUP(EntityId);
-        <<"od_space">> -> ?THROUGH_SPACE(EntityId)
-    end,
-
-    case user_logic:get_name(SessionId, UserId, AuthHint) of
-        ?ERROR_FORBIDDEN ->
-            gui_error:unauthorized();
-        {ok, UserName} ->
-            {ok, [
-                {<<"id">>, UserId},
-                {<<"name">>, UserName}
-            ]}
+    case proplists:get_value(<<"context">>, Data) of
+        [{<<"od_space">>, SpaceId}] ->
+            case user_logic:get_name(SessionId, UserId, ?THROUGH_SPACE(SpaceId)) of
+                ?ERROR_FORBIDDEN ->
+                    op_gui_error:unauthorized();
+                {ok, UserName} ->
+                    {ok, [
+                        {<<"id">>, UserId},
+                        {<<"name">>, UserName}
+                    ]}
+            end;
+        _ ->
+            op_gui_error:unauthorized()
     end;
 
 query_record(<<"system-group">>, Data) ->
-    SessionId = gui_session:get_session_id(),
+    SessionId = op_gui_session:get_session_id(),
     GroupId = proplists:get_value(<<"id">>, Data),
-    Context = proplists:get_value(<<"context">>, Data),
-    [{EntityType, EntityId}] = Context,
-    AuthHint = case EntityType of
-        <<"od_group">> -> ?THROUGH_GROUP(EntityId);
-        <<"od_space">> -> ?THROUGH_SPACE(EntityId)
-    end,
-
-    case group_logic:get_name(SessionId, GroupId, AuthHint) of
-        ?ERROR_FORBIDDEN ->
-            gui_error:unauthorized();
-        {ok, GroupName} ->
-            {ok, [
-                {<<"id">>, GroupId},
-                {<<"name">>, GroupName}
-            ]}
+    case proplists:get_value(<<"context">>, Data) of
+        [{<<"od_space">>, SpaceId}] ->
+            case group_logic:get_name(SessionId, GroupId, ?THROUGH_SPACE(SpaceId)) of
+                ?ERROR_FORBIDDEN ->
+                    op_gui_error:unauthorized();
+                {ok, GroupName} ->
+                    {ok, [
+                        {<<"id">>, GroupId},
+                        {<<"name">>, GroupName}
+                    ]}
+            end;
+        _ ->
+            op_gui_error:unauthorized()
     end.
 
 
@@ -170,9 +169,9 @@ query_record(<<"system-group">>, Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -182,9 +181,9 @@ create_record(_ResourceType, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 update_record(_ResourceType, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -193,7 +192,7 @@ update_record(_ResourceType, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
+    ok | op_gui_error:error_result().
 delete_record(_ResourceType, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    op_gui_error:report_error(<<"Not implemented">>).
 

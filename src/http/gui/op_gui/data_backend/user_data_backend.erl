@@ -1,27 +1,29 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the handle_service model used in Ember application.
+%%% the data-space model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(handle_service_data_backend).
+-module(user_data_backend).
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([user_record/2]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -53,19 +55,15 @@ terminate() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-find_record(<<"handle-service">>, HandleServiceId) ->
-    SessionId = gui_session:get_session_id(),
-    UserId = gui_session:get_user_id(),
-    {ok, #document{
-        value = #od_handle_service{
-            name = Name
-        }}} = handle_service_logic:get(SessionId, HandleServiceId),
-    {ok, [
-        {<<"id">>, HandleServiceId},
-        {<<"name">>, Name},
-        {<<"user">>, UserId}
-    ]}.
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+find_record(<<"user">>, UserId) ->
+    SessionId = op_gui_session:get_session_id(),
+    case op_gui_session:get_user_id() of
+        UserId ->
+            {ok, user_record(SessionId, UserId)};
+        _ ->
+            op_gui_error:unauthorized()
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -74,9 +72,9 @@ find_record(<<"handle-service">>, HandleServiceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"handle-service">>) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
+find_all(<<"user">>) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -85,9 +83,9 @@ find_all(<<"handle-service">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
-query(<<"handle-service">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, [proplists:proplist()]} | op_gui_error:error_result().
+query(<<"user">>, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -96,9 +94,9 @@ query(<<"handle-service">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-query_record(<<"handle-service">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+query_record(<<"user">>, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -107,9 +105,9 @@ query_record(<<"handle-service">>, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"handle-service">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    {ok, proplists:proplist()} | op_gui_error:error_result().
+create_record(<<"user">>, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -119,9 +117,9 @@ create_record(<<"handle-service">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
-    ok | gui_error:error_result().
-update_record(<<"handle-service">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+    ok | op_gui_error:error_result().
+update_record(<<"user">>, _UserId, _Data) ->
+    op_gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -130,6 +128,52 @@ update_record(<<"handle-service">>, _Id, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
-    ok | gui_error:error_result().
-delete_record(<<"handle-service">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+    ok | op_gui_error:error_result().
+delete_record(<<"user">>, _Id) ->
+    op_gui_error:report_error(<<"Not implemented">>).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant user record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec user_record(SessionId :: session:id(), UserId :: od_user:id()) ->
+    proplists:proplist().
+user_record(SessionId, UserId) ->
+    {ok, #document{value = #od_user{
+        name = Name,
+        default_space = DefaultSpaceValue,
+        eff_spaces = EffSpaces,
+        eff_handle_services = EffHServices
+    }}} = user_logic:get(SessionId, UserId),
+    DefaultSpace = case DefaultSpaceValue of
+        undefined -> null;
+        _ -> DefaultSpaceValue
+    end,
+    Shares = lists:foldl(
+        fun(SpaceId, Acc) ->
+            % Make sure that user is allowed to view shares in this space
+            Authorized = space_logic:has_eff_privilege(
+                SessionId, SpaceId, UserId, ?SPACE_VIEW
+            ),
+            case Authorized of
+                true ->
+                    {ok, ShareIds} = space_logic:get_shares(SessionId, SpaceId),
+                    ShareIds ++ Acc;
+                false ->
+                    Acc
+            end
+        end, [], EffSpaces),
+    [
+        {<<"id">>, UserId},
+        {<<"name">>, Name},
+        {<<"defaultSpaceId">>, gs_protocol:undefined_to_null(DefaultSpace)},
+        {<<"spaces">>, EffSpaces},
+        {<<"shares">>, Shares},
+        {<<"handleServices">>, EffHServices}
+    ].

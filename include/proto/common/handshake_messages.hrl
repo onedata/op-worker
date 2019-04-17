@@ -18,7 +18,8 @@
 -record(client_handshake_request, {
     auth :: #macaroon_auth{},
     session_id :: session:id(),
-    version :: binary()
+    version :: binary(),
+    compatible_oneprovider_versions :: [binary()]
 }).
 
 -record(provider_handshake_request, {

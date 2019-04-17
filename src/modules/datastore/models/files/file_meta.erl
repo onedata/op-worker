@@ -35,7 +35,7 @@
 -export([get_parent/1, get_parent_uuid/1]).
 -export([get_child/2, get_child_uuid/2, list_children/3, list_children/4]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/9, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
 
 
@@ -55,12 +55,11 @@
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
--type symlink_value() :: binary().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    offset/0, size/0, mode/0, time/0, symlink_value/0, posix_permissions/0,
+    offset/0, size/0, mode/0, time/0, posix_permissions/0,
     file_meta/0]).
 
 -define(CTX, #{
@@ -719,8 +718,8 @@ make_space_exist(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec new_doc(undefined | uuid(), undefined | name(), undefined | type(),
     posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
-    undefined | size(), uuid(), od_space:id()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid,
+    uuid(), od_space:id()) -> doc().
+new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
     SpaceId
 ) ->
     #document{
@@ -731,7 +730,6 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, Size, ParentUuid,
             mode = Mode,
             owner = Owner,
             group_owner = GroupOwner,
-            size = Size,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id(),
             scope = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
@@ -872,7 +870,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    6.
+    7.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -985,6 +983,21 @@ get_record_struct(6) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(7) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {owner, string},
+        {group_owner, string},
+        % size field  has been removed in this version
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1021,4 +1034,10 @@ upgrade_record(5, {?MODULE, Name, Type, Mode, Owner, GroupOwner, Size, Version, 
 ) ->
     {6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, Size, Version, IsScope,
         Scope, ProviderId, LinkValue, Shares, Deleted, ParentUuid}
+    };
+upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version, IsScope,
+    Scope, ProviderId, _LinkValue, Shares, Deleted, ParentUuid}
+) ->
+    {7, {?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
+        Scope, ProviderId, Shares, Deleted, ParentUuid}
     }.

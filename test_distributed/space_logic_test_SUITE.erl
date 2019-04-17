@@ -22,10 +22,7 @@
     get_protected_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
-    convenience_functions_test/1,
-    create_update_delete_test/1,
-    update_privileges_test/1,
-    create_tokens_test/1
+    convenience_functions_test/1
 ]).
 
 all() -> ?ALL([
@@ -33,10 +30,7 @@ all() -> ?ALL([
     get_protected_data_test,
     mixed_get_test,
     subscribe_test,
-    convenience_functions_test,
-    create_update_delete_test,
-    update_privileges_test,
-    create_tokens_test
+    convenience_functions_test
 ]).
 
 %%%===================================================================
@@ -276,7 +270,7 @@ subscribe_test(Config) ->
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Node, od_space, get, [?SPACE_1])
+        rpc:call(Node, od_space, get_from_cache, [?SPACE_1])
     ),
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
@@ -290,7 +284,7 @@ subscribe_test(Config) ->
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Node, od_space, get, [?SPACE_1])
+        rpc:call(Node, od_space, get_from_cache, [?SPACE_1])
     ),
 
     ok.
@@ -346,18 +340,6 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    % Eff groups are within private scope
-    ?assertMatch(
-        true,
-        rpc:call(Node, space_logic, has_eff_group, [User1Sess, ?SPACE_1, ?GROUP_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        false,
-        rpc:call(Node, space_logic, has_eff_group, [User1Sess, ?SPACE_1, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % User eff privileges are within private scope,
     % mocked users only have SPACE_VIEW privileges
     ?assertMatch(
@@ -372,7 +354,7 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
     ?assertMatch(
         false,
-        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_INVITE_USER])
+        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
@@ -408,151 +390,6 @@ convenience_functions_test(Config) ->
         rpc:call(Node, space_logic, can_view_group_through_space, [User1Sess, ?SPACE_1, ?USER_3, ?GROUP_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
-
-create_update_delete_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    % Create
-    ?assertMatch(
-        {ok, ?MOCK_CREATED_SPACE_ID},
-        rpc:call(Node, space_logic, create, [
-            User1Sess,
-            ?SPACE_NAME(<<"newSpace">>)
-        ])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_BAD_VALUE_BINARY(<<"name">>),
-        rpc:call(Node, space_logic, create, [
-            User1Sess,
-            12345
-        ])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    % Update
-    ?assertMatch(
-        ok,
-        rpc:call(Node, space_logic, update_name, [User1Sess, ?SPACE_1, <<"newName">>])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_BAD_VALUE_BINARY(<<"name">>),
-        rpc:call(Node, space_logic, update_name, [User1Sess, ?SPACE_1, 1234])
-    ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
-
-    % Delete
-    ?assertMatch(
-        ok,
-        rpc:call(Node, space_logic, delete, [User1Sess, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, space_logic, delete, [User1Sess, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
-update_privileges_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        ok,
-        rpc:call(Node, space_logic, update_user_privileges, [
-            User1Sess,
-            ?SPACE_1,
-            ?USER_1,
-            [?SPACE_VIEW, ?SPACE_INVITE_USER]
-        ])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, space_logic, update_user_privileges, [
-            User1Sess,
-            ?SPACE_1,
-            ?USER_3,
-            [?SPACE_VIEW, ?SPACE_INVITE_USER]
-        ])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        ok,
-        rpc:call(Node, space_logic, update_group_privileges, [
-            User1Sess,
-            ?SPACE_1,
-            ?GROUP_2,
-            [?SPACE_VIEW, ?SPACE_INVITE_USER]
-        ])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, space_logic, update_group_privileges, [
-            User1Sess,
-            ?SPACE_1,
-            <<"wrongId">>,
-            [?SPACE_VIEW, ?SPACE_INVITE_USER]
-        ])
-    ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
-create_tokens_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        {ok, ?MOCK_INVITE_USER_TOKEN},
-        rpc:call(Node, space_logic, create_user_invite_token, [User1Sess, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, space_logic, create_user_invite_token, [User1Sess, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, ?MOCK_INVITE_GROUP_TOKEN},
-        rpc:call(Node, space_logic, create_group_invite_token, [User1Sess, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, space_logic, create_group_invite_token, [User1Sess, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, ?MOCK_INVITE_PROVIDER_TOKEN},
-        rpc:call(Node, space_logic, create_provider_invite_token, [User1Sess, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        ?ERROR_NOT_FOUND,
-        rpc:call(Node, space_logic, create_provider_invite_token, [User1Sess, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
 

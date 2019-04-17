@@ -626,6 +626,8 @@ periodical_spaces_autocleaning_check() ->
             lists:foreach(fun(SpaceId) ->
                 autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
             end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            ?debug("Skipping spaces cleanup due to unregistered provider");
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
     catch

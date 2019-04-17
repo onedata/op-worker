@@ -259,12 +259,14 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 translate_from_protobuf(#'ClientHandshakeRequest'{
     macaroon = Macaroon,
     session_id = SessionId,
-    version = Version
+    version = Version,
+    compatible_oneprovider_versions = CompOpVersions
 }) ->
     #client_handshake_request{
         auth = translate_from_protobuf(Macaroon),
         session_id = SessionId,
-        version = Version
+        version = Version,
+        compatible_oneprovider_versions = CompOpVersions
     };
 translate_from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,

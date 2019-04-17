@@ -40,6 +40,7 @@
 -export([
     provider_connection_test/1,
     client_connection_test/1,
+    forward_compatible_client_connection_test/1,
     python_client_test/1,
     multi_connection_test/1,
 
@@ -73,6 +74,7 @@
 -define(NORMAL_CASES, [
     provider_connection_test,
     client_connection_test,
+    forward_compatible_client_connection_test,
     python_client_test,
     multi_connection_test,
 
@@ -144,6 +146,36 @@ client_connection_test(Config) ->
         {Macaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
         {Macaroon, CompatibleVersion, 'OK'}
     ]).
+
+
+forward_compatible_client_connection_test(Config) ->
+    % given
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    OpVersion = rpc:call(Node, oneprovider, get_version, []),
+
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
+            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
+            version = <<"30.01.01-very-future-version">>,
+            compatible_oneprovider_versions = [OpVersion, <<"30.01.01-very-future-version">>]
+        }
+    }},
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+
+    % when
+    {ok, Sock} = fuse_test_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
+
+    % then
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = Status
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        fuse_test_utils:receive_server_message()
+    ),
+    ?assertMatch('OK', Status),
+    ok.
 
 
 python_client_test(Config) ->

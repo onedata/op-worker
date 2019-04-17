@@ -97,16 +97,6 @@
 -define(GROUP_NAME(__Group), __Group).
 -define(GROUP_TYPE_JSON(__Group), <<"role">>).
 -define(GROUP_TYPE_ATOM(__Group), role).
--define(GROUP_DIRECT_PARENTS(__Group), [?GROUP_1, ?GROUP_2]).
--define(GROUP_DIRECT_CHILDREN_VALUE(__Group), ?GROUP_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_DIRECT_CHILDREN_MATCHER(__Group), ?GROUP_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_EFF_CHILDREN_VALUE(__Group), ?GROUP_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_EFF_CHILDREN_MATCHER(__Group), ?GROUP_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_DIRECT_USERS_VALUE(__Group), ?USER_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_DIRECT_USERS_MATCHER(__Group), ?USER_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_EFF_USERS_VALUE(__Group), ?USER_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_EFF_USERS_MATCHER(__Group), ?USER_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_EFF_SPACES(__Group), [?SPACE_1, ?SPACE_2]).
 
 % Mocked space data
 -define(SPACE_NAME(__Space), __Space).
@@ -217,27 +207,10 @@
 }}).
 
 
--define(GROUP_PRIVATE_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
+-define(GROUP_SHARED_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
     name = ?GROUP_NAME(__Group),
-    type = ?GROUP_TYPE_ATOM(__Group),
-    direct_parents = ?GROUP_DIRECT_PARENTS(__Group),
-    direct_children = ?GROUP_DIRECT_CHILDREN_MATCHER(__Group),
-    eff_children = ?GROUP_EFF_CHILDREN_MATCHER(__Group),
-    direct_users = ?GROUP_DIRECT_USERS_MATCHER(__Group),
-    eff_users = ?GROUP_EFF_USERS_MATCHER(__Group),
-    eff_spaces = ?GROUP_EFF_SPACES(__Group)
+    type = ?GROUP_TYPE_ATOM(__Group)
 }}).
--define(GROUP_PROTECTED_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
-    name = ?GROUP_NAME(__Group),
-    type = ?GROUP_TYPE_ATOM(__Group),
-    direct_parents = [],
-    direct_children = #{},
-    eff_children = #{},
-    direct_users = #{},
-    eff_users = #{},
-    eff_spaces = []
-}}).
--define(GROUP_SHARED_DATA_MATCHER(__Group), ?GROUP_PROTECTED_DATA_MATCHER(__Group)).
 
 
 -define(SPACE_PRIVATE_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
@@ -360,26 +333,6 @@ end).
     <<"name">> => ?GROUP_NAME(__GroupId),
     <<"type">> => ?GROUP_TYPE_JSON(__GroupId)
 }).
--define(GROUP_PROTECTED_DATA_VALUE(__GroupId), begin
-    __SharedData = ?GROUP_SHARED_DATA_VALUE(__GroupId),
-    __SharedData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_group, id = __GroupId, aspect = instance, scope = protected})
-    }
-end).
--define(GROUP_PRIVATE_DATA_VALUE(__GroupId), begin
-    __ProtectedData = ?GROUP_PROTECTED_DATA_VALUE(__GroupId),
-    __ProtectedData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_group, id = __GroupId, aspect = instance, scope = private}),
-        <<"children">> => ?GROUP_DIRECT_CHILDREN_VALUE(__GroupId),
-        <<"effectiveChildren">> => ?GROUP_EFF_CHILDREN_VALUE(__GroupId),
-        <<"parents">> => ?GROUP_DIRECT_PARENTS(__GroupId),
-
-        <<"users">> => ?GROUP_DIRECT_USERS_VALUE(__GroupId),
-        <<"effectiveUsers">> => ?GROUP_EFF_USERS_VALUE(__GroupId),
-
-        <<"spaces">> => ?GROUP_EFF_SPACES(__GroupId)
-    }
-end).
 
 
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
