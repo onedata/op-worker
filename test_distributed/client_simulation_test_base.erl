@@ -164,14 +164,14 @@ maybe_unsub(Sock, Subs, Unsub) ->
     end.
 
 create_new_file_subscriptions(Sock, Guid, StreamId) ->
-    [Sub1, Sub2, Sub3] = [?SeqID, ?SeqID, ?SeqID],
+    [Seq1, Seq2, Seq3] = [?SeqID, ?SeqID, ?SeqID],
     ok = ssl:send(Sock, fuse_test_utils:generate_file_removed_subscription_message(
-        StreamId, Sub1, -Sub1, Guid)),
+        StreamId, Seq1, -Seq1, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_renamed_subscription_message(
-        StreamId, Sub2, -Sub2, Guid)),
+        StreamId, Seq2, -Seq2, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_attr_changed_subscription_message(
-        StreamId, Sub3, -Sub3, Guid, 500)),
-    [-Sub1, -Sub2, -Sub3].
+        StreamId, Seq3, -Seq3, Guid, 500)),
+    [-Seq1, -Seq2, -Seq3]. % Return subscription numbers (opposite to sequence numbers)
 
 cancel_subscriptions(Sock, StreamId, Subs) ->
     lists:foreach(fun(SubId) ->
