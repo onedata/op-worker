@@ -6,12 +6,50 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for receiving changes from changes stream and
-%%% processing them. It pushes changes of custom_metadata document
+%%% This module starts couchbase_changes_stream and processes changes received
+%%% from it. It pushes changes of custom_metadata document
 %%% to Onezone. One instance is started per triple
 %%% {HarvesterId, SpaceId, IndexId}. Streams started for the same
-%%% HarvesterId and SpaceId differ only in level of processing changes
+%%% HarvesterId and SpaceId differ only in progress of processing changes
 %%% from the scope.
+%%% Operation of harvest_stream process is presented on the below
+%%% state machine diagram.
+%%%
+%%% HARVEST_STREAM STATE MACHINE:
+%%%
+%%%  +--on-success--+                               +--on-failure--+
+%%%  |              |                               |              |
+%%%  |              |                               V              |
+%%%  |   +--------------+                    +-------------+       |
+%%%  +-->|    stream    |-----on-failure---->|    retry    |-------+
+%%%      +--------------+                    +-------------+
+%%%             ^                                   |
+%%%             |                                   |
+%%%             |                              on success
+%%%             |                                   |
+%%%             |                                   V
+%%%             |                            +-------------+
+%%%             +--changes_flushed := true---|   resuming  |
+%%%                                          +-------------+
+%%% Modes:
+%%%  - stream   - in this mode, harvest_stream processes changes received
+%%%               from couchbase_changes_stream. If the change is processed
+%%%               successfully, the process remains in the "stream" state.
+%%%               Otherwise, it stops couchbase_changes_stream and moves to the
+%%%               "retry" state.
+%%%  - retry    - in this mode, harvest_stream retries processing of
+%%%               given change/changes using backoff algorithm.
+%%%               It is possible, that new changes arrive in this mode, because
+%%%               changes may have been sent before stopping
+%%%               couchbase_changes_stream. If `end_of_stream` is received,
+%%%               the flag `changes_flushed` is set to `true`. Other new changes
+%%%               are ignored. When all changes are successfully processed,
+%%%               harvest_stream moves to the `resuming` mode.
+%%%  - resuming - this mode is used to ensure, that all changes sent by
+%%%               couchbase_changes_stream before stopping it where received.
+%%%               When `changes_flushed` flag equals `true`, harvest_stream
+%%%               moves to the `stream` mode.
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvest_stream).
@@ -133,10 +171,6 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(_Request, #state{mode = Mode} = State)
-    when Mode =:= retry orelse Mode =:= resuming ->
-    % ignore because stream is in retry mode
-    {noreply, State};
 handle_cast({change, {ok, end_of_stream}}, State = #state{mode = retry}) ->
     % all changes sent by changes_stream before stopping it have already arrived
     {noreply, State#state{changes_flushed = true}};
@@ -150,6 +184,10 @@ handle_cast({change, {ok, DocOrDocs}}, State = #state{mode = stream}) ->
     {noreply, consume_change_and_enter_retry_mode_on_error(State, DocOrDocs)};
 handle_cast({change, {error, _Seq, Reason}}, State = #state{mode = stream}) ->
     {stop, Reason, State};
+handle_cast(_Request, #state{mode = Mode} = State)
+    when Mode =:= retry orelse Mode =:= resuming ->
+    % ignore because stream is in retry/resuming mode
+    {noreply, State};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -222,6 +260,15 @@ start_changes_stream(SpaceId, Since) ->
         [{since, Since}, {until, infinity}], []
     ).
 
+-spec stop_changes_stream(pid()) -> ok.
+stop_changes_stream(Stream) ->
+    try
+        gen_server:stop(Stream)
+    catch
+        exit:noproc ->
+            ok
+    end.
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -252,16 +299,21 @@ consume_change_and_enter_retry_mode_on_error(State = #state{
     space_id = SpaceId,
     stream = Stream
 }, Docs = [Doc | RestDocs]) ->
-    try
-        State2 = consume_change(State, Doc),
-        consume_change_and_enter_retry_mode_on_error(State2, RestDocs)
+    State2 = try
+        consume_change(State, Doc)
     catch
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
             "handling changes for harvester ~p in space ~p",
                 [Error, Reason, Id, HarvesterId, SpaceId]),
-            catch gen_server:stop(Stream),
+            stop_changes_stream(Stream),
             enter_retry_mode(Docs, State)
+    end,
+    case State2#state.mode of
+        retry ->
+            State2;
+        _ ->
+            consume_change_and_enter_retry_mode_on_error(State2, RestDocs)
     end;
 consume_change_and_enter_retry_mode_on_error(State, Doc = #document{}) ->
     consume_change_and_enter_retry_mode_on_error(State, [Doc]).
