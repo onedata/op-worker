@@ -59,7 +59,8 @@ communicate(SessionId, RawMsg) ->
                    "connections", [SessionId]),
             NoConsError;
         Error ->
-            ?error("Failed to communicate msg ~s to peer ~p due to: ~p", [
+            % TODO BW VFS-5405 restore error log after fixing failures
+            ?debug("Failed to communicate msg ~s to peer ~p due to: ~p", [
                 clproto_utils:msg_to_string(Msg), SessionId, Error
             ]),
             Error
