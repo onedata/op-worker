@@ -8,13 +8,12 @@
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for
 %%% management of connections for outgoing provider session. It starts
-%%% such connections, monitors them and restarts if they fail.
-%%% Outgoing provider sessions should be created immediately after discovering
-%%% new peer (provider supporting the same space as this provider) or after
-%%% failed attempt to send msg (in case of proxy).
-%%% It also sends keepalives to keep connections alive but only to effective
-%%% peers. If some connection dies due to timeout it terminates entire session
-%%% (because of keepalives only proxy session connections should timeout).
+%%% such connections, monitors them and restarts if they fail due to
+%%% reasons other than timeout.
+%%% Connection is always randomly selected for sending msg it is unlikely
+%%% that for active session any of the connections will be idle for more
+%%% than 24h (connection timeout). That is why when any connection dies out
+%%% due to timeout entire session is terminated (session is inactive).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(connection_manager).
@@ -90,7 +89,6 @@ start_link(SessId) ->
 init([SessionId]) ->
     process_flag(trap_exit, true),
     self() ! ?RENEW_CONNECTIONS_REQ,
-    schedule_keepalive_msg(),
 
     {ok, #state{
         session_id = SessionId,
@@ -145,7 +143,7 @@ handle_info(?RENEW_CONNECTIONS_REQ, State) ->
     case renew_connections(State#state{renewal_timer = undefined}) of
         {ok, NewState} ->
             {noreply, NewState};
-        {error, peer_down} ->
+        {error, peer_offline} ->
             {stop, normal, State}
     end;
 handle_info({'EXIT', _ConnPid, timeout}, State) ->
@@ -155,20 +153,9 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State0) ->
     case renew_connections(State1) of
         {ok, State2} ->
             {noreply, State2};
-        {error, peer_down} ->
+        {error, peer_offline} ->
             {stop, normal, State1}
     end;
-handle_info(keepalive, #state{peer_id = PeerId, connections = Cons} = State) ->
-    case provider_logic:is_effective_peer(PeerId) of
-        true ->
-            lists:foreach(fun(Conn) ->
-                connection:send_keepalive(Conn)
-            end, maps:keys(Cons));
-        _ ->
-            ok
-    end,
-    schedule_keepalive_msg(),
-    {noreply, State};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -187,7 +174,7 @@ handle_info(Info, State) ->
     state()) -> term().
 terminate(Reason, #state{session_id = SessId, connections = Cons} = State) ->
     ?log_terminate(Reason, State),
-    lists:foreach(fun(Conn) -> unlink(Conn) end, maps:keys(Cons)),
+    lists:foreach(fun unlink/1, maps:keys(Cons)),
     spawn(fun() -> session_manager:remove_session(SessId) end).
 
 
@@ -211,29 +198,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Connects to peer nodes with witch he is not yet connected if next
-%% renewal is not scheduled. Returns error if it is another failed attempt
-%% and it is a proxy session (not meant to be kept forever).
+%% Connects to peer nodes with witch provider is not yet connected if next
+%% renewal is not scheduled.
+%% Returns error if it is another failed attempt (peer seems to be offline).
 %% @end
 %%--------------------------------------------------------------------
--spec renew_connections(state()) -> {ok, state()} | {error, peer_down}.
+-spec renew_connections(state()) -> {ok, state()} | {error, peer_offline}.
 renew_connections(#state{renewal_timer = undefined} = State) ->
-    try
-        case renew_connections_insecure(State) of
-            #state{
-                peer_id = PeerId,
-                renewal_interval = ?MAX_RENEWAL_INTERVAL,
-                connections = Cons
-            } = State1 when map_size(Cons) == 0 ->
-                case provider_logic:is_effective_peer(PeerId) of
-                    true ->
-                        {ok, State1};
-                    _ ->
-                        {error, peer_down}
-                end;
-            State2 ->
-                {ok, State2}
-        end
+    try renew_connections_insecure(State) of
+        #state{renewal_interval = ?MAX_RENEWAL_INTERVAL, connections = Cons} when map_size(Cons) == 0 ->
+            {error, peer_offline};
+        State2 ->
+            {ok, State2}
     catch
         Type:Reason ->
             ?warning("Failed to renew connections to peer provider(~p) "
@@ -307,9 +283,3 @@ schedule_next_renewal(#state{renewal_timer = undefined} = State) ->
     };
 schedule_next_renewal(State) ->
     State.
-
-
-%% @private
--spec schedule_keepalive_msg() -> TimerRef :: reference().
-schedule_keepalive_msg() ->
-    erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive).

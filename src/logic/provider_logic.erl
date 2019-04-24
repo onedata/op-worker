@@ -52,9 +52,6 @@
 -export([assert_provider_compatibility/3]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
--export([is_effective_peer/1]).
--export([start_session_with_peer/1]).
--export([terminate_session_with_peer/1]).
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
@@ -928,46 +925,6 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
         {error, Error} ->
             error(Error)
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if specified provider is one of this provider's effective peers.
-%% @end
-%%--------------------------------------------------------------------
--spec is_effective_peer(od_provider:id()) -> boolean() | gs_protocol:error().
-is_effective_peer(ProviderId) ->
-    case ?MODULE:get() of
-        {ok, #document{value = #od_provider{eff_peers = PeerProviders}}} ->
-            lists:member(ProviderId, PeerProviders);
-        Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Reuses or creates outgoing provider session with specified provider.
-%% @end
-%%--------------------------------------------------------------------
--spec start_session_with_peer(od_provider:id()) ->
-    {ok, session:id()} | {error, term()}.
-start_session_with_peer(ProviderId) ->
-    SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
-    session_manager:reuse_or_create_outgoing_provider_session(
-        SessionId, #user_identity{provider_id = ProviderId}
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Terminates outgoing provider session with specified peer provider.
-%% @end
-%%--------------------------------------------------------------------
--spec terminate_session_with_peer(od_provider:id()) -> ok | {error, term()}.
-terminate_session_with_peer(ProviderId) ->
-    SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
-    session_manager:remove_session(SessionId).
 
 
 %%%===================================================================

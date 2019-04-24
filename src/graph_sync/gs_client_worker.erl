@@ -282,8 +282,6 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     case GRI of
         #gri{type = od_provider, id = ProviderId, aspect = instance} ->
             oneprovider:on_deregister();
-        #gri{type = od_provider, id = PeerProviderId, aspect = instance} ->
-            provider_logic:terminate_session_with_peer(PeerProviderId);
         _ ->
             ok
     end,

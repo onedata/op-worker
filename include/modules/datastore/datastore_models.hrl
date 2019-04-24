@@ -132,7 +132,6 @@
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
-    eff_peers = [] :: [od_provider:id()],
 
     cache_state = #{} :: cache_state()
 }).

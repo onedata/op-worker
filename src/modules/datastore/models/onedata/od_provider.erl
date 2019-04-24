@@ -38,7 +38,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2, get_posthooks/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -62,33 +62,6 @@ invalidate_cache(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Provider create/update posthook.
-%% @end
-%%--------------------------------------------------------------------
--spec run_after(atom(), list(), term()) -> term().
-run_after(save, _, {ok, #document{
-    key = ProviderId,
-    value = #od_provider{eff_peers = EffPeers}
-}}) ->
-    case oneprovider:is_self(ProviderId) of
-        true ->
-            lists:foreach(fun(PeerProviderId) ->
-                case PeerProviderId of
-                    ProviderId ->
-                        ok;
-                    _ ->
-                        provider_logic:start_session_with_peer(PeerProviderId)
-                end
-            end, EffPeers);
-        false ->
-            ok
-    end;
-run_after(_Function, _Args, Result) ->
-    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -158,25 +131,6 @@ get_record_struct(3) ->
         {eff_groups, [string]},
 
         {cache_state, #{atom => term}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {name, string},
-        {admin_email, string},
-        {subdomain_delegation, boolean},
-        {domain, string},
-        {subdomain, string},
-        {latitude, float},
-        {longitude, float},
-        {online, boolean},
-
-        {spaces, #{string => integer}},
-
-        {eff_users, [string]},
-        {eff_groups, [string]},
-        {eff_peers, [string]}, % new field
-
-        {cache_state, #{atom => term}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -221,67 +175,20 @@ upgrade_record(2, Provider) ->
         #{}
     } = Provider,
     #{host := Domain} = url_utils:parse(hd(Urls)),
-    {3, {od_provider, 
-        Name,
-        undefined,
-        false,
-        Domain,
-        undefined,
-        0.0,
-        0.0,
-        false,
-
-        #{},
-
-        [],
-        [],
-
-        #{}
-    }};
-upgrade_record(3, Provider) ->
-    {
-        od_provider,
-        Name,
-        AdminEmail,
-        SubdomainDelegation,
-        Domain,
-        Subdomain,
-        Latitude,
-        Longitude,
-        Online,
-
-        Spaces,
-
-        EffUsers,
-        EffGroups,
-
-        CacheState
-    } = Provider,
-    {4, #od_provider{
+    {3, #od_provider{
         name = Name,
-        admin_email = AdminEmail,
-        subdomain_delegation = SubdomainDelegation,
+        admin_email = undefined,
+        subdomain_delegation = false,
         domain = Domain,
-        subdomain = Subdomain,
-        latitude = Latitude,
-        longitude = Longitude,
-        online = Online,
+        subdomain = undefined,
+        latitude = 0.0,
+        longitude = 0.0,
+        online = false,
 
-        spaces = Spaces,
+        spaces = #{},
 
-        eff_users = EffUsers,
-        eff_groups = EffGroups,
-        eff_peers = [],
+        eff_users = [],
+        eff_groups = [],
 
-        cache_state = CacheState
+        cache_state = #{}
     }}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of callbacks which will be called after each operation
-%% on datastore model.
-%% @end
-%%--------------------------------------------------------------------
--spec get_posthooks() -> [datastore_hooks:posthook()].
-get_posthooks() ->
-    [fun run_after/3].

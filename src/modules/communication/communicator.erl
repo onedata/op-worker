@@ -198,7 +198,7 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
             NoConnectionsError;
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_oneclient_internal(SessionId, Msg, retries_left(Retries))
+            send_to_oneclient_internal(SessionId, Msg, decrement_retries(Retries))
     end.
 
 
@@ -214,10 +214,10 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
         {error, not_found} ->
             session_connections:ensure_connected(SessionId),
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_provider_internal(SessionId, Msg, retries_left(Retries));
+            send_to_provider_internal(SessionId, Msg, decrement_retries(Retries));
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_provider_internal(SessionId, Msg, retries_left(Retries))
+            send_to_provider_internal(SessionId, Msg, decrement_retries(Retries))
     end.
 
 
@@ -233,19 +233,19 @@ communicate_with_provider_internal(SessionId, Msg, Retries) ->
         {error, not_found} ->
             session_connections:ensure_connected(SessionId),
             timer:sleep(?SEND_RETRY_DELAY),
-            RetriesLeft = retries_left(Retries),
+            RetriesLeft = decrement_retries(Retries),
             communicate_with_provider_internal(SessionId, Msg, RetriesLeft);
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            RetriesLeft = retries_left(Retries),
+            RetriesLeft = decrement_retries(Retries),
             communicate_with_provider_internal(SessionId, Msg, RetriesLeft)
     end.
 
 
 %% @private
--spec retries_left(retries()) -> retries().
-retries_left(infinity) -> infinity;
-retries_left(Num) -> Num - 1.
+-spec decrement_retries(retries()) -> retries().
+decrement_retries(infinity) -> infinity;
+decrement_retries(Num) -> Num - 1.
 
 
 %% @private
