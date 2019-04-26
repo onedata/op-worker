@@ -17,38 +17,26 @@
 %%%
 %%% HARVEST_STREAM STATE MACHINE:
 %%%
-%%%  +--on-success--+                               +--on-failure--+
-%%%  |              |                               |              |
-%%%  |              |                               V              |
-%%%  |   +--------------+                    +-------------+       |
-%%%  +-->|    stream    |-----on-failure---->|    retry    |-------+
-%%%      +--------------+                    +-------------+
-%%%             ^                                   |
-%%%             |                                   |
-%%%             |                              on success
-%%%             |                                   |
-%%%             |                                   V
-%%%             |                            +-------------+
-%%%             +--changes_flushed := true---|   resuming  |
-%%%                                          +-------------+
+%%%  +---------------+                     +--------------+
+%%%  |   streaming   |-----on-failure----->|   retrying   |
+%%%  +---------------+                     +--------------+
+%%%           ^                                   |
+%%            |                                   |
+%%%           +------------on-success-------------+
+%%%
 %%% Modes:
-%%%  - stream   - in this mode, harvest_stream processes changes received
-%%%               from couchbase_changes_stream. If the change is processed
-%%%               successfully, the process remains in the "stream" state.
-%%%               Otherwise, it stops couchbase_changes_stream and moves to the
-%%%               "retry" state.
-%%%  - retry    - in this mode, harvest_stream retries processing of
-%%%               given change/changes using backoff algorithm.
-%%%               It is possible, that new changes arrive in this mode, because
-%%%               changes may have been sent before stopping
-%%%               couchbase_changes_stream. If `end_of_stream` is received,
-%%%               the flag `changes_flushed` is set to `true`. Other new changes
-%%%               are ignored. When all changes are successfully processed,
-%%%               harvest_stream moves to the `resuming` mode.
-%%%  - resuming - this mode is used to ensure, that all changes sent by
-%%%               couchbase_changes_stream before stopping it where received.
-%%%               When `changes_flushed` flag equals `true`, harvest_stream
-%%%               moves to the `stream` mode.
+%%%  - streaming - in this mode, harvest_stream processes changes received
+%%%                from couchbase_changes_stream. If the change is processed
+%%%                successfully, the process remains in the "streaming" state.
+%%%                Otherwise, it stops couchbase_changes_stream and moves to the
+%%%                "retrying" state.
+%%%  - retrying -  in this mode, harvest_stream retries processing of
+%%%                given change/changes using backoff algorithm.
+%%%                Before starting the retries, the process ensures that
+%%%                couchbase_changes_stream is stopped so that no new messages
+%%%                will arrive when performing retries.
+%%%                When all changes are successfully processed, harvest_stream
+%%%                moves to the `streaming` mode.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
@@ -78,16 +66,14 @@
     space_id :: od_space:id(),
     provider_id :: od_provider:id(),
     last_persisted_seq = 0 :: couchbase_changes:seq(),
-    stream :: undefined | pid(),
-    mode = stream :: mode(),
-    % flag that informs whether all changes received in retry mode were flushed
-    changes_flushed = false :: boolean(),
-    docs_to_retry = [] :: datastore:doc() | [datastore:doc()],
+    stream_pid :: undefined | pid(),
+    mode = streaming :: mode(),
+    docs_to_retry = [] :: [datastore:doc()],
     backoff :: term()
 }).
 
 -type state() :: #state{}.
--type mode() :: stream | retry | resuming.
+-type mode() :: streaming | retrying.
 
 
 % Below constant determines how often seen sequence number will be persisted
@@ -138,7 +124,7 @@ init([HarvesterId, SpaceId, IndexId]) ->
         harvester_id = HarvesterId,
         provider_id = oneprovider:get_id()
     },
-    State2 = enter_stream_mode(State),
+    State2 = enter_streaming_mode(State),
     ?debug("Started harvest_stream: ~p", [{HarvesterId, SpaceId, IndexId}]),
     {ok, State2}.
 
@@ -156,9 +142,20 @@ init([HarvesterId, SpaceId, IndexId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({change, {ok, DocOrDocs}}, From, State = #state{mode = streaming}) ->
+    gen_server2:reply(From, ok),
+    {noreply, consume_change_and_enter_retrying_mode_on_error(State, DocOrDocs)};
+handle_call({change, {ok, stream_stopped}}, _From, State = #state{mode = retrying}) ->
+    % all changes sent by changes_stream before stopping it have already arrived
+    % so we can start backoff algorithm
+    {reply, ok, schedule_backoff(State#state{stream_pid = undefined})};
+handle_call({change, {ok, DocOrDocs}}, _From, #state{mode = retrying, docs_to_retry = DocsToRetry} = State) ->
+    % changes sent by changes_stream before stopping it 
+    % add to list of docs to retry
+    {reply, ok, State#state{docs_to_retry = DocsToRetry ++ ensure_list(DocOrDocs)}};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
-    {noreply, State}.
+    {reply, ok, State}.
 
 
 %%--------------------------------------------------------------------
@@ -171,23 +168,6 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({change, {ok, end_of_stream}}, State = #state{mode = retry}) ->
-    % all changes sent by changes_stream before stopping it have already arrived
-    {noreply, State#state{changes_flushed = true}};
-handle_cast({change, {ok, end_of_stream}}, State = #state{mode = resuming}) ->
-    % all changes sent by changes_stream before stopping it have already arrived
-    % and retry is finished, so we can get back to normal operation
-    {noreply, enter_stream_mode(State)};
-handle_cast({change, {ok, end_of_stream}}, State = #state{mode = stream}) ->
-    {stop, normal, State};
-handle_cast({change, {ok, DocOrDocs}}, State = #state{mode = stream}) ->
-    {noreply, consume_change_and_enter_retry_mode_on_error(State, DocOrDocs)};
-handle_cast({change, {error, _Seq, Reason}}, State = #state{mode = stream}) ->
-    {stop, Reason, State};
-handle_cast(_Request, #state{mode = Mode} = State)
-    when Mode =:= retry orelse Mode =:= resuming ->
-    % ignore because stream is in retry/resuming mode
-    {noreply, State};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -204,17 +184,11 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({timeout, _TimerRef, ?RETRY}, State = #state{
-    mode = retry,
-    docs_to_retry = DocOrDocs,
-    changes_flushed = ChangesFlushed
+    mode = retrying,
+    stream_pid = undefined,
+    docs_to_retry = Docs
 }) ->
-    State2 = consume_change_and_enter_retry_mode_on_error(State, DocOrDocs),
-    case ChangesFlushed andalso (State2#state.mode =:= resuming) of
-        true ->
-            {noreply, enter_stream_mode(State2)};
-        false ->
-            {noreply, State2}
-    end;
+    {noreply, consume_change_and_enter_retrying_mode_on_error(State, Docs)};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -253,51 +227,39 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, pid()}.
 start_changes_stream(SpaceId, Since) ->
     Self = self(),
-    Callback = fun(Change) -> gen_server2:cast(Self, {change, Change}) end,
-
+    Callback = fun(Change) -> gen_server2:call(Self, {change, Change}, infinity) end,
     couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
         [{since, Since}, {until, infinity}], []
     ).
 
--spec stop_changes_stream(pid()) -> ok.
-stop_changes_stream(Stream) ->
-    try
-        gen_server:stop(Stream)
-    catch
-        exit:noproc ->
-            ok
+-spec stop_changes_stream(state()) -> state().
+stop_changes_stream(State = #state{stream_pid = undefined}) ->
+    State;
+stop_changes_stream(State = #state{stream_pid = StreamPid}) ->
+    case process_info(StreamPid) of
+        undefined ->
+            State#state{stream_pid = undefined};
+        _ ->
+            couchbase_changes_stream:stop_async(StreamPid),
+            State
     end.
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Start/restart changes stream and mark mode as `stream`.
-%% @end
-%%-------------------------------------------------------------------
--spec enter_stream_mode(state()) -> state().
-enter_stream_mode(State = #state{id = Id, index_id = IndexId, space_id = SpaceId}) ->
-    LastProcessedSeq = harvest_stream_state:get_seen_seq(Id, IndexId),
-    {ok, StreamPid} = start_changes_stream(SpaceId, LastProcessedSeq + 1),
-    State#state{
-        mode = stream,
-        stream = StreamPid
-    }.
-
-
--spec consume_change_and_enter_retry_mode_on_error(state(),
+-spec consume_change_and_enter_retrying_mode_on_error(state(),
     datastore:doc() | [datastore:doc()]) -> state().
-consume_change_and_enter_retry_mode_on_error(State = #state{mode = Mode}, []) ->
-    % all docs were successfully handled, ensure we are not in 'retry' mode
-    State#state{
-        mode = maybe_enter_resuming_mode(Mode),
-        backoff = undefined
-    };
-consume_change_and_enter_retry_mode_on_error(State = #state{
+consume_change_and_enter_retrying_mode_on_error(State = #state{mode = streaming}, []) ->
+    % all docs were successfully handled
+    State;
+consume_change_and_enter_retrying_mode_on_error(State = #state{
+    mode = retrying,
+    stream_pid = undefined
+}, []) ->
+    % all docs were successfully handled in retrying mode, get back to streaming mode
+    enter_streaming_mode(State);
+consume_change_and_enter_retrying_mode_on_error(State = #state{
     id = Id,
     harvester_id = HarvesterId,
-    space_id = SpaceId,
-    stream = Stream
+    space_id = SpaceId
 }, Docs = [Doc | RestDocs]) ->
     State2 = try
         consume_change(State, Doc)
@@ -306,17 +268,58 @@ consume_change_and_enter_retry_mode_on_error(State = #state{
             ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
             "handling changes for harvester ~p in space ~p",
                 [Error, Reason, Id, HarvesterId, SpaceId]),
-            stop_changes_stream(Stream),
-            enter_retry_mode(Docs, State)
+            enter_retrying_mode(Docs, stop_changes_stream(State))
     end,
     case State2#state.mode of
-        retry ->
+        retrying ->
             State2;
         _ ->
-            consume_change_and_enter_retry_mode_on_error(State2, RestDocs)
+            consume_change_and_enter_retrying_mode_on_error(State2, RestDocs)
     end;
-consume_change_and_enter_retry_mode_on_error(State, Doc = #document{}) ->
-    consume_change_and_enter_retry_mode_on_error(State, [Doc]).
+consume_change_and_enter_retrying_mode_on_error(State, Doc = #document{}) ->
+    consume_change_and_enter_retrying_mode_on_error(State, [Doc]).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Start/restart changes stream and mark mode as `stream`.
+%% @end
+%%-------------------------------------------------------------------
+-spec enter_streaming_mode(state()) -> state().
+enter_streaming_mode(State = #state{id = Id, index_id = IndexId, space_id = SpaceId}) ->
+    LastProcessedSeq = harvest_stream_state:get_seen_seq(Id, IndexId),
+    {ok, StreamPid} = start_changes_stream(SpaceId, LastProcessedSeq + 1),
+    State#state{
+        mode = streaming,
+        stream_pid = StreamPid,
+        backoff = undefined
+    }.
+
+-spec enter_retrying_mode([datastore:doc()], state()) -> state().
+enter_retrying_mode(Docs, State = #state{stream_pid = undefined}) ->
+    %% stream_pid is undefined which means that stream has been stopped and we
+    %% can start backoff algorithm
+    schedule_backoff(State#state{docs_to_retry = Docs, mode = retrying});
+enter_retrying_mode(Docs, State) ->
+    %% stream_pid is not undefined which means that stream_stopped message hasn't
+    %% arrived yet
+    State#state{
+        docs_to_retry = Docs,
+        mode = retrying
+    }.
+
+schedule_backoff(State = #state{backoff = undefined}) ->
+    B0 = backoff:init(?MIN_BACKOFF_INTERVAL, ?MAX_BACKOFF_INTERVAL, self(), ?RETRY),
+    B1 = backoff:type(B0, jitter),
+    ?error("Next retry after: ~p seconds", [?MIN_BACKOFF_INTERVAL /1000]),
+    backoff:fire(B1),
+    State#state{backoff = B1};
+schedule_backoff(State = #state{backoff = B0}) ->
+    {Value, B1} = backoff:fail(B0),
+    ?error("Next retry after: ~p seconds", [Value /1000]),
+    backoff:fire(B1),
+    State#state{backoff = B1}.
 
 
 -spec consume_change(state(), datastore:doc()) -> state().
@@ -380,28 +383,6 @@ consume_change(State = #state{
 consume_change(State, _Doc) ->
     State.
 
-
--spec enter_retry_mode(datastore:doc() | [datastore:doc()], state()) -> state().
-enter_retry_mode(DocOrDocs, State = #state{backoff = undefined}) ->
-    B0 = backoff:init(?MIN_BACKOFF_INTERVAL, ?MAX_BACKOFF_INTERVAL, self(), ?RETRY),
-    B1 = backoff:type(B0, jitter),
-    ?error("Next retry after: ~p seconds", [?MIN_BACKOFF_INTERVAL /1000]),
-    backoff:fire(B1),
-    State#state{
-        docs_to_retry = DocOrDocs,
-        mode = retry,
-        backoff = B1
-    };
-enter_retry_mode(DocOrDocs, State = #state{backoff = B}) ->
-    {Value, B2} = backoff:fail(B),
-    ?error("Next retry after: ~p seconds", [Value /1000]),
-    backoff:fire(B2),
-    State#state{
-        docs_to_retry = DocOrDocs,
-        mode = retry,
-        backoff = B2
-    }.
-
--spec maybe_enter_resuming_mode(mode()) -> mode().
-maybe_enter_resuming_mode(stream) -> stream;
-maybe_enter_resuming_mode(retry) -> resuming.
+-spec ensure_list(term()) -> [term()].
+ensure_list(List) when is_list(List) -> List;
+ensure_list(Element) -> [Element].
