@@ -707,16 +707,27 @@ handle_client_message(#state{
                     undefined ->
                         {ok, State};
                     _ ->
-                        ServerMsg = #server_message{
+                        AccessErrorMsg = #server_message{
                             message_id = Msg#client_message.message_id,
                             message_body = #status{code = ?EACCES}
                         },
-                        send_response(State, ServerMsg)
+                        send_response(State, AccessErrorMsg)
                 end
         end
-    catch Type:Reason ->
-        ?error("Client message handling error - ~p:~p", [Type, Reason]),
-        {ok, State}
+    catch
+        throw:{translation_failed, Reason, undefined} ->
+            ?error("Client message decoding error - ~p", [Reason]),
+            {ok, State};
+        throw:{translation_failed, Reason, MsgId} ->
+            ?error("Client message decoding error - ~p", [Reason]),
+            InvalidArgErrorMsg = #server_message{
+                message_id = MsgId,
+                message_body = #status{code = ?EINVAL}
+            },
+            send_response(State, InvalidArgErrorMsg);
+        Type:Reason ->
+            ?error("Client message handling error - ~p:~p", [Type, Reason]),
+            {ok, State}
     end.
 
 

@@ -786,7 +786,8 @@ await_status_answer(ExpStatus, MsgId, MinHeartbeatNum) ->
 
 
 await_status_answer(ExpStatus, MsgId, MinHeartbeatsNum, HeartbeatsNum) ->
-    case fuse_test_utils:receive_server_message() of
+    case fuse_test_utils:receive_server_message([message_stream_reset, subscription,
+        message_request]) of
         #'ServerMessage'{
             message_id = MsgId,
             message_body = {processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}}

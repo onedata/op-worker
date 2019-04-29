@@ -79,7 +79,7 @@
     ping/1, ping/2
 ]).
 
--define(ID, erlang:unique_integer([positive, monotonic])).
+-define(ID, generate_msg_id()).
 -define(MSG_ID, integer_to_binary(?ID)).
 -define(IRRELEVANT_FIELD_VALUE, <<"needless">>).
 
@@ -89,7 +89,13 @@
 %% API
 %% ====================================================================
 
-generate_msg_id() -> ?MSG_ID.
+generate_msg_id() ->
+    ID = case get(msg_id_generator) of
+        undefined -> 1;
+        Value -> Value + 1
+    end,
+    put(msg_id_generator, ID),
+    ID.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -233,9 +239,9 @@ connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
 
     % then
     RM = receive_server_message(),
-    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
         status = 'OK'
-    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+    }}},
         RM
     ),
     ssl:setopts(Sock, ActiveOpt),
@@ -256,7 +262,8 @@ connect_and_upgrade_proto(Hostname, Port) ->
     end.
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset, subscription, message_request]).
+    receive_server_message([message_stream_reset, subscription, message_request,
+        message_acknowledgement, processing_status, events]). % ignore events about parent changes
 
 receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).

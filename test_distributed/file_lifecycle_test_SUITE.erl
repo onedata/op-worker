@@ -345,7 +345,7 @@ open_delete_race_test(Config) ->
     check_dir_init(W),
 
     test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, open_storage_on_node,
+    test_utils:mock_expect(W, file_req, open_on_storage,
         fun(FileCtx, SessId, Flag, HandleId) ->
             Ans = meck:passthrough([FileCtx, SessId, Flag, HandleId]),
 
