@@ -35,6 +35,7 @@
 %% this session is proxied by some other session.
 %% @end
 %%--------------------------------------------------------------------
+% TODO VFS-5412
 -spec fill_effective_session_info(message(), session:id()) -> message().
 fill_effective_session_info(Msg, SessionId) ->
     case session:get(SessionId) of
