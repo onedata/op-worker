@@ -261,6 +261,7 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
 import_children(_Job, _Type, _Offset, undefined, _BatchSize) ->
     [];
 import_children(Job = #space_strategy_job{
+    strategy_args = Args,
     strategy_type = StrategyType,
     data = #{
         max_depth := MaxDepth,
@@ -274,8 +275,9 @@ import_children(Job = #space_strategy_job{
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, _} =
         storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
+    SyncAcl = maps:get(sync_acl, Args, false),
     {BatchHash, ChildrenStorageCtxsBatch2} =
-        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
+        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1, SyncAcl),
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
@@ -988,6 +990,8 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                 throw:?ENOTSUP ->
                     ok;
                 throw:?ENOENT ->
+                    ok;
+                throw:?ENODATA ->
                     ok
             end
     end.
@@ -1024,7 +1028,9 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
                 throw:?ENOTSUP ->
                     not_updated;
                 throw:?ENOENT ->
-                    not_updated
+                    not_updated;
+                throw:?ENODATA ->
+                    ok
             end
     end.
 
