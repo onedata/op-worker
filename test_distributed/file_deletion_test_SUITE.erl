@@ -560,10 +560,7 @@ init_session(Worker, SessID) ->
     Self = self(),
     Iden = #user_identity{user_id = <<"u1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessID, Iden]
-    )),
-    ?assertMatch(ok, rpc:call(Worker, session_connections,
-        register, [SessID, Self]
+        reuse_or_create_fuse_session, [SessID, Iden, undefined, Self]
     )).
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->

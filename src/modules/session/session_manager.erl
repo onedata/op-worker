@@ -19,7 +19,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([reuse_or_create_fuse_session/2, reuse_or_create_fuse_session/3]).
+-export([
+    reuse_or_create_fuse_session/2,
+    reuse_or_create_fuse_session/3,
+    reuse_or_create_fuse_session/4
+]).
 -export([reuse_or_create_rest_session/2]).
 -export([
     reuse_or_create_incoming_provider_session/2,
@@ -59,6 +63,19 @@ reuse_or_create_fuse_session(SessId, Iden, Auth) ->
     critical_section:run([?MODULE, SessId], fun() ->
         reuse_or_create_session(SessId, fuse, Iden, Auth)
     end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates FUSE session or if session exists reuses it
+%% and registers connection for it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(session:id(), session:identity(),
+    session:auth() | undefined, pid()) -> {ok, session:id()} | error().
+reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
+    {ok, _} = reuse_or_create_fuse_session(SessId, Iden, Auth),
+    session_connections:register(SessId, Conn),
+    {ok, SessId}.
 
 %%--------------------------------------------------------------------
 %% @doc

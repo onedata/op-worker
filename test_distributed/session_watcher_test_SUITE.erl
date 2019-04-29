@@ -85,10 +85,7 @@ session_create_or_reuse_session_should_update_session_access_time(Config) ->
     SessId = ?config(session_id, Config),
     Accessed1 = get_session_access_time(Config),
     rpc:call(Worker, session_manager, reuse_or_create_fuse_session,
-        [SessId, undefined]),
-    rpc:call(Worker, session_connections,
-        register, [SessId, self()]
-    ),
+        [SessId, undefined, undefined, self()]),
     ?call(Worker, get, [SessId]),
     Accessed2 = get_session_access_time(Config),
     ?assert(Accessed2 - Accessed1 >= 0).
