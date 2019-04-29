@@ -104,13 +104,20 @@ provider_should_reconnect_after_loss_of_connection(Config) ->
         {ok, [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms]}
     end,
     test_utils:mock_expect(Nodes, provider_logic, get_nodes, GetNodesFun),
-    Cons = list_session_connections(P1Worker, OutgoingSessId),
+    {ok, Cons} = list_session_connections(P1Worker, OutgoingSessId),
     lists:foreach(fun(Conn) -> connection:close(Conn) end, Cons),
-    timer:sleep(timer:seconds(2)),
 
-    [Conn2, Conn1] = ?assertMatch([_, _], list_session_connections(P1Worker, OutgoingSessId), ?ATTEMPTS),
+    {ok, [Conn2, Conn1]} = ?assertMatch(
+        {ok, [_, _]},
+        list_session_connections(P1Worker, OutgoingSessId),
+        ?ATTEMPTS
+    ),
     connection:close(Conn1),
-    [Conn3, _] = ?assertMatch([_Conn3, Conn2], list_session_connections(P1Worker, OutgoingSessId), ?ATTEMPTS),
+    {ok, [Conn3, _]} = ?assertMatch(
+        {ok, [_Conn3, Conn2]},
+        list_session_connections(P1Worker, OutgoingSessId),
+        ?ATTEMPTS
+    ),
 
     ?assertNotEqual(Conn1, Conn3).
 
@@ -129,7 +136,11 @@ after_connection_timeout_session_is_terminated(Config) ->
     OutgoingSessId = get_provider_session_id(P1, outgoing, P2Id),
 
     % when one of session connection timeouts
-    [Conn2, Conn1] = ?assertMatch([_, _], list_session_connections(P1, OutgoingSessId), ?ATTEMPTS),
+    {ok, [Conn2, Conn1]} = ?assertMatch(
+        {ok, [_, _]},
+        list_session_connections(P1, OutgoingSessId),
+        ?ATTEMPTS
+    ),
     Conn1 ! timeout,
 
     % then entire session and it's connections should be terminated
@@ -302,13 +313,20 @@ connection_exists(Provider, PeerProvider) ->
     IncomingSessId = get_provider_session_id(Provider, incoming, PeerProviderId),
     OutgoingSessId = get_provider_session_id(Provider, outgoing, PeerProviderId),
 
-    IncomingConnExists = session_exists(Provider, IncomingSessId),
+    IncomingSessExists = session_exists(Provider, IncomingSessId),
     % Outgoing session is always created but will fail to make any connection
     % in case of providers incompatibilities.
-    OutgoingConnExists = session_exists(Provider, OutgoingSessId) andalso
-        list_session_connections(Provider, OutgoingSessId) =/= [],
+    OutgoingConnExists = case session_exists(Provider, OutgoingSessId) of
+        true ->
+            case list_session_connections(Provider, OutgoingSessId) of
+                {ok, [_ | _]} -> true;
+                _ -> false
+            end;
+        false ->
+            false
+    end,
 
-    IncomingConnExists orelse OutgoingConnExists.
+    IncomingSessExists orelse OutgoingConnExists.
 
 
 get_provider_session_id(Worker, Type, ProviderId) ->
@@ -322,12 +340,7 @@ session_exists(Provider, SessId) ->
 
 
 list_session_connections(Provider, SessId) ->
-    case rpc:call(Provider, session_connections, list, [SessId]) of
-        {ok, Cons} ->
-            Cons;
-        Error ->
-            Error
-    end.
+    rpc:call(Provider, session_connections, list, [SessId]).
 
 
 -spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
