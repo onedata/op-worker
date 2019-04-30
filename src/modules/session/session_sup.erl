@@ -90,7 +90,7 @@ child_specs(SessId, provider_outgoing) ->
     [
         sequencer_manager_sup_spec(SessId),
         event_manager_sup_spec(SessId),
-        connection_manager_spec(SessId)
+        outgoing_connection_manager_spec(SessId)
     ];
 child_specs(SessId, fuse) ->
     [
@@ -146,15 +146,16 @@ async_request_manager_spec(SessId) ->
 %% Creates a supervisor child_spec for a connection_manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec connection_manager_spec(session:id()) -> supervisor:child_spec().
-connection_manager_spec(SessId) ->
+-spec outgoing_connection_manager_spec(session:id()) ->
+    supervisor:child_spec().
+outgoing_connection_manager_spec(SessId) ->
     #{
-        id => connection_manager,
-        start => {connection_manager, start_link, [SessId]},
+        id => outgoing_connection_manager,
+        start => {outgoing_connection_manager, start_link, [SessId]},
         restart => permanent,
         shutdown => timer:seconds(10),
         type => worker,
-        modules => [connection_manager]
+        modules => [outgoing_connection_manager]
     }.
 
 %%--------------------------------------------------------------------

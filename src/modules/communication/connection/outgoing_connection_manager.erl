@@ -16,7 +16,7 @@
 %%% due to timeout entire session is terminated (session is inactive).
 %%% @end
 %%%-------------------------------------------------------------------
--module(connection_manager).
+-module(outgoing_connection_manager).
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_server).
@@ -64,7 +64,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the connection_manager server for specified session.
+%% Starts the outgoing connection_manager server for specified session.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(session:id()) -> {ok, pid()} | ignore | error().
