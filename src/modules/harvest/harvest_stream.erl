@@ -145,7 +145,7 @@ init([HarvesterId, SpaceId, IndexId]) ->
 handle_call({change, {ok, DocOrDocs}}, From, State = #state{mode = streaming}) ->
     gen_server2:reply(From, ok),
     {noreply, consume_change_and_enter_retrying_mode_on_error(State, DocOrDocs)};
-handle_call({change, {ok, stream_stopped}}, _From, State = #state{mode = retrying}) ->
+handle_call({change, {ok, end_of_stream}}, _From, State = #state{mode = retrying}) ->
     % all changes sent by changes_stream before stopping it have already arrived
     % so we can start backoff algorithm
     {reply, ok, schedule_backoff(State#state{stream_pid = undefined})};
@@ -261,20 +261,22 @@ consume_change_and_enter_retrying_mode_on_error(State = #state{
     harvester_id = HarvesterId,
     space_id = SpaceId
 }, Docs = [Doc | RestDocs]) ->
-    State2 = try
-        consume_change(State, Doc)
+    {State3, ConsumingFailed} = try
+        State2 = consume_change(State, Doc),
+        {State2#state{backoff = undefined}, false}
     catch
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p in harvest_stream ~p "
             "handling changes for harvester ~p in space ~p",
                 [Error, Reason, Id, HarvesterId, SpaceId]),
-            enter_retrying_mode(Docs, stop_changes_stream(State))
+            {enter_retrying_mode(Docs, stop_changes_stream(State)), true}
     end,
-    case State2#state.mode of
-        retrying ->
-            State2;
+    case ConsumingFailed of
+        true ->
+            % if consuming change failed, backoff algorithm will trigger retries
+            State3;
         _ ->
-            consume_change_and_enter_retrying_mode_on_error(State2, RestDocs)
+            consume_change_and_enter_retrying_mode_on_error(State3, RestDocs)
     end;
 consume_change_and_enter_retrying_mode_on_error(State, Doc = #document{}) ->
     consume_change_and_enter_retrying_mode_on_error(State, [Doc]).
@@ -302,8 +304,8 @@ enter_retrying_mode(Docs, State = #state{stream_pid = undefined}) ->
     %% can start backoff algorithm
     schedule_backoff(State#state{docs_to_retry = Docs, mode = retrying});
 enter_retrying_mode(Docs, State) ->
-    %% stream_pid is not undefined which means that stream_stopped message hasn't
-    %% arrived yet
+    %% stream_pid is not undefined which means that `end_of_stream` message
+    %% hasn't arrived yet
     State#state{
         docs_to_retry = Docs,
         mode = retrying

@@ -149,16 +149,6 @@ all() ->
 -define(assertNotReceivedDeleteEntry(ExpFileId, ExpHarvester, ExpIndices, ExpProviderId, Timeout),
     ?assertNotReceivedEqual(?DELETE_ENTRY(ExpFileId, ExpHarvester, ExpIndices, ExpProviderId), Timeout)).
 
--define(TYPE_PAYLOAD(Type), <<(Type)/binary, "_payload">>).
-
--define(CUSTOM_ENTRY_TYPE_FIELD, <<"CUSTOM_METADATA_TYPE_FIELD">>).
-
--define(CUSTOM_ACCEPTED_ENTRY_TYPE, <<"CUSTOM_ACCEPTED_METADATA_TYPE">>).
--define(CUSTOM_NOT_ACCEPTED_ENTRY_TYPE, <<"CUSTOM_NOT_ACCEPTED_METADATA_TYPE">>).
-
--define(DEFAULT_ENTRY_TYPE, <<"DEFAULT_METADATA_TYPE">>).
-
--define(ACCEPTED_ENTRY_TYPES, [?CUSTOM_ACCEPTED_ENTRY_TYPE, ?DEFAULT_ENTRY_TYPE]).
 
 -define(INDEX(N), <<"index", (integer_to_binary(N))/binary>>).
 -define(INDEX11, ?INDEX(11)).
@@ -166,6 +156,8 @@ all() ->
 -define(INDEX22, ?INDEX(22)).
 -define(INDEX23, ?INDEX(23)).
 -define(INDEX31, ?INDEX(31)).
+
+-define(MOCK_HARVESTER_LOGIC_FAILURE, mock_harvester_logic_failure).
 
 %%%====================================================================
 %%% Test function
@@ -381,11 +373,11 @@ submit_entry_failure_test(Config) ->
     SessId = ?SESS_ID(Worker),
 
     FileName = ?FILE_NAME,
+    FileName2 = ?FILE_NAME,
     JSON1 = #{<<"color">> => <<"blue">>},
     ProviderId1 = ?PROVIDER_ID(Worker),
 
     HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1, ?INDEX11),
-    mock_harvester_logic_submit_entry(Worker),
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
@@ -393,15 +385,22 @@ submit_entry_failure_test(Config) ->
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ProviderId1),
 
-    mock_harvester_logic_submit_entry_failure(Worker),
+    set_mock_harvester_logic_failure(Worker, true),
 
     JSON2 = #{<<"color">> => <<"red">>},
+    JSON3 = #{<<"color">> => <<"green">>},
+
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID1), 8#600),
+    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
+
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON3, []),
 
-    % change should not be submitted as connection to onezone failed
+    % changes should not be submitted as connection to onezone failed
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, JSON2, _, ProviderId1),
+    ?assertNotReceivedSubmitEntry(FileId2, ?HARVESTER1, JSON3, _, ProviderId1),
 
-    mock_harvester_logic_submit_entry(Worker),
+    set_mock_harvester_logic_failure(Worker, false),
 
     % harvest_stream should not have been restarted
     ?assertEqual(HSPid1,
@@ -410,8 +409,9 @@ submit_entry_failure_test(Config) ->
     % previously sent change should not be submitted
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, _, ProviderId1),
 
-    % missing change should be submitted
-    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON2, [?INDEX11], ProviderId1).
+    % missing changes should be submitted
+    ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON2, [?INDEX11], ProviderId1),
+    ?assertReceivedSubmitEntry(FileId2, ?HARVESTER1, JSON3, [?INDEX11], ProviderId1).
 
 delete_entry_failure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -423,22 +423,20 @@ delete_entry_failure_test(Config) ->
 
     HSPid1 = get_harvest_stream_pid(Worker, ?HARVESTER1, ?SPACE_ID1, ?INDEX11),
 
-    mock_harvester_logic_submit_entry(Worker),
-
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
     {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
     ?assertReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, [?INDEX11], ProviderId1),
 
-    mock_harvester_logic_delete_entry_failure(Worker),
+    set_mock_harvester_logic_failure(Worker, true),
 
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
 
     % change should not be submitted as connection to onezone failed
     ?assertNotReceivedDeleteEntry(FileId, ?HARVESTER1, [?INDEX11], ProviderId1),
 
-    mock_harvester_logic_delete_entry(Worker),
+    set_mock_harvester_logic_failure(Worker, false),
 
     % harvest_stream should not have been restarted
     ?assertEqual(HSPid1,
@@ -447,7 +445,7 @@ delete_entry_failure_test(Config) ->
     % previously sent change should not be submitted
     ?assertNotReceivedSubmitEntry(FileId, ?HARVESTER1, JSON1, _, ProviderId1),
 
-    % missing change should be submitted
+    % missing changes should be submitted
     ?assertReceivedDeleteEntry(FileId, ?HARVESTER1, [?INDEX11], ProviderId1).
 
 %%%===================================================================
@@ -461,13 +459,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
-init_per_testcase(Case, Config) when
-    Case =:= submit_entry_failure_test;
-    Case =:= delete_entry_failure_test
-    ->
-    init_per_testcase(default, Config);
-
-init_per_testcase(default, Config) ->
+init_per_testcase(_Case, Config) ->
     Config2 = sort_workers(Config),
     Workers = ?config(op_worker_nodes, Config2),
     initializer:communicator_mock(Workers),
@@ -477,15 +469,11 @@ init_per_testcase(default, Config) ->
         % trigger od_provider posthooks
         rpc:call(W, od_provider, save_to_cache, [D])
     end, Workers),
-    mock_space_quota_checks(Workers),
-    lfm_proxy:init(ConfigWithSessionInfo);
-
-init_per_testcase(_Case, Config) ->
-    Config2 = init_per_testcase(default, Config),
-    Workers = ?config(op_worker_nodes, Config2),
+    set_mock_harvester_logic_failure(Workers, false),
     mock_harvester_logic_submit_entry(Workers),
     mock_harvester_logic_delete_entry(Workers),
-    Config2.
+    mock_space_quota_checks(Workers),
+    lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -509,8 +497,13 @@ mock_harvester_logic_submit_entry(Node) ->
     Self = self(),
     ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
         fun(HarvesterId, FileId, JSON, Indices, _Seq, _MaxSeq) ->
-            Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, JSON, Indices, oneprovider:get_id()),
-            {ok, []}
+            case application:get_env(op_worker, ?MOCK_HARVESTER_LOGIC_FAILURE, false) of
+                true ->
+                    {error, test_error};
+                false ->
+                    Self ! ?SUBMIT_ENTRY(FileId, HarvesterId, JSON, Indices, oneprovider:get_id()),
+                    {ok, []}
+            end
         end
     ).
 
@@ -518,24 +511,18 @@ mock_harvester_logic_delete_entry(Node) ->
     Self = self(),
     ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
         fun(HarvesterId, FileId, Indices, _Seq, _MaxSeq) ->
-            Self ! ?DELETE_ENTRY(FileId, HarvesterId, Indices, oneprovider:get_id()),
-            {ok, []}
+            case application:get_env(op_worker, ?MOCK_HARVESTER_LOGIC_FAILURE, false) of
+                true ->
+                    {error, test_error};
+                false ->
+                    Self ! ?DELETE_ENTRY(FileId, HarvesterId, Indices, oneprovider:get_id()),
+                    {ok, []}
+            end
         end
     ).
 
-mock_harvester_logic_submit_entry_failure(Node) ->
-    ok = test_utils:mock_expect(Node, harvester_logic, submit_entry,
-        fun(_HarvesterId, _FileId, _JSON, _Indices, _Seq, _MaxSeq) ->
-            {error, test_error}
-        end
-    ).
-
-mock_harvester_logic_delete_entry_failure(Node) ->
-    ok = test_utils:mock_expect(Node, harvester_logic, delete_entry,
-        fun(_HarvesterId, _FileId, _Indices, _Seq, _MaxSeq) ->
-            {error, test_error}
-        end
-    ).
+set_mock_harvester_logic_failure(Nodes, Boolean) ->
+    test_utils:set_env(Nodes, op_worker, ?MOCK_HARVESTER_LOGIC_FAILURE, Boolean).
 
 mock_space_quota_checks(Node) ->
     % mock space_quota to mock error logs due to some test environment issues
