@@ -276,9 +276,9 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
     end;
 
 mock_graph_create(#gri{type = od_harvester, id = _, aspect = {submit_entry, _}}, undefined, _Data) ->
-    {ok, #gs_resp_graph{data_format = undefined}};
+    {ok, #gs_resp_graph{data_format = value, data = #{<<"failedIndices">> => []}}};
 mock_graph_create(#gri{type = od_harvester, id = _, aspect = {delete_entry, _}}, undefined, _Data) ->
-    {ok, #gs_resp_graph{data_format = undefined}}.
+    {ok, #gs_resp_graph{data_format = value, data = #{<<"failedIndices">> => []}}}.
 
 
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->

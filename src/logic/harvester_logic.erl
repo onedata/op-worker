@@ -82,15 +82,19 @@ get_indices(#document{value = #od_harvester{indices = Indices}}) ->
 %%--------------------------------------------------------------------
 -spec submit_entry(od_harvester:id(), cdmi_id:objectid(), gs_protocol:json_map(),
     [od_harvester:index()], non_neg_integer(), non_neg_integer()) ->
-    {ok, #{binary() => [od_harvester:index()]}} | gs_protocol:error().
+    {ok, [od_harvester:index()]} | gs_protocol:error().
 submit_entry(HarvesterId, FileId, JSON, Indices, Seq, MaxSeq) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_harvester, id = HarvesterId,
             aspect = ?SUBMIT_ENTRY(FileId), scope = private
         },
         data = submit_payload(JSON, Indices, Seq, MaxSeq)
-    }).
+    }),
+    case Result of
+        {ok, #{<<"failedIndices">> := FailedIndices}} -> {ok, FailedIndices};
+        {error, _} = Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,15 +105,20 @@ submit_entry(HarvesterId, FileId, JSON, Indices, Seq, MaxSeq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_entry(od_harvester:id(), cdmi_id:objectid(), [od_harvester:index()],
-    non_neg_integer(), non_neg_integer()) -> ok | gs_protocol:error().
+    non_neg_integer(), non_neg_integer()) ->
+    {ok, [od_harvester:index()]} | gs_protocol:error().
 delete_entry(HarvesterId, FileId, Indices, Seq, MaxSeq) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create, % intentional !!!, GS does not support sending data in `delete`
         gri = #gri{type = od_harvester, id = HarvesterId,
             aspect = ?DELETE_ENTRY(FileId), scope = private
         },
         data = delete_payload(Indices, Seq, MaxSeq)
-    }).
+    }),
+    case Result of
+        {ok, #{<<"failedIndices">> := FailedIndices}} -> {ok, FailedIndices};
+        {error, _} = Error -> Error
+    end.
 
 
 %%%===================================================================

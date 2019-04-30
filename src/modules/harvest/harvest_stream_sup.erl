@@ -66,7 +66,7 @@ terminate_child(HarvesterId, SpaceId, IndexId) ->
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}).
 init([]) ->
-    {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, []}}.
+    {ok, {#{strategy => one_for_all, intensity => 1000, period => 3600}, []}}.
 
 %%%===================================================================
 %%% Internal functions

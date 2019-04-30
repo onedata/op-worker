@@ -219,7 +219,8 @@ stop_streams_of_harvester(HarvesterId, State) ->
     [od_harvester:index()], state()) -> state().
 revise_streams_of_harvester(HarvesterId, CurrentSpaces, CurrentIndices, State) ->
     PreviousStreams = maps:get(HarvesterId, State, sets:new()),
-    CurrentStreamsList = generate_streams(HarvesterId, CurrentSpaces, CurrentIndices),
+    SupportedSpaces = filter_supported_spaces(CurrentSpaces),
+    CurrentStreamsList = generate_streams(HarvesterId, SupportedSpaces, CurrentIndices),
     LocalCurrentStreams = sets:from_list(filter_streams_to_be_handled_locally(CurrentStreamsList)),
     StreamsToStop = sets:subtract(PreviousStreams, LocalCurrentStreams),
     StreamsToStart = sets:subtract(LocalCurrentStreams, PreviousStreams),
@@ -234,6 +235,10 @@ revise_streams_of_harvester(HarvesterId, CurrentSpaces, CurrentIndices, State) -
 -spec filter_streams_to_be_handled_locally([#harvest_stream{}]) -> [#harvest_stream{}].
 filter_streams_to_be_handled_locally(HarvestStreams) ->
     lists:filter(fun should_be_handled_locally/1, HarvestStreams).
+
+-spec filter_supported_spaces([od_space:id()]) -> [od_space:id()].
+filter_supported_spaces(Spaces) ->
+    lists:filter(fun provider_logic:supports_space/1, Spaces).
 
 -spec should_be_handled_locally(#harvest_stream{}) -> boolean().
 should_be_handled_locally(#harvest_stream{
