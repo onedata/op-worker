@@ -7,10 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for removal
-%%% of session that has been inactive longer that allowed period.
+%%% of incoming session (gui/rest/fuse/incoming provider) that has been
+%%% inactive longer that allowed period.
 %%% @end
 %%%-------------------------------------------------------------------
--module(session_watcher).
+-module(incoming_session_watcher).
 -author("Krzysztof Trzepla").
 
 -behaviour(gen_server).
@@ -201,9 +202,6 @@ get_session_ttl(rest) ->
     {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
     Period;
 get_session_ttl(provider_incoming) ->
-    {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
-    Period;
-get_session_ttl(provider_outgoing) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
     Period;
 get_session_ttl(_) ->

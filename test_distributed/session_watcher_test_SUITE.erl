@@ -22,11 +22,11 @@
 
 %% tests
 -export([
-    session_watcher_should_not_remove_session_with_connections/1,
-    session_watcher_should_remove_session_without_connections/1,
-    session_watcher_should_remove_inactive_session/1,
-    session_watcher_should_remove_session_on_error/1,
-    session_watcher_should_retry_session_removal/1,
+    incoming_session_watcher_should_not_remove_session_with_connections/1,
+    incoming_session_watcher_should_remove_session_without_connections/1,
+    incoming_session_watcher_should_remove_inactive_session/1,
+    incoming_session_watcher_should_remove_session_on_error/1,
+    incoming_session_watcher_should_retry_session_removal/1,
     session_create_or_reuse_session_should_update_session_access_time/1,
     session_update_should_update_session_access_time/1,
     session_save_should_update_session_access_time/1,
@@ -35,11 +35,11 @@
 
 all() ->
     ?ALL([
-        session_watcher_should_not_remove_session_with_connections,
-        session_watcher_should_remove_session_without_connections,
-        session_watcher_should_remove_inactive_session,
-        session_watcher_should_remove_session_on_error,
-        session_watcher_should_retry_session_removal,
+        incoming_session_watcher_should_not_remove_session_with_connections,
+        incoming_session_watcher_should_remove_session_without_connections,
+        incoming_session_watcher_should_remove_inactive_session,
+        incoming_session_watcher_should_remove_session_on_error,
+        incoming_session_watcher_should_retry_session_removal,
         session_create_or_reuse_session_should_update_session_access_time,
         session_update_should_update_session_access_time,
         session_save_should_update_session_access_time,
@@ -55,27 +55,27 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
-session_watcher_should_not_remove_session_with_connections(_Config) ->
+incoming_session_watcher_should_not_remove_session_with_connections(_Config) ->
     ?assertNotReceivedMatch({remove_session, _}, ?TIMEOUT).
 
-session_watcher_should_remove_session_without_connections(Config) ->
+incoming_session_watcher_should_remove_session_without_connections(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
     ?call(Worker, session_connections, deregister, [SessId, Self]),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
-session_watcher_should_remove_inactive_session(Config) ->
+incoming_session_watcher_should_remove_inactive_session(Config) ->
     set_session_status(Config, inactive),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
-session_watcher_should_remove_session_on_error(Config) ->
+incoming_session_watcher_should_remove_session_on_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     ?assertEqual(ok, ?call(Worker, delete, [SessId])),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
-session_watcher_should_retry_session_removal(Config) ->
+incoming_session_watcher_should_retry_session_removal(Config) ->
     set_session_status(Config, inactive),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
@@ -123,14 +123,14 @@ init_per_testcase(_Case, Config) ->
     SessId = <<"session_id">>,
     initializer:remove_pending_messages(),
     mock_session_manager(Worker),
-    {ok, Pid} = start_session_watcher(Worker, SessId),
-    [{session_watcher, Pid}, {session_id, SessId} | Config].
+    {ok, Pid} = start_incoming_session_watcher(Worker, SessId),
+    [{incoming_session_watcher, Pid}, {session_id, SessId} | Config].
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    Pid = ?config(session_watcher, Config),
-    stop_session_watcher(Worker, Pid, SessId),
+    Pid = ?config(incoming_session_watcher, Config),
+    stop_incoming_session_watcher(Worker, Pid, SessId),
     test_utils:mock_validate_and_unload(Worker, [session_manager]).
 
 %%%===================================================================
@@ -143,9 +143,9 @@ end_per_testcase(_Case, Config) ->
 %% Starts sequencer stream for outgoing messages.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_watcher(Worker :: node(), SessId :: session:id()) ->
+-spec start_incoming_session_watcher(Worker :: node(), SessId :: session:id()) ->
     {ok, Pid :: pid()}.
-start_session_watcher(Worker, SessId) ->
+start_incoming_session_watcher(Worker, SessId) ->
     Self = self(),
     ?call(Worker, application, set_env,
         [?APP_NAME, fuse_session_ttl_seconds, 1]),
@@ -153,7 +153,7 @@ start_session_watcher(Worker, SessId) ->
         key = SessId, value = #session{status = active, type = fuse, connections = [Self]}
     }])),
     ?assertMatch({ok, _}, ?call(Worker, gen_server, start, [
-        session_watcher, [SessId, fuse], []
+        incoming_session_watcher, [SessId, fuse], []
     ])).
 
 %%--------------------------------------------------------------------
@@ -162,9 +162,9 @@ start_session_watcher(Worker, SessId) ->
 %% Stops sequencer stream for outgoing messages.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_session_watcher(Worker :: node(), Pid :: pid(),
+-spec stop_incoming_session_watcher(Worker :: node(), Pid :: pid(),
     SessId :: session:id()) -> true.
-stop_session_watcher(Worker, Pid, SessId) ->
+stop_incoming_session_watcher(Worker, Pid, SessId) ->
     ?call(Worker, delete, [SessId]),
     exit(Pid, shutdown).
 

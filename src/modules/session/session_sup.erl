@@ -82,9 +82,9 @@ child_specs(SessId, guest) ->
     [event_manager_sup_spec(SessId)];
 child_specs(SessId, provider_incoming) ->
     [
-        session_watcher_spec(SessId, provider_incoming),
         async_request_manager_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, provider_incoming)
     ];
 child_specs(SessId, provider_outgoing) ->
     [
@@ -94,33 +94,33 @@ child_specs(SessId, provider_outgoing) ->
     ];
 child_specs(SessId, fuse) ->
     [
-        session_watcher_spec(SessId, fuse),
         async_request_manager_spec(SessId),
         sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, fuse)
     ];
 child_specs(SessId, SessType) ->
     [
-        session_watcher_spec(SessId, SessType),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, SessType)
     ].
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a worker child_spec for a session watcher child.
+%% Creates a worker child_spec for a incoming session watcher child.
 %% @end
 %%--------------------------------------------------------------------
--spec session_watcher_spec(SessId :: session:id(), SessType :: session:type()) ->
+-spec incoming_session_watcher_spec(session:id(), session:type()) ->
     supervisor:child_spec().
-session_watcher_spec(SessId, SessType) ->
+incoming_session_watcher_spec(SessId, SessType) ->
     #{
-        id => session_watcher,
-        start => {session_watcher, start_link, [SessId, SessType]},
+        id => incoming_session_watcher,
+        start => {incoming_session_watcher, start_link, [SessId, SessType]},
         restart => transient,
         shutdown => timer:seconds(10),
         type => worker,
-        modules => [session_watcher]
+        modules => [incoming_session_watcher]
     }.
 
 %%--------------------------------------------------------------------
