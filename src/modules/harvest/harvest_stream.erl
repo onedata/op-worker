@@ -144,7 +144,7 @@ init([HarvesterId, SpaceId, IndexId]) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_call({change, {ok, DocOrDocs}}, From, State = #state{mode = streaming}) ->
     gen_server2:reply(From, ok),
-    {noreply, consume_change_and_enter_retrying_mode_on_error(State, DocOrDocs)};
+    {noreply, consume_change_and_retry_on_error(State, DocOrDocs)};
 handle_call({change, {ok, end_of_stream}}, _From, State = #state{mode = retrying}) ->
     % all changes sent by changes_stream before stopping it have already arrived
     % so we can start backoff algorithm
@@ -188,7 +188,7 @@ handle_info({timeout, _TimerRef, ?RETRY}, State = #state{
     stream_pid = undefined,
     docs_to_retry = Docs
 }) ->
-    {noreply, consume_change_and_enter_retrying_mode_on_error(State, Docs)};
+    {noreply, consume_change_and_retry_on_error(State, Docs)};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -245,18 +245,18 @@ stop_changes_stream(State = #state{stream_pid = StreamPid}) ->
             State
     end.
 
--spec consume_change_and_enter_retrying_mode_on_error(state(),
+-spec consume_change_and_retry_on_error(state(),
     datastore:doc() | [datastore:doc()]) -> state().
-consume_change_and_enter_retrying_mode_on_error(State = #state{mode = streaming}, []) ->
+consume_change_and_retry_on_error(State = #state{mode = streaming}, []) ->
     % all docs were successfully handled
     State;
-consume_change_and_enter_retrying_mode_on_error(State = #state{
+consume_change_and_retry_on_error(State = #state{
     mode = retrying,
     stream_pid = undefined
 }, []) ->
     % all docs were successfully handled in retrying mode, get back to streaming mode
     enter_streaming_mode(State);
-consume_change_and_enter_retrying_mode_on_error(State = #state{
+consume_change_and_retry_on_error(State = #state{
     id = Id,
     harvester_id = HarvesterId,
     space_id = SpaceId
@@ -276,10 +276,10 @@ consume_change_and_enter_retrying_mode_on_error(State = #state{
             % if consuming change failed, backoff algorithm will trigger retries
             State3;
         _ ->
-            consume_change_and_enter_retrying_mode_on_error(State3, RestDocs)
+            consume_change_and_retry_on_error(State3, RestDocs)
     end;
-consume_change_and_enter_retrying_mode_on_error(State, Doc = #document{}) ->
-    consume_change_and_enter_retrying_mode_on_error(State, [Doc]).
+consume_change_and_retry_on_error(State, Doc = #document{}) ->
+    consume_change_and_retry_on_error(State, [Doc]).
 
 
 %%-------------------------------------------------------------------
