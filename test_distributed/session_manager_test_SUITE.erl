@@ -250,7 +250,7 @@ session_supervisor_child_crash_test(Config) ->
     end, [
         {event_manager_sup, fun erlang:exit/2, [kill]},
         {sequencer_manager_sup, fun erlang:exit/2, [kill]},
-        {session_watcher, fun gen_server:cast/2, [kill]}
+        {incoming_session_watcher, fun gen_server:cast/2, [kill]}
     ]),
 
     ok.
