@@ -45,7 +45,7 @@
 -type ttl() :: non_neg_integer().
 -type auth() :: #macaroon_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
--type status() :: active | inactive.
+-type status() :: initializing | active | inactive.
 -type identity() :: #user_identity{}.
 
 -export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).

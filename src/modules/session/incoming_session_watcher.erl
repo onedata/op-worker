@@ -69,7 +69,10 @@ init([SessId, SessType]) ->
     process_flag(trap_exit, true),
     Self = self(),
     {ok, _} = session:update(SessId, fun(Session = #session{}) ->
-        {ok, Session#session{watcher = Self}}
+        {ok, Session#session{
+            status = active,
+            watcher = Self
+        }}
     end),
     TTL = get_session_ttl(SessType),
     schedule_session_status_checkup(TTL),

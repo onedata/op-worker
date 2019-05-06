@@ -97,7 +97,9 @@ reuse_or_create_incoming_provider_session(SessId, Iden) ->
 -spec reuse_or_create_outgoing_provider_session(session:id(),
     session:identity()) -> {ok, session:id()} | error().
 reuse_or_create_outgoing_provider_session(SessId, Iden) ->
-    reuse_or_create_session(SessId, provider_outgoing, Iden, undefined).
+    critical_section:run([?MODULE, SessId], fun() ->
+        reuse_or_create_session(SessId, provider_outgoing, Iden, undefined)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -233,7 +235,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
     Sess = #session{
         type = SessType,
-        status = active,
+        status = initializing,
         identity = Iden,
         auth = Auth,
         proxy_via = ProxyVia

@@ -216,7 +216,7 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
     case connection_api:send(SessionId, Msg) of
         ok ->
             ok;
-        {error, not_found} ->
+        {error, R} when R == not_found orelse R == uninitialized_session ->
             session_connections:ensure_connected(SessionId),
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_provider_internal(SessionId, Msg, decrement_retries(Retries));
@@ -238,12 +238,10 @@ stream_to_provider_internal(SessionId, Msg, StmId, Retries) ->
         {error, not_found} ->
             session_connections:ensure_connected(SessionId),
             timer:sleep(?SEND_RETRY_DELAY),
-            RetriesLeft = decrement_retries(Retries),
-            stream_to_provider_internal(SessionId, Msg, StmId, RetriesLeft);
+            stream_to_provider_internal(SessionId, Msg, StmId, decrement_retries(Retries));
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            RetriesLeft = decrement_retries(Retries),
-            stream_to_provider_internal(SessionId, Msg, StmId, RetriesLeft)
+            stream_to_provider_internal(SessionId, Msg, StmId, decrement_retries(Retries))
     end.
 
 

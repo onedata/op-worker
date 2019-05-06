@@ -54,6 +54,8 @@ deregister(SessId, Conn) ->
 -spec list(session:id()) -> {ok, [Conn :: pid()]} | error().
 list(SessId) ->
     case get_proxy_session(SessId) of
+        {ok, #session{status = initializing}} ->
+            {error, uninitialized_session};
         {ok, #session{connections = Cons}} ->
             {ok, Cons};
         Error ->

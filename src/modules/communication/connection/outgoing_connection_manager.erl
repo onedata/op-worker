@@ -88,7 +88,13 @@ start_link(SessId) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId]) ->
     process_flag(trap_exit, true),
-    self() ! ?RENEW_CONNECTIONS_REQ,
+
+    Self = self(),
+    Self ! ?RENEW_CONNECTIONS_REQ,
+
+    {ok, _} = session:update(SessionId, fun(Session = #session{}) ->
+        {ok, Session#session{status = active}}
+    end),
 
     {ok, #state{
         session_id = SessionId,
