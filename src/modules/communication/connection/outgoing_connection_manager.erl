@@ -235,6 +235,14 @@ renew_connections(#state{
         NewState ->
             {ok, NewState}
     catch
+        throw:{cannot_verify_peer_op_identity, Reason0} ->
+            ?warning("Discarding connections renewal to provider ~ts because "
+                     "its identity cannot be verified due to ~p. ~n"
+                     "Next retry not sooner than ~p s. ~n", [
+                provider_logic:to_string(ProviderId), Reason0,
+                RenewalInterval / 1000
+            ]),
+            {ok, schedule_next_renewal(State)};
         throw:{cannot_check_peer_op_version, HTTPErrorCode} ->
             ?warning("Discarding connections renewal to provider ~ts because "
                      "its version cannot be determined (HTTP ~b). ~n"

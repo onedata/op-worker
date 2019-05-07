@@ -751,7 +751,11 @@ verify_provider_identity(ProviderId) ->
             {error, _} = Error ->
                 Error
         end
-    catch _:_ ->
+    catch Type:Reason ->
+        ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
+            provider_logic:to_string(ProviderId),
+            Type, Reason
+        ]),
         ?ERROR_UNAUTHORIZED
     end.
 

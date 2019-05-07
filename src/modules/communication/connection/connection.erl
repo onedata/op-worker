@@ -530,12 +530,8 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
 
         process_flag(trap_exit, true),
         gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
-    catch
-        Type:Reason ->
-            ?warning("Failed to connect to peer provider ~p (~p) - ~p:~p. ", [
-                ProviderId, Host, Type, Reason
-            ]),
-            exit(Reason)
+    catch _:Reason ->
+        exit(Reason)
     end.
 
 
