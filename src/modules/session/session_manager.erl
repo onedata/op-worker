@@ -60,9 +60,7 @@ reuse_or_create_fuse_session(SessId, Iden) ->
 -spec reuse_or_create_fuse_session(session:id(), session:identity(),
     session:auth() | undefined) -> {ok, session:id()} | error().
 reuse_or_create_fuse_session(SessId, Iden, Auth) ->
-    critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(SessId, fuse, Iden, Auth)
-    end).
+    reuse_or_create_session(SessId, fuse, Iden, Auth).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,9 +83,7 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
 -spec reuse_or_create_incoming_provider_session(session:id(),
     session:identity()) -> {ok, session:id()} | error().
 reuse_or_create_incoming_provider_session(SessId, Iden) ->
-    critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(SessId, provider_incoming, Iden, undefined)
-    end).
+    reuse_or_create_session(SessId, provider_incoming, Iden, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -97,9 +93,7 @@ reuse_or_create_incoming_provider_session(SessId, Iden) ->
 -spec reuse_or_create_outgoing_provider_session(session:id(),
     session:identity()) -> {ok, session:id()} | error().
 reuse_or_create_outgoing_provider_session(SessId, Iden) ->
-    critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(SessId, provider_outgoing, Iden, undefined)
-    end).
+    reuse_or_create_session(SessId, provider_outgoing, Iden, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -129,7 +123,9 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = #user_identity{} = Iden}} ->
-            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
+            critical_section:run([?MODULE, SessId], fun() ->
+                reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia)
+            end);
         Error ->
             Error
     end.
@@ -216,7 +212,9 @@ remove_session(SessId) ->
     session:identity(), session:auth() | undefined) ->
     {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth) ->
-    reuse_or_create_session(SessId, SessType, Iden, Auth, undefined).
+    critical_section:run([?MODULE, SessId], fun() ->
+        reuse_or_create_session(SessId, SessType, Iden, Auth, undefined)
+    end).
 
 
 %%%===================================================================
