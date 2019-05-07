@@ -14,11 +14,13 @@
 %%% that for active session any of the connections will be idle for more
 %%% than 24h (connection timeout). That is why when any connection dies out
 %%% due to timeout entire session is terminated (session is inactive).
-%%% If manager fails reaches ?MAX_RENEWAL_INTERVAL and still fails to
-%%% connect to even one peer host, then it is assumed that peer is
-%%% down/offline and session is terminated.
-%%% Next time some process will try to send msg to peer it will first call
-%%% `session_connections:ensure_connected` to create the session anew.
+%%% Failed connection attempts are repeated after a backoff period that grows
+%%% with every failure.
+%%% If backoff reaches ?MAX_RENEWAL_INTERVAL and manager still fails to
+%%% connect to at least one peer host, then it is assumed that the peer is
+%%% down/offline and the session is terminated.
+%%% Next time any process tries to send a msg to the peer, it will first call
+%%% `session_connections:ensure_connected` to create the session again.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(outgoing_connection_manager).
@@ -209,14 +211,14 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Connects to peer nodes with witch provider is not yet connected if next
+%% Connects to peer nodes with which provider is not yet connected if next
 %% renewal is not scheduled.
 %% In case of errors while connecting schedules next renewal with increased
 %% interval than before (not larger than ?MAX_RENEWAL_INTERVAL though).
 %% Otherwise if no errors occurred resets mentioned interval to
 %% ?INITIAL_RENEWAL_INTERVAL.
 %% If it is already another failed attempt and no connection is alive,
-%% meaning that peer is probably offline, returns error.
+%% meaning that peer is probably down/offline, returns error.
 %% @end
 %%--------------------------------------------------------------------
 -spec renew_connections(state()) -> {ok, state()} | {error, peer_offline}.
