@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([run/7]).
+-export([run/8]).
 %% Behaviour callbacks
 -export([do_master_job/1, save_job/2]).
 
@@ -30,7 +30,8 @@
     token = #link_token{} :: datastore_links_iter:token(),
     last_name = 0 :: non_neg_integer(),
     execute_slave_on_dir :: boolean(),
-    batch_size :: non_neg_integer()
+    batch_size :: non_neg_integer(),
+    traverse_info :: term()
 }).
 
 -type master_job() :: #tree_travserse_job{}.
@@ -40,15 +41,16 @@
 %%% API
 %%%===================================================================
 
-run(#document{} = Doc, Pool, TaskID, TaskGroup, TaskModule, ExecuteActionOnDir, BatchSize) ->
-    traverse:run(Pool, TaskID, TaskGroup, TaskModule, #tree_travserse_job{
+run(Pool, TaskModule, #document{} = Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
+    traverse:run(Pool, TaskModule, TaskID, TaskGroup, #tree_travserse_job{
         doc = Doc,
         execute_slave_on_dir = ExecuteActionOnDir,
-        batch_size = BatchSize
+        batch_size = BatchSize,
+        traverse_info = TraverseInfo
     });
-run(FileCtx, Pool, TaskID, TaskGroup, TaskModule, ExecuteActionOnDir, BatchSize) ->
+run(Pool, TaskModule, FileCtx, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
-    run(Doc, Pool, TaskID, TaskGroup, TaskModule, ExecuteActionOnDir, BatchSize).
+    run(Pool, TaskModule, Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo).
 
 %%%===================================================================
 %%% Behaviour callbacks
@@ -61,11 +63,12 @@ run(FileCtx, Pool, TaskID, TaskGroup, TaskModule, ExecuteActionOnDir, BatchSize)
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job()) -> {ok, [slave_job()], [master_job()]}.
 do_master_job(#tree_travserse_job{
-    doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
+    doc = #document{value = #file_meta{name = Name}} = Doc,
     token = Token,
     last_name = LN,
     execute_slave_on_dir = OnDir,
-    batch_size = BatchSize
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
 }) ->
     % TODO - list by key - not token
     {ok, Children, NewToken} = file_meta:list_children(Doc, LN, BatchSize, Token),
@@ -75,13 +78,15 @@ do_master_job(#tree_travserse_job{
         name = Name}, {Slaves, Masters, _} = Acc) ->
         case {file_meta:get({uuid, UUID}), OnDir} of
             {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
-                {[ChildDoc | Slaves], [#tree_travserse_job{doc = ChildDoc,
-                    execute_slave_on_dir = OnDir, batch_size = BatchSize} | Masters], Name};
+                {[{ChildDoc, TraverseInfo} | Slaves], [#tree_travserse_job{doc = ChildDoc,
+                    execute_slave_on_dir = OnDir, batch_size = BatchSize,
+                    traverse_info = TraverseInfo} | Masters], Name};
             {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
                 {Slaves, [#tree_travserse_job{doc = ChildDoc,
-                    execute_slave_on_dir = OnDir, batch_size = BatchSize} | Masters], Name};
+                    execute_slave_on_dir = OnDir, batch_size = BatchSize,
+                    traverse_info = TraverseInfo} | Masters], Name};
             {{ok, ChildDoc}, _} ->
-                {[ChildDoc | Slaves], Masters, Name};
+                {[{ChildDoc, TraverseInfo} | Slaves], Masters, Name};
             {{error, not_found}, _} ->
                 Acc
         end
@@ -92,15 +97,13 @@ do_master_job(#tree_travserse_job{
         false -> {ok, lists:reverse(SlaveJobs), [#tree_travserse_job{
             doc = Doc,
             token = NewToken,
-            last_name = LN2,
+%%            last_name = LN2,
+            last_name = LN + BatchSize,
             execute_slave_on_dir = OnDir,
-            batch_size = BatchSize
+            batch_size = BatchSize,
+            traverse_info = TraverseInfo
         } | lists:reverse(MasterJobs)]}
-    end;
-do_master_job(#tree_travserse_job{
-    doc = Doc
-}) ->
-    {ok, [Doc], []}.
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

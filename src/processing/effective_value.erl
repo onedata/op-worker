@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get_or_calculate/5, invalidate/1]).
+-export([get_or_calculate/5, get_or_calculate/6, invalidate/1]).
 
 -type traverse_cache() :: term().
 -type args() :: list().
@@ -40,19 +40,6 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, TraverseCache, Args) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes all data in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate(tmp_cache:cache()) -> ok.
-invalidate(Cache) ->
-    tmp_cache:invalidate(Cache).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Gets value from cache. If it is not found - uses callback to calculate it.
 %% Calculated value is cached.
 %% @end
@@ -63,7 +50,7 @@ invalidate(Cache) ->
 get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, TraverseCache, Args, Timestamp) ->
     case tmp_cache:get(Cache, Key) of
         {ok, Value} ->
-            {ok, Value, cached};
+            {ok, Value, TraverseCache};
         {error, not_found} ->
             SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(Key)),
             case is_binary(SpaceId) of % is space?
@@ -72,9 +59,22 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, TraverseC
                         [Doc, undefined, TraverseCache | Args], Timestamp);
                 _ ->
                     {ok, ParentDoc} = file_meta:get_parent(Doc),
-                    {ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
+                    {ok, ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
                         CalculateCallback, TraverseCache, Args, Timestamp),
                     tmp_cache:calculate_and_cache(Cache, Key, CalculateCallback,
                         [Doc, ParentValue, CalculationInfo | Args], Timestamp)
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes all data in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate(tmp_cache:cache()) -> ok.
+invalidate(Cache) ->
+    tmp_cache:invalidate(Cache).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
