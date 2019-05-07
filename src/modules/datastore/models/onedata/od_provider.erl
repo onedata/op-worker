@@ -83,7 +83,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,24 +115,6 @@ get_record_struct(2) ->
         {cache_state, #{atom => term}}
     ]};
 get_record_struct(3) ->
-    {record, [
-        {name, string},
-        {admin_email, string},
-        {subdomain_delegation, boolean},
-        {domain, string},
-        {subdomain, string},
-        {latitude, float},
-        {longitude, float},
-        {online, boolean},
-
-        {spaces, #{string => integer}},
-
-        {eff_users, [string]},
-        {eff_groups, [string]},
-
-        {cache_state, #{atom => term}}
-    ]};
-get_record_struct(4) ->
     {record, [
         {name, string},
         {admin_email, string},

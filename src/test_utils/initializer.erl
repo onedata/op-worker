@@ -26,7 +26,7 @@
 
 %% API
 -export([setup_session/3, teardown_session/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
-    basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0, create_test_users_and_spaces/2,
+    remove_pending_messages/0, create_test_users_and_spaces/2,
     remove_pending_messages/1, clear_subscriptions/1, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
@@ -191,28 +191,6 @@ clean_test_users_and_spaces_no_validate(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates basic test session.
-%% @end
-%%--------------------------------------------------------------------
--spec basic_session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
-basic_session_setup(Worker, SessId, Iden, Con, Config) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Con])),
-    [{session_id, SessId}, {identity, Iden} | Config].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes basic test session.
-%% @end
-%%--------------------------------------------------------------------
--spec basic_session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
-basic_session_teardown(Worker, Config) ->
-    SessId = proplists:get_value(session_id, Config),
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% @equiv remove_pending_messages(0)
 %% @end
 %%--------------------------------------------------------------------
@@ -273,7 +251,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     Auth = #macaroon_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
+        reuse_or_create_session, [SessId, fuse, Iden, Auth])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     [
         {{spaces, UserId}, Spaces},

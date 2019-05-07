@@ -129,7 +129,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/1]).
 -export([delegate_and_supervise/4]).
 
 %% gen_server callbacks
@@ -154,7 +154,7 @@
 -type server_message() :: #server_message{}.
 
 -type worker_ref() :: proc | module() | {module(), node()}.
--type reply_to() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
+-type respond_via() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
 -type error() :: {error, Reason :: term()}.
 
@@ -175,29 +175,27 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server and optionally sets keepalive timeout (it should
-%% be done only for provider_outgoing sessions).
+%% Starts the async_request_manager server for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), EnableKeepalive :: boolean()) ->
-    {ok, pid()} | ignore | error().
-start_link(SessId, EnableKeepalive) ->
-    gen_server:start_link(?MODULE, [SessId, EnableKeepalive], []).
+-spec start_link(session:id()) -> {ok, pid()} | ignore | error().
+start_link(SessionId) ->
+    gen_server:start_link(?MODULE, [SessionId], []).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Delegates handling of request to specified worker or spawned process
 %% (if worker_ref is `proc`). When worker finishes it's work,
-%% it will send result using given ReplyTo info.
+%% it will send result using given RespondVia info.
 %% @end
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
-    reply_to()) -> ok | {ok, server_message()}.
-delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
+    respond_via()) -> ok | {ok, server_message()}.
+delegate_and_supervise(WorkerRef, Req, MsgId, RespondVia) ->
     try
         ReqId = {make_ref(), MsgId},
-        ok = delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo)
+        ok = delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia)
     catch
         Type:Error ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
@@ -221,10 +219,9 @@ delegate_and_supervise(WorkerRef, Req, MsgId, ReplyTo) ->
 -spec init(Args :: term()) ->
     {ok, state()} | {ok, state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, EnableKeepalive]) ->
+init([SessionId]) ->
     process_flag(trap_exit, true),
     ok = session_connections:set_async_request_manager(SessionId, self()),
-    EnableKeepalive andalso schedule_keepalive_msg(),
     {ok, #state{session_id = SessionId}}.
 
 
@@ -317,7 +314,7 @@ handle_info(heartbeat, #state{
     pending_requests = PR,
     withheld_heartbeats = WH
 } = State) ->
-    NewState = case session_connections:get_connections(SessionId) of
+    NewState = case session_connections:list(SessionId) of
         {ok, Cons} ->
             State#state{
                 pending_requests = check_workers_status(PR, Cons, true),
@@ -332,20 +329,6 @@ handle_info(heartbeat, #state{
             State#state{heartbeat_timer = undefined}
     end,
     {noreply, schedule_workers_status_checkup(NewState)};
-handle_info(keepalive, #state{session_id = SessionId} = State) ->
-    case session_connections:get_connections(SessionId) of
-        {ok, Cons} ->
-            lists:foreach(fun(Conn) -> 
-                connection:send_keepalive(Conn) 
-            end, Cons);
-        Error ->
-            ?error("Async request manager for session ~p failed to send "
-                   "keepalives due to: ~p", [
-                SessionId, Error
-            ])
-    end,
-    schedule_keepalive_msg(),
-    {noreply, State};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -384,9 +367,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec delegate_request_insecure(worker_ref(), term(), req_id(), reply_to()) ->
+-spec delegate_request_insecure(worker_ref(), term(), req_id(), respond_via()) ->
     ok | error().
-delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
+delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
     Pid = spawn(fun() ->
         Response = try
             HandlerFun()
@@ -397,37 +380,37 @@ delegate_request_insecure(proc, HandlerFun, ReqId, ReplyTo) ->
                 ]),
                 #processing_status{code = 'ERROR'}
         end,
-        respond(ReplyTo, ReqId, Response)
+        respond(RespondVia, ReqId, Response)
     end),
-    report_pending_request(ReplyTo, Pid, ReqId);
+    report_pending_request(RespondVia, Pid, ReqId);
 
-delegate_request_insecure(WorkerRef, Req, ReqId, ReplyTo) ->
+delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
     ReplyFun =
         fun
             ({ok, Response}) ->
-                respond(ReplyTo, ReqId, Response);
+                respond(RespondVia, ReqId, Response);
             ({error, Reason}) ->
                 ?error("Failed to handle delegated request ~p due to ~p", [
                     ReqId, Reason
                 ]),
-                respond(ReplyTo, ReqId, #processing_status{code = 'ERROR'})
+                respond(RespondVia, ReqId, #processing_status{code = 'ERROR'})
         end,
     case worker_proxy:cast_and_monitor(WorkerRef, Req, ReplyFun, ReqId) of
         Pid when is_pid(Pid) ->
-            report_pending_request(ReplyTo, Pid, ReqId);
+            report_pending_request(RespondVia, Pid, ReqId);
         Error ->
             Error
     end.
 
 
 %% @private
--spec report_pending_request(reply_to(), pid(), req_id()) -> ok.
+-spec report_pending_request(respond_via(), pid(), req_id()) -> ok.
 report_pending_request({_, AsyncReqManager, _}, Pid, ReqId) ->
     gen_server2:cast(AsyncReqManager, {report_pending_req, Pid, ReqId}).
 
 
 %% @private
--spec respond(reply_to(), req_id(), term()) -> ok | error().
+-spec respond(respond_via(), req_id(), term()) -> ok | error().
 respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
     case withhold_heartbeats(AsyncReqManager, ReqId) of
         ok ->
@@ -438,15 +421,7 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
             case send_response(Conn, SessionId, Msg) of
                 ok ->
                     report_response_sent(AsyncReqManager, ReqId);
-                {error, no_connections} = NoConsError ->
-                    ?debug("Failed to send response to ~p due to no connections", [
-                        SessionId
-                    ]),
-                    NoConsError;
                 Error ->
-                    ?error("Failed to send response ~s to peer ~p due to: ~p", [
-                        clproto_utils:msg_to_string(Msg), SessionId, Error
-                    ]),
                     Error
             end;
         Error ->
@@ -474,9 +449,7 @@ send_response(Conn, SessionId, Response) ->
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         _Error ->
-            connection_utils:send_msg_excluding_connections(
-                SessionId, Response, [Conn]
-            )
+            connection_api:send(SessionId, Response, [Conn])
     end.
 
 
@@ -533,10 +506,10 @@ check_workers_status(Workers, Cons, SendHeartbeats) ->
                 ?error("Async Request Manager: process ~p handling request ~p died",
                     [Pid, ReqId]
                 ),
-                connection_utils:send_via_any(?ERROR_MSG(MsgId), Cons),
+                connection_api:send_via_any(?ERROR_MSG(MsgId), Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
-                SendHeartbeats andalso connection_utils:send_via_any(
+                SendHeartbeats andalso connection_api:send_via_any(
                     ?HEARTBEAT_MSG(MsgId), Cons
                 ),
                 case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
@@ -557,9 +530,3 @@ schedule_workers_status_checkup(#state{heartbeat_timer = undefined} = State) ->
     )};
 schedule_workers_status_checkup(State) ->
     State.
-
-
-%% @private
--spec schedule_keepalive_msg() -> TimerRef :: reference().
-schedule_keepalive_msg() ->
-    erlang:send_after(?KEEPALIVE_TIMEOUT, self(), keepalive).

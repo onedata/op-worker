@@ -49,7 +49,7 @@
 -export([fetch_compatibility_config/1]).
 -export([assert_zone_compatibility/0]).
 -export([provider_connection_ssl_opts/1]).
--export([assert_provider_compatibility/3]).
+-export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
@@ -751,7 +751,11 @@ verify_provider_identity(ProviderId) ->
             {error, _} = Error ->
                 Error
         end
-    catch _:_ ->
+    catch Type:Reason ->
+        ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
+            provider_logic:to_string(ProviderId),
+            Type, Reason
+        ]),
         ?ERROR_UNAUTHORIZED
     end.
 
@@ -889,10 +893,9 @@ provider_connection_ssl_opts(Domain) ->
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_provider_compatibility(od_provider:id(), Domain :: binary(), Hostname :: binary()) ->
-    ok | no_return().
-assert_provider_compatibility(ProviderId, Domain, Hostname) ->
-    case fetch_compatibility_config({oneprovider, Domain, Hostname}) of
+-spec assert_provider_compatibility(Domain :: binary()) -> ok | no_return().
+assert_provider_compatibility(Domain) ->
+    case fetch_compatibility_config({oneprovider, Domain, Domain}) of
         {ok, RemoteOpVersion, RemoteCompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
             CompOpVersions = application:get_env(
@@ -904,24 +907,14 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
                 true ->
                     ok;
                 false ->
-                    ?error("Discarding connection to provider ~p because of "
-                    "incompatible version. ~n"
-                    "Local version: ~s, supports providers: ~p~n"
-                    "Remote version: ~s, supports providers: ~p~n", [
-                        ProviderId,
-                        OpVersion,
-                        CompOpVersions,
+                    throw({
+                        incompatible_peer_op_version,
                         RemoteOpVersion,
                         binaries_to_strings(RemoteCompOpVersionsBin)
-                    ]),
-                    throw(incompatible_peer_op_version)
+                    })
             end;
         {error, {bad_response, Code, _ResponseBody}} ->
-            ?warning("Discarding connection to provider ~p because its "
-            "version cannot be determined (HTTP ~b). ~n", [
-                ProviderId, Code
-            ]),
-            throw(cannot_check_peer_op_version);
+            throw({cannot_check_peer_op_version, Code});
         {error, Error} ->
             error(Error)
     end.

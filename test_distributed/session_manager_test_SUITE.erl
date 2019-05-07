@@ -61,12 +61,12 @@ session_manager_session_creation_and_reuse_test(Config) ->
     lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
             ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-                reuse_or_create_fuse_session, [SessId, Iden, Self]))
+                reuse_or_create_fuse_session, [SessId, Iden, undefined, Self]))
         end, Workers),
 
         % Check connections have been added to session
         {ok, Cons} = ?assertMatch({ok, _},
-            rpc:call(Worker1, session_connections, get_connections, [SessId]), 10),
+            rpc:call(Worker1, session_connections, list, [SessId]), 10),
         ?assertEqual(length(Answers), length(Cons))
 
     end, [
@@ -215,7 +215,7 @@ session_getters_test(Config) ->
             _ -> ?assert(is_pid(Result))
         end
     end, [{session, get_event_manager}, {session, get_sequencer_manager},
-        {session_connections, get_connections}]),
+        {session_connections, list}]),
 
     Answer = rpc:call(Worker, session, get_session_supervisor_and_node, [SessId]),
     ?assertMatch({ok, {_, _}}, Answer),
@@ -235,7 +235,8 @@ session_supervisor_child_crash_test(Config) ->
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-            reuse_or_create_fuse_session, [SessId, Iden, Self])),
+            reuse_or_create_fuse_session, [SessId, Iden, undefined, Self])),
+
 
         {ok, {SessSup, Node}} = rpc:call(Worker, session,
             get_session_supervisor_and_node, [SessId]),
@@ -249,7 +250,7 @@ session_supervisor_child_crash_test(Config) ->
     end, [
         {event_manager_sup, fun erlang:exit/2, [kill]},
         {sequencer_manager_sup, fun erlang:exit/2, [kill]},
-        {session_watcher, fun gen_server:cast/2, [kill]}
+        {incoming_session_watcher, fun gen_server:cast/2, [kill]}
     ]),
 
     ok.
@@ -274,11 +275,11 @@ init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
 
 init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Self = self(),
     SessId = <<"session_id">>,
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:communicator_mock(Worker),
-    initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
+    {ok, _} = fuse_test_utils:connect_via_macaroon(Worker, [{active, true}], SessId),
+    [{session_id, SessId}, {identity, Iden} | Config];
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -305,9 +306,9 @@ init_per_testcase(Case, Config) when
 
     initializer:communicator_mock(Workers),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
-        reuse_or_create_fuse_session, [SessId1, Iden1, Self])),
+        reuse_or_create_fuse_session, [SessId1, Iden1, undefined, Self])),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
-        reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
+        reuse_or_create_fuse_session, [SessId2, Iden2, undefined, Self])),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
         remove_session, [?ROOT_SESS_ID])),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
@@ -317,7 +318,8 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    initializer:basic_session_teardown(Worker, Config),
+    SessId = proplists:get_value(session_id, Config),
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->

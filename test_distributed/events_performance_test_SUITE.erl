@@ -428,10 +428,11 @@ end_per_testcase(_Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Con) ->
+    Iden :: session:identity(), Conn :: pid()) -> ok.
+session_setup(Worker, SessId, Iden, Conn) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #macaroon_auth{}, [Con]])).
+        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Conn]
+    )).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -282,7 +282,8 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     case GRI of
         #gri{type = od_provider, id = ProviderId, aspect = instance} ->
             oneprovider:on_deregister();
-        _ -> ok
+        _ ->
+            ok
     end,
 
     invalidate_cache(GRI),
