@@ -117,31 +117,6 @@ traverse_test(Config) ->
         rpc:call(Worker, traverse_task, get, [<<"1">>])),
     ok.
 
-build_traverse_tree(Worker, SessId, Dir, Num) ->
-    NumBin = integer_to_binary(Num),
-    Dirs = case Num < 1000 of
-        true -> [10 * Num, 10 * Num + 5];
-        _ -> []
-    end,
-    Files = [Num + 1, Num + 2, Num + 3],
-
-    DirsPaths = lists:map(fun(DirNum) ->
-        DirNumBin = integer_to_binary(DirNum),
-        NewDir = <<Dir/binary, "/", DirNumBin/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, NewDir)),
-        {NewDir, DirNum}
-    end, Dirs),
-
-    lists:foreach(fun(FileNum) ->
-        FileNumBin = integer_to_binary(FileNum),
-        NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
-    end, Files),
-
-    NumBin = integer_to_binary(Num),
-    Files ++ lists:flatten(lists:map(fun({D, N}) ->
-        build_traverse_tree(Worker, SessId, D, N) end, DirsPaths)).
-
 effective_value_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -654,6 +629,31 @@ get_slave_ans() ->
         10000 ->
             []
     end.
+
+build_traverse_tree(Worker, SessId, Dir, Num) ->
+    NumBin = integer_to_binary(Num),
+    Dirs = case Num < 1000 of
+               true -> [10 * Num, 10 * Num + 5];
+               _ -> []
+           end,
+    Files = [Num + 1, Num + 2, Num + 3],
+
+    DirsPaths = lists:map(fun(DirNum) ->
+        DirNumBin = integer_to_binary(DirNum),
+        NewDir = <<Dir/binary, "/", DirNumBin/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, NewDir)),
+        {NewDir, DirNum}
+                          end, Dirs),
+
+    lists:foreach(fun(FileNum) ->
+        FileNumBin = integer_to_binary(FileNum),
+        NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
+                  end, Files),
+
+    NumBin = integer_to_binary(Num),
+    Files ++ lists:flatten(lists:map(fun({D, N}) ->
+        build_traverse_tree(Worker, SessId, D, N) end, DirsPaths)).
 
 %%%===================================================================
 %%% Pool callbacks
