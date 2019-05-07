@@ -57,7 +57,7 @@ send(SessionId, Msg, ExcludedCons) ->
                    "connections", [SessionId]),
             NoConsError;
         Error ->
-            ?debug("Failed to send msg ~s to peer ~p due to: ~p", [
+            ?error("Failed to send msg ~s to peer ~p due to: ~p", [
                 clproto_utils:msg_to_string(Msg), SessionId, Error
             ]),
             Error

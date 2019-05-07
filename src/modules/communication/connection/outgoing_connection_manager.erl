@@ -178,10 +178,12 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     state()) -> term().
-terminate(Reason, #state{session_id = SessId, connections = Cons} = State) ->
+terminate(Reason, #state{session_id = SessionId} = State) ->
     ?log_terminate(Reason, State),
-    lists:foreach(fun unlink/1, maps:keys(Cons)),
-    spawn(fun() -> session_manager:remove_session(SessId) end).
+    % remove_session tears down supervision tree, so it can not be simple
+    % called as this process is also part of mentioned supervision tree.
+    % Instead new process is spawned that can call it.
+    spawn(fun() -> session_manager:remove_session(SessionId) end).
 
 
 %%--------------------------------------------------------------------

@@ -524,8 +524,11 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
             SessionId, ProviderId, Domain, Host, Port,
             Transport, Timeout
         ),
+
         self() ! {upgrade_protocol, Host},
         ok = proc_lib:init_ack({ok, self()}),
+
+        process_flag(trap_exit, true),
         gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
     catch
         Type:Reason ->

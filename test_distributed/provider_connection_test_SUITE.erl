@@ -141,12 +141,19 @@ after_connection_timeout_session_is_terminated(Config) ->
         list_session_connections(P1, OutgoingSessId),
         ?ATTEMPTS
     ),
+    ConnManager = get_outgoing_connection_manager(P1, OutgoingSessId),
+
+    ?assertMatch(true, rpc:call(P1, erlang, is_process_alive, [Conn1])),
+    ?assertMatch(true, rpc:call(P1, erlang, is_process_alive, [Conn2])),
+    ?assertMatch(true, rpc:call(P1, erlang, is_process_alive, [ConnManager])),
+
     Conn1 ! timeout,
 
     % then entire session and it's connections should be terminated
     ?assertMatch(false, session_exists(P1, OutgoingSessId), ?ATTEMPTS),
     ?assertMatch(false, rpc:call(P1, erlang, is_process_alive, [Conn1])),
     ?assertMatch(false, rpc:call(P1, erlang, is_process_alive, [Conn2])),
+    ?assertMatch(false, rpc:call(P1, erlang, is_process_alive, [ConnManager])),
     ?assertMatch({error, not_found}, list_session_connections(P1, OutgoingSessId), ?ATTEMPTS),
 
     test_utils:mock_unload(Nodes, [session_connections]).
@@ -341,6 +348,16 @@ session_exists(Provider, SessId) ->
 
 list_session_connections(Provider, SessId) ->
     rpc:call(Provider, session_connections, list, [SessId]).
+
+
+get_outgoing_connection_manager(Provider, SessId) ->
+    {ok, #document{
+        value = #session{supervisor = SupervisorPid}
+    }} = rpc:call(Provider, session, get, [SessId]),
+
+    Children = supervisor:which_children(SupervisorPid),
+    [ConnManager] = [Pid || {outgoing_connection_manager, Pid, _, _} <- Children],
+    ConnManager.
 
 
 -spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
