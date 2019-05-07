@@ -14,6 +14,11 @@
 %%% that for active session any of the connections will be idle for more
 %%% than 24h (connection timeout). That is why when any connection dies out
 %%% due to timeout entire session is terminated (session is inactive).
+%%% If manager fails reaches ?MAX_RENEWAL_INTERVAL and still fails to
+%%% connect to even one peer host, then it is assumed that peer is
+%%% down/offline and session is terminated.
+%%% Next time some process will try to send msg to peer it will first call
+%%% `session_connections:ensure_connected` to create the session anew.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(outgoing_connection_manager).
@@ -40,14 +45,14 @@
 -define(INITIAL_RENEWAL_INTERVAL, timer:seconds(2)).
 -define(RENEWAL_INTERVAL_INCREASE_RATE, 2).
 % timer:minutes(15) - defined like that to use in patter matching
--define(MAX_RENEWAL_INTERVAL, 900000).
+-define(MAX_RENEWAL_INTERVAL, 3600000).
 
 -define(RENEW_CONNECTIONS_REQ, renew_connections).
 
 -record(state, {
     session_id :: session:id(),
     peer_id :: od_provider:id(),
-    connections = #{} :: #{pid() => binary()},
+    connections = #{} :: #{pid() => Hostname :: binary()},
 
     renewal_timer = undefined :: undefined | reference(),
     renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer()
@@ -88,9 +93,7 @@ start_link(SessId) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId]) ->
     process_flag(trap_exit, true),
-
-    Self = self(),
-    Self ! ?RENEW_CONNECTIONS_REQ,
+    self() ! ?RENEW_CONNECTIONS_REQ,
 
     {ok, _} = session:update(SessionId, fun(Session = #session{}) ->
         {ok, Session#session{status = active}}
@@ -208,7 +211,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc
 %% Connects to peer nodes with witch provider is not yet connected if next
 %% renewal is not scheduled.
-%% Returns error if it is another failed attempt (peer seems to be offline).
+%% In case of errors while connecting schedules next renewal with increased
+%% interval than before (not larger than ?MAX_RENEWAL_INTERVAL though).
+%% Otherwise if no errors occurred resets mentioned interval to
+%% ?INITIAL_RENEWAL_INTERVAL.
+%% If it is already another failed attempt and no connection is alive,
+%% meaning that peer is probably offline, returns error.
 %% @end
 %%--------------------------------------------------------------------
 -spec renew_connections(state()) -> {ok, state()} | {error, peer_offline}.
@@ -218,37 +226,40 @@ renew_connections(#state{
     renewal_interval = RenewalInterval
 } = State) ->
     try renew_connections_insecure(State) of
+        #state{renewal_timer = undefined} = State1 ->
+            {ok, State1#state{renewal_interval = ?INITIAL_RENEWAL_INTERVAL}};
         #state{renewal_interval = ?MAX_RENEWAL_INTERVAL, connections = Cons} when map_size(Cons) == 0 ->
             {error, peer_offline};
         NewState ->
             {ok, NewState}
     catch
         throw:{cannot_check_peer_op_version, HTTPErrorCode} ->
-            ?warning("Discarding connections renewal to provider ~p because "
+            ?warning("Discarding connections renewal to provider ~ts because "
                      "its version cannot be determined (HTTP ~b). ~n"
                      "Next retry not sooner than ~p s. ~n", [
-                ProviderId,
+                provider_logic:to_string(ProviderId),
                 HTTPErrorCode,
                 RenewalInterval / 1000
             ]),
             {ok, schedule_next_renewal(State)};
         throw:{incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions} ->
-            ?warning("Discarding connections renewal to provider ~p "
+            ?warning("Discarding connections renewal to provider ~ts "
                      "because of incompatible version. ~n"
                      "Local version: ~s, supports providers: ~p~n"
                      "Remote version: ~s, supports providers: ~p~n"
                      "Next retry not sooner than ~p s. ~n", [
-                ProviderId, oneprovider:get_version(),
+                provider_logic:to_string(ProviderId),
+                oneprovider:get_version(),
                 application:get_env(?APP_NAME, compatible_op_versions, []),
                 PeerOpVersion, PeerCompOpVersions,
                 RenewalInterval / 1000
             ]),
             {ok, schedule_next_renewal(State)};
         Type:Reason ->
-            ?warning("Failed to renew connections to provider ~p "
+            ?warning("Failed to renew connections to provider ~ts "
                      "because of ~p:~p. ~n"
                      "Next retry not sooner than ~p s. ~n", [
-                ProviderId,
+                provider_logic:to_string(ProviderId),
                 Type, Reason,
                 RenewalInterval / 1000
             ]),
@@ -272,34 +283,29 @@ renew_connections_insecure(#state{
     session_id = SessionId,
     peer_id = ProviderId,
     connections = Cons
-} = State0) ->
+} = State) ->
     case provider_logic:verify_provider_identity(ProviderId) of
         ok -> ok;
         Error1 -> throw({cannot_verify_peer_op_identity, Error1})
     end,
     {ok, Domain} = provider_logic:get_domain(ProviderId),
-    provider_logic:assert_provider_compatibility(Domain, Domain),
+    provider_logic:assert_provider_compatibility(Domain),
 
     Port = https_listener:port(),
     {ok, [_ | _] = Hosts} = provider_logic:get_nodes(ProviderId),
 
-    State1 = lists:foldl(fun(Host, #state{connections = AccCons} = AccState) ->
+    lists:foldl(fun(Host, #state{connections = AccCons} = AccState) ->
         case connection:start_link(ProviderId, SessionId, Domain, Host, Port) of
             {ok, Pid} ->
                 AccState#state{connections = AccCons#{Pid => Host}};
             Error2 ->
-                ?warning("Failed to connect to host ~p of provider ~p "
-                         "due to ~p. ", [Host, ProviderId, Error2]),
+                ?warning("Failed to connect to host ~p of provider ~ts "
+                         "due to ~p. ", [
+                    Host, provider_logic:to_string(ProviderId), Error2
+                ]),
                 schedule_next_renewal(AccState)
         end
-    end, State0, Hosts -- maps:values(Cons)),
-
-    case State1#state.renewal_timer of
-        undefined ->
-            State1#state{renewal_interval = ?INITIAL_RENEWAL_INTERVAL};
-        _ ->
-            State1
-    end.
+    end, State, Hosts -- maps:values(Cons)).
 
 
 %% @private

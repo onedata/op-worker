@@ -49,7 +49,7 @@
 -export([fetch_compatibility_config/1]).
 -export([assert_zone_compatibility/0]).
 -export([provider_connection_ssl_opts/1]).
--export([assert_provider_compatibility/2]).
+-export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
@@ -889,10 +889,9 @@ provider_connection_ssl_opts(Domain) ->
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_provider_compatibility(Domain :: binary(), Hostname :: binary()) ->
-    ok | no_return().
-assert_provider_compatibility(Domain, Hostname) ->
-    case fetch_compatibility_config({oneprovider, Domain, Hostname}) of
+-spec assert_provider_compatibility(Domain :: binary()) -> ok | no_return().
+assert_provider_compatibility(Domain) ->
+    case fetch_compatibility_config({oneprovider, Domain, Domain}) of
         {ok, RemoteOpVersion, RemoteCompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
             CompOpVersions = application:get_env(

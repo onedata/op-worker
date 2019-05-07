@@ -275,11 +275,11 @@ init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
 
 init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Self = self(),
     SessId = <<"session_id">>,
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:communicator_mock(Worker),
-    initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
+    {ok, _} = fuse_test_utils:connect_via_macaroon(Worker, [{active, true}], SessId),
+    [{session_id, SessId}, {identity, Iden} | Config];
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -318,7 +318,8 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    initializer:basic_session_teardown(Worker, Config),
+    SessId = proplists:get_value(session_id, Config),
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
