@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([run/8]).
+-export([run/8, get_traverse_info/1, get_doc/1]).
 %% Behaviour callbacks
 -export([do_master_job/1, save_job/2]).
 
@@ -51,6 +51,12 @@ run(Pool, TaskModule, #document{} = Doc, TaskID, TaskGroup, ExecuteActionOnDir, 
 run(Pool, TaskModule, FileCtx, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
     run(Pool, TaskModule, Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo).
+
+get_traverse_info(#tree_travserse_job{traverse_info = TraverseInfo}) ->
+    TraverseInfo.
+
+get_doc(#tree_travserse_job{doc = Doc}) ->
+    Doc.
 
 %%%===================================================================
 %%% Behaviour callbacks
