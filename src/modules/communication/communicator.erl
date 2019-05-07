@@ -172,7 +172,7 @@ communicate_with_provider(SessionId, Msg, Retries) ->
     ok | {ok | clproto_message_id:id()} | error().
 stream_to_provider(SessionId, #client_message{} = Msg0, StmId, RecipientPid) ->
     {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
-    case {stream_to_provider_internal(SessionId, Msg, StmId, 1), RecipientPid} of
+    case {sequencer:send_message(Msg, StmId, SessionId), RecipientPid} of
         {ok, undefined} ->
             ok;
         {ok, _} ->
@@ -223,25 +223,6 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_provider_internal(SessionId, Msg, decrement_retries(Retries))
-    end.
-
-
-%% @private
--spec stream_to_provider_internal(session:id(), client_message(),
-    sequencer:stream_id(), retries()) -> {ok, message()} | error().
-stream_to_provider_internal(SessionId, Msg, StmId, 0) ->
-    sequencer:send_message(Msg, StmId, SessionId);
-stream_to_provider_internal(SessionId, Msg, StmId, Retries) ->
-    case sequencer:send_message(Msg, StmId, SessionId) of
-        ok ->
-            ok;
-        {error, not_found} ->
-            session_connections:ensure_connected(SessionId),
-            timer:sleep(?SEND_RETRY_DELAY),
-            stream_to_provider_internal(SessionId, Msg, StmId, decrement_retries(Retries));
-        {error, _Reason} ->
-            timer:sleep(?SEND_RETRY_DELAY),
-            stream_to_provider_internal(SessionId, Msg, StmId, decrement_retries(Retries))
     end.
 
 
