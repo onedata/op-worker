@@ -22,7 +22,8 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([handle_handshake/2, get_handshake_error/1]).
+-export([handle_handshake/2, get_handshake_error_msg/1]).
+
 
 %%%===================================================================
 %%% API
@@ -33,72 +34,71 @@ handle_handshake(#client_handshake_request{} = Request, IpAddress) ->
 handle_handshake(#provider_handshake_request{} = Request, IpAddress) ->
     handle_provider_handshake(Request, IpAddress).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a server message with the handshake error details.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handshake_error(Error :: term()) -> #server_message{}.
-get_handshake_error(incompatible_client_version) ->
+-spec get_handshake_error_msg(Error :: term()) -> #server_message{}.
+get_handshake_error_msg(incompatible_client_version) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INCOMPATIBLE_VERSION'
         }
     };
-get_handshake_error(invalid_token) ->
+get_handshake_error_msg(invalid_token) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INVALID_MACAROON'
         }
     };
-get_handshake_error(bad_macaroon) ->
+get_handshake_error_msg(bad_macaroon) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INVALID_MACAROON'
         }
     };
-get_handshake_error(invalid_provider) ->
+get_handshake_error_msg(invalid_provider) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INVALID_PROVIDER'
         }
     };
-get_handshake_error(invalid_nonce) ->
+get_handshake_error_msg(invalid_nonce) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INVALID_NONCE'
         }
     };
-get_handshake_error({badmatch, {error, Error}}) ->
-    get_handshake_error(Error);
-get_handshake_error({Code, Error, _Description}) when is_integer(Code) ->
+get_handshake_error_msg({badmatch, {error, Error}}) ->
+    get_handshake_error_msg(Error);
+get_handshake_error_msg({Code, Error, _Description}) when is_integer(Code) ->
     #server_message{
         message_body = #handshake_response{
             status = clproto_translator:translate_handshake_error(Error)
         }
     };
-get_handshake_error(_) ->
+get_handshake_error_msg(_) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INTERNAL_SERVER_ERROR'
         }
     }.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles client handshake request
-%% @end
-%%--------------------------------------------------------------------
+
+%% @private
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     session_id = SessId,
-    auth = Auth
-} = Req, IpAddress) when is_binary(SessId) andalso is_record(Auth, macaroon_auth) ->
+    auth = #macaroon_auth{} = Auth
+} = Req, IpAddress) when is_binary(SessId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
@@ -110,15 +110,14 @@ handle_client_handshake(#client_handshake_request{
         ?ERROR_MACAROON_EXPIRED -> throw(bad_macaroon);
         ?ERROR_MACAROON_TTL_TO_LONG(_) -> throw(bad_macaroon);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
-            {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
+            {ok, _} = session_manager:reuse_or_create_fuse_session(
+                SessId, Iden, Auth
+            ),
             {UserId, SessId}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles provider handshake request
-%% @end
-%%--------------------------------------------------------------------
+
+%% @private
 -spec handle_provider_handshake(#provider_handshake_request{}, inet:ip_address()) ->
     {od_provider:id(), session:id()} | no_return().
 handle_provider_handshake(#provider_handshake_request{
@@ -152,32 +151,29 @@ handle_provider_handshake(#provider_handshake_request{
 
     Identity = #user_identity{provider_id = ProviderId},
     SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_provider_session(
-        SessionId, provider_incoming, Identity, self()
+    {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
+        SessionId, Identity
     ),
     {ProviderId, SessionId}.
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%% Checks if client is of compatible version.
-%% @end
-%%--------------------------------------------------------------------
 -spec assert_client_compatibility(#client_handshake_request{}, inet:ip_address()) ->
     ok | no_return().
-assert_client_compatibility(HandshakeRequest, IpAddress) ->
-    #client_handshake_request{
-        version = OcVersionBin,
-        compatible_oneprovider_versions = CompatibleOpVersions
-    } = HandshakeRequest,
+assert_client_compatibility(#client_handshake_request{
+    version = OcVersionBin,
+    compatible_oneprovider_versions = CompatibleOpVersions
+}, IpAddress) ->
+    OpVersion = oneprovider:get_version(),
     OcVersion = binary_to_list(OcVersionBin),
     {ok, CompatibleOcVersions} = application:get_env(?APP_NAME, compatible_oc_versions),
-    OpVersion = oneprovider:get_version(),
+
     % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
     % of matching whole build version we check only the prefix
     IsOcVersionPrefix = fun(Ver) -> lists:prefix(Ver, OcVersion) end,
     case lists:any(IsOcVersionPrefix, CompatibleOcVersions) orelse
-        lists:member(OpVersion, CompatibleOpVersions) of
+        lists:member(OpVersion, CompatibleOpVersions)
+    of
         true ->
             ok;
         false ->

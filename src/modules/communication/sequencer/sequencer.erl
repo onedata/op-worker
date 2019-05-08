@@ -18,9 +18,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([open_stream/1, close_stream/2, send_message/3]).
+-export([send_message/3]).
 -export([communicate_with_sequencer_manager/2,
     communicate_with_sequencer_manager/3, term_to_stream_id/1]).
+
+%% Test API
+-export([open_stream/1, close_stream/2]).
 
 -export_type([stream_id/0, sequence_number/0]).
 
@@ -34,26 +37,6 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Opens sequencer stream for outgoing messages.
-%% @end
-%%--------------------------------------------------------------------
--spec open_stream(Ref :: sequencer_manager_ref()) ->
-    {ok, StmId :: stream_id()} | {error, Reason :: term()}.
-open_stream(Ref) ->
-    communicate_with_sequencer_manager(open_stream, Ref).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Closes sequencer stream for outgoing messages.
-%% @end
-%%--------------------------------------------------------------------
--spec close_stream(StmId :: stream_id(), Ref :: sequencer_manager_ref()) ->
-    ok | {error, Reason :: term()}.
-close_stream(StmId, Ref) ->
-    communicate_with_sequencer_manager({close_stream, StmId}, Ref).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Forwards message to the sequencer stream for outgoing messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -62,11 +45,11 @@ close_stream(StmId, Ref) ->
 send_message(#server_message{} = Msg, StmId, Ref) ->
     communicate_with_sequencer_manager(Msg#server_message{
         message_stream = #message_stream{stream_id = StmId}
-    }, Ref);
+    }, Ref, true);
 send_message(#client_message{} = Msg, StmId, Ref) ->
     communicate_with_sequencer_manager(Msg#client_message{
         message_stream = #message_stream{stream_id = StmId}
-    }, Ref);
+    }, Ref, true);
 
 send_message(Msg, StmId, Ref) ->
     send_message(#server_message{message_body = Msg}, StmId, Ref).
@@ -102,7 +85,7 @@ communicate_with_sequencer_manager(Msg, Ref) ->
     Ref :: sequencer_manager_ref(), EnsureConnected :: boolean()) ->
     Reply :: term().
 communicate_with_sequencer_manager(Msg, Ref, _) when is_pid(Ref) ->
-    sequencer_manager:send(Ref, Msg);
+    sequencer_manager:handle(Ref, Msg);
 
 communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
     case {session:get_sequencer_manager(Ref), EnsureConnected} of
@@ -112,6 +95,30 @@ communicate_with_sequencer_manager(Msg, Ref, EnsureConnected) ->
             communicate_with_sequencer_manager(Msg, Ref);
         {{error, Reason}, _} -> {error, Reason}
     end.
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens sequencer stream for outgoing messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_stream(Ref :: sequencer_manager_ref()) ->
+    {ok, StmId :: stream_id()} | {error, Reason :: term()}.
+open_stream(Ref) ->
+    communicate_with_sequencer_manager(open_stream, Ref).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Closes sequencer stream for outgoing messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec close_stream(StmId :: stream_id(), Ref :: sequencer_manager_ref()) ->
+    ok | {error, Reason :: term()}.
+close_stream(StmId, Ref) ->
+    communicate_with_sequencer_manager({close_stream, StmId}, Ref).
 
 %%%===================================================================
 %%% Internal functions

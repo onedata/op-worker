@@ -30,14 +30,14 @@
 %%% - ready - indicates that connection is in operational mode,
 %%%           so that it can send and receive messages.
 %%%
-%%% More detailed transitions between statuses for each connection and
+%%% More detailed transitions between statuses for each connection type and
 %%% message flow is depicted on diagram below.
 %%%
 %%%              INCOMING              |              OUTGOING
 %%%                                    |
 %%%                                    |             Provider B
 %%%                                    |                 |
-%%%                                    |        0: connect_to_provider
+%%%                                    |           0: start_link
 %%%                                    |                 |
 %%%                                    |                 v
 %%%           Provider A          1: protocol      +------------+
@@ -112,9 +112,8 @@
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
     verify_msg = true :: boolean(),
 
-    % info used when replying to delegated requests
-    % (used by async_request_manager)
-    reply_to = undefined :: undefined | async_request_manager:reply_to()
+    % routing information base - structure necessary for routing.
+    rib :: router:rib()
 }).
 
 -type state() :: #state{}.
@@ -138,8 +137,9 @@
 
 %% API
 -export([
-    connect_to_provider/7,
+    start_link/5, start_link/7,
     close/1,
+
     send_msg/2,
     send_keepalive/1
 ]).
@@ -167,14 +167,28 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts an connection to peer provider.
+%% @equiv start_link(ProviderId, SessionId, Domain, Host, Port, ranch_ssl,
+%% timer:seconds(5)).
 %% @end
 %%--------------------------------------------------------------------
--spec connect_to_provider(od_provider:id(), session:id(), Domain :: binary(),
+-spec start_link(od_provider:id(), session:id(), Domain :: binary(),
+    Host :: binary(), Port :: non_neg_integer()) -> {ok, pid()} | error().
+start_link(ProviderId, SessionId, Domain, Host, Port) ->
+    start_link(ProviderId, SessionId, Domain, Host, Port,
+        ranch_ssl, timer:seconds(5)
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts an outgoing connection to peer provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_link(od_provider:id(), session:id(), Domain :: binary(),
     Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
-    Timeout :: non_neg_integer()) -> {ok, Pid :: pid()}.
-connect_to_provider(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
-    proc_lib:start(?MODULE, init, [
+    Timeout :: non_neg_integer()) -> {ok, pid()} | error().
+start_link(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
+    proc_lib:start_link(?MODULE, init, [
         ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
     ]).
 
@@ -289,8 +303,6 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(disconnect, State) ->
-    {stop, normal, State};
 handle_cast(send_keepalive, State) ->
     case socket_send(State, ?CLIENT_KEEPALIVE_MSG) of
         {ok, NewState} ->
@@ -298,6 +310,8 @@ handle_cast(send_keepalive, State) ->
         Error ->
             {stop, Error, State}
     end;
+handle_cast(disconnect, State) ->
+    {stop, normal, State};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -335,7 +349,8 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
     case handle_handshake(State, Data) of
-        {ok, State1} ->
+        {ok, #state{session_id = SessionId} = State1} ->
+            ok = session_connections:register(SessionId, self()),
             State2 = State1#state{status = ready},
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
@@ -361,7 +376,7 @@ handle_info({Closed, _}, State = #state{closed = Closed}) ->
 
 handle_info(timeout, State = #state{socket = Socket}) ->
     ?warning("Connection ~p timeout", [Socket]),
-    {stop, normal, State};
+    {stop, timeout, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -379,11 +394,11 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
+terminate(Reason, #state{session_id = SessionId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
-    case SessId of
+    case SessionId of
         undefined -> ok;
-        _ -> session_connections:remove_connection(SessId, self())
+        _ -> session_connections:deregister(SessionId, self())
     end,
     ssl:close(Socket),
     State.
@@ -504,46 +519,19 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
-    % Map keeping reconnect interval and time between provider connection
-    % retries; needed to implement backoff algorithm
-    Intervals = application:get_env(?APP_NAME, providers_reconnect_intervals, #{}),
-    ProviderId = session_utils:session_id_to_provider_id(SessionId),
-    NextReconnect = connection_utils:get_next_reconnect(ProviderId, Intervals),
-    case time_utils:cluster_time_seconds() >= NextReconnect of
-        false ->
-            ?debug("Discarding connection request to provider(~p) as the "
-                   "grace period has not passed yet.", [ProviderId]),
-            exit(normal);
-        true ->
-            try
-                State = connect_to_provider_internal(
-                    SessionId, ProviderId, Domain, Host, Port,
-                    Transport, Timeout
-                ),
-                ok = proc_lib:init_ack({ok, self()}),
-                connection_utils:reset_reconnect_interval(ProviderId, Intervals),
-                gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
-            catch
-                throw:incompatible_peer_op_version ->
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal);
-                throw:cannot_check_peer_op_version ->
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal);
-                throw:cannot_verify_identity ->
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal);
-                exit:normal ->
-                    ?info("Connection to peer provider(~p) closed", [ProviderId]),
-                    exit(normal);
-                Type:Reason ->
-                    ?warning("Failed to connect to peer provider(~p) - ~p:~p. "
-                             "Next retry not sooner than ~p.", [
-                        ProviderId, Type, Reason, NextReconnect
-                    ]),
-                    connection_utils:postpone_next_reconnect(ProviderId, Intervals),
-                    exit(normal)
-            end
+    try
+        State = connect_to_provider(
+            SessionId, ProviderId, Domain, Host, Port,
+            Transport, Timeout
+        ),
+
+        self() ! {upgrade_protocol, Host},
+        ok = proc_lib:init_ack({ok, self()}),
+
+        process_flag(trap_exit, true),
+        gen_server2:enter_loop(?MODULE, [], State, ?PROTO_CONNECTION_TIMEOUT)
+    catch _:Reason ->
+        exit(Reason)
     end.
 
 
@@ -553,23 +541,11 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
 %% Attempts to connect to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_to_provider_internal(session:id(), od_provider:id(),
+-spec connect_to_provider(session:id(), od_provider:id(),
     Domain :: binary(), Host :: binary(),
     Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> state() | no_return().
-connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
-    case provider_logic:verify_provider_identity(ProviderId) of
-        ok ->
-            ok;
-        Err ->
-            ?warning("Cannot verify identity of provider ~p, skipping connection - ~p", [
-                ProviderId, Err
-            ]),
-            throw(cannot_verify_identity)
-    end,
-
-    provider_logic:assert_provider_compatibility(ProviderId, Domain, Host),
-
+connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
     DomainAndIpInfo = case Domain of
         Host -> str_utils:format("@ ~s:~b", [Host, Port]);
         _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
@@ -580,14 +556,6 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
-    self() ! {upgrade_protocol, Host},
-
-    session_manager:reuse_or_create_provider_session(
-        SessionId, provider_outgoing, #user_identity{
-            provider_id = session_utils:session_id_to_provider_id(SessionId)
-        }, self()
-    ),
-    {ok, ReqManager} = session_connections:get_async_req_manager(SessionId),
 
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{
@@ -602,7 +570,7 @@ connect_to_provider_internal(SessionId, ProviderId, Domain, Host, Port, Transpor
         session_id = SessionId,
         peer_id = ProviderId,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG,
-        reply_to = {self(), ReqManager, SessionId}
+        rib = router:build_rib(SessionId)
     },
     activate_socket(State, true),
 
@@ -661,19 +629,19 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
         {PeerId, SessionId} = connection_auth:handle_handshake(
             Msg#client_message.message_body, IpAddress
         ),
-        {ok, ReqManager} = session_connections:get_async_req_manager(SessionId),
 
         NewState = State#state{
             peer_id = PeerId,
             session_id = SessionId,
-            reply_to = {self(), ReqManager, SessionId}
+            rib = router:build_rib(SessionId)
         },
         send_server_message(NewState, #server_message{
             message_body = #handshake_response{status = 'OK'}
         })
     catch Type:Reason ->
         ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
-        send_server_message(State, connection_auth:get_handshake_error(Reason)),
+        ErrorMsg = connection_auth:get_handshake_error_msg(Reason),
+        send_server_message(State, ErrorMsg),
         {error, Reason}
     end.
 
@@ -681,10 +649,10 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
 %% @private
 -spec handle_handshake_response(state(), binary()) -> {ok, state()} | error().
 handle_handshake_response(#state{
-    session_id = SessId,
+    session_id = SessionId,
     peer_id = ProviderId
 } = State, Data) ->
-    try clproto_serializer:deserialize_server_message(Data, SessId) of
+    try clproto_serializer:deserialize_server_message(Data, SessionId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider ~ts", [
                 provider_logic:to_string(ProviderId)
@@ -738,16 +706,27 @@ handle_client_message(#state{
                     undefined ->
                         {ok, State};
                     _ ->
-                        ServerMsg = #server_message{
+                        AccessErrorMsg = #server_message{
                             message_id = Msg#client_message.message_id,
                             message_body = #status{code = ?EACCES}
                         },
-                        send_response(State, ServerMsg)
+                        send_response(State, AccessErrorMsg)
                 end
         end
-    catch Type:Reason ->
-        ?error("Client message handling error - ~p:~p", [Type, Reason]),
-        {ok, State}
+    catch
+        throw:{translation_failed, Reason, undefined} ->
+            ?error("Client message decoding error - ~p", [Reason]),
+            {ok, State};
+        throw:{translation_failed, Reason, MsgId} ->
+            ?error("Client message decoding error - ~p", [Reason]),
+            InvalidArgErrorMsg = #server_message{
+                message_id = MsgId,
+                message_body = #status{code = ?EINVAL}
+            },
+            send_response(State, InvalidArgErrorMsg);
+        Type:Reason ->
+            ?error("Client message handling error - ~p:~p", [Type, Reason]),
+            {ok, State}
     end.
 
 
@@ -765,8 +744,8 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 
 %% @private
 -spec route_message(state(), message()) -> {ok, state()} | error().
-route_message(#state{reply_to = ReplyTo} = State, Msg) ->
-    case router:route_message(Msg, ReplyTo) of
+route_message(#state{rib = RIB} = State, Msg) ->
+    case router:route_message(Msg, RIB) of
         ok ->
             {ok, State};
         {ok, ServerMsg} ->
@@ -794,7 +773,7 @@ send_response(#state{session_id = SessionId} = State, ServerMsg) ->
             % Removal from pool is necessary to avoid deadlock when some other
             % connection terminates as well and tries to send msg via this one
             % while this one tries to send via the other one.
-            session_connections:remove_connection(SessionId, self()),
+            session_connections:deregister(SessionId, self()),
             connection_api:send(SessionId, ServerMsg, [self()]),
             Error
     end.

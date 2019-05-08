@@ -51,7 +51,6 @@
     fulfill_promises_after_connection_error_test/1,
 
     send_test/1,
-    send_async_test/1,
     communicate_test/1,
 
     client_keepalive_test/1,
@@ -72,7 +71,6 @@
     fulfill_promises_after_connection_error_test,
 
     send_test,
-    send_async_test,
     communicate_test,
 
     client_keepalive_test,
@@ -281,7 +279,7 @@ send_test(Config) ->
         code = ?OK,
         description = Description
     }},
-    ?assertMatch(ok, send_sync_msg(Worker1, SessionId, ServerMsgInternal)),
+    ?assertMatch(ok, send_msg(Worker1, SessionId, ServerMsgInternal)),
 
     ?assertMatch(#'ServerMessage'{
         message_id = undefined,
@@ -296,7 +294,7 @@ send_test(Config) ->
     ok = ssl:close(Sock2).
 
 
-send_async_test(Config) ->
+communicate_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Status = #status{
@@ -311,29 +309,14 @@ send_async_test(Config) ->
 
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
-    % when
-    ?assertMatch(ok, send_sync_msg(Worker1, SessionId, ServerMsgInternal)),
+    % when sending msg with id to peer
+    ?assertMatch(ok, send_msg(Worker1, SessionId, ServerMsgInternal)),
 
-    % then
+    % then response should be sent back
     ?assertReceivedMatch(#client_message{
         message_id = MsgId, message_body = Status
     }, ?TIMEOUT),
 
-    ok = ssl:close(Sock).
-
-
-communicate_test(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Status = #status{code = ?OK, description = <<"desc">>},
-    ServerMsgInternal = #server_message{message_body = Status},
-
-    % when
-    {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
-    CommunicateResult = communicate(Worker1, SessionId, ServerMsgInternal),
-
-    % then
-    ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
     ok = ssl:close(Sock).
 
 
@@ -708,12 +691,8 @@ create_resolve_guid_req(Path) ->
     FuseReq.
 
 
-send_sync_msg(Node, SessionId, Msg) ->
+send_msg(Node, SessionId, Msg) ->
     rpc:call(Node, connection_api, send, [SessionId, Msg]).
-
-
-communicate(Node, SessionId, Msg) ->
-    rpc:call(Node, connection_api, communicate, [SessionId, Msg]).
 
 
 %%--------------------------------------------------------------------
@@ -786,7 +765,8 @@ await_status_answer(ExpStatus, MsgId, MinHeartbeatNum) ->
 
 
 await_status_answer(ExpStatus, MsgId, MinHeartbeatsNum, HeartbeatsNum) ->
-    case fuse_test_utils:receive_server_message() of
+    case fuse_test_utils:receive_server_message([message_stream_reset, subscription,
+        message_request]) of
         #'ServerMessage'{
             message_id = MsgId,
             message_body = {processing_status, #'ProcessingStatus'{code = 'IN_PROGRESS'}}

@@ -36,6 +36,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    ets_state:init(session),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -64,6 +65,7 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    ets_state:terminate(session),
     ok.
 
 %%%===================================================================

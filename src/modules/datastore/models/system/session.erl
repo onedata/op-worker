@@ -45,7 +45,12 @@
 -type ttl() :: non_neg_integer().
 -type auth() :: #macaroon_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
--type status() :: active | inactive.
+% All sessions, beside root and guest (they start with active status),
+% start with initializing status. When the last component of supervision tree
+% gets up (either incoming_session_watcher or outgoing_connection_manager),
+% meaning entire supervision tree finished getting up, it will set session
+% status to active.
+-type status() :: initializing | active | inactive.
 -type identity() :: #user_identity{}.
 
 -export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
