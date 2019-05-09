@@ -25,7 +25,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([get/0, get/1, get/2, get_protected_data/2]).
+-export([get/0, get/1, get/2, get_protected_data/2, get_eff_harvesters/0]).
 -export([get_as_map/0]).
 -export([to_string/1]).
 -export([update/1, update/2]).
@@ -99,6 +99,13 @@ get(SessionId, ProviderId) ->
         subscribe = true
     }).
 
+-spec get_eff_harvesters() -> {ok, [od_harvester:id()]} | gs_protocol:error().
+get_eff_harvesters() ->
+    case ?MODULE:get() of
+        {ok, #document{value = #od_provider{eff_harvesters = EffHarvesters}}} ->
+            {ok, EffHarvesters};
+        Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

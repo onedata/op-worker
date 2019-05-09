@@ -184,12 +184,12 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     File = ?absPath(SpaceId, <<"file_sorted">>),
     Size = 1,
     FileGuid = create_test_file(WorkerP1, SessionId, File, crypto:strong_rand_bytes(Size)),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     File2 = ?absPath(SpaceId, <<"file_sorted2">>),
     Size2 = 3 * 1024 * 1024 * 1024,
     FileGuid2 = create_test_file_by_size(WorkerP1, SessionId, File2, Size2),
-    {ok, FileObjectId2} = cdmi_id:guid_to_objectid(FileGuid2),
+    {ok, FileObjectId2} = file_id:guid_to_objectid(FileGuid2),
 
     % when
     ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
@@ -318,7 +318,7 @@ attributes_list(Config) ->
         gid = Gid,
         uid = Uid
     }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
-    {ok, CdmiObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, CdmiObjectId} = file_id:guid_to_objectid(FileGuid),
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         #{
@@ -448,7 +448,7 @@ list_file(Config) ->
 
     % then
     DecodedBody = json_utils:decode(Body),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     ?assertEqual(
         [#{<<"id">> => FileObjectId, <<"path">> => File}],
         DecodedBody
@@ -543,7 +543,7 @@ create_share(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Dir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
     {ok, FileGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir, 8#700),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
 
     % No share name -> error
     ?assertMatch({ok, 400, _, _},
@@ -557,7 +557,7 @@ create_share(Config) ->
         rest_test_utils:request(WorkerP1, str_utils:format_bin("shares-id/~s", [ObjectId]), post,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Payload)),
     #{<<"shareId">> := ShareId} = json_utils:decode(Response),
-    ShareGuid = fslogic_uuid:guid_to_share_guid(FileGuid, ShareId),
+    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     ?assertMatch(
         {ok, #document{key = ShareId, value = #od_share{
             root_file = ShareGuid, name = ShareName, space = SpaceId
@@ -607,7 +607,7 @@ set_get_json_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgjmi">>, 8#777),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
@@ -649,7 +649,7 @@ set_get_rdf_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgrmi">>, 8#777),
-    {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
@@ -828,7 +828,7 @@ list_transfers(Config) ->
     FileGuidsAndPaths2 = proplists:delete(DirGuid, FileGuidsAndPaths),
 
     AllTransfers = lists:sort(lists:map(fun({FileGuid, _FilePath}) ->
-        {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
         schedule_file_replication_by_id(P1, DomainP2, FileObjectId, Config)
     end, FileGuidsAndPaths2)),
 
@@ -875,7 +875,7 @@ track_transferred_files(Config) ->
     [Provider1, Provider2] = ?config(op_worker_nodes, Config),
     FileUuid = <<"file1">>,
     SpaceId = <<"space2">>,
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     ScheduleTime = 100,
     FinishTime = 150,
     Transfer1 = <<"transfer1">>,

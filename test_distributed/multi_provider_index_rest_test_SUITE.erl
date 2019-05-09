@@ -1092,7 +1092,7 @@ binary_from_term(Val) when is_atom(Val) ->
 
 objectids_to_guids(ObjectIds) ->
     lists:map(fun(ObjectId) ->
-        {ok, Guid} = cdmi_id:objectid_to_guid(ObjectId),
+        {ok, Guid} = file_id:objectid_to_guid(ObjectId),
         Guid
     end, ObjectIds).
 

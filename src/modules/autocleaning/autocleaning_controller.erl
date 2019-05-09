@@ -626,10 +626,10 @@ refill_queue_with_one_batch(State = #state{
 %% Files that do not satisfy auto-cleaning rules are removed from the list.
 %% @end
 %%-------------------------------------------------------------------
--spec filter([cdmi_id:objectid()], autocleaning_config:rules()) -> [file_ctx:ctx()].
+-spec filter([file_id:objectid()], autocleaning_config:rules()) -> [file_ctx:ctx()].
 filter(PreselectedFiles, ACRules) ->
     lists:filtermap(fun(FileId) ->
-        {ok, Guid} = cdmi_id:objectid_to_guid(FileId),
+        {ok, Guid} = file_id:objectid_to_guid(FileId),
         FileCtx = file_ctx:new_by_guid(Guid),
         try
             case autocleaning_rules:are_all_rules_satisfied(FileCtx, ACRules) of
@@ -726,6 +726,6 @@ new_batch_counters(FilesToProcess) ->
 
 
 -spec query(od_space:id(), non_neg_integer(), file_popularity_view:index_token()) ->
-    {[cdmi_id:objectid()], file_popularity_view:index_token() | undefined}.
+    {[file_id:objectid()], file_popularity_view:index_token() | undefined}.
 query(SpaceId, BatchSize, IndexToken) ->
     file_popularity_api:query(SpaceId, IndexToken, BatchSize).

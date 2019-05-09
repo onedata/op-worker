@@ -312,7 +312,7 @@ transfer_record(StateAndTransferId) ->
     }}} = transfer:get(TransferId),
     {DataSourceType, DataSourceIdentifier, DataSourceName} = case IndexName of
         undefined ->
-            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
             FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
                 {ok, _} -> <<"file">>;

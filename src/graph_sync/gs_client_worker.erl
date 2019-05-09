@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -544,7 +545,9 @@ put_cache_state(CacheState, Doc = #document{value = Provider = #od_provider{}}) 
 put_cache_state(CacheState, Doc = #document{value = HService = #od_handle_service{}}) ->
     Doc#document{value = HService#od_handle_service{cache_state = CacheState}};
 put_cache_state(CacheState, Doc = #document{value = Handle = #od_handle{}}) ->
-    Doc#document{value = Handle#od_handle{cache_state = CacheState}}.
+    Doc#document{value = Handle#od_handle{cache_state = CacheState}};
+put_cache_state(CacheState, Doc = #document{value = Harvester = #od_harvester{}}) ->
+    Doc#document{value = Harvester#od_harvester{cache_state = CacheState}}.
 
 
 -spec get_cache_state(doc()) -> cache_state().
@@ -561,6 +564,8 @@ get_cache_state(#document{value = #od_provider{cache_state = CacheState}}) ->
 get_cache_state(#document{value = #od_handle_service{cache_state = CacheState}}) ->
     CacheState;
 get_cache_state(#document{value = #od_handle{cache_state = CacheState}}) ->
+    CacheState;
+get_cache_state(#document{value = #od_harvester{cache_state = CacheState}}) ->
     CacheState.
 
 
@@ -593,6 +598,9 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
     true;
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
+    true;
+
+is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
 
 % Provider can access shares of spaces that it supports
@@ -687,5 +695,8 @@ is_user_authorized(UserId, _, _, #gri{type = od_handle_service, scope = private}
     handle_service_logic:has_eff_user(CachedDoc, UserId);
 
 is_user_authorized(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
-    handle_logic:has_eff_user(CachedDoc, UserId).
+    handle_logic:has_eff_user(CachedDoc, UserId);
+
+is_user_authorized(_, _, _, _, _) ->
+    false.
 

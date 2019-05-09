@@ -465,7 +465,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     % when
     fuse_test_utils:create_file(Sock, RootGuid, <<"f1">>),
     FileGuid = get_guid(Worker1, SessionId, <<"/space_name1/f1">>),
-    FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
+    FileUuid = rpc:call(Worker1, file_id, guid_to_uuid, [FileGuid]),
     fuse_test_utils:open(Sock, FileGuid),
     ok = ssl:close(Sock),
 

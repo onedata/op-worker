@@ -4,7 +4,7 @@
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
-%%% WRITEME
+%%% Macros used in tests of storage_sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Jakub Kudzia").

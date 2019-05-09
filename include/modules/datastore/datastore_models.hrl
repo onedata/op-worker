@@ -132,6 +132,7 @@
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
+    eff_harvesters = [] :: [od_harvester:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -162,6 +163,12 @@
     eff_users = #{} :: maps:map(od_user:id(), [privileges:handle_privilege()]),
     eff_groups = #{} :: maps:map(od_group:id(), [privileges:handle_privilege()]),
 
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_harvester, {
+    indices = [] :: [od_harvester:index()],
+    spaces = [] :: [od_space:id()],
     cache_state = #{} :: cache_state()
 }).
 
@@ -516,7 +523,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
-    file_objectid :: undefined | cdmi_id:object_id(), % undefined only for upgraded docs
+    file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
     value = #{} :: maps:map()
 }).
 
@@ -684,6 +691,14 @@
     reduce_function :: undefined | index:index_function(),
     index_options = [] :: index:options(),
     providers = [] :: all | [od_provider:id()]
+}).
+
+%% Model that holds information about harvesting for given pair (HarvesterId, SpaceId)
+-record(harvest_stream_state, {
+    % max processed sequence associated with custom_metadata document
+    max_relevant_seq = 0 :: couchbase_changes:seq(),
+    % maps that holds max seen sequence numbers for each harvesting index
+    seen_seqs = #{} :: maps:map(od_harvester:index(), couchbase_changes:seq())
 }).
 
 -endif.

@@ -101,7 +101,7 @@
 -define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 -define(cdmi_id(Guid), begin
-                         {ok, FileId} = cdmi_id:guid_to_objectid(Guid),
+                         {ok, FileId} = file_id:guid_to_objectid(Guid),
                          FileId
                        end).
 
@@ -140,7 +140,7 @@ lfm_recreate_handle(Config) ->
 
   FileGuid = lfm_context:get_guid(Context),
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
   {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
   print_mem_and_disc_docs_diff(W, MemEntriesBefore, CacheEntriesBefore,
@@ -160,7 +160,7 @@ lfm_open_failure(Config) ->
 
   ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
 
   {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
@@ -213,7 +213,7 @@ lfm_open_and_create_open_failure(Config) ->
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
   ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
   {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
   print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -240,7 +240,7 @@ lfm_open_multiple_times_failure(Config) ->
     W, SessId1, {guid, FileGuid}, rdwr)
   ),
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
 
   % unload mock for open so that it will succeed again
@@ -252,7 +252,7 @@ lfm_open_multiple_times_failure(Config) ->
   ?assertEqual(ok, lfm_proxy:close(W, Handle2)),
 
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
   {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
   print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -295,7 +295,7 @@ lfm_open_failure_multiple_users(Config) ->
   ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
   {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
   print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -386,7 +386,7 @@ lfm_copy_failure_multiple_users(Config) ->
   ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
   ?assertEqual(false, rpc:call(
-    W, file_handles, exists, [fslogic_uuid:guid_to_uuid(FileGuid)])
+    W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
   ),
   {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
   print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -1170,7 +1170,7 @@ create_share_dir(Config) ->
   UserId = ?config({user_id, <<"user1">>}, Config),
   Path = <<"/space_name1/share_dir">>,
   {ok, Guid} = lfm_proxy:mkdir(W, SessId, Path, 8#700),
-  SpaceId = fslogic_uuid:guid_to_space_id(Guid),
+  SpaceId = file_id:guid_to_space_id(Guid),
 
   % Make sure SPACE_MANAGE_SHARES priv is accounted
   initializer:testmaster_mock_space_user_privileges(
@@ -1200,7 +1200,7 @@ remove_share(Config) ->
   UserId = ?config({user_id, <<"user1">>}, Config),
   DirPath = <<"/space_name1/share_dir">>,
   {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
-  SpaceId = fslogic_uuid:guid_to_space_id(Guid),
+  SpaceId = file_id:guid_to_space_id(Guid),
   {ok, {ShareId, _ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
 
   % Make sure SPACE_MANAGE_SHARES priv is accounted
@@ -1371,7 +1371,7 @@ new_file_should_not_have_popularity_doc(Config) ->
 
   % when
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_no_popularity">>, 8#755),
-  FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+  FileUuid = file_id:guid_to_uuid(FileGuid),
 
   % then
   ?assertEqual(
@@ -1385,8 +1385,8 @@ new_file_should_have_zero_popularity(Config) ->
 
   % when
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_zero_popularity">>, 8#755),
-  FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-  SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+  FileUuid = file_id:guid_to_uuid(FileGuid),
+  SpaceId = file_id:guid_to_space_id(FileGuid),
 
   % then
   ?assertMatch(
@@ -1402,15 +1402,15 @@ new_file_should_have_zero_popularity(Config) ->
         mth_mov_avg = 0.0
       }
     }},
-    rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
+    rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))])
   ).
 
 opening_file_should_increase_file_popularity(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),
   SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>, 8#755),
-  FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-  SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+  FileUuid = file_id:guid_to_uuid(FileGuid),
+  SpaceId = file_id:guid_to_space_id(FileGuid),
   ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
   % when
@@ -1431,7 +1431,7 @@ opening_file_should_increase_file_popularity(Config) ->
         mth_hist = [1 | _]
       }
     }},
-    rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
+    rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))])
   ),
   ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
@@ -1452,7 +1452,7 @@ opening_file_should_increase_file_popularity(Config) ->
         mth_mov_avg = 2.0
       }
     }},
-    rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId))])
+    rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))])
   ),
   ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
   [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,
@@ -1466,14 +1466,14 @@ file_popularity_should_have_correct_file_size(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),
   SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>, 8#755),
-  SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+  SpaceId = file_id:guid_to_space_id(FileGuid),
   ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
   {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, write),
   {ok, 5} = lfm_proxy:write(W, Handle, 0, <<"01234">>),
   ok = lfm_proxy:close(W, Handle),
 
-  FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+  FileUuid = file_id:guid_to_uuid(FileGuid),
   ?assertMatch(
     {ok, #document{value = #file_popularity{size = 5}}},
     rpc:call(W, file_popularity, get, [FileUuid])
@@ -1525,7 +1525,7 @@ get_mem_and_disc_entries(Worker) ->
   {MemEntries, DiscEntries}.
 
 get_session_file_handles_num(W, FileGuid, SessionId) ->
-  FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+  FileUuid = file_id:guid_to_uuid(FileGuid),
   {ok, [#document{key = FileUuid, value = FileHandlesRec} | _]} = rpc:call(
     W, file_handles, list, []
   ),

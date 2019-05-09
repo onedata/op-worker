@@ -150,7 +150,7 @@ can_support_deletion(#replica_deletion{
     version_vector = VV,
     requested_blocks = RequestedBlocks
 }) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {LocalLocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     LocalBlocks = replica_finder:get_all_blocks([LocalLocationDoc]),

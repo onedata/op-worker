@@ -203,7 +203,7 @@ share_record(SessionId, ShareId) ->
             {ok, [
                 {<<"id">>, ShareId},
                 {<<"name">>, Name},
-                {<<"file">>, fslogic_uuid:share_guid_to_guid(RootFileId)},
+                {<<"file">>, file_id:share_guid_to_guid(RootFileId)},
                 {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
                 {<<"dataSpace">>, SpaceId},
                 {<<"publicUrl">>, PublicURL},

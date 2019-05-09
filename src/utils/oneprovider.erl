@@ -296,7 +296,9 @@ restart_oz_connection() ->
 -spec on_connect_to_oz() -> ok.
 on_connect_to_oz() ->
     set_up_service_in_onezone(),
-    ok = provider_logic:update_subdomain_delegation_ips().
+    ok = provider_logic:update_subdomain_delegation_ips(),
+    % revise harvesters when connection to onezone is established
+    harvest_manager:revise_all_streams().
 
 
 %%--------------------------------------------------------------------

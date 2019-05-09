@@ -37,6 +37,7 @@ encode_entity_type(od_provider) -> <<"provider">>;
 encode_entity_type(od_handle_service) -> <<"handleService">>;
 encode_entity_type(od_handle) -> <<"handle">>;
 encode_entity_type(od_cluster) -> <<"cluster">>;
+encode_entity_type(od_harvester) -> <<"harvester">>;
 encode_entity_type(_) -> throw(?ERROR_BAD_TYPE).
 
 
@@ -54,4 +55,5 @@ decode_entity_type(<<"provider">>) -> od_provider;
 decode_entity_type(<<"handleService">>) -> od_handle_service;
 decode_entity_type(<<"handle">>) -> od_handle;
 decode_entity_type(<<"cluster">>) -> od_cluster;
+decode_entity_type(<<"harvester">>) -> od_harvester;
 decode_entity_type(_) -> throw(?ERROR_BAD_TYPE).

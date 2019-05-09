@@ -43,7 +43,7 @@
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flag() :: helpers:open_flag().
 -type posix_permissions() :: file_meta:posix_permissions().
--type file_guid() :: binary().
+-type file_guid() :: file_id:file_guid().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
 -export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
@@ -79,8 +79,6 @@
     synchronize_block_and_compute_checksum, get_xattr, set_xattr, remove_xattr,
     list_xattr, fsync]).
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
-
--define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -536,7 +534,7 @@ process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
     case space_strategies:is_import_on(SpaceId) of
         true ->
             SessId = user_ctx:get_session_id(UserCtx),
-            Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
+            Path0 = fslogic_uuid:uuid_to_path(SessId, file_id:guid_to_uuid(ParentGuid)),
             {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
             Tokens = Tokens0 ++ [FileName],
             Path = fslogic_path:join(Tokens),

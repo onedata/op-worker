@@ -726,7 +726,7 @@ redirecting_event_to_renamed_file_test(Config) ->
     }, SessId])),
     {_, [#file_written_event{file_guid = Evt1Guid}]} =
         ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
-    ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile1Guid), fslogic_uuid:guid_to_uuid(Evt1Guid)).
+    ?assertEqual(file_id:guid_to_uuid(NewFile1Guid), file_id:guid_to_uuid(Evt1Guid)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
