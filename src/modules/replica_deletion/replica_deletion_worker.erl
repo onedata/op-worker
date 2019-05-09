@@ -107,13 +107,13 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast(?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id), State) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     case custom_precondition(Type, Id) of
         true ->
             Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
                 ok ->
-                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+                    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
                     DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
                         ok ->

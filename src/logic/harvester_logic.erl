@@ -80,7 +80,7 @@ get_indices(#document{value = #od_harvester{indices = Indices}}) ->
 %% must be repeated.
 %% @end
 %%--------------------------------------------------------------------
--spec submit_entry(od_harvester:id(), cdmi_id:objectid(), gs_protocol:json_map(),
+-spec submit_entry(od_harvester:id(), file_id:objectid(), gs_protocol:json_map(),
     [od_harvester:index()], non_neg_integer(), non_neg_integer()) ->
     {ok, [od_harvester:index()]} | gs_protocol:error().
 submit_entry(HarvesterId, FileId, JSON, Indices, Seq, MaxSeq) ->
@@ -104,7 +104,7 @@ submit_entry(HarvesterId, FileId, JSON, Indices, Seq, MaxSeq) ->
 %% must be repeated.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_entry(od_harvester:id(), cdmi_id:objectid(), [od_harvester:index()],
+-spec delete_entry(od_harvester:id(), file_id:objectid(), [od_harvester:index()],
     non_neg_integer(), non_neg_integer()) ->
     {ok, [od_harvester:index()]} | gs_protocol:error().
 delete_entry(HarvesterId, FileId, Indices, Seq, MaxSeq) ->

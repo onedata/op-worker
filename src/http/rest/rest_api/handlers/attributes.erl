@@ -186,7 +186,7 @@ add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?DIRECTORY_TYPE}) ->
 add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?SYMLINK_TYPE}) ->
     maps:put(<<"type">>, <<"lnk">>, add_attr(Map, Rest, Attr));
 add_attr(Map, [<<"file_id">> | Rest], Attr = #file_attr{guid = Guid}) ->
-    {ok, Id} = cdmi_id:guid_to_objectid(Guid),
+    {ok, Id} = file_id:guid_to_objectid(Guid),
     maps:put(<<"file_id">>, Id, add_attr(Map, Rest, Attr));
 add_attr(_Map, _List, _Attr) ->
     throw(?ERROR_INVALID_ATTRIBUTE).

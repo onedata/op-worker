@@ -259,7 +259,7 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
             name = Name,
             root_file = RootFileId
         }}} = share_logic:get(op_gui_session:get_session_id(), ShareId),
-    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+    FileId = file_id:share_guid_to_guid(RootFileId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
@@ -394,7 +394,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 false -> null;
                 true -> ResId
             end,
-            {ok, CdmiId} = cdmi_id:guid_to_objectid(FileId),
+            {ok, CdmiId} = file_id:guid_to_objectid(FileId),
             Res = [
                 {<<"id">>, ResId},
                 {<<"name">>, Name},

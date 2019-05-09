@@ -68,7 +68,7 @@
 all() -> ?ALL(?TEST_CASES).
 
 -define(FILE_UUID, <<"file_uuid">>).
--define(FILE_GUID, fslogic_uuid:uuid_to_guid(?FILE_UUID, <<"spaceid">>)).
+-define(FILE_GUID, file_id:pack_guid(?FILE_UUID, <<"spaceid">>)).
 -define(SESSION_ID_1, <<"session_id_1">>).
 -define(SESSION_ID_2, <<"session_id_2">>).
 
@@ -188,8 +188,8 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    FileCtx2 = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(<<"file_uuid2">>, <<"spaceid">>)),
-    FileCtx3 = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(<<"file_uuid3">>, <<"spaceid">>)),
+    FileCtx2 = file_ctx:new_by_guid(file_id:pack_guid(<<"file_uuid2">>, <<"spaceid">>)),
+    FileCtx3 = file_ctx:new_by_guid(file_id:pack_guid(<<"file_uuid3">>, <<"spaceid">>)),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId, 30])),
@@ -252,7 +252,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),

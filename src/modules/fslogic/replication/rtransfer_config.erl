@@ -165,7 +165,7 @@ auth_request(TransferData, ProviderId) ->
             false -> throw({error, space_not_supported_by_local_provider, SpaceId})
         end,
 
-        case fslogic_uuid:guid_to_space_id(FileGuid) of
+        case file_id:guid_to_space_id(FileGuid) of
             SpaceId -> ok;
             _ -> throw({error, {invalid_file_guid, FileGuid}})
         end,

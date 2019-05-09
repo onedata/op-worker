@@ -232,7 +232,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         EmptyMap when map_size(EmptyMap) =:= 0 ->
             null;
         _ ->
-            fslogic_uuid:uuid_to_guid(
+            file_id:pack_guid(
                 fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId
             )
     end,

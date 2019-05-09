@@ -292,7 +292,7 @@ answer_or_delegate(Msg = #client_message{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
 }, RIB) ->
-    Node = read_write_req:get_proxyio_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+    Node = read_write_req:get_proxyio_node(file_id:guid_to_uuid(FileGuid)),
     Req = {proxyio_request, effective_session_id(Msg), ProxyIORequest},
     delegate_request({fslogic_worker, Node}, Req, Id, RIB);
 

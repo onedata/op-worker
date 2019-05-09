@@ -95,7 +95,7 @@
 %%--------------------------------------------------------------------
 -spec new_root_ctx() -> ctx().
 new_root_ctx() ->
-    new_by_guid(fslogic_uuid:uuid_to_guid(?ROOT_DIR_UUID, undefined)).
+    new_by_guid(file_id:pack_guid(?ROOT_DIR_UUID, undefined)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,7 +124,7 @@ new_by_guid(Guid) ->
 %%--------------------------------------------------------------------
 -spec new_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) ->
-    Guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+    Guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
     #file_ctx{file_doc = Doc, guid = Guid}.
 
 %%--------------------------------------------------------------------
@@ -227,7 +227,7 @@ get_storage_path_type_const(#file_ctx{storage_path_type = StoragePathType}) ->
 %%--------------------------------------------------------------------
 -spec get_share_id_const(user_ctx:ctx()) -> od_share:id() | undefined.
 get_share_id_const(#file_ctx{guid = Guid}) ->
-    {_FileUuid, _SpaceId, ShareId} = fslogic_uuid:unpack_share_guid(Guid),
+    {_FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
     ShareId.
 
 %%--------------------------------------------------------------------
@@ -237,7 +237,7 @@ get_share_id_const(#file_ctx{guid = Guid}) ->
 %%--------------------------------------------------------------------
 -spec get_space_id_const(ctx()) -> od_space:id() | undefined.
 get_space_id_const(#file_ctx{guid = Guid}) ->
-    fslogic_uuid:guid_to_space_id(Guid).
+    file_id:guid_to_space_id(Guid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -267,7 +267,7 @@ get_guid_const(#file_ctx{guid = Guid}) ->
 -spec get_uuid_const(ctx()) -> file_meta:uuid().
 get_uuid_const(FileCtx) ->
     Guid = get_guid_const(FileCtx),
-    fslogic_uuid:guid_to_uuid(Guid).
+    file_id:guid_to_uuid(Guid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -348,7 +348,7 @@ get_logical_path(FileCtx, UserCtx) ->
 -spec get_file_doc(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     Guid = get_guid_const(FileCtx),
-    {ok, FileDoc} = file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}),
+    {ok, FileDoc} = file_meta:get({uuid, file_id:guid_to_uuid(Guid)}),
     {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
@@ -427,15 +427,15 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
                         UserId = user_ctx:get_user_id(UserCtx),
                         fslogic_uuid:user_root_dir_guid(UserId);
                     _ ->
-                        fslogic_uuid:uuid_to_guid(ParentUuid, undefined)
+                        file_id:pack_guid(ParentUuid, undefined)
                 end;
             false ->
                 SpaceId = get_space_id_const(FileCtx2),
                 case get_share_id_const(FileCtx2) of
                     undefined ->
-                        fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId);
+                        file_id:pack_guid(ParentUuid, SpaceId);
                     ShareId ->
-                        fslogic_uuid:uuid_to_share_guid(ParentUuid, SpaceId, ShareId)
+                        file_id:pack_share_guid(ParentUuid, SpaceId, ShareId)
                 end
         end,
     Parent = new_by_guid(ParentGuid),
@@ -1069,7 +1069,7 @@ is_file_ctx_const(_) ->
 %%--------------------------------------------------------------------
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
-    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:guid_to_uuid(Guid))),
+    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(file_id:guid_to_uuid(Guid))),
     is_binary(SpaceId).
 
 %%--------------------------------------------------------------------
@@ -1083,7 +1083,7 @@ is_user_root_dir_const(#file_ctx{canonical_path = <<"/">>}, _UserCtx) ->
 is_user_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}, UserCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
     UserRootDirUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-    UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid);
+    UserRootDirUuid == file_id:guid_to_uuid(Guid);
 is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
     false.
 
@@ -1096,7 +1096,7 @@ is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
 is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    Uuid = file_id:guid_to_uuid(Guid),
     fslogic_uuid:is_root_dir_uuid(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
@@ -1174,7 +1174,7 @@ is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
 %%--------------------------------------------------------------------
 -spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
-    #file_ctx{guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
+    #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
 
 %%--------------------------------------------------------------------
 %% @private

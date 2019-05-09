@@ -93,7 +93,7 @@ parse_id(Req, State) ->
 -spec parse_objectid(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_objectid(Req, State) ->
-    case catch cdmi_id:objectid_to_guid(cowboy_req:binding(id, Req)) of
+    case catch file_id:objectid_to_guid(cowboy_req:binding(id, Req)) of
         {ok, Guid} ->
             {State#{id => Guid}, Req};
         _Error ->

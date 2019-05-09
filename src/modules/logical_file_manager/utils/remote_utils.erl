@@ -60,7 +60,7 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
 call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
     parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
 }, OKHandle) ->
-    Node = read_write_req:get_proxyio_node(fslogic_uuid:guid_to_uuid(FileGuid)),
+    Node = read_write_req:get_proxyio_node(file_id:guid_to_uuid(FileGuid)),
     case worker_proxy:call({fslogic_worker, Node}, {proxyio_request, SessId, Request}) of
         {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = Response}} ->
             OKHandle(Response);
