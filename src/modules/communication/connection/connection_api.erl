@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([send/2, send/3, send_via_any/2]).
+-export([send/2, send/3, send/4, send_via_any/2]).
 
 -type message() :: #client_message{} | #server_message{}.
 
@@ -40,26 +40,32 @@ send(SessionId, Msg) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message to peer. In case of errors during sending tries other
-%% session connections until message is send or no more available
-%% connections remains.
-%% Exceptions to this are encoding errors which immediately fails call.
+%% @equiv send(SessionId, Msg, ExcludedCons, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec send(session:id(), message(), ExcludedCons :: [pid()]) ->
     ok | {error, Reason :: term()}.
 send(SessionId, Msg, ExcludedCons) ->
+    send(SessionId, Msg, ExcludedCons, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to peer. In case of errors during sending tries other
+%% session connections until message is send or no more available
+%% connections remains.
+%% Exceptions to this are encoding errors which immediately fails call.
+%% Additionally logs eventual errors if LogErrors is set to true.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(session:id(), message(), ExcludedCons :: [pid()], boolean()) ->
+    ok | {error, Reason :: term()}.
+send(SessionId, Msg, ExcludedCons, LogErrors) ->
     case send_msg_excluding_connections(SessionId, Msg, ExcludedCons) of
         ok ->
             ok;
-        {error, no_connections} = NoConsError ->
-            ?debug("Failed to send msg to ~p due to lack of available "
-                   "connections", [SessionId]),
-            NoConsError;
         Error ->
-            ?error("Failed to send msg ~s to peer ~p due to: ~p", [
-                clproto_utils:msg_to_string(Msg), SessionId, Error
-            ]),
+            LogErrors andalso log_sending_msg_error(SessionId, Msg, Error),
             Error
     end.
 
@@ -103,3 +109,13 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
         Error ->
             Error
     end.
+
+
+%% @private
+log_sending_msg_error(SessionId, _Msg, {error, no_connections}) ->
+    ?debug("Failed to send msg to ~p due to lack of available "
+           "connections", [SessionId]);
+log_sending_msg_error(SessionId, Msg, Error) ->
+    ?error("Failed to send msg ~s to peer ~p due to: ~p", [
+        clproto_utils:msg_to_string(Msg), SessionId, Error
+    ]).

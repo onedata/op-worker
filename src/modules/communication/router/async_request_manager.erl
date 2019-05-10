@@ -449,7 +449,7 @@ send_response(Conn, SessionId, Response) ->
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         _Error ->
-            connection_api:send(SessionId, Response, [Conn])
+            connection_api:send(SessionId, Response, [Conn], true)
     end.
 
 

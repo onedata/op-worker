@@ -774,7 +774,7 @@ send_response(#state{session_id = SessionId} = State, ServerMsg) ->
             % connection terminates as well and tries to send msg via this one
             % while this one tries to send via the other one.
             session_connections:deregister(SessionId, self()),
-            connection_api:send(SessionId, ServerMsg, [self()]),
+            connection_api:send(SessionId, ServerMsg, [self()], true),
             Error
     end.
 
