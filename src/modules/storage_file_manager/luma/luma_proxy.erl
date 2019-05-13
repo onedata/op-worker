@@ -182,17 +182,27 @@ get_user_details(SessionId, UserId) ->
         {ok, #document{value = User}} ->
             #{
                 <<"id">> => UserId,
-                <<"name">> => User#od_user.name,
-                <<"login">> => User#od_user.alias,
+                <<"fullName">> => User#od_user.full_name,
+                <<"username">> => User#od_user.username,
                 <<"linkedAccounts">> => User#od_user.linked_accounts,
+                <<"emails">> => User#od_user.emails,
+
+                % TODO VFS-4506 deprecated field, included for backward compatibility
+                <<"name">> => User#od_user.full_name,
+                <<"login">> => User#od_user.username,
                 <<"emailList">> => User#od_user.emails
             };
         {error, _} ->
             #{
                 <<"id">> => UserId,
+                <<"fullName">> => <<>>,
+                <<"username">> => <<>>,
+                <<"linkedAccounts">> => [],
+                <<"emails">> => [],
+
+                % TODO VFS-4506 deprecated field, included for backward compatibility
                 <<"name">> => <<>>,
                 <<"login">> => <<>>,
-                <<"linkedAccounts">> => [],
                 <<"emailList">> => []
             }
     end.

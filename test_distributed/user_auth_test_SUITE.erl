@@ -29,7 +29,7 @@
 -define(MACAROON, <<"DUMMY-MACAROON">>).
 -define(DISCH_MACAROONS, [<<"DM1">>, <<"DM2">>]).
 -define(USER_ID, <<"test_id">>).
--define(USER_NAME, <<"test_name">>).
+-define(USER_FULL_NAME, <<"test_name">>).
 
 all() -> ?ALL([macaroon_authentication]).
 
@@ -176,7 +176,7 @@ mock_user_logic(Config) ->
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get_by_auth,
         fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-            {ok, #document{key = ?USER_ID, value = #od_user{name = ?USER_NAME}}}
+            {ok, #document{key = ?USER_ID, value = #od_user{full_name = ?USER_FULL_NAME}}}
         end).
 
 unmock_user_logic(Config) ->

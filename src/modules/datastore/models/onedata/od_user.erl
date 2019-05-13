@@ -23,13 +23,13 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--type name() :: binary().
+-type full_name() :: binary().
 %% Linked account is expressed in the form of map:
 %% #{
 %%     <<"idp">> => binary(),
 %%     <<"subjectId">> => binary(),
 %%     <<"name">> => undefined | binary(),
-%%     <<"alias">> => undefined | binary(),
+%%     <<"login">> => undefined | binary(),
 %%     <<"emails">> => [binary()],
 %%     <<"entitlements">> => [binary()],
 %%     <<"custom">> => jiffy:json_value()
@@ -37,7 +37,7 @@
 -type linked_account() :: maps:map().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, linked_account/0]).
+-export_type([full_name/0, linked_account/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -115,7 +115,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -185,7 +185,26 @@ get_record_struct(3) ->
 get_record_struct(4) ->
     {record, Struct} = get_record_struct(3),
     % Rename email_list to emails
-    {record, lists:keyreplace(email_list, 1, Struct, {emails, [string]})}.
+    {record, lists:keyreplace(email_list, 1, Struct, {emails, [string]})};
+get_record_struct(5) ->
+    % Rename name -> full_name
+    % Rename alias -> username
+    {record, [
+        {full_name, string},
+        {username, string},
+        {emails, [string]},
+        {linked_accounts, [ #{string => term} ]},
+
+        {default_space, string},
+        {space_aliases, #{string => string}},
+
+        {eff_groups, [string]},
+        {eff_spaces, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
+
+        {cache_state, #{atom => term}}
+    ]}.
 
 
 %%--------------------------------------------------------------------
@@ -289,10 +308,44 @@ upgrade_record(3, User) ->
         CacheState
     } = User,
 
-    {4, #od_user{
-        name = Name,
-        alias = Alias,
-        emails = EmailList,
+    {4, {od_user,
+        Name,
+        Alias,
+        EmailList,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    }};
+upgrade_record(4, User) ->
+    {od_user,
+        Name,
+        Alias,
+        Emails,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    } = User,
+
+    {5, #od_user{
+        full_name = Name,
+        username = Alias,
+        emails = Emails,
         linked_accounts = LinkedAccounts,
 
         default_space = DefaultSpace,

@@ -782,10 +782,10 @@ user_logic_mock_setup(Workers, Users) ->
         {SpaceIds, _} = lists:unzip(Spaces),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, #document{key = UID, value = #od_user{
-            name = UName,
+            full_name = UName,
             linked_accounts = [],
             emails = [],
-            alias = <<>>,
+            username = <<>>,
             default_space = DefaultSpaceId,
             eff_spaces = SpaceIds,
             eff_groups = GroupIds
@@ -800,9 +800,9 @@ user_logic_mock_setup(Workers, Users) ->
 
     GetUserFun = fun
         (_, _, ?ROOT_USER_ID) ->
-            {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
+            {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
         (_, _, ?GUEST_USER_ID) ->
-            {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
+            {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
         (Scope, ?ROOT_SESS_ID, UserId) when Scope =:= shared orelse Scope =:= protected ->
             case proplists:get_value(UserId, Users) of
                 undefined ->
@@ -847,9 +847,9 @@ user_logic_mock_setup(Workers, Users) ->
         end
     end),
 
-    test_utils:mock_expect(Workers, user_logic, get_name, fun(Client, UserId) ->
-        {ok, #document{value = #od_user{name = Name}}} = GetUserFun(protected, Client, UserId),
-        {ok, Name}
+    test_utils:mock_expect(Workers, user_logic, get_full_name, fun(Client, UserId) ->
+        {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, Client, UserId),
+        {ok, FullName}
     end),
 
     GetEffSpacesFun = fun(Client, UserId) ->

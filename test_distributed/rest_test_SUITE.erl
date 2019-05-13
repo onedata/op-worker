@@ -41,7 +41,7 @@ all() -> ?ALL([
 -define(MACAROON, <<"DUMMY-MACAROON">>).
 
 -define(USER_ID, <<"test_id">>).
--define(USER_NAME, <<"test_name">>).
+-define(USER_FULL_NAME, <<"test_name">>).
 
 -define(SPACE_ID, <<"space0">>).
 -define(SPACE_NAME, <<"Space 0">>).
@@ -230,7 +230,7 @@ mock_user_logic(Config) ->
     test_utils:mock_new(Workers, user_logic, []),
 
     UserDoc = {ok, #document{key = ?USER_ID, value = #od_user{
-        name = ?USER_NAME,
+        full_name = ?USER_FULL_NAME,
         eff_spaces = [?SPACE_ID]
     }}},
 

@@ -73,8 +73,8 @@ uid_to_ace_name(?everyone) ->
 uid_to_ace_name(?group) ->
     undefined;
 uid_to_ace_name(Uid) ->
-    {ok, Name} = user_logic:get_name(?ROOT_SESS_ID, Uid),
-    Name.
+    {ok, FullName} = user_logic:get_full_name(?ROOT_SESS_ID, Uid),
+    FullName.
 
 %%--------------------------------------------------------------------
 %% @private
