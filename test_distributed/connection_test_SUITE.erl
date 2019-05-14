@@ -111,6 +111,8 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 -define(CORRECT_NONCE, <<"correct-nonce">>).
 -define(INCORRECT_NONCE, <<"incorrect-nonce">>).
 
+-define(ATTEMPTS, 60).
+
 
 %%%===================================================================
 %%% Test functions
@@ -766,9 +768,11 @@ handshake_as_client(Node, Macaroon, Version) ->
 
 
 send_sync_msg(Node, SessId, Msg) ->
-    {ok, #document{value = #session{
-        connections = [Conn | _]
-    }}} = rpc:call(Node, session, get, [SessId]),
+    {ok, #document{value = #session{connections = [Conn | _]}}} = ?assertMatch(
+        {ok, #document{value = #session{connections = [Conn | _]}}},
+        rpc:call(Node, session, get, [SessId]),
+        ?ATTEMPTS
+    ),
     rpc:call(Node, connection, send_msg, [Conn, Msg]).
 
 
