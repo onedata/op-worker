@@ -24,7 +24,7 @@
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/cluster-worker.git",
-       {ref,"739da2173b827885f2eb01b8e7f5ebf76978654f"}},
+       {ref,"ee7931d1768f7e53f605ca992a12ad63193edd4b"}},
   0},
  {<<"cowboy">>,
   {git,"git://github.com/ninenines/cowboy.git",

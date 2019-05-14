@@ -453,9 +453,9 @@ list_children_by_key(Entry, PrevLinkKey, PrevProviderID, Size) ->
 -spec list_children_by_key(entry(), name(), oneprovider:id(), non_neg_integer(),
     datastore_links_iter:token() | undefined) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children_by_key(Entry, PrevLinkKey, PrevProviderID, Size, Token) ->
+list_children_by_key(Entry, PrevLinkKey, PrevTeeID, Size, Token) ->
     list_children_internal(Entry, #{prev_link_name => PrevLinkKey,
-        prev_tree_id => PrevProviderID, size => Size, token => Token}).
+        prev_tree_id => PrevTeeID, size => Size, token => Token}).
 
 %%--------------------------------------------------------------------
 %% @doc
