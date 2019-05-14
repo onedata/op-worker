@@ -27,8 +27,9 @@
 
 -record(tree_travserse_job, {
     doc :: file_meta:doc(),
-    token = #link_token{} :: datastore_links_iter:token(),
-    last_name = 0 :: non_neg_integer(),
+    token :: datastore_links_iter:token() | undefined,
+    last_name :: file_meta:name() | undefined,
+    last_tree :: od_provider:id() | undefined,
     execute_slave_on_dir :: boolean(),
     batch_size :: non_neg_integer(),
     traverse_info :: term()
@@ -69,42 +70,46 @@ get_doc(#tree_travserse_job{doc = Doc}) ->
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job()) -> {ok, [slave_job()], [master_job()]}.
 do_master_job(#tree_travserse_job{
-    doc = #document{value = #file_meta{name = Name}} = Doc,
+    doc = #document{value = #file_meta{}} = Doc,
     token = Token,
     last_name = LN,
+    last_tree = LT,
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }) ->
-    % TODO - list by key - not token
-    {ok, Children, NewToken} = file_meta:list_children(Doc, LN, BatchSize, Token),
+    {ok, Children, ExtendedInfo} = case Token of
+        undefined -> file_meta:list_children(Doc, BatchSize);
+        _ -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize, Token)
+    end,
 
-    {SlaveJobs, MasterJobs, LN2} = lists:foldl(fun(#child_link_uuid{
-        uuid = UUID,
-        name = Name}, {Slaves, Masters, _} = Acc) ->
+    #{token := Token2, last_name := LN2, last_tree := LT2} = ExtendedInfo,
+
+    {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
+        uuid = UUID}, {Slaves, Masters} = Acc) ->
         case {file_meta:get({uuid, UUID}), OnDir} of
             {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
                 {[{ChildDoc, TraverseInfo} | Slaves], [#tree_travserse_job{doc = ChildDoc,
                     execute_slave_on_dir = OnDir, batch_size = BatchSize,
-                    traverse_info = TraverseInfo} | Masters], Name};
+                    traverse_info = TraverseInfo} | Masters]};
             {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
                 {Slaves, [#tree_travserse_job{doc = ChildDoc,
                     execute_slave_on_dir = OnDir, batch_size = BatchSize,
-                    traverse_info = TraverseInfo} | Masters], Name};
+                    traverse_info = TraverseInfo} | Masters]};
             {{ok, ChildDoc}, _} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], Masters, Name};
+                {[{ChildDoc, TraverseInfo} | Slaves], Masters};
             {{error, not_found}, _} ->
                 Acc
         end
-    end, {[], [], undefined}, Children),
+    end, {[], []}, Children),
 
-    case NewToken#link_token.is_last of
+    case Token2#link_token.is_last of
         true -> {ok, lists:reverse(SlaveJobs), lists:reverse(MasterJobs)};
         false -> {ok, lists:reverse(SlaveJobs), [#tree_travserse_job{
             doc = Doc,
-            token = NewToken,
-%%            last_name = LN2,
-            last_name = LN + BatchSize,
+            token = Token2,
+            last_name = LN2,
+            last_tree = LT2,
             execute_slave_on_dir = OnDir,
             batch_size = BatchSize,
             traverse_info = TraverseInfo

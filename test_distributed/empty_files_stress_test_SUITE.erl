@@ -208,6 +208,7 @@ process_traverse_info(Config, Type, ID) ->
 
     DirsDone = maps:get(master_jobs_done, Description, 0),
     Failed = maps:get(master_jobs_failed, Description, 0),
+    Failed2 = maps:get(slave_jobs_failed, Description, 0),
     All = maps:get(master_jobs_delegated, Description, 0),
     FilesDone = maps:get(slave_jobs_done, Description, 0),
     Evaluations = maps:get(dirs_evaluation, Description, 0),
@@ -215,6 +216,11 @@ process_traverse_info(Config, Type, ID) ->
 
     ct:print("Files done: ~p, dirs done ~p~ndirs evaluations ~p, possible evaluations ~p, cache size ~p, test type ~p",
         [FilesDone, DirsDone, Evaluations, RequiredEvaluations, 500, Type]),
+
+    case Failed + Failed2 > 0 of
+        true -> ct:print("Alert! Master jobs failed: ~p, slave jobs failed ~p", [Failed, Failed2]);
+        _ -> ok
+    end,
 
     Ans = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0),
     {All == DirsDone + Failed, Ans}.
