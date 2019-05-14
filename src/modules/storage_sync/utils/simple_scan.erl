@@ -161,7 +161,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
             case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
-                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+                    FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
                     sync_if_file_is_not_being_replicated(Job2, FileCtx, FileType);
                 {ok, _} ->
@@ -457,7 +457,7 @@ import_file(#space_strategy_job{
     {ParentCanonicalPath, _} = file_ctx:get_canonical_path(ParentCtx2),
     StorageFileId = filename:join([ParentStorageFileId, FileName]),
     CanonicalPath = filename:join([ParentCanonicalPath, FileName]),
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
     case file_meta:type(Mode) of

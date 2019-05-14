@@ -589,7 +589,7 @@ translate_from_protobuf(#'FileChildrenAttrs'{
     };
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
-        uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
+        uuid = file_id:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
@@ -1607,7 +1607,7 @@ translate_to_protobuf(#file_location{
     blocks = Blocks
 } = Record) ->
     {file_location, #'FileLocation'{
-        uuid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
+        uuid = file_id:pack_guid(Uuid, SpaceId),
         provider_id = ProviderId,
         space_id = SpaceId,
         storage_id = StorageId,

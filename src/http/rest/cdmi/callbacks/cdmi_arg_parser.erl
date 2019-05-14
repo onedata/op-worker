@@ -250,7 +250,7 @@ add_objectid_path_to_state(Req, State) ->
 
     % get GUID from objectid
     Guid =
-        case cdmi_id:objectid_to_guid(Id) of
+        case file_id:objectid_to_guid(Id) of
             {ok, Guid_} -> Guid_;
             _ -> throw(?ERROR_INVALID_OBJECTID)
         end,

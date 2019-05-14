@@ -1101,7 +1101,7 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
     }}),
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
-    {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
@@ -1217,8 +1217,8 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
         [ProviderId2]
     ),
 
-    {ok, ObjectId1} = cdmi_id:guid_to_objectid(Guid1),
-    {ok, ObjectId6} = cdmi_id:guid_to_objectid(Guid6),
+    {ok, ObjectId1} = file_id:guid_to_objectid(Guid1),
+    {ok, ObjectId6} = file_id:guid_to_objectid(Guid6),
 
     ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, IndexName,  [{key, XattrValue11}]),
     ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
@@ -1279,7 +1279,7 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
             }}),
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
-    {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
     JobId1 = <<"1">>,
@@ -1497,8 +1497,8 @@ scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Conf
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
 
     NotExistingUuid = <<"not_existing_uuid">>,
-    NotExistingGuid = fslogic_uuid:uuid_to_guid(NotExistingUuid, SpaceId),
-    {ok, NotExistingFileId} = cdmi_id:guid_to_objectid(NotExistingGuid),
+    NotExistingGuid = file_id:pack_guid(NotExistingUuid, SpaceId),
+    {ok, NotExistingFileId} = file_id:guid_to_objectid(NotExistingGuid),
 
     %functions emits not existing file id
     MapFunction = <<
@@ -1608,7 +1608,7 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
             }}),
 
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
-    {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
 
     % set xattr on file to be replicated
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
@@ -1683,7 +1683,7 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
 
     FileIds = lists:map(fun({FileGuid, _}) ->
         ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-        {ok, FileId} = cdmi_id:guid_to_objectid(FileGuid),
+        {ok, FileId} = file_id:guid_to_objectid(FileGuid),
         FileId
     end, FileGuidsAndPaths),
 

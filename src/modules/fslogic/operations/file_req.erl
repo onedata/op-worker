@@ -508,7 +508,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
         mtime = CTime, atime = CTime, ctime = CTime
     }, scope = SpaceId}),
 
-    file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
+    file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)).
 
 %%--------------------------------------------------------------------
 %% @private

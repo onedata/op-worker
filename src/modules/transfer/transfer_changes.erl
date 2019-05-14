@@ -492,7 +492,7 @@ new_replication_or_migration(#document{
         query_view_params = QueryViewParams
     }
 }) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     worker_pool:cast(?REPLICATION_CONTROLLERS_POOL, {
         start_replication,
         session_utils:root_session_id(),
@@ -524,7 +524,7 @@ new_replica_eviction(#document{
         query_view_params = QueryViewParams
     }
 }) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     {ok, _Pid} = gen_server2:start(replica_eviction_controller,
         [session_utils:root_session_id(),
             TransferId, FileGuid, Callback, TargetProviderId,

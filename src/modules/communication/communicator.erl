@@ -194,7 +194,7 @@ stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
 -spec send_to_oneclient_internal(session:id(), server_message(), retries()) ->
     ok | error().
 send_to_oneclient_internal(SessionId, Msg, 0) ->
-    connection_api:send(SessionId, Msg);
+    connection_api:send(SessionId, Msg, [], true);
 send_to_oneclient_internal(SessionId, Msg, Retries) ->
     case connection_api:send(SessionId, Msg) of
         ok ->
@@ -211,7 +211,7 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
 -spec send_to_provider_internal(session:id(), client_message(), retries()) ->
     ok | error().
 send_to_provider_internal(SessionId, Msg, 0) ->
-    connection_api:send(SessionId, Msg);
+    connection_api:send(SessionId, Msg, [], true);
 send_to_provider_internal(SessionId, Msg, Retries) ->
     case connection_api:send(SessionId, Msg) of
         ok ->

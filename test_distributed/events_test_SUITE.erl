@@ -58,7 +58,7 @@ all() ->
 
 -define(FILE_UUID, <<"file_uuid">>).
 -define(SPACE_ID, <<"spaceid">>).
--define(FILE_GUID, fslogic_uuid:uuid_to_guid(?FILE_UUID, ?SPACE_ID)).
+-define(FILE_GUID, file_id:pack_guid(?FILE_UUID, ?SPACE_ID)).
 
 %%%===================================================================
 %%% Test functions

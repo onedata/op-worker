@@ -35,7 +35,6 @@
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -213,4 +212,3 @@ can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
 can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
     has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
         has_eff_group(SpaceDoc, GroupId).
-

@@ -1028,7 +1028,7 @@ schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Co
             {error, Body}
     end;
 schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     case rest_test_utils:request(Worker,
         <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
         post, [?USER_TOKEN_HEADER(Config, User)], []
@@ -1091,7 +1091,7 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Co
             {error, Body}
     end;
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config, MigrationProviderId) ->
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     URL = case MigrationProviderId of
         undefined ->
             <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>;

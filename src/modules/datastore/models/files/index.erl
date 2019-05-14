@@ -489,7 +489,7 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
         'use strict';
         var userMapCallback = eval.call(null, '(", UserMapFunction/binary, ")');
 
-        // code for building cdmi_id
+        // code for building file_id
         ", (build_cdmi_object_id_in_js())/binary,"
 
         function filterHiddenValues(object) {

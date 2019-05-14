@@ -400,7 +400,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
 
     StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
-    Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
+    Uuid = rpc:call(Worker1, file_id, guid_to_uuid, [Guid2]),
     StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
@@ -475,7 +475,7 @@ sufix_in_metadata_and_storage_test(Config) ->
     {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
 
     StorageFilePath1 = storage_file_path(Worker1, SpaceId, FileName),
-    Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
+    Uuid = rpc:call(Worker1, file_id, guid_to_uuid, [Guid2]),
     StorageFilePath2 = storage_file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
@@ -543,7 +543,7 @@ sufix_in_dir_metadata_test(Config) ->
 
     DirStoragePath = storage_file_path(Worker1, SpaceId, DirName),
     StorageFilePath1 = filename:join([DirStoragePath, FileName]),
-    Uuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [Guid2]),
+    Uuid = rpc:call(Worker1, file_id, guid_to_uuid, [Guid2]),
     StorageFilePath2 = filename:join([DirStoragePath, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)]),
 
     {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),

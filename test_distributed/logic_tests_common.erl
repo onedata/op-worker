@@ -56,6 +56,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
+    ok = test_utils:mock_new(Nodes, harvest_manager, [history, passthrough]),
 
     GetProviderId = fun() ->
         ?DUMMY_PROVIDER_ID
@@ -78,6 +79,14 @@ mock_gs_client(Config) ->
     end),
     ok = test_utils:mock_expect(Nodes, provider_logic, has_eff_user, fun(UserId) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3])
+    end),
+
+    % harvest_manager requires connection to oz to fetch eff_harvesters
+    ok = test_utils:mock_expect(Nodes, harvest_manager, revise_all_streams, fun() ->
+        ok
+    end),
+    ok = test_utils:mock_expect(Nodes, harvest_manager, revise_all_streams, fun(_) ->
+        ok
     end),
 
     % Mock macaroons handling
@@ -160,7 +169,8 @@ invalidate_all_test_records(Config) ->
         {od_share, ?SHARE_1}, {od_share, ?SHARE_2},
         {od_provider, ?PROVIDER_1}, {od_provider, ?PROVIDER_2},
         {od_handle_service, ?HANDLE_SERVICE_1}, {od_handle_service, ?HANDLE_SERVICE_2},
-        {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2}
+        {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2},
+        {od_harvester, ?HARVESTER_1}
     ],
     lists:foreach(
         fun({Type, Id}) ->
@@ -263,7 +273,12 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
             {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
-    end.
+    end;
+
+mock_graph_create(#gri{type = od_harvester, id = _, aspect = {submit_entry, _}}, undefined, _Data) ->
+    {ok, #gs_resp_graph{data_format = value, data = #{<<"failedIndices">> => []}}};
+mock_graph_create(#gri{type = od_harvester, id = _, aspect = {delete_entry, _}}, undefined, _Data) ->
+    {ok, #gs_resp_graph{data_format = value, data = #{<<"failedIndices">> => []}}}.
 
 
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
@@ -445,6 +460,23 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
             Data = case GRI#gri.scope of
                 public -> ?HANDLE_PUBLIC_DATA_VALUE(HandleId);
                 private -> ?HANDLE_PRIVATE_DATA_VALUE(HandleId)
+            end,
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance}, Authorization, _) ->
+    Authorized = case {Authorization, GRI#gri.scope} of
+        {undefined, private} ->
+            true;
+        {?USER_GS_MACAROON_AUTH(_), _} ->
+            false
+    end,
+    case Authorized of
+        true ->
+            Data = case GRI#gri.scope of
+                private -> ?HARVESTER_PRIVATE_DATA_VALUE(SpaceId)
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->

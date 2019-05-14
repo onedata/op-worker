@@ -166,7 +166,7 @@ clean_test_users_and_spaces(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, cluster_logic, space_storage]),
+        space_logic, provider_logic, cluster_logic, harvester_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -186,7 +186,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, cluster_logic, space_storage]),
+        provider_logic, cluster_logic, harvester_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -553,8 +553,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
+    HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
-
 
     lists:foreach(fun({_, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
@@ -626,7 +626,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, GroupUsers),
 
-    SpacesToProviders = lists:map(fun({SpaceId, SpaceConfig}) ->
+    SpacesSupports = lists:map(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         Providers1 = lists:map(fun({CPid, Provider}) ->
             % If provider does not belong to any domain (was not started in env,
@@ -660,11 +660,30 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
+    SpacesProviders = lists:map(fun({SpaceId, SpaceSupports}) ->
+        {SpaceId, maps:keys(SpaceSupports)}
+    end, SpacesSupports),
+
+    EffHarvestersSetup = maps:to_list(lists:foldl(
+        fun({HarvesterId, HarvesterConfig}, EffHarvestersMap0) ->
+            HarvesterSpaces = proplists:get_value(<<"spaces">>, HarvesterConfig),
+            HarvesterProviders = lists:usort(lists:flatmap(fun(SpaceId) ->
+                proplists:get_value(SpaceId, SpacesProviders, [])
+            end, HarvesterSpaces)),
+            lists:foldl(fun(ProviderId, EffHarvestersMap00) ->
+                maps:update_with(ProviderId, fun(Harvesters) ->
+                    [HarvesterId | Harvesters]
+                end, [HarvesterId], EffHarvestersMap00)
+            end, EffHarvestersMap0, HarvesterProviders)
+        end, #{}, HarvestersSetup
+    )),
+
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, EffHarvestersSetup),
     cluster_logic_mock_setup(AllWorkers),
+    harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
     %% Setup storage
     lists:foreach(fun({SpaceId, _}) ->
@@ -898,8 +917,8 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}]) ->
-    ok.
+    [{binary(), binary()}], [{binary(), [binary()]}],
+    [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
 space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, space_logic),
@@ -953,8 +972,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
-provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, SpacesToProviders) ->
+    proplists:proplist(), proplists:proplist(),
+    [{binary(), [{binary(), non_neg_integer()}]}], proplists:proplist()) -> ok.
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
+    SpacesToProviders, EffHarvestersSetup
+) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     test_utils:mock_new(AllWorkers, provider_logic),
 
@@ -985,7 +1007,8 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup, Spac
                         {SpaceId, maps:get(PID, ProvidersSupp)}
                     end, Spaces)),
                     longitude = 0.0,
-                    latitude = 0.0
+                    latitude = 0.0,
+                    eff_harvesters = proplists:get_value(PID, EffHarvestersSetup, [])
                 }}}
         end
     end,
@@ -1185,6 +1208,28 @@ cluster_logic_mock_setup(AllWorkers) ->
     test_utils:mock_new(AllWorkers, cluster_logic),
     test_utils:mock_expect(AllWorkers, cluster_logic, update_version_info, fun(_, _, _) ->
         ok
+    end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks harvester_logic module.
+%% @end
+%%--------------------------------------------------------------------
+-spec harvester_logic_mock_setup(Workers :: node() | [node()],
+    proplists:proplist()) -> ok.
+harvester_logic_mock_setup(Workers, HarvestersSetup) ->
+    ok = test_utils:mock_new(Workers, harvester_logic),
+    ok = test_utils:mock_expect(Workers, harvester_logic, get, fun(HarvesterId) ->
+        Setup = proplists:get_value(HarvesterId, HarvestersSetup, []),
+        Doc = #document{
+            key = HarvesterId,
+            value = #od_harvester{
+                spaces = proplists:get_value(<<"spaces">>, Setup),
+                indices = proplists:get_value(<<"indices">>, Setup)
+            }},
+        od_harvester:save_to_cache(Doc),
+        {ok, Doc}
     end).
 
 %%--------------------------------------------------------------------

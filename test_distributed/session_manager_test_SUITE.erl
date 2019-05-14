@@ -278,8 +278,7 @@ init_per_testcase(session_getters_test, Config) ->
     SessId = <<"session_id">>,
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:communicator_mock(Worker),
-    {ok, _} = fuse_test_utils:connect_via_macaroon(Worker, [{active, true}], SessId),
-    [{session_id, SessId}, {identity, Iden} | Config];
+    basic_session_setup(Worker, SessId, Iden, self(), Config);
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -318,8 +317,7 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = proplists:get_value(session_id, Config),
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+    basic_session_teardown(Worker, Config),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
@@ -376,3 +374,25 @@ get_child(Sup, ChildId) ->
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates basic test session.
+%% @end
+%%--------------------------------------------------------------------
+-spec basic_session_setup(Worker :: node(), SessId :: session:id(),
+    Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
+basic_session_setup(Worker, SessId, Iden, Con, Config) ->
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
+        reuse_or_create_fuse_session, [SessId, Iden, undefined, Con])),
+    [{session_id, SessId}, {identity, Iden} | Config].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes basic test session.
+%% @end
+%%--------------------------------------------------------------------
+-spec basic_session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
+basic_session_teardown(Worker, Config) ->
+    SessId = proplists:get_value(session_id, Config),
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).

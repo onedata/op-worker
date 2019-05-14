@@ -207,7 +207,7 @@ upgrade_record(1, Space) ->
 %% Sends event informing about od_space update if provider supports the space.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_monitoring_event(doc()) -> no_return().
+-spec emit_monitoring_event(doc()) -> {ok, id()}.
 emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
     case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
         true -> monitoring_event_emitter:emit_od_space_updated(SpaceId);

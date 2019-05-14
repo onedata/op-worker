@@ -210,7 +210,7 @@ remove_file_test(Config) ->
     Value1 = <<"t4_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    Uuid = file_id:guid_to_uuid(Guid),
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
     ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
@@ -259,9 +259,9 @@ create_and_query_view(Config) ->
     {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
     {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
-    {ok, FileId1} = cdmi_id:guid_to_objectid(Guid1),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    {ok, FileId3} = cdmi_id:guid_to_objectid(Guid3),
+    {ok, FileId1} = file_id:guid_to_objectid(Guid1),
+    {ok, FileId2} = file_id:guid_to_objectid(Guid2),
+    {ok, FileId3} = file_id:guid_to_objectid(Guid3),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
@@ -363,12 +363,12 @@ custom_metadata_doc_should_contain_file_objectid(Config) ->
     Xattr1 = #xattr{name = <<"name">>, value = <<"value">>},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    FileUuid = fslogic_uuid:guid_to_uuid(Guid),
+    FileUuid = file_id:guid_to_uuid(Guid),
 
     {ok, #document{value = #custom_metadata{file_objectid = FileObjectid}}} =
         rpc:call(Worker, custom_metadata, get, [FileUuid]),
 
-    {ok, ExpectedFileObjectid} = cdmi_id:guid_to_objectid(Guid),
+    {ok, ExpectedFileObjectid} = file_id:guid_to_objectid(Guid),
     ?assertEqual(ExpectedFileObjectid, FileObjectid).
 
 create_and_query_view_mapping_one_file_to_many_rows(Config) ->
@@ -406,9 +406,9 @@ create_and_query_view_mapping_one_file_to_many_rows(Config) ->
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
     {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
 
-    {ok, FileId1} = cdmi_id:guid_to_objectid(Guid1),
-    {ok, FileId2} = cdmi_id:guid_to_objectid(Guid2),
-    {ok, FileId3} = cdmi_id:guid_to_objectid(Guid3),
+    {ok, FileId1} = file_id:guid_to_objectid(Guid1),
+    {ok, FileId2} = file_id:guid_to_objectid(Guid2),
+    {ok, FileId3} = file_id:guid_to_objectid(Guid3),
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr1)),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr2)),
