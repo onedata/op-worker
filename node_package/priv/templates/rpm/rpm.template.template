@@ -1,6 +1,10 @@
 %% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
 %%
 {variables, [
+             {release, "release"}, %% e.g. 1802
+             {scl, "scl"}, %% e.g. onedata1802
+             {scl_prefix, "scl_prefix"},  %% e.g. /opt/onedata
+             {scl_package, "scl_package"}, %% e.g. op-worker
              {package_name, "package_name"},
              {package_install_name, "package_install_name"},
              {package_install_user, "package_install_user"},

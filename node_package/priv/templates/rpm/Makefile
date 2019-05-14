@@ -16,7 +16,7 @@ default: init.script
 	mkdir -p packages
 
 	mock --root $(DISTRIBUTION) --buildsrpm --spec package.spec --sources $(PWD) --resultdir $(PWD)/packages
-	mock --root $(DISTRIBUTION) --rebuild packages/*.src.rpm --resultdir $(PWD)/packages
+	mock --config-opts rpmbuild_networking=True --enable-network --root $(DISTRIBUTION) --rebuild packages/*.src.rpm --resultdir $(PWD)/packages
 	cd packages && \
 		for rpmfile in *.rpm; do \
 			sha256sum $${rpmfile} > $${rpmfile}.sha \
