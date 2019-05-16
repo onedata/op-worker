@@ -23,7 +23,8 @@
 -include("http/rest/http_status.hrl").
 
 %% API
--export([select_accept_callback/1, select_provide_callback/1]).
+-export([select_accept_callback/1, select_provide_callback/1,
+    choose_provide_content_type_callback/3]).
 
 %%%===================================================================
 %%% API
@@ -50,16 +51,18 @@ select_accept_callback(Req) ->
 select_provide_callback(Req) ->
     ContentTypesProvided = request_context:get_content_types_provided(),
     NormalizedContentTypesProvided = normalize_content_types(ContentTypesProvided),
+    [{_, DefaultFun} | _] = NormalizedContentTypesProvided,
     case cowboy_req:parse_header(<<"accept">>, Req) of
         undefined ->
-            [{_, Fun} | _] = NormalizedContentTypesProvided,
-            {ok, {Req, Fun}};
+            {ok, {Req, DefaultFun}};
         Accepts ->
             PrioritizedAccepts = prioritize_accept(Accepts),
-            {ok,
-                {Req,
-                    choose_provide_content_type_callback(Req, NormalizedContentTypesProvided, PrioritizedAccepts)
-            }}
+            case choose_provide_content_type_callback(Req, NormalizedContentTypesProvided, PrioritizedAccepts) of
+                undefined ->
+                    {ok, {Req, DefaultFun}};
+                Fun ->
+                    {ok, {Req, Fun}}
+            end
     end.
 
 %%%===================================================================
@@ -100,7 +103,7 @@ choose_accept_content_type_callback(ContentType, [_ | Tail]) ->
 %% Chooses callback that can handle given content type.
 %% @end
 %%--------------------------------------------------------------------
--spec choose_provide_content_type_callback(cowboy_req:req(), list(), list()) -> module().
+-spec choose_provide_content_type_callback(cowboy_req:req(), list(), list()) -> module() | undefined.
 choose_provide_content_type_callback(Req, CTP, [MediaType | Tail]) ->
     match_media_type(Req, CTP, Tail, MediaType).
 
@@ -146,7 +149,7 @@ prioritize_mediatype({TypeA, SubTypeA, ParamsA}, {TypeB, SubTypeB, ParamsB}) ->
 %% adequate handler
 %% @end
 %%--------------------------------------------------------------------
--spec match_media_type(cowboy_req:req(), list(), list(), tuple()) -> module().
+-spec match_media_type(cowboy_req:req(), list(), list(), tuple()) -> module() | undefined.
 match_media_type(Req, CTP, AcceptTail, MediaType = {{<<"*">>, <<"*">>, _Params_A}, _QA, _APA}) ->
     match_media_type_params(Req, CTP, AcceptTail, MediaType);
 match_media_type(Req, CTP = [{{Type, SubType_P, _PP}, _Fun} | _Tail], AcceptTail,
@@ -154,7 +157,9 @@ match_media_type(Req, CTP = [{{Type, SubType_P, _PP}, _Fun} | _Tail], AcceptTail
     when SubType_P =:= SubType_A; SubType_A =:= <<"*">> ->
     match_media_type_params(Req, CTP, AcceptTail, MediaType);
 match_media_type(Req, [_Any | CTPTail], AcceptTail, MediaType) ->
-    match_media_type(Req, CTPTail, AcceptTail, MediaType).
+    match_media_type(Req, CTPTail, AcceptTail, MediaType);
+match_media_type(_Req, [], _AcceptTail, _MediaType) ->
+    undefined.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -162,7 +167,7 @@ match_media_type(Req, [_Any | CTPTail], AcceptTail, MediaType) ->
 %% adequate handler
 %% @end
 %%--------------------------------------------------------------------
--spec match_media_type_params(cowboy_req:req(), list(), list(), tuple()) -> module().
+-spec match_media_type_params(cowboy_req:req(), list(), list(), tuple()) -> module()| undefined.
 match_media_type_params(_Req, [{{_TP, _STP, '*'}, Callback} | _], _, _) ->
     Callback;
 match_media_type_params(Req, [{{_TP, _STP, Params_P}, Callback} | Tail],
