@@ -311,7 +311,7 @@ start_gs_connection() ->
         {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
 
         gs_client:start_link(
-            Address, {macaroon, ProviderMacaroon}, [?GS_PROTOCOL_VERSION],
+            Address, {macaroon, ProviderMacaroon, []}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts
         )
     catch
