@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([run/8, get_traverse_info/1, get_doc/1]).
+-export([init/4, run/5, run/6, run/7, get_traverse_info/1, get_doc/1]).
 %% Behaviour callbacks
 -export([do_master_job/1, save_job/2]).
 
@@ -38,20 +38,37 @@
 -type master_job() :: #tree_travserse_job{}.
 -type slave_job() :: file_meta:doc().
 
+-define(DEFAULT_GROUP, <<"main_group">>).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-run(Pool, TaskModule, #document{} = Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
-    traverse:run(Pool, TaskModule, TaskID, TaskGroup, #tree_travserse_job{
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes pool.
+%% @end
+%%--------------------------------------------------------------------
+-spec init(traverse:task_module(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
+init(CallbackModule, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
+    traverse:init_pool(CallbackModule, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit).
+
+run(TaskModule, Doc, TaskID, BatchSize, TraverseInfo) ->
+    run(TaskModule, Doc, TaskID, false, BatchSize, TraverseInfo).
+
+run(TaskModule, Doc, TaskID, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
+    run(TaskModule, Doc, TaskID, ?DEFAULT_GROUP, ExecuteActionOnDir, BatchSize, TraverseInfo).
+
+run(TaskModule, #document{} = Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
+    traverse:run(TaskModule, TaskID, TaskGroup, #tree_travserse_job{
         doc = Doc,
         execute_slave_on_dir = ExecuteActionOnDir,
         batch_size = BatchSize,
         traverse_info = TraverseInfo
     });
-run(Pool, TaskModule, FileCtx, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
+run(TaskModule, FileCtx, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo) ->
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
-    run(Pool, TaskModule, Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo).
+    run(TaskModule, Doc, TaskID, TaskGroup, ExecuteActionOnDir, BatchSize, TraverseInfo).
 
 get_traverse_info(#tree_travserse_job{traverse_info = TraverseInfo}) ->
     TraverseInfo.

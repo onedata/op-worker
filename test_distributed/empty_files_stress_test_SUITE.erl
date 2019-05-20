@@ -40,7 +40,6 @@ all() ->
 -define(TIMEOUT, timer:minutes(20)).
 -define(CACHE, test_cache).
 -define(CALL_CACHE(Worker, Op, Args), rpc:call(Worker, effective_value, Op, [?CACHE | Args])).
--define(POOL, test_pool).
 
 %%%===================================================================
 %%% Test functions
@@ -107,7 +106,7 @@ init_per_suite(Config) ->
 
 init_per_testcase(stress_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, traverse, init_pool, [?POOL, 5, 30, 10])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 5, 30, 10])),
 
     CachePid = spawn(Worker, fun() -> cache_proc(
         #{check_frequency => timer:minutes(1), size => 500}) end),
@@ -162,7 +161,7 @@ task_finished(_) ->
     ok.
 
 save_job(_, _) ->
-    ok.
+    {ok, <<"id">>}.
 
 %%%===================================================================
 %%% Internal functions
@@ -196,8 +195,8 @@ start_traverse(Config, TraverseCache, ID) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     {ok, Guid} = ?assertMatch({ok, _},
         lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, run, [?POOL, ?MODULE,
-        file_ctx:new_by_guid(Guid), ID, <<"1">>, false, 100, TraverseCache])).
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, run, [?MODULE,
+        file_ctx:new_by_guid(Guid), ID, 100, TraverseCache])).
 
 process_traverse_info(Config, Type, ID) ->
     timer:sleep(timer:seconds(30)),

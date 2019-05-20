@@ -74,7 +74,6 @@ all() ->
 
 -define(CACHE, test_cache).
 -define(CALL_CACHE(Worker, Op, Args), rpc:call(Worker, effective_value, Op, [?CACHE | Args])).
--define(POOL, test_pool).
 
 %%%====================================================================
 %%% Test function
@@ -89,8 +88,8 @@ traverse_test(Config) ->
     {ok, Guid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
     build_traverse_tree(Worker, SessId, Dir1, 1),
 
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, run, [?POOL, ?MODULE, file_ctx:new_by_guid(Guid1),
-        <<"1">>, <<"1">>, false, 1, self()])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid1),
+        <<"1">>, 1, self()])),
 
     Expected = [2,3,4,
         11,12,13,16,17,18,
@@ -565,7 +564,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(traverse_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, traverse, init_pool, [?POOL, 3, 3, 10])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(effective_value_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -670,4 +669,4 @@ task_finished(_) ->
     ok.
 
 save_job(_, _) ->
-    ok.
+    {ok, <<"id">>}.
