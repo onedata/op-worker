@@ -26,7 +26,7 @@
 -export([get_by_auth/1]).
 -export([get/2, get_protected_data/2, get_shared_data/3]).
 -export([exists/2]).
--export([get_name/2, get_name/3]).
+-export([get_full_name/2, get_full_name/3]).
 -export([fetch_idp_access_token/3]).
 -export([has_eff_group/2, has_eff_group/3]).
 -export([get_eff_spaces/2]).
@@ -62,9 +62,9 @@ get_by_auth(Auth) ->
 -spec get(gs_client_worker:client(), od_user:id()) ->
     {ok, od_user:doc()} | gs_protocol:error().
 get(_, ?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
+    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
 get(_, ?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
+    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
 get(Client, UserId) ->
     gs_client_worker:request(Client, #gs_req_graph{
         operation = get,
@@ -81,9 +81,9 @@ get(Client, UserId) ->
 -spec get_protected_data(gs_client_worker:client(), od_user:id()) ->
     {ok, od_user:doc()} | gs_protocol:error().
 get_protected_data(_, ?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
+    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
 get_protected_data(_, ?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
+    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
 get_protected_data(?ROOT_SESS_ID, UserId) ->
     get_protected_data(?ROOT_SESS_ID, UserId, ?THROUGH_PROVIDER(oneprovider:get_id()));
 get_protected_data(Client, UserId) ->
@@ -116,9 +116,9 @@ get_protected_data(Client, UserId, AuthHint) ->
 -spec get_shared_data(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
     {ok, od_user:doc()} | gs_protocol:error().
 get_shared_data(_, ?ROOT_USER_ID, _) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
+    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
 get_shared_data(_, ?GUEST_USER_ID, _) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
+    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
 get_shared_data(Client, UserId, AuthHint) ->
     gs_client_worker:request(Client, #gs_req_graph{
         operation = get,
@@ -143,18 +143,18 @@ exists(Client, UserId) ->
     end.
 
 
--spec get_name(gs_client_worker:client(), od_user:id()) ->
-    {ok, od_user:name()} | gs_protocol:error().
-get_name(Client, UserId) ->
-    get_name(Client, UserId, undefined).
+-spec get_full_name(gs_client_worker:client(), od_user:id()) ->
+    {ok, od_user:full_name()} | gs_protocol:error().
+get_full_name(Client, UserId) ->
+    get_full_name(Client, UserId, undefined).
 
 
--spec get_name(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
-    od_user:name() | gs_protocol:error().
-get_name(Client, UserId, AuthHint) ->
+-spec get_full_name(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
+    od_user:full_name() | gs_protocol:error().
+get_full_name(Client, UserId, AuthHint) ->
     case get_shared_data(Client, UserId, AuthHint) of
-        {ok, #document{value = #od_user{name = Name}}} ->
-            {ok, Name};
+        {ok, #document{value = #od_user{full_name = FullName}}} ->
+            {ok, FullName};
         {error, Reason} ->
             {error, Reason}
     end.

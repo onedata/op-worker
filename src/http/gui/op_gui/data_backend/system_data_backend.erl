@@ -131,7 +131,7 @@ query_record(<<"system-user">>, Data) ->
     UserId = proplists:get_value(<<"id">>, Data),
     case proplists:get_value(<<"context">>, Data) of
         [{<<"od_space">>, SpaceId}] ->
-            case user_logic:get_name(SessionId, UserId, ?THROUGH_SPACE(SpaceId)) of
+            case user_logic:get_full_name(SessionId, UserId, ?THROUGH_SPACE(SpaceId)) of
                 ?ERROR_FORBIDDEN ->
                     op_gui_error:unauthorized();
                 {ok, UserName} ->

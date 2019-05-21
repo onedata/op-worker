@@ -146,7 +146,7 @@ delete_record(<<"user">>, _Id) ->
     proplists:proplist().
 user_record(SessionId, UserId) ->
     {ok, #document{value = #od_user{
-        name = Name,
+        full_name = Name,
         default_space = DefaultSpaceValue,
         eff_spaces = EffSpaces,
         eff_handle_services = EffHServices

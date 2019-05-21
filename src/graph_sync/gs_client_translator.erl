@@ -41,8 +41,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
             default_space = gs_protocol:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
@@ -59,8 +59,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result)
         }
@@ -70,8 +70,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null))
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null)))
         }
     };
 

@@ -83,8 +83,8 @@
 -define(GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS, #{?GROUP_1 := [?HANDLE_VIEW], ?GROUP_2 := [?HANDLE_VIEW]}).
 
 % Mocked user data
--define(USER_NAME(__User), __User).
--define(USER_ALIAS(__User), __User).
+-define(USER_FULL_NAME(__User), __User).
+-define(USER_USERNAME(__User), __User).
 -define(USER_EMAIL_LIST(__User), [__User]).
 -define(USER_LINKED_ACCOUNTS_VALUE(__User), [#{<<"userId">> => __User}]).
 -define(USER_LINKED_ACCOUNTS_MATCHER(__User), [#{<<"userId">> := __User}]).
@@ -198,8 +198,8 @@
 -define(MOCK_IDP, <<"mockIdP">>).
 
 -define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
-    name = ?USER_NAME(__User),
-    alias = ?USER_ALIAS(__User),
+    full_name = ?USER_FULL_NAME(__User),
+    username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = ?USER_DEFAULT_SPACE(__User),
@@ -210,8 +210,8 @@
     eff_handles = ?USER_EFF_HANDLES(__User)
 }}).
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
-    name = ?USER_NAME(__User),
-    alias = ?USER_ALIAS(__User),
+    full_name = ?USER_FULL_NAME(__User),
+    username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = undefined,
@@ -222,8 +222,8 @@
     eff_handles = []
 }}).
 -define(USER_SHARED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
-    name = ?USER_NAME(__User),
-    alias = ?USER_ALIAS(__User),
+    full_name = ?USER_FULL_NAME(__User),
+    username = ?USER_USERNAME(__User),
     emails = [],
     linked_accounts = [],
     default_space = undefined,
@@ -336,9 +336,12 @@
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
-    <<"name">> => ?USER_NAME(__UserId),
-    <<"alias">> => ?USER_ALIAS(__UserId),
-    <<"login">> => ?USER_ALIAS(__UserId) % @TODO deprecated, included for backward compatibility
+    <<"fullName">> => ?USER_FULL_NAME(__UserId),
+    <<"username">> => ?USER_USERNAME(__UserId),
+    % @TODO deprecated, included for backward compatibility
+    <<"name">> => ?USER_FULL_NAME(__UserId),
+    <<"login">> => ?USER_USERNAME(__UserId),
+    <<"alias">> => ?USER_USERNAME(__UserId)
 }).
 -define(USER_PROTECTED_DATA_VALUE(__UserId), begin
     __SharedData = ?USER_SHARED_DATA_VALUE(__UserId),
