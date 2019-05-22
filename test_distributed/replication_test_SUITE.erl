@@ -1290,6 +1290,16 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(W1, sfm_utils, [passthrough]),
+    test_utils:mock_expect(W1, sfm_utils, create_delayed_storage_file,
+        fun(FileCtx, UserCtx, VerifyLink) ->
+            {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, VerifyLink]),
+            {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}
+        end),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
@@ -1297,6 +1307,10 @@ init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(W1, [sfm_utils]),
+    end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),

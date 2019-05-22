@@ -233,8 +233,8 @@ server_message(Body) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send_to_client, fun
-        (Msg, _, _) -> Self ! Msg, ok
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
+        (_, Msg, _) -> Self ! Msg, ok
     end).
 
 %%--------------------------------------------------------------------

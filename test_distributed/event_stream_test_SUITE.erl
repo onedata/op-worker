@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -140,6 +140,22 @@ event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
     stop_event_stream(Stm).
 
 %%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, event_manager),
+    test_utils:mock_expect(Workers, event_manager, handle, fun(Manager, Message) ->
+        gen_server2:cast(Manager, Message)
+    end),
+    Config.
+
+end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [event_manager]).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -184,6 +200,7 @@ start_event_stream(Worker, EmRule, EmTime) ->
             transition_rule = fun(Ctr, _) -> Ctr + 1 end
         }
     },
+
     ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
         event_stream, [Mgr, Sub, SessId], []
     ])).

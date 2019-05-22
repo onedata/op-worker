@@ -78,23 +78,29 @@ sequencer_manager_should_update_session_on_terminate(Config) ->
     ), 10).
 
 sequencer_manager_should_register_sequencer_in_stream(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_in_stream, 1, self()}),
-    gen_server:cast(SeqMan, client_message()),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, client_message()]),
     ?assertReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_unregister_sequencer_in_stream(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
-    gen_server:cast(SeqMan, client_message()),
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, client_message()]),
     gen_server:cast(SeqMan, {unregister_in_stream, 1}),
-    gen_server:cast(SeqMan, client_message()),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, client_message()]),
     ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT),
     ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT).
 
 sequencer_manager_should_register_sequencer_out_stream(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
-    gen_server:cast(SeqMan, server_message()),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, server_message()]),
     ?assertReceivedMatch({'$gen_cast', #server_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_unregister_sequencer_out_stream(Config) ->
@@ -110,47 +116,59 @@ sequencer_manager_should_create_sequencer_stream_on_open_stream(Config) ->
     ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT).
 
 sequencer_manager_should_send_end_of_message_stream_on_close_stream(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
-    gen_server:cast(SeqMan, {close_stream, 1}),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, {close_stream, 1}]),
     ?assertReceivedMatch({'$gen_cast', #server_message{
         message_body = #end_of_message_stream{}
     }}, ?TIMEOUT).
 
 sequencer_manager_should_forward_message_stream_reset(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_stream_reset{stream_id = 1},
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
-    gen_server:cast(SeqMan, #client_message{message_body = Msg}),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, #client_message{message_body = Msg}]),
     ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
 sequencer_manager_should_forward_message_stream_reset_to_all_streams(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_stream_reset{},
     lists:foreach(fun(StmId) ->
         gen_server:cast(SeqMan, {register_out_stream, StmId, self()})
     end, lists:seq(0, 4)),
-    gen_server:cast(SeqMan, #client_message{message_body = Msg}),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, #client_message{message_body = Msg}]),
     lists:foreach(fun(_) ->
         ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT)
     end, lists:seq(0, 4)).
 
 sequencer_manager_should_forward_message_request(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_request{stream_id = 1},
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
-    gen_server:cast(SeqMan, #client_message{message_body = Msg}),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, #client_message{message_body = Msg}]),
     ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
 sequencer_manager_should_forward_message_acknowledgement(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_acknowledgement{stream_id = 1},
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
-    gen_server:cast(SeqMan, #client_message{message_body = Msg}),
+    timer:sleep(100), % sleep to finish cast handling
+    rpc:call(Worker, sequencer_manager, handle, [SeqMan, #client_message{message_body = Msg}]),
     ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
 sequencer_manager_should_start_sequencer_in_stream_on_first_message(Config) ->
-    gen_server:cast(?config(sequencer_manager, Config), client_message()),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    rpc:call(Worker, sequencer_manager, handle,
+        [?config(sequencer_manager, Config), client_message()]),
     ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT),
     ?assertReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
 
@@ -309,6 +327,6 @@ mock_sequencer_stream_sup(Worker) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send_to_client, fun
-        (Msg, _, _) -> Self ! Msg, ok
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
+        (_, Msg, _) -> Self ! Msg, ok
     end).

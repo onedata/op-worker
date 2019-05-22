@@ -26,7 +26,7 @@
 
 %% API
 -export([children_attrs_hash_has_changed/3, mtime_has_changed/2,
-    count_files_attrs_hash/1]).
+    count_files_attrs_hash/2]).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -74,14 +74,14 @@ children_attrs_hash_has_changed(#document{
 %% Counts hash of attributes of files associated with passed contexts.
 %% @end
 %%-------------------------------------------------------------------
--spec count_files_attrs_hash([storage_file_ctx:ctx()]) ->
+-spec count_files_attrs_hash([storage_file_ctx:ctx()], boolean()) ->
     {hash(), [storage_file_ctx:ctx()]}.
-count_files_attrs_hash([]) ->
+count_files_attrs_hash([], _SyncAcl) ->
     {undefined, []};
-count_files_attrs_hash(StorageFileCtxs) ->
+count_files_attrs_hash(StorageFileCtxs, SyncAcl) ->
     try
         {H, Ctxs} = lists:foldr(fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
-            {FileHash, StorageFileCtx2} = count_file_attrs_hash_safe(StorageFileCtx),
+            {FileHash, StorageFileCtx2} = count_file_attrs_hash_safe(StorageFileCtx, SyncAcl),
             {[FileHash | Hash0], [StorageFileCtx2 | StorageFileCtxs0]}
         end, {[], []}, StorageFileCtxs),
         {hash(H), Ctxs}
@@ -102,10 +102,11 @@ count_files_attrs_hash(StorageFileCtxs) ->
 %% If file has been remove, it will return empty hash.
 %% @end
 %%-------------------------------------------------------------------
--spec count_file_attrs_hash_safe(storage_file_ctx:ctx()) -> {hash(), storage_file_ctx:ctx()}.
-count_file_attrs_hash_safe(StorageFileCtx) ->
+-spec count_file_attrs_hash_safe(storage_file_ctx:ctx(), boolean()) ->
+    {hash(), storage_file_ctx:ctx()}.
+count_file_attrs_hash_safe(StorageFileCtx, SyncAcl) ->
     try
-       count_file_attrs_hash(StorageFileCtx)
+       count_file_attrs_hash(StorageFileCtx, SyncAcl)
     catch
         throw:?ENOENT ->
             {<<"">>, StorageFileCtx}
@@ -117,8 +118,8 @@ count_file_attrs_hash_safe(StorageFileCtx) ->
 %% Counts hash of attributes of file associated with passed context.
 %% @end
 %%-------------------------------------------------------------------
--spec count_file_attrs_hash(storage_file_ctx:ctx()) -> {hash(), storage_file_ctx:ctx()}.
-count_file_attrs_hash(StorageFileCtx) ->
+-spec count_file_attrs_hash(storage_file_ctx:ctx(), boolean()) -> {hash(), storage_file_ctx:ctx()}.
+count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{
         st_mode = StMode,
@@ -128,16 +129,7 @@ count_file_attrs_hash(StorageFileCtx) ->
         st_ctime = STCtime
     }= StatBuf,
 
-    {Xattr, StorageFileCtx3} = try
-        storage_file_ctx:get_nfs4_acl(StorageFileCtx2)
-    catch
-        throw:?ENOTSUP ->
-            {<<"">>, StorageFileCtx2};
-        throw:?ENOENT ->
-            {<<"">>, StorageFileCtx2};
-        throw:?ENODATA ->
-            {<<"">>, StorageFileCtx2}
-    end,
+    {Xattr, StorageFileCtx3} = maybe_get_nfs4_acl(StorageFileCtx2, SyncAcl),
 
     case file_meta:type(StMode) of
         ?DIRECTORY_TYPE ->
@@ -147,6 +139,23 @@ count_file_attrs_hash(StorageFileCtx) ->
             FileId = storage_file_ctx:get_file_id_const(StorageFileCtx2),
             {hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
+
+-spec maybe_get_nfs4_acl(storage_file_ctx:ctx(), boolean()) ->
+    {binary(), storage_file_ctx:ctx()}.
+maybe_get_nfs4_acl(StorageFileCtx, false) ->
+    {<<"">>, StorageFileCtx};
+maybe_get_nfs4_acl(StorageFileCtx, true) ->
+    try
+        storage_file_ctx:get_nfs4_acl(StorageFileCtx)
+    catch
+        throw:?ENOTSUP ->
+            {<<"">>, StorageFileCtx};
+        throw:?ENOENT ->
+            {<<"">>, StorageFileCtx};
+        throw:?ENODATA ->
+            {<<"">>, StorageFileCtx}
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @private

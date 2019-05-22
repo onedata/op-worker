@@ -742,11 +742,13 @@ eviction_should_succeed_when_remote_provider_modified_file_replica(Config, Type,
     ),
     [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
 
-    % bump version on WorkerP2
+    % bump version on WorkerP1
     SessionId = ?USER_SESSION(WorkerP1, ?DEFAULT_USER, Config2),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, Handle, 1, <<"#">>),
     lfm_proxy:close(WorkerP1, Handle),
+
+    ?assertVersion(2, WorkerP2, FileGuid, ProviderId1, ?ATTEMPTS),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -811,7 +813,8 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config, Type, 
         {ok, _, 1} = logical_file_manager:write(Handle, 1, <<"#">>),
         ok = logical_file_manager:fsync(Handle),
         ok = logical_file_manager:release(Handle),
-        meck:passthrough([FileCtx, Blocks, AllowedVV])
+        % meck:passthrough does not work for functions that use other mocked functions inside
+        erlang:apply(meck_util:original_name(replica_deletion_req), delete_blocks, [FileCtx, Blocks, AllowedVV])
     end),
 
     transfers_test_mechanism:run_test(

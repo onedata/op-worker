@@ -37,6 +37,8 @@
 -export([wait_for_file_new_file_id/2]).
 -export([clean_upload_map/1]).
 
+%% For test purpose
+-export([multipart/3]).
 
 %% ====================================================================
 %% Cowboy API functions

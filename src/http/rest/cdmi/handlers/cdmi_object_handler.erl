@@ -157,8 +157,8 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, guid = Fil
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
         case Ranges of
-            undefined -> ?HTTP_OK;
-            _ -> ?PARTIAL_CONTENT
+            undefined -> ?HTTP_200_OK;
+            _ -> ?HTTP_206_PARTIAL_CONTENT
         end,
     Req3 = cdmi_streamer:stream_binary(HttpStatus, Req2, State, Size, Ranges),
     {stop, Req3, State}.

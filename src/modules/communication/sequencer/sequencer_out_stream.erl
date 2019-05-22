@@ -135,8 +135,8 @@ handle_cast(#message_request{} = Request, #state{} = State) ->
 handle_cast(#message_acknowledgement{} = Request, #state{} = State) ->
     {noreply, handle_request(Request, State)};
 
-handle_cast(#server_message{} = Request, State) ->
-    {noreply, handle_request(Request, State)};
+handle_cast(#server_message{} = Request, #state{session_id = SessionId} = State) ->
+    {noreply, handle_request(Request#server_message{effective_session_id = SessionId}, State)};
 
 handle_cast(#client_message{} = Request, State) ->
     {noreply, handle_request(Request, State)};
@@ -296,7 +296,7 @@ process_request(#server_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = communicator:send_to_client(NewMsg, SessId),
+    ok = communicator:send_to_oneclient(SessId, NewMsg),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)};
 
 process_request(#client_message{message_stream = MsgStm} = Msg, #state{
@@ -304,7 +304,7 @@ process_request(#client_message{message_stream = MsgStm} = Msg, #state{
     NewMsg = Msg#client_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ok = communicator:send_to_provider(NewMsg, SessId),
+    ok = communicator:send_to_provider(SessId, NewMsg),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -355,13 +355,13 @@ resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
             NewMsg = Msg#server_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = communicator:send_to_client(NewMsg, SessId),
+            ok = communicator:send_to_oneclient(SessId, NewMsg),
             resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         {value, #client_message{message_stream = MsgStm} = Msg} ->
             NewMsg = Msg#client_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ok = communicator:send_to_provider(NewMsg, SessId),
+            ok = communicator:send_to_provider(SessId, NewMsg),
             resend_all_messages(queue:drop(Msgs), SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         empty ->
             {SeqNum, MsgsAcc}
@@ -384,7 +384,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
         {value, #server_message{message_stream = #message_stream{
             sequence_number = LowerSeqNum
         }} = Msg} ->
-            ok = communicator:send_to_client(Msg, SessId),
+            ok = communicator:send_to_oneclient(SessId, Msg),
             resend_messages(LowerSeqNum + 1, UpperSeqNum, queue:drop(Msgs), StmId, SessId);
         {value, #server_message{message_stream = #message_stream{
             sequence_number = SeqNum

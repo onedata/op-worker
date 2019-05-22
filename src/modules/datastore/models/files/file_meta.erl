@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -28,7 +29,7 @@
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
--export([delete_child_link/4, foreach_child/3, add_child_link/4]).
+-export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_parent/1, get_parent_uuid/1]).
@@ -132,7 +133,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         Link = {FileName, FileUuid},
         case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
             {ok, #link{}} ->
-                case save(FileDoc3) of
+                case file_meta:save(FileDoc3) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
@@ -177,17 +178,6 @@ get(#document{value = #file_meta{}} = Doc) ->
     {ok, Doc};
 get({path, Path}) ->
     ?run(fslogic_path:resolve(Path));
-get(?ROOT_DIR_UUID) ->
-    {ok, #document{
-        key = ?ROOT_DIR_UUID,
-        value = #file_meta{
-            name = ?ROOT_DIR_NAME,
-            is_scope = true,
-            mode = 8#111,
-            owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
-        }
-    }};
 get(FileUuid) ->
     case get_including_deleted(FileUuid) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
@@ -204,6 +194,17 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
+get_including_deleted(?ROOT_DIR_UUID) ->
+    {ok, #document{
+        key = ?ROOT_DIR_UUID,
+        value = #file_meta{
+            name = ?ROOT_DIR_NAME,
+            is_scope = true,
+            mode = 8#111,
+            owner = ?ROOT_USER_ID,
+            parent_uuid = ?ROOT_DIR_UUID
+        }
+    }};
 get_including_deleted(FileUuid) ->
     datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
 
@@ -311,6 +312,17 @@ delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Removes deletion link for local provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_deletion_link(ParentUuid :: uuid(), Scope :: datastore_doc:scope(),
+    FileName :: name()) -> ok | {error, term()}.
+delete_deletion_link(ParentUuid, Scope, Link) ->
+    Ctx = ?CTX#{scope => Scope},
+    datastore_model:delete_links(Ctx, ParentUuid, oneprovider:get_id(), Link).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Checks whether file meta exists.
 %% @end
 %%--------------------------------------------------------------------
@@ -325,7 +337,7 @@ exists({path, Path}) ->
         {error, not_found} -> false
     end;
 exists(Key) ->
-    case ?MODULE:get(Key) of
+    case file_meta:get(Key) of
         {ok, _} -> true;
         {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
@@ -351,7 +363,7 @@ get_child(ParentUuid, Name) ->
 %%--------------------------------------------------------------------
 -spec get_child_uuid(uuid(), name()) -> {ok, uuid()} | {error, term()}.
 get_child_uuid(ParentUuid, Name) ->
-    Tokens = binary:split(Name, <<"@">>, [global]),
+    Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
             case get_child_uuid(ParentUuid, oneprovider:get_id(), Name) of

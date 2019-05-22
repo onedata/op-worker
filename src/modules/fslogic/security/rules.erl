@@ -59,7 +59,7 @@ check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
             throw(?EACCES);
         false ->
             {#document{value = #file_meta{shares = Shares}}, SubjectCtx2} =
-                file_ctx:get_file_doc(SubjectCtx),
+                file_ctx:get_file_doc_including_deleted(SubjectCtx),
             ShareId = file_ctx:get_share_id_const(DefaultFileCtx),
 
             case lists:member(ShareId, Shares) of
@@ -89,7 +89,7 @@ check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
             {ok, SubjectCtx3}
     end;
 check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
-    {FileDoc, SubjectCtx2} = file_ctx:get_file_doc(SubjectCtx),
+    {FileDoc, SubjectCtx2} = file_ctx:get_file_doc_including_deleted(SubjectCtx),
     ShareId = file_ctx:get_share_id_const(SubjectCtx2),
     {Acl, _} = file_ctx:get_acl(SubjectCtx2),
     check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx).
@@ -118,7 +118,7 @@ check(owner, #document{value = #file_meta{owner = OwnerId}}, UserCtx, _, _, File
 check(owner_if_parent_sticky, Doc, UserCtx, ShareId, Acl, FileCtx) ->
     {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     {#document{value = #file_meta{mode = Mode}}, _ParentCtx2} =
-        file_ctx:get_file_doc(ParentCtx),
+        file_ctx:get_file_doc_including_deleted(ParentCtx),
     case (Mode band (8#1 bsl 9)) > 0 of
         true ->
             check(owner, Doc, UserCtx, ShareId, Acl, FileCtx2);
@@ -309,7 +309,7 @@ validate_posix_access(rdwr, FileCtx, UserCtx, ShareId) ->
     validate_posix_access(read, FileCtx2, UserCtx, ShareId);
 validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
     {#document{value = #file_meta{owner = OwnerId, mode = Mode}}, FileCtx2} =
-        file_ctx:get_file_doc(FileCtx),
+        file_ctx:get_file_doc_including_deleted(FileCtx),
     ReqBit =
         case AccessType of
             read -> 8#4;
