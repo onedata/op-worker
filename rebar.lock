@@ -91,7 +91,7 @@
   1},
  {<<"helpers">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/helpers.git",
-       {ref,"d5db19d4ea93a1ea341dc11d19603e1f552f0264"}},
+       {ref,"fb83a62000f54a6e94e3ac015875ff7e69ea4c36"}},
   0},
  {<<"hut">>,
   {git,"git://github.com/tolbrino/hut.git",
@@ -154,11 +154,7 @@
   0},
  {<<"rtransfer_link">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/rtransfer_link.git",
-<<<<<<< HEAD
-       {ref,"38226c265c57c9de9a9f86cb9ca75aa407ad3e40"}},
-=======
-       {ref,"e3d832f30b321d4d1513b6d24a7cd5cf71dac024"}},
->>>>>>> develop
+       {ref,"729913ea9e53dc080cd84a2a696456d4d2f4ec46"}},
   0},
  {<<"setup">>,
   {git,"git://github.com/uwiger/setup.git",
