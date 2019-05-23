@@ -21,7 +21,9 @@ DYNAMIC_PARAMS := ,{version_, \"$(PKG_VERSION_NO_H)\"}\
                   ,{revision_, \"$(PKG_VERSION)\"}\
                   ,{release_, \"$(PKG_BUILD)\"}\
                   ,{tarname_, \"$(PKG_ID).tar.gz\"}\
-                  ,{tarname_base_, \"$(PKG_ID)\"}
+                  ,{tarname_base_, \"$(PKG_ID)\"}\
+                  ,{scl, \"onedata$(RELEASE)\"}\
+                  ,{release, \"$(RELEASE)\"}
 
 $(RPM_TEMPLATE_DIR)/rpm.template: $(RPM_TEMPLATE_DIR)/rpm.template.template
 	sed "s/%dynamic_params%/$(DYNAMIC_PARAMS)/" $< > $@

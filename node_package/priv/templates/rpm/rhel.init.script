@@ -5,29 +5,31 @@
 # chkconfig: 2345 80 30
 # description: {{package_shortdesc}}
 # processname: beam
-# config: /etc/{{package_install_name}}/app.config
-# config: /etc/{{package_install_name}}/vm.args
-# config: /etc/sysconfig/{{package_install_name}}
+# config: {{scl_prefix}}/{{scl}}/etc/{{package_install_name}}/app.config
+# config: {{scl_prefix}}/{{scl}}/etc/{{package_install_name}}/vm.args
+# config: {{scl_prefix}}/{{scl}}/etc/sysconfig/{{package_install_name}}
 #
 
 # Source function library.
 . /etc/rc.d/init.d/functions
 
+ONEDATA{{release}}_SCLS_ENABLED="onedata{{release}}"
+SCL_ROOT={{scl_prefix}}/{{scl}}/root
 RETVAL=0
-PATH=/sbin:/usr/sbin:/bin:/usr/bin
+PATH=$SCL_ROOT/usr/bin:$SCL_ROOT/usr/sbin:/sbin:/usr/sbin:/bin:/usr/bin
 DESC="{{package_shortdesc}}"
 NAME={{package_install_name}}
-DAEMON=/usr/{{bin_or_sbin}}/$NAME
-lockfile=/var/lock/subsys/$NAME
-pidfile=/var/run/$NAME/$NAME.pid
+DAEMON="scl enable $ONEDATA{{release}}_SCLS_ENABLED -- $NAME"
+lockfile=$SCL_ROOT/var/lock/subsys/$NAME
+pidfile=$SCL_ROOT/var/run/$NAME/$NAME.pid
 
 # Check for script, config and data dirs
-[ -x /usr/{{bin_or_sbin}}/$NAME ] || exit 0
-[ -d /etc/$NAME ] || exit 0
-[ -d /var/lib/$NAME ] || exit 0
+[ -x $SCL_ROOT/usr/{{bin_or_sbin}}/$NAME ] || exit 0
+[ -d $SCL_ROOT/etc/$NAME ] || exit 0
+[ -d $SCL_ROOT/var/lib/$NAME ] || exit 0
 
 # Read configuration variable file if it is present and readable
-[ -r /etc/sysconfig/$NAME ] && . /etc/sysconfig/$NAME
+[ -r $SCL_ROOT/etc/sysconfig/$NAME ] && . $SCL_ROOT/etc/sysconfig/$NAME
 
 # `service` strips all environmental VARS so
 # if no HOME was set in /etc/sysconfig/$NAME then set one here
