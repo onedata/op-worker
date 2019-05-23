@@ -36,6 +36,7 @@
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
+-define(GUEST_IDENTITY, #user_identity{user_id = ?GUEST_USER_ID}).
 
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
@@ -45,16 +46,5 @@
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
-
--define(FILE_DELETION_LINK_SUFFIX, <<"####TO_DELETE">>).
--define(FILE_DELETION_LINK_NAME(Name),
-    <<(Name)/binary, (?FILE_DELETION_LINK_SUFFIX)/binary>>).
--define(FILE_DELETION_LINK(Name, Uuid),
-    {?FILE_DELETION_LINK_NAME(Name), Uuid}).
-
-
--define(SUFFIX_SEPARATOR, <<"%%%%">>).
--define(FILE_WITH_SUFFIX(Filename,Uuid), <<Filename/binary, 
-    (?SUFFIX_SEPARATOR)/binary, Uuid/binary>>).
 
 -endif.

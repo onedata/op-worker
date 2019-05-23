@@ -22,14 +22,11 @@
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0, modules_with_args/0]).
 -export([before_init/1, on_cluster_initialized/1]).
--export([handle_cast/2]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
-
--type state() :: #state{}.
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -95,12 +92,15 @@ modules_with_args() -> filter_disabled_workers([
     {gs_worker, [
         {supervisor_flags, gs_worker:supervisor_flags()}
     ]},
-    {fslogic_deletion_worker, []},
     {rtransfer_worker, [
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {space_sync_worker, []}
+    {space_sync_worker, []},
+    {harvest_worker, [
+        {supervisor_flags, harvest_worker:supervisor_flags()},
+        {supervisor_children_spec, harvest_worker:supervisor_children_spec()}
+    ]}
 ]).
 
 %%-------------------------------------------------------------------
@@ -159,34 +159,6 @@ before_init([]) ->
 -spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
 on_cluster_initialized(_Nodes) ->
     ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Overrides {@link node_manager_plugin_default:handle_cast/2}.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_cast(update_subdomain_delegation_ips, State) ->
-    % This cast will be usually used only after acquiring connection
-    % to onezone in order to send current cluster IPs
-    case provider_logic:update_subdomain_delegation_ips() of
-        ok ->
-            ok;
-        error ->
-            % Kill the connection to Onezone in case provider IPs cannot be
-            % updated, which will cause a reconnection and update retry.
-            gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
-                {terminate, normal})
-    end,
-    {noreply, State};
-
-handle_cast(Request, State) ->
-    ?log_bad_request(Request),
-    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @doc

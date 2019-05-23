@@ -69,6 +69,7 @@ route_message(#client_message{message_body = #subscription_cancellation{} = SubC
     end;
 route_message(#client_message{
     session_id = OriginSessId,
+    % TODO VFS-5326
     message_id = MsgId,
     message_body = FlushMsg = #flush_events{}
 }, SessionID) ->
@@ -77,7 +78,7 @@ route_message(#client_message{
         % Spawn because send can wait and block event_stream
         % Probably not needed after migration to asynchronous connections
         spawn(fun() ->
-            communicator:send_to_client(Result#server_message{message_id = MsgId}, OriginSessId)
+            communicator:send_to_oneclient(OriginSessId, Result#server_message{message_id = MsgId})
         end)
     end
     }, SessionID),

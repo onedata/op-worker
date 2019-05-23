@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -46,8 +47,7 @@
 -spec send(od_provider:id(), msg()) -> ok | {error, Reason :: term()}.
 send(ProviderId, Msg) ->
     SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-    communicator:send_to_provider(#dbsync_message{message_body = Msg},
-        SessId, #{ignore_send_errors => true}).
+    communicator:send_to_provider(SessId, #dbsync_message{message_body = Msg}).
 
 %%--------------------------------------------------------------------
 %% @doc

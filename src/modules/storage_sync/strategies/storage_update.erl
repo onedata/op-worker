@@ -322,9 +322,7 @@ import_children(Job = #space_strategy_job{
     DirsJobs;
 import_children(Job = #space_strategy_job{
     strategy_type = StrategyType,
-    strategy_args = #{
-        write_once := false
-    },
+    strategy_args = Args = #{write_once := false},
     data = Data0 = #{
         max_depth := MaxDepth,
         storage_file_ctx := StorageFileCtx,
@@ -339,7 +337,8 @@ import_children(Job = #space_strategy_job{
     {BatchHash, ChildrenStorageCtxsBatch, Data} =
         case storage_sync_utils:take_hash_for_batch(BatchKey, Data0) of
             {undefined, _} ->
-                count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx);
+                SyncAcl = maps:get(sync_acl, Args, false),
+                count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx, SyncAcl);
             {BatchHash0, Data1} ->
                 {ChildrenStorageCtxsBatch0, Data2} =
                     storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data1),
@@ -438,14 +437,15 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
 -spec handle_already_imported_directory_unchanged_mtime(space_strategy:job(),
     #file_attr{}, file_ctx:ctx()) -> {simple_scan:job_result(), space_strategy:job()}.
 handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
-    strategy_args = #{write_once := false},
+    strategy_args = Args = #{write_once := false},
     data = Data0 = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx) ->
     Offset = maps:get(dir_offset, Data0, 0),
     {ChildrenStorageCtxsBatch, _} = storage_file_ctx:get_children_ctxs_batch(
         StorageFileCtx, Offset, ?DIR_BATCH),
+    SyncAcl = maps:get(sync_acl, Args, false),
     {BatchHash, ChildrenStorageCtxsBatch2} =
-        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch),
+        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch, SyncAcl),
 
     ChildrenStorageCtxs = maps:get(children_storage_file_ctxs, Data0, #{}),
     HashesMap = maps:get(hashes_map, Data0, #{}),
@@ -516,9 +516,9 @@ import_dirs_only(Job = #space_strategy_job{}, FileAttr, FileCtx) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec count_batch_hash(non_neg_integer(), non_neg_integer(),
-    space_strategy:job_data(), storage_file_ctx:ctx()) ->
+    space_strategy:job_data(), storage_file_ctx:ctx(), boolean()) ->
     {binary(), [storage_file_ctx:ctx()], space_strategy:job_data()}.
-count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx) ->
+count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx, SyncAcl) ->
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, Data1} =
         case storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data0) of
@@ -528,7 +528,7 @@ count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx) ->
                 {ChildrenStorageCtxsBatch0, Data2}
         end,
     {BatchHash0, ChildrenStorageCtxsBatch2} =
-        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
+        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1, SyncAcl),
     {BatchHash0, ChildrenStorageCtxsBatch2, Data1}.
 
 %%-------------------------------------------------------------------

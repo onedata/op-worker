@@ -81,12 +81,12 @@ get_configuration(SpaceId) ->
     end.
 
 -spec query(od_space:id(), non_neg_integer()) ->
-    {[cdmi_id:objectid()], file_popularity_view:index_token() | undefined} | {error, term()}.
+    {[file_id:objectid()], file_popularity_view:index_token() | undefined} | {error, term()}.
 query(SpaceId, Limit) ->
     file_popularity_view:query(SpaceId, undefined, Limit).
 
 -spec query(od_space:id(), file_popularity_view:index_token() | undefined, non_neg_integer()) ->
-    {[cdmi_id:objectid()], file_popularity_view:index_token()} | {error, term()}.
+    {[file_id:objectid()], file_popularity_view:index_token()} | {error, term()}.
 query(SpaceId, IndexToken, Limit) ->
     file_popularity_view:query(SpaceId, IndexToken, Limit).
 

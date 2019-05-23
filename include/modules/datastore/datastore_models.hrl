@@ -60,8 +60,8 @@
 %
 
 -record(od_user, {
-    name :: undefined | binary(),
-    alias :: undefined | binary(),
+    full_name :: undefined | binary(),
+    username :: undefined | binary(),
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
@@ -132,6 +132,7 @@
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
+    eff_harvesters = [] :: [od_harvester:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -165,6 +166,12 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_harvester, {
+    indices = [] :: [od_harvester:index()],
+    spaces = [] :: [od_space:id()],
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -180,6 +187,11 @@
 
 -record(authorization_nonce, {
     timestamp :: integer()
+}).
+
+-record(file_download_code, {
+    session_id :: session:id(),
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% Identity containing user_id
@@ -204,14 +216,19 @@
     event_manager :: undefined | pid(),
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
+    async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
     proxy_via :: oneprovider:id() | undefined,
-    response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = #{} :: maps:map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
-    transfers = [] :: [transfer:id()],
     direct_io = false :: boolean()
+}).
+
+% Model used to cache idp access tokens
+-record(idp_access_token, {
+    token :: idp_access_token:token(),
+    expiration_time :: idp_access_token:expires()
 }).
 
 %% File handle used by the module
@@ -506,7 +523,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
-    file_objectid :: undefined | cdmi_id:object_id(), % undefined only for upgraded docs
+    file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
     value = #{} :: maps:map()
 }).
 
@@ -674,6 +691,14 @@
     reduce_function :: undefined | index:index_function(),
     index_options = [] :: index:options(),
     providers = [] :: all | [od_provider:id()]
+}).
+
+%% Model that holds information about harvesting for given pair (HarvesterId, SpaceId)
+-record(harvest_stream_state, {
+    % max processed sequence associated with custom_metadata document
+    max_relevant_seq = 0 :: couchbase_changes:seq(),
+    % maps that holds max seen sequence numbers for each harvesting index
+    seen_seqs = #{} :: maps:map(od_harvester:index(), couchbase_changes:seq())
 }).
 
 -endif.

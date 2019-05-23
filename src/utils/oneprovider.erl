@@ -15,27 +15,32 @@
 
 -include("global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
--include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
-%% ID of this provider (assigned by global registry)
+%% Id of this provider (assigned by Onezone)
 -type id() :: binary().
 -export_type([id/0]).
 
--define(OZ_VERSION_CACHE_TTL, timer:minutes(5)).
-
 %% API
--export([get_node_hostname/0, get_node_ip/0, get_rest_endpoint/1]).
+-export([get_domain/0, get_node_ip/0, get_rest_endpoint/1]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
 -export([get_oz_domain/0, get_oz_url/0, get_oz_version/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
--export([force_oz_connection_start/0, is_connected_to_oz/0, on_connection_to_oz/0]).
+-export([is_connected_to_oz/0]).
+-export([terminate_oz_connection/0, force_oz_connection_start/0, restart_oz_connection/0]).
+-export([on_connect_to_oz/0, on_deregister/0]).
+-export([set_up_service_in_onezone/0]).
 
 % Developer functions
--export([register_in_oz_dev/2]).
+-export([register_in_oz_dev/3]).
+
+-define(GUI_PACKAGE_PATH, begin
+    {ok, __Path} = application:get_env(?APP_NAME, gui_package_path), __Path
+end).
+-define(OZ_VERSION_CACHE_TTL, timer:minutes(5)).
 
 %%%===================================================================
 %%% API
@@ -46,9 +51,12 @@
 %% Returns the hostname of the node, based on its erlang node name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_node_hostname() -> string().
-get_node_hostname() ->
-    utils:get_host(node()).
+-spec get_domain() -> binary().
+get_domain() ->
+    case provider_logic:get_domain() of
+        {ok, Domain} -> Domain;
+        _ -> list_to_binary(utils:get_host(node()))
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -70,7 +78,7 @@ get_node_ip() ->
 -spec get_rest_endpoint(string()) -> string().
 get_rest_endpoint(Path) ->
     Port = https_listener:port(),
-    Host = oneprovider:get_node_hostname(),
+    Host = get_domain(),
     str_utils:format("https://~s:~B/api/v3/oneprovider/~s", [Host, Port, Path]).
 
 
@@ -84,7 +92,7 @@ get_rest_endpoint(Path) ->
 get_id() ->
     case provider_auth:get_provider_id() of
         {error, _} -> throw(?ERROR_UNREGISTERED_PROVIDER);
-        ProviderId -> ProviderId
+        {ok, ProviderId} -> ProviderId
     end.
 
 
@@ -98,7 +106,7 @@ get_id() ->
 get_id_or_undefined() ->
     try provider_auth:get_provider_id() of
         {error, _} -> undefined;
-        ProviderId -> ProviderId
+        {ok, ProviderId} -> ProviderId
     catch
         _:_ ->
             % Can appear before cluster is initialized
@@ -113,7 +121,7 @@ get_id_or_undefined() ->
 %%--------------------------------------------------------------------
 -spec is_self(od_provider:id()) -> boolean().
 is_self(ProviderId) ->
-    ProviderId =:= provider_auth:get_provider_id().
+    {ok, ProviderId} =:= provider_auth:get_provider_id().
 
 
 %%--------------------------------------------------------------------
@@ -146,7 +154,10 @@ get_version() ->
 %%--------------------------------------------------------------------
 -spec get_build() -> binary().
 get_build() ->
-    list_to_binary(application:get_env(?APP_NAME, build_version, "unknown")).
+    case application:get_env(?APP_NAME, build_version, "unknown") of
+        "" -> <<"unknown">>;
+        Build -> list_to_binary(Build)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -164,10 +175,10 @@ trusted_ca_certs() ->
 %% Returns the domain of OZ, which is specified in env.
 %% @end
 %%--------------------------------------------------------------------
--spec get_oz_domain() -> string().
+-spec get_oz_domain() -> binary().
 get_oz_domain() ->
     {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    str_utils:to_list(Hostname).
+    str_utils:to_binary(Hostname).
 
 
 %%--------------------------------------------------------------------
@@ -175,9 +186,9 @@ get_oz_domain() ->
 %% Returns the URL to OZ.
 %% @end
 %%--------------------------------------------------------------------
--spec get_oz_url() -> string().
+-spec get_oz_url() -> binary().
 get_oz_url() ->
-    "https://" ++ get_oz_domain().
+    <<"https://", (get_oz_domain())/binary>>.
 
 
 %%--------------------------------------------------------------------
@@ -188,7 +199,7 @@ get_oz_url() ->
 -spec get_oz_version() -> binary().
 get_oz_version() ->
     GetOzVersion = fun() ->
-        {ok, OzVersion, _} = provider_logic:fetch_oz_compatibility_config(get_oz_url()),
+        {ok, OzVersion, _} = provider_logic:fetch_compatibility_config(onezone),
         {true, OzVersion, ?OZ_VERSION_CACHE_TTL}
     end,
     {ok, OzVersion} = simple_cache:get(cached_oz_version, GetOzVersion),
@@ -244,8 +255,19 @@ is_connected_to_oz() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Immediately kills existing Onezone connection (if any).
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate_oz_connection() -> ok.
+terminate_oz_connection() ->
+    gs_worker:terminate_connection().
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Immediately triggers onezone connection attempt.
 %% Returns boolean indicating success.
+%% NOTE: used by onepanel (RPC)
 %% @end
 %%--------------------------------------------------------------------
 -spec force_oz_connection_start() -> boolean().
@@ -255,17 +277,69 @@ force_oz_connection_start() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called when connection to Onezone is established.
+%% Immediately triggers onezone connection attempt.
+%% Returns boolean indicating success.
 %% @end
 %%--------------------------------------------------------------------
--spec on_connection_to_oz() -> ok.
-on_connection_to_oz() ->
-    % when connection is established onezone should be notified about
-    % current provider ips.
-    % cast is used as this function is called
-    % in gs_client init and a call would cause a deadlock - updating
-    % ips uses the graph sync connection.
-    gen_server2:cast(?NODE_MANAGER_NAME, update_subdomain_delegation_ips).
+-spec restart_oz_connection() -> ok.
+restart_oz_connection() ->
+    gs_worker:restart_connection().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called when connection to Onezone is established.
+%% Should throw on any error, in such case the connection is aborted and
+%% attempted again after backoff.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_connect_to_oz() -> ok.
+on_connect_to_oz() ->
+    set_up_service_in_onezone(),
+    ok = provider_logic:update_subdomain_delegation_ips(),
+    % revise harvesters when connection to onezone is established
+    harvest_manager:revise_all_streams().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Performs cleanup upon provider deregistration.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_deregister() -> ok.
+on_deregister() ->
+    ?info("Provider has been deregistered"),
+    provider_auth:delete(),
+    % kill the connection to prevent 'unauthorized' errors due
+    % to older authorization when immediately registering anew
+    terminate_oz_connection().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets up Oneprovider worker service in Onezone - updates version info
+%% (release, build and GUI versions). If given GUI version is not present in
+%% Onezone, the GUI package is uploaded first.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_up_service_in_onezone() -> ok.
+set_up_service_in_onezone() ->
+    ?info("Setting up Oneprovider worker service in Onezone"),
+    Release = get_version(),
+    Build = get_build(),
+    {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
+
+    case cluster_logic:update_version_info(Release, Build, GuiHash) of
+        ok ->
+            ?info("Skipping GUI upload as it is already present in Onezone");
+        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
+            ?info("Uploading GUI to Onezone (~s)", [GuiHash]),
+            ok = cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH),
+            ?info("GUI uploaded succesfully"),
+            ok = cluster_logic:update_version_info(Release, Build, GuiHash)
+    end,
+
+    ?info("Oneprovider worker service successfully set up in Onezone").
 
 
 %%--------------------------------------------------------------------
@@ -275,9 +349,9 @@ on_connection_to_oz() ->
 %% onepanel is responsible for registering the provider.
 %% @end
 %%--------------------------------------------------------------------
--spec register_in_oz_dev(NodeList :: [node()], ProviderName :: binary()) ->
+-spec register_in_oz_dev(NodeList :: [node()], ProviderName :: binary(), Token :: binary()) ->
     {ok, ProviderId :: od_provider:id()} | {error, term()}.
-register_in_oz_dev(NodeList, ProviderName) ->
+register_in_oz_dev(NodeList, ProviderName, Token) ->
     try
         % Send signing request to OZ
         IPAddresses = get_all_nodes_ips(NodeList),
@@ -287,13 +361,17 @@ register_in_oz_dev(NodeList, ProviderName) ->
         Domain = <<(hd(IPAddresses))/binary>>,
         SubdomainDelegation = false,
         Parameters = [
-            {<<"domain">>, Domain},
+            {<<"uuid">>, ProviderName},
+            {<<"token">>, Token},
             {<<"name">>, ProviderName},
             {<<"adminEmail">>, <<ProviderName/binary, "@onedata.org">>},
             {<<"subdomainDelegation">>, SubdomainDelegation},
-            {<<"uuid">>, ProviderName}
+            {<<"domain">>, Domain}
         ],
-        {ok, ProviderId, Macaroon} = oz_providers:register_with_uuid(none, Parameters),
+        {ok, #{
+            <<"providerId">> := ProviderId,
+            <<"macaroon">> := Macaroon
+        }} = oz_providers:register_with_uuid(none, Parameters),
         provider_auth:save(ProviderId, Macaroon),
         {ok, ProviderId}
     catch

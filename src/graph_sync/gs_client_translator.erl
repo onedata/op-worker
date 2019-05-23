@@ -41,8 +41,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
             default_space = gs_protocol:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
@@ -59,8 +59,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result)
         }
@@ -70,8 +70,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null))
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null)))
         }
     };
 
@@ -147,7 +147,8 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             online = maps:get(<<"online">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
-            eff_groups = maps:get(<<"effectiveGroups">>, Result)
+            eff_groups = maps:get(<<"effectiveGroups">>, Result),
+            eff_harvesters = maps:get(<<"effectiveHarvesters">>, Result)
         }
     };
 
@@ -208,6 +209,15 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
             public_handle = maps:get(<<"publicHandle">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
             timestamp = time_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result))
+        }
+    };
+
+translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_harvester{
+            indices = maps:get(<<"indices">>, Result),
+            spaces = maps:get(<<"spaces">>, Result)
         }
     };
 
@@ -281,7 +291,8 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
             subdomain = undefined,
             spaces = #{},
             eff_users = [],
-            eff_groups = []
+            eff_groups = [],
+            eff_harvesters = []
         }
     };
 

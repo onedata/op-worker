@@ -14,14 +14,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/rtransfer/rtransfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(RTRANSFER_PORT, proplists:get_value(server_port,
-                                            application:get_env(rtransfer_link, transfer, []),
-                                            6665)).
 
 -define(MOCK, application:get_env(?APP_NAME, rtransfer_mock, false)).
 
@@ -99,10 +97,11 @@ fetch(Request, NotifyFun, CompleteFun, TransferId, SpaceId, FileGuid) ->
 %% Returns a list of node addresses for a given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_nodes(ProviderId :: binary()) -> rtransfer_link:address().
+-spec get_nodes(ProviderId :: binary()) -> [rtransfer_link:address()].
 get_nodes(ProviderId) ->
-    {ok, IPs} = provider_logic:resolve_ips(ProviderId),
-    [{IP, ?RTRANSFER_PORT} || IP <- IPs].
+    {ok, Nodes} = provider_logic:get_nodes(ProviderId),
+    {ok, RtransferPort} = provider_logic:get_rtransfer_port(ProviderId),
+    [{Hostname, RtransferPort} || Hostname <- Nodes].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,7 +165,7 @@ auth_request(TransferData, ProviderId) ->
             false -> throw({error, space_not_supported_by_local_provider, SpaceId})
         end,
 
-        case fslogic_uuid:guid_to_space_id(FileGuid) of
+        case file_id:guid_to_space_id(FileGuid) of
             SpaceId -> ok;
             _ -> throw({error, {invalid_file_guid, FileGuid}})
         end,
@@ -199,7 +198,7 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
     MySecret = do_generate_secret(),
     Request = #generate_rtransfer_conn_secret{secret = MySecret},
     {ok, #server_message{message_body = #rtransfer_conn_secret{secret = PeerSecret}}} =
-        communicator:communicate_with_provider(Request, SessId),
+        communicator:communicate_with_provider(SessId, Request),
     {MySecret, PeerSecret}.
 
 %%--------------------------------------------------------------------

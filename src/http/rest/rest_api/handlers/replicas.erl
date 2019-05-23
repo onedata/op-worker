@@ -168,7 +168,7 @@ evict_file_replica_internal(Req, State = #{
     migration_provider_id := MigrationProviderId
 }) ->
     FileGuid = get_file_guid(State),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
@@ -178,7 +178,7 @@ evict_file_replica_internal(Req, State = #{
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),
-    Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
+    Req2 = cowboy_req:reply(?HTTP_200_OK, #{}, Response, Req),
     {stop, Req2, State}.
 
 %%--------------------------------------------------------------------
@@ -189,7 +189,7 @@ evict_file_replica_internal(Req, State = #{
 -spec replicate_file_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
     FileGuid = get_file_guid(State),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, ProviderId),
@@ -199,7 +199,7 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
     ),
 
     Response = json_utils:encode(#{<<"transferId">> => TransferId}),
-    Req2 = cowboy_req:reply(?HTTP_OK, #{}, Response, Req),
+    Req2 = cowboy_req:reply(?HTTP_200_OK, #{}, Response, Req),
     {stop, Req2, State}.
 
 %%--------------------------------------------------------------------

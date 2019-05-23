@@ -299,7 +299,7 @@ import_file_with_link_but_no_doc_test(Config, MountSpaceInRoot) ->
     %% Check if dir was imported
     {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch(FileUuid, fslogic_uuid:guid_to_uuid(FileGuid)),
+    ?assertMatch(FileUuid, file_id:guid_to_uuid(FileGuid)),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
@@ -1798,7 +1798,7 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     Xattr = #xattr{name = <<"xattr_name">>, value = <<"xattr_value">>},
     ok = lfm_proxy:set_xattr(W1, ?ROOT_SESS_ID, {guid, FileGuid}, Xattr),
 
@@ -2607,10 +2607,10 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config,
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
 
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    Uuid = file_id:guid_to_uuid(Guid),
 
     %% modify file content and change mtime to time of last stat by sync
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    Uuid = file_id:guid_to_uuid(Guid),
     StorageFileId = to_storage_file_id(StorageTestFilePath, W1MountPoint),
     StatTime = get_last_stat_timestamp(W1, StorageFileId, ?SPACE_ID),
     %pretend that there were 2 modifications at the same time and that the second
@@ -3671,7 +3671,7 @@ clean_space(Config) ->
 close_opened_files(Worker, SessionId) ->
     {ok, Handles} = rpc:call(Worker, file_handles, list, []),
     lists:foreach(fun(#document{key = Uuid}) ->
-        Guid = fslogic_uuid:uuid_to_guid(Uuid, ?SPACE_ID),
+        Guid = file_id:pack_guid(Uuid, ?SPACE_ID),
         FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [Guid]),
         ok = rpc:call(Worker, file_handles, register_release, [FileCtx, SessionId, infinity])
     end, Handles).
@@ -3944,7 +3944,7 @@ assertNoUpdateInProgress(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 uuid(Worker, FileGuid) ->
-    rpc:call(Worker, fslogic_uuid, guid_to_uuid, [FileGuid]).
+    rpc:call(Worker, file_id, guid_to_uuid, [FileGuid]).
 
 space_uuid(Worker, SpaceId) ->
     rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [SpaceId]).
@@ -3997,9 +3997,9 @@ flatten_histograms(SSM) ->
         <<"updatedMinHist">> => lists:sum(lists:sublist(maps:get(<<"updatedMinHist">>, SSM), 2)),
         <<"deletedMinHist">> => lists:sum(lists:sublist(maps:get(<<"deletedMinHist">>, SSM), 2)),
 
-        <<"importedHourHist">> => lists:sum(lists:sublist(maps:get(<<"importedHourHist">>, SSM), 2)),
-        <<"updatedHourHist">> => lists:sum(lists:sublist(maps:get(<<"updatedHourHist">>, SSM), 2)),
-        <<"deletedHourHist">> => lists:sum(lists:sublist(maps:get(<<"deletedHourHist">>, SSM), 2)),
+        <<"importedHourHist">> => lists:sum(lists:sublist(maps:get(<<"importedHourHist">>, SSM), 3)),
+        <<"updatedHourHist">> => lists:sum(lists:sublist(maps:get(<<"updatedHourHist">>, SSM), 3)),
+        <<"deletedHourHist">> => lists:sum(lists:sublist(maps:get(<<"deletedHourHist">>, SSM), 3)),
 
         <<"importedDayHist">> => lists:sum(lists:sublist(maps:get(<<"importedDayHist">>, SSM), 1)),
         <<"updatedDayHist">> => lists:sum(lists:sublist(maps:get(<<"updatedDayHist">>, SSM), 1)),

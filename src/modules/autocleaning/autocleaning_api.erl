@@ -41,7 +41,7 @@
 %% occupancy hasn't reached the configured threshold).
 %% @end
 %%-------------------------------------------------------------------
--spec force_start(od_space:id()) -> {ok, autocleaning_run:id()} | {error, term()}.
+-spec force_start(od_space:id()) -> {ok, autocleaning:run_id()} | {error, term()}.
 force_start(SpaceId) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -109,7 +109,7 @@ maybe_check_and_start_autocleaning(SpaceId, SQ = #space_quota{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_start(od_space:id(), space_quota:record()) ->
-    ok | {ok, autocleaning_run:id()} | {error, term()}.
+    ok | {ok, autocleaning:run_id()} | {error, term()}.
 maybe_start(SpaceId, SpaceQuota) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -124,7 +124,8 @@ maybe_start(SpaceId, SpaceQuota) ->
                         _ ->
                             ok
                     end;
-                _ -> ok
+                _ ->
+                    ok
             end;
         false ->
             ok
@@ -204,7 +205,7 @@ status(SpaceId) ->
 %% sorted by start time.
 %% @end
 %%-------------------------------------------------------------------
--spec list_reports(od_space:id()) -> {ok, [autocleaning_run:id()]}.
+-spec list_reports(od_space:id()) -> {ok, [autocleaning:run_id()]}.
 list_reports(SpaceId) ->
     list_reports(SpaceId, undefined, 0, all).
 
@@ -214,15 +215,15 @@ list_reports(SpaceId) ->
 %% Offset after StartId. The list is decreasingly sorted by start time.
 %% @end
 %%-------------------------------------------------------------------
--spec list_reports(od_space:id(), autocleaning_run:id() | undefined,
+-spec list_reports(od_space:id(), autocleaning:run_id() | undefined,
     autocleaning_run_links:offset(), autocleaning_run_links:list_limit()) ->
-    {ok, [autocleaning_run:id()]}.
+    {ok, [autocleaning:run_id()]}.
 list_reports(SpaceId, StartId, Offset, Limit) ->
     autocleaning_run_links:list(SpaceId, StartId, Offset, Limit).
 
 
 -spec restart_autocleaning_run(autocleaning:id()) ->
-    ok | {ok, autocleaning_run:id()} | {error, term()}.
+    ok | {ok, autocleaning:run_id()} | {error, term()}.
 restart_autocleaning_run(SpaceId) ->
     case autocleaning:get(SpaceId) of
         {ok, #document{value = #autocleaning{current_run = undefined}}} ->
@@ -279,7 +280,7 @@ should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec get_run_report(autocleaning_run:id(), autocleaning_run:record()) -> {ok, maps:maps()}.
+-spec get_run_report(autocleaning:run_id(), autocleaning_run:record()) -> {ok, maps:maps()}.
 get_run_report(ARId, #autocleaning_run{
     started_at = StartedAt,
     stopped_at = StoppedAt,

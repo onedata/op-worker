@@ -202,7 +202,7 @@ stream_space_changes(Req, State) ->
 
     State6 = ?MODULE:init_stream(State5),
     Req6 = cowboy_req:stream_reply(
-        ?HTTP_OK, #{<<"content-type">> => <<"application/json">>}, Req5
+        ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req5
     ),
 
     ok = stream_loop(Req6, State6),
@@ -434,7 +434,7 @@ send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs) ->
         Changes ->
             FileId =
                 try
-                    {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(
+                    {ok, Val} = file_id:guid_to_objectid(file_id:pack_guid(
                         FileUuid, SpaceId
                     )),
                     Val

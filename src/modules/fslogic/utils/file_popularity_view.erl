@@ -40,7 +40,7 @@ create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay
             // function used to calculate the popularity of a file
             ", (popularity_function(TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay))/binary,"
 
-            // code for building cdmi_id
+            // code for building file_id
             ", (index:build_cdmi_object_id_in_js())/binary,"
 
            if(doc['_record'] == 'file_popularity'
@@ -76,7 +76,7 @@ modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay)
     end.
 
 -spec query(od_space:id(), undefined | index_token(), non_neg_integer()) ->
-    {[cdmi_id:objectid()], undefined | index_token()} | {error, term()}.
+    {[file_id:objectid()], undefined | index_token()} | {error, term()}.
 query(SpaceId, IndexToken, Limit) ->
     Options = token_to_opts(IndexToken, Limit),
     Ctx = datastore_model_default:get_ctx(file_popularity),
@@ -112,7 +112,7 @@ query(SpaceId, IndexToken, Limit) ->
 example_query(SpaceId) ->
     str_utils:format_bin(
         "curl -sS -k -H \"X-Auth-Token:$TOKEN\" -X GET https://~s/api/v3/oneprovider/spaces/~s/indexes/file-popularity/query?limit=10",
-        [oneprovider:get_node_hostname(), SpaceId]
+        [oneprovider:get_domain(), SpaceId]
     ).
 
 

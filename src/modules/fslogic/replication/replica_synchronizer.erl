@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
 
@@ -90,7 +91,7 @@
 % API
 -export([
     synchronize/6, request_synchronization/6, request_synchronization/7,
-    update_replica/4, force_flush_events/1,
+    update_replica/4, force_flush_events/1, delete_whole_file_replica/2,
     cancel/1, cancel_transfers_of_session/2,
     terminate_all/0
 ]).
@@ -173,6 +174,16 @@ update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
 -spec force_flush_events(file_meta:uuid()) -> ok.
 force_flush_events(Uuid) ->
     apply_if_alive_no_check(Uuid, ?FLUSH_EVENTS).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes delete_whole_file_replica_internal inside synchronizer.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_whole_file_replica(file_ctx:ctx(), version_vector:version_vector()) ->
+    ok | {error, term()}.
+delete_whole_file_replica(FileCtx, AllowedVV) ->
+    apply_no_check(FileCtx, {delete_whole_file_replica, AllowedVV}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -574,6 +585,10 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
 handle_call(?FLUSH_EVENTS, _From, State) ->
     {reply, ok, flush_events(State), ?DIE_AFTER};
 
+handle_call({delete_whole_file_replica, AllowedVV}, _From, State) ->
+    {Ans, State2} = delete_whole_file_replica_internal(AllowedVV, State),
+    {reply, Ans, State2, ?DIE_AFTER};
+
 handle_call({apply, Fun}, _From, State) ->
     Ans = Fun(),
     {reply, Ans, State, ?DIE_AFTER};
@@ -677,22 +692,29 @@ handle_info({Ref, complete, {ok, _} = _Status}, State) ->
     {noreply, State5, ?DIE_AFTER};
 
 handle_info({FailedRef, complete, {error, disconnected}}, State) ->
-    {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
-        disassociate_ref(FailedRef, State),
+    try
+        {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
+            disassociate_ref(FailedRef, State),
 
-    case Block of
-        undefined ->
-            ?error("Failed transfer ~p not found in state", [FailedRef]),
-            {noreply, State1};
-        _ ->
-            NewTransfers = start_transfers([Block], undefined, State1, Priority),
-            ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
-                FailedRef, Block, NewTransfers
-            ]),
-            {_, NewRefs, _} = lists:unzip3(NewTransfers),
-            State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
-            State3 = add_in_progress(NewTransfers, State2),
-            {noreply, State3}
+        case Block of
+            undefined ->
+                ?error("Failed transfer ~p not found in state", [FailedRef]),
+                {noreply, State1};
+            _ ->
+                NewTransfers = start_transfers([Block], undefined, State1, Priority),
+                ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
+                    FailedRef, Block, NewTransfers
+                ]),
+                {_, NewRefs, _} = lists:unzip3(NewTransfers),
+                State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
+                State3 = add_in_progress(NewTransfers, State2),
+                {noreply, State3}
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Unable to restart transfer due to error ~p:~p",
+                [E1, E2]),
+            handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
 handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, State) ->
@@ -1339,7 +1361,7 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     #file_location{blocks = FinalBlocks} = Location =
         file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
-        fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+            fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
     case Flush of
@@ -1502,4 +1524,44 @@ wait_for_terminate(Pid) ->
             wait_for_terminate(Pid);
         _ ->
             ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes replica of file.
+%% Before deletion checks whether version of local replica is identical
+%% or lesser to allowed.
+%% NOTE!!! This function is not responsible for checking whether
+%% given replica is unique.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{})
+        -> {ok | {error, term()}, #state{}}.
+delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    try
+        LocalFileLocId = file_location:local_id(FileUuid),
+        ProviderId = oneprovider:get_id(),
+        {ok, LocDoc} = fslogic_location_cache:get_location(LocalFileLocId, FileUuid),
+        CurrentVV = file_location:get_version_vector(LocDoc),
+        AllowedLocalV = version_vector:get_version(LocalFileLocId, ProviderId, AllowedVV),
+        CurrentLocalV = version_vector:get_version(LocalFileLocId, ProviderId, CurrentVV),
+        case AllowedLocalV =:= CurrentLocalV of
+            true ->
+                UserCtx = user_ctx:new(?ROOT_SESS_ID),
+                #fuse_response{status = #status{code = ?OK}} =
+                    truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
+                %todo VFS-4433 file_popularity should be updated after updates on file_location
+                fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
+                State2 = flush_events(State),
+                {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2};
+            _ ->
+                {{error, file_modified_locally}, State}
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
+                [FileUuid, {Error, Reason}]),
+            {{error, Reason}, State}
     end.

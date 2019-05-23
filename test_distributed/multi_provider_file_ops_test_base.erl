@@ -725,7 +725,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                         case CloseAfterVerify of
                             true ->
                                 ok = timer:sleep(timer:seconds(1)),
-                                ok = lfm_proxy:close(W, Handle);
+                                ?assertEqual(ok, lfm_proxy:close(W, Handle));
                             _ ->
                                 ok
                         end;
@@ -1744,7 +1744,7 @@ verify_locations(W, FileUuid, SpaceId) ->
     end, 0, IDs).
 
 get_locations(W, FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
     {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
     LocationIds.
 
@@ -1810,7 +1810,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     FileContent = <<"abc">>,
     storage_file_manager:unlink(SFMHandle1, size(FileContent)),
     ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
+    {ok, SFMHandle2} = storage_file_manager:open_insecure(SFMHandle1, write),
     SFMHandle3 = storage_file_manager:set_size(SFMHandle2),
     {ok, 3} = storage_file_manager:write(SFMHandle3, 0, FileContent),
     storage_file_manager:fsync(SFMHandle3, false),
@@ -1916,7 +1916,7 @@ verify_stats(Config, File, IsDir) ->
         end,
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
         {FileUuid, rpc:call(W, file_meta, get, [FileUuid])}
     end),
 
@@ -2083,7 +2083,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
 
         [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
         {W, get_locations(W, FileUuid, SpaceId)}
@@ -2126,7 +2126,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
         {W, FileUuid}
     end),
 

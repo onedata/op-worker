@@ -52,7 +52,7 @@ get(FileCtx, Names, true) ->
         {ok, Uuids} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             Jsons = lists:map(fun(Uuid) ->
-                AncestorCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId)),
+                AncestorCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
                 case get(AncestorCtx, Names, false) of
                     {ok, Json} ->
                         Json;
@@ -82,7 +82,7 @@ get(FileCtx, Names, true) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set(FileCtx, JsonToInsert, Names, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, FileObjectid} = cdmi_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
+    {ok, FileObjectid} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
     ToCreate = #document{
         key = FileUuid,
         value = #custom_metadata{

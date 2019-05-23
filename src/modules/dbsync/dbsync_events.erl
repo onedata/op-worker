@@ -56,7 +56,7 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    fslogic_deletion_worker:request_remote_deletion(FileCtx),
+    fslogic_delete:check_if_opened_and_remove(user_ctx:new(?ROOT_SESS_ID), FileCtx, false, true),
     file_popularity:delete(FileUuid),
     ok;
 change_replicated_internal(SpaceId, #document{
@@ -79,14 +79,14 @@ change_replicated_internal(SpaceId, #document{
     value = #file_location{uuid = FileUuid}
 } = Doc) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #times{}
 }) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
     (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx));
 change_replicated_internal(_SpaceId, #document{
     key = FileUuid,

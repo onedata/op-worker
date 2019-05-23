@@ -150,8 +150,8 @@ current_size(SpaceId) ->
 -spec available_size(id()) -> integer().
 available_size(SpaceId) ->
     try
+        {ok, SupSize} = provider_logic:get_support_size(SpaceId),
         CSize = ?MODULE:current_size(SpaceId),
-        SupSize = space_logic:get_provider_support(?ROOT_SESS_ID, SpaceId),
         SupSize - CSize
     catch
         _:Reason ->

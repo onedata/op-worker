@@ -23,10 +23,10 @@
 
 %% API
 -export([get_helper_handle/2]).
--export([getattr/2, access/3, mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3,
-    removexattr/3, listxattr/2, open/3, read/3, write/3, release/1, flush/1,
-    fsync/2, readdir/4]).
+-export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
+    mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
+    chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
+    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2, readdir/4]).
 -export([init_counters/0, init_report/0]).
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
@@ -72,6 +72,18 @@ get_helper_handle(Helper, UserCtx) ->
         handle = Handle,
         timeout = helper:get_timeout(Helper)
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:refresh_params/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec refresh_params(helper_handle() | file_handle(), maps:map()) ->
+    ok | {error, Reason :: term()}.
+refresh_params(#helper_handle{} = Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
+refresh_params(#file_handle{} = Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -258,6 +270,17 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:refresh_params/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec refresh_helper_params(file_handle(), maps:map()) ->
+    ok | {error, Reason :: term()}.
+refresh_helper_params(Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+
 
 %%--------------------------------------------------------------------
 %% @doc

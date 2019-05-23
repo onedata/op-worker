@@ -167,7 +167,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     {ok, Handle} =
         lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
     lfm_proxy:close(W1, Handle),
-    FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
+    FileToCompareUUID = file_id:guid_to_uuid(FileToCompareGUID),
 
     [$/ | FileToCompareFID] =
         binary_to_list(get_storage_file_id_by_uuid(W1, FileToCompareUUID)),
@@ -176,7 +176,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     %when
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, read),
     lfm_proxy:close(W1, Handle2),
 
@@ -246,7 +246,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     {ok, Handle} =
         lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
     lfm_proxy:close(W1, Handle),
-    FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
+    FileToCompareUUID = file_id:guid_to_uuid(FileToCompareGUID),
 
     [$/ | FileToCompareFID] =
         binary_to_list(get_storage_file_id_by_uuid(W1, FileToCompareUUID)),
@@ -259,11 +259,11 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid2, value = FileMeta2}]),
 
-    FileGuid1 = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), % create delayed storage files
+    FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create delayed storage files
     {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
     lfm_proxy:close(W1, Handle1),
 
-    FileGuid2 = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+    FileGuid2 = file_id:pack_guid(FileUuid2, SpaceId),
     {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, read),
     lfm_proxy:close(W1, Handle2),
 
@@ -291,7 +291,7 @@ write_should_add_blocks_to_file_location(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
 
     %when
@@ -344,7 +344,7 @@ truncate_should_change_size_and_blocks(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
 
@@ -375,7 +375,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
     ExternalBlocks = [#file_block{offset = 0, size = 10}],
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -411,7 +411,7 @@ update_should_bump_replica_version(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
 
     %when
@@ -468,7 +468,7 @@ read_should_synchronize_file(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % attach external location
     ExternalBlocks = [#file_block{offset = 0, size = 10}],
@@ -545,7 +545,7 @@ external_change_should_invalidate_blocks(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -602,7 +602,7 @@ update_should_save_recent_changes(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
 
     %when
@@ -667,7 +667,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -750,7 +750,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -821,7 +821,7 @@ remote_change_of_size_should_notify_clients(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -880,7 +880,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -935,7 +935,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -1006,7 +1006,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -1097,7 +1097,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
 
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % attach external location
     ExternalBlocks = [],
@@ -1158,7 +1158,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     ok = lfm_proxy:close(W1, Handle),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {SfmHandle, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx]),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % attach external location
     ExternalBlocks = [#file_block{offset = 0, size = 10}],
@@ -1223,8 +1223,8 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     FileCtx2 = file_ctx:new_by_guid(FileGuid2),
     {SfmHandle1, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx1]),
     {SfmHandle2, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx2]),
-    FileUuid1 = fslogic_uuid:guid_to_uuid(FileGuid1),
-    FileUuid2 = fslogic_uuid:guid_to_uuid(FileGuid2),
+    FileUuid1 = file_id:guid_to_uuid(FileGuid1),
+    FileUuid2 = file_id:guid_to_uuid(FileGuid2),
 
     % attach external location
     ExternalBlocks = [#file_block{offset = 0, size = 10}],
@@ -1290,6 +1290,16 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(W1, sfm_utils, [passthrough]),
+    test_utils:mock_expect(W1, sfm_utils, create_delayed_storage_file,
+        fun(FileCtx, UserCtx, VerifyLink) ->
+            {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, VerifyLink]),
+            {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}
+        end),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
@@ -1297,6 +1307,10 @@ init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(W1, [sfm_utils]),
+    end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),

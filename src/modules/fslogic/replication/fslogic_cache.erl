@@ -157,7 +157,7 @@ flush(Type) ->
 flush(Key, _FlushBlocks) ->
     KM = get(?KEYS_MODIFIED),
     KBM = get(?KEYS_BLOCKS_MODIFIED),
-    case lists:member(Key, KM) orelse lists:member(Key, KM) of
+    case lists:member(Key, KM) orelse lists:member(Key, KBM) of
         true ->
             case flush_key(Key, sync) of
                 ok ->

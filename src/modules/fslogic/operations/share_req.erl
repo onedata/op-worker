@@ -88,7 +88,7 @@ remove_share_internal(UserCtx, FileCtx) ->
 create_share_insecure(UserCtx, FileCtx, Name) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     ShareId = datastore_utils:gen_key(),
-    ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
+    ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),

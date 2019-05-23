@@ -278,7 +278,7 @@ gen_filename() ->
 
 helper_handle_server(Config) ->
     UserCtx = helper:new_posix_user_ctx(0, 0),
-    Helper = helper:new_helper(
+    {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
         #{<<"mountPoint">> => ?path(Config, "")},
         UserCtx,

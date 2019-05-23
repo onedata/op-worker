@@ -49,7 +49,7 @@ all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(TIMEOUT, timer:minutes(1)).
--define(FILE_GUID(Id), fslogic_uuid:uuid_to_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
+-define(FILE_GUID(Id), file_id:pack_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
 -define(STM_ID(N), list_to_atom("stream_id_" ++ integer_to_list(N))).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
@@ -370,9 +370,9 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send_to_client, fun
-        (#file_written_subscription{} = Msg, _, _) -> Self ! Msg, ok;
-        (#subscription_cancellation{} = Msg, _, _) -> Self ! Msg, ok;
+    test_utils:mock_expect(Workers, communicator, send_to_oneclient, fun
+        (_, #file_written_subscription{} = Msg, _) -> Self ! Msg, ok;
+        (_, #subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
         (_, _, _) -> ok
     end),
     test_utils:mock_new(Workers, space_logic),
@@ -389,7 +389,7 @@ init_per_testcase(_Case, Config) ->
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send_to_client, fun
+    test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
         (_, _, _) -> ok
     end),
     test_utils:mock_new(Workers, space_logic),
@@ -428,10 +428,11 @@ end_per_testcase(_Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Con) ->
+    Iden :: session:identity(), Conn :: pid()) -> ok.
+session_setup(Worker, SessId, Iden, Conn) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #macaroon_auth{}, [Con]])).
+        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Conn]
+    )).
 
 %%--------------------------------------------------------------------
 %% @private

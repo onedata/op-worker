@@ -16,7 +16,7 @@
 -include("proto/oneclient/common_messages.hrl").
 
 % API
--export([local_id/1, id/2, critical_section/2, save_and_bump_version/2,
+-export([local_id/1, id/2, save_and_bump_version/2,
     is_storage_file_created/1, get/2, get_local/1, get_version_vector/1]).
 -export([create/1, create/2, create_and_update_quota/2, save/1,
     save_and_update_quota/2, get/1, update/2,
@@ -62,17 +62,6 @@ local_id(FileUuid) ->
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(FileUuid, ProviderId) ->
     datastore_utils:gen_key(ProviderId, FileUuid).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Runs given function within locked ResourceId. This function makes sure that
-%% 2 funs with same ResourceId won't run at the same time.
-%% @end
-%%--------------------------------------------------------------------
--spec critical_section(ResourceId :: binary(), Fun :: fun(() -> term())) ->
-    term().
-critical_section(ResourceId, Fun) ->
-    critical_section:run([?MODULE, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc

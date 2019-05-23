@@ -15,17 +15,18 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
--include("proto/oneclient/message_id.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% API
 -export([setup_session/3, teardown_session/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
-    basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0, create_test_users_and_spaces/2,
+    remove_pending_messages/0, create_test_users_and_spaces/2,
     remove_pending_messages/1, clear_subscriptions/1, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
@@ -165,7 +166,7 @@ clean_test_users_and_spaces(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, space_storage]),
+        space_logic, provider_logic, cluster_logic, harvester_logic, space_storage]),
     unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -185,30 +186,8 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, space_storage]),
+        provider_logic, cluster_logic, harvester_logic, space_storage]),
     unmock_provider_ids(Workers).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates basic test session.
-%% @end
-%%--------------------------------------------------------------------
--spec basic_session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
-basic_session_setup(Worker, SessId, Iden, Con, Config) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Con])),
-    [{session_id, SessId}, {identity, Iden} | Config].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes basic test session.
-%% @end
-%%--------------------------------------------------------------------
--spec basic_session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
-basic_session_teardown(Worker, Config) ->
-    SessId = proplists:get_value(session_id, Config),
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -272,7 +251,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     Auth = #macaroon_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
+        reuse_or_create_session, [SessId, fuse, Iden, Auth])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     [
         {{spaces, UserId}, Spaces},
@@ -339,18 +318,18 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
+    {ok, UserCtx} = helper:new_posix_user_ctx(0, 0),
+    Args = #{<<"mountPoint">> => list_to_binary(TmpDir)},
+    {ok, Helper} = helper:new_helper(
+        ?POSIX_HELPER_NAME,
+        Args,
+        UserCtx,
+        false,
+        ?CANONICAL_STORAGE_PATH
+    ),
     StorageDoc = storage:new(
         <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
-        [helper:new_helper(
-            ?POSIX_HELPER_NAME,
-            #{
-                <<"mountPoint">> => list_to_binary(TmpDir)
-            },
-            helper:new_posix_user_ctx(0, 0),
-            false,
-            ?CANONICAL_STORAGE_PATH
-        )]
-    ),
+        [Helper]),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
@@ -398,7 +377,7 @@ space_storage_mock(Workers, StorageId) ->
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
     catch test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send_to_client, fun(_, _) -> ok end).
+    test_utils:mock_expect(Workers, communicator, send_to_oneclient, fun(_, _) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -518,7 +497,8 @@ testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
 
 -spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
 node_get_mocked_space_user_privileges(SpaceId, UserId) ->
-    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() -> {false, privileges:space_admin()} end),
+    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() ->
+        {false, privileges:space_admin()} end),
     Privileges.
 
 -spec mock_share_logic(proplists:proplist()) -> ok.
@@ -526,7 +506,7 @@ mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
     test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
-        {ok, _} = od_share:save(#document{key = ShareId, value = #od_share{
+        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid
@@ -534,17 +514,16 @@ mock_share_logic(Config) ->
         {ok, ShareId}
     end),
     test_utils:mock_expect(Workers, share_logic, get, fun(_Auth, ShareId) ->
-        od_share:get(ShareId)
+        od_share:get_from_cache(ShareId)
     end),
     test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
-        ok = od_share:delete(ShareId)
+        ok = od_share:invalidate_cache(ShareId)
     end).
 
 -spec unmock_share_logic(proplists:proplist()) -> ok.
 unmock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, share_logic).
-
 
 
 %%%===================================================================
@@ -580,8 +559,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
+    HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
-
 
     lists:foreach(fun({_, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
@@ -619,22 +598,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    %% Setup storage
-    lists:foreach(fun({SpaceId, _}) ->
-        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
-    end, SpacesSetup),
-    lists:foreach(fun({SpaceId, SpaceConfig}) ->
-        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
-        lists:foreach(fun({PID, ProviderConfig}) ->
-            Domain = proplists:get_value(PID, DomainMappings),
-            case get_same_domain_workers(Config, Domain) of
-                [Worker | _] ->
-                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
-                _ -> ok
-            end
-        end, Providers0)
-    end, SpacesSetup),
-
     Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
         DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
         {SpaceId, DisplayName}
@@ -669,7 +632,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, GroupUsers),
 
-    SpacesToProviders = lists:map(fun({SpaceId, SpaceConfig}) ->
+    SpacesSupports = lists:map(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         Providers1 = lists:map(fun({CPid, Provider}) ->
             % If provider does not belong to any domain (was not started in env,
@@ -703,10 +666,46 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
+    SpacesProviders = lists:map(fun({SpaceId, SpaceSupports}) ->
+        {SpaceId, maps:keys(SpaceSupports)}
+    end, SpacesSupports),
+
+    EffHarvestersSetup = maps:to_list(lists:foldl(
+        fun({HarvesterId, HarvesterConfig}, EffHarvestersMap0) ->
+            HarvesterSpaces = proplists:get_value(<<"spaces">>, HarvesterConfig),
+            HarvesterProviders = lists:usort(lists:flatmap(fun(SpaceId) ->
+                proplists:get_value(SpaceId, SpacesProviders, [])
+            end, HarvesterSpaces)),
+            lists:foldl(fun(ProviderId, EffHarvestersMap00) ->
+                maps:update_with(ProviderId, fun(Harvesters) ->
+                    [HarvesterId | Harvesters]
+                end, [HarvesterId], EffHarvestersMap00)
+            end, EffHarvestersMap0, HarvesterProviders)
+        end, #{}, HarvestersSetup
+    )),
+
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, EffHarvestersSetup),
+    cluster_logic_mock_setup(AllWorkers),
+    harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
+
+    %% Setup storage
+    lists:foreach(fun({SpaceId, _}) ->
+        rpc:multicall(MasterWorkers, space_storage, delete, [SpaceId])
+    end, SpacesSetup),
+    lists:foreach(fun({SpaceId, SpaceConfig}) ->
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        lists:foreach(fun({PID, ProviderConfig}) ->
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
+                _ -> ok
+            end
+        end, Providers0)
+    end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
@@ -778,7 +777,7 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, user_logic),
+    test_utils:mock_new(Workers, user_logic, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{
@@ -789,10 +788,10 @@ user_logic_mock_setup(Workers, Users) ->
         {SpaceIds, _} = lists:unzip(Spaces),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, #document{key = UID, value = #od_user{
-            name = UName,
+            full_name = UName,
             linked_accounts = [],
             emails = [],
-            alias = <<>>,
+            username = <<>>,
             default_space = DefaultSpaceId,
             eff_spaces = SpaceIds,
             eff_groups = GroupIds
@@ -807,9 +806,9 @@ user_logic_mock_setup(Workers, Users) ->
 
     GetUserFun = fun
         (_, _, ?ROOT_USER_ID) ->
-            {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
+            {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
         (_, _, ?GUEST_USER_ID) ->
-            {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>}}};
+            {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
         (Scope, ?ROOT_SESS_ID, UserId) when Scope =:= shared orelse Scope =:= protected ->
             case proplists:get_value(UserId, Users) of
                 undefined ->
@@ -854,9 +853,9 @@ user_logic_mock_setup(Workers, Users) ->
         end
     end),
 
-    test_utils:mock_expect(Workers, user_logic, get_name, fun(Client, UserId) ->
-        {ok, #document{value = #od_user{name = Name}}} = GetUserFun(protected, Client, UserId),
-        {ok, Name}
+    test_utils:mock_expect(Workers, user_logic, get_full_name, fun(Client, UserId) ->
+        {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, Client, UserId),
+        {ok, FullName}
     end),
 
     GetEffSpacesFun = fun(Client, UserId) ->
@@ -924,8 +923,8 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}]) ->
-    ok.
+    [{binary(), binary()}], [{binary(), [binary()]}],
+    [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
 space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, space_logic),
@@ -961,11 +960,6 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
         {ok, maps:keys(Providers)}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, get_providers_supports, fun(Client, SpaceId) ->
-        {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(Client, SpaceId),
-        {ok, Providers}
-    end),
-
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(Client, SpaceId, UserId, Privilege) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(Client, SpaceId),
         lists:member(Privilege, maps:get(UserId, EffUsers, []))
@@ -984,8 +978,12 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist()) -> ok.
-provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
+    proplists:proplist(), proplists:proplist(),
+    [{binary(), [{binary(), non_neg_integer()}]}], proplists:proplist()) -> ok.
+provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
+    SpacesToProviders, EffHarvestersSetup
+) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     test_utils:mock_new(AllWorkers, provider_logic),
 
     ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
@@ -1006,10 +1004,17 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
                 {ok, #document{key = PID, value = #od_provider{
                     name = PID,
                     subdomain_delegation = false,
-                    domain = PID,
-                    spaces = maps:from_list([{S, 1000000000} || S <- Spaces]),
+                    domain = PID,  % domain is the same as Id
+                    spaces = maps:from_list(lists:map(fun(SpaceId) ->
+                        ProvidersSupp = proplists:get_value(
+                            SpaceId, SpacesToProviders,
+                            maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])
+                        ),
+                        {SpaceId, maps:get(PID, ProvidersSupp)}
+                    end, Spaces)),
                     longitude = 0.0,
-                    latitude = 0.0
+                    latitude = 0.0,
+                    eff_harvesters = proplists:get_value(PID, EffHarvestersSetup, [])
                 }}}
         end
     end,
@@ -1024,23 +1029,49 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         {ok, Domain}
     end,
 
-    ResolveIPsFun = fun(?ROOT_SESS_ID, PID) ->
+    GetNodesFun = fun(PID) ->
         {ok, Domain} = GetDomainFun(?ROOT_SESS_ID, PID),
-        inet:getaddrs(binary_to_list(Domain), inet)
+        % Simulate the fact the some providers can be reached only by their domain,
+        % but return the domain/IP consistently
+        AllProviders = lists:sort(maps:keys(ProvMap)),
+        case index_of(PID, AllProviders) rem 2 of
+            0 ->
+                {ok, [Domain]};
+            1 ->
+                {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
+                {ok, [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms]}
+        end
+    end,
+
+    GetSupportsFun = fun(?ROOT_SESS_ID, PID) ->
+        {ok, #document{value = #od_provider{spaces = Supports}}} = GetProviderFun(?ROOT_SESS_ID, PID),
+        {ok, Supports}
     end,
 
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
-        {ok, #document{value = #od_provider{spaces = Spaces}}} = GetProviderFun(?ROOT_SESS_ID, PID),
-        {ok, maps:keys(Spaces)}
+        {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
+        {ok, maps:keys(Supports)}
     end,
 
     SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
-        case maps:get(ProviderId, ProvMap, undefined) of
-            undefined ->
-                false;
-            Spaces ->
-                lists:member(SpaceId, Spaces)
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
+        lists:member(SpaceId, Spaces)
+    end,
+
+    GetSupportSizeFun = fun(?ROOT_SESS_ID, PID, SpaceId) ->
+        {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
+        case maps:find(SpaceId, Supports) of
+            {ok, Support} -> {ok, Support};
+            error -> {error, not_found}
         end
+    end,
+
+    HasEffUserFun = fun(?ROOT_SESS_ID, ProviderId, UserId) ->
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
+        lists:any(fun(SpaceId) ->
+            {ok, Users} = space_logic:get_eff_users(?ROOT_SESS_ID, SpaceId),
+            maps:is_key(UserId, Users)
+        end, Spaces)
     end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, get, GetProviderFun),
@@ -1098,12 +1129,7 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips, ResolveIPsFun),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, resolve_ips,
-        fun(PID) ->
-            ResolveIPsFun(?ROOT_SESS_ID, PID)
-        end),
+    test_utils:mock_expect(AllWorkers, provider_logic, get_nodes, GetNodesFun),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces, GetSpacesFun),
@@ -1119,6 +1145,16 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
 
+    test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
+        fun(UserId) ->
+            HasEffUserFun(?ROOT_SESS_ID, oneprovider:get_id(), UserId)
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
+        HasEffUserFun
+    ),
+
+
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         fun(SpaceId) ->
             SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
@@ -1127,6 +1163,12 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
     test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
         SupportsSpaceFun
     ),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_support_size,
+        fun(SpaceId) ->
+            GetSupportSizeFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
+        end),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
@@ -1159,39 +1201,42 @@ provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup) ->
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        VerifyProviderIdentityFun),
+        VerifyProviderIdentityFun).
 
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_nonce,
-        fun(ProviderId, Nonce) ->
-            {ok, #document{value = #od_provider{
-                domain = Domain
-            }}} = GetProviderFun(?ROOT_SESS_ID, ProviderId),
-            [Worker | _] = get_same_domain_workers(Config, binary_to_atom(Domain, utf8)),
-            Hostname = ?GET_HOSTNAME(Worker),
-            try
-                URL = str_utils:format_bin("https://~s~s?nonce=~s", [
-                    Hostname, ?NONCE_VERIFY_PATH, Nonce
-                ]),
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks cluster_logic module.
+%% @end
+%%--------------------------------------------------------------------
+-spec cluster_logic_mock_setup(Workers :: node() | [node()]) -> ok.
+cluster_logic_mock_setup(AllWorkers) ->
+    test_utils:mock_new(AllWorkers, cluster_logic),
+    test_utils:mock_expect(AllWorkers, cluster_logic, update_version_info, fun(_, _, _) ->
+        ok
+    end).
 
-                CaCerts = oneprovider:trusted_ca_certs(),
-                SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
-                Opts = [{ssl_options, [{cacerts, CaCerts}, {secure, SecureFlag}]}],
-
-                case http_client:get(URL, #{}, <<>>, Opts) of
-                    {ok, 200, _, JSON} ->
-                        case json_utils:decode(JSON) of
-                            #{<<"status">> := <<"ok">>} -> ok;
-                            _ -> {error, invalid_nonce}
-                        end;
-                    {ok, Code, _, _} ->
-                        {error, {bad_http_code, Code}};
-                    {error, _} = Error ->
-                        Error
-                end
-            catch _:_ ->
-                {error, unauthorized}
-            end
-        end).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks harvester_logic module.
+%% @end
+%%--------------------------------------------------------------------
+-spec harvester_logic_mock_setup(Workers :: node() | [node()],
+    proplists:proplist()) -> ok.
+harvester_logic_mock_setup(Workers, HarvestersSetup) ->
+    ok = test_utils:mock_new(Workers, harvester_logic),
+    ok = test_utils:mock_expect(Workers, harvester_logic, get, fun(HarvesterId) ->
+        Setup = proplists:get_value(HarvesterId, HarvestersSetup, []),
+        Doc = #document{
+            key = HarvesterId,
+            value = #od_harvester{
+                spaces = proplists:get_value(<<"spaces">>, Setup),
+                indices = proplists:get_value(<<"indices">>, Setup)
+            }},
+        od_harvester:save_to_cache(Doc),
+        {ok, Doc}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1250,3 +1295,12 @@ add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
     ?assertMatch({ok, _},
         rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
     ).
+
+
+-spec index_of(term(), [term()]) -> not_found | integer().
+index_of(Value, List) ->
+    WithIndices = lists:zip(List, lists:seq(1, length(List))),
+    case lists:keyfind(Value, 1, WithIndices) of
+        {Value, Index} -> Index;
+        false -> not_found
+    end.

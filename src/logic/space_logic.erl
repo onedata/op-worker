@@ -17,23 +17,23 @@
 -module(space_logic).
 -author("Lukasz Opiola").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -export([get/2, get_protected_data/2]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privilege/4]).
 -export([get_eff_groups/2, get_shares/2]).
--export([get_provider_ids/2, get_providers_supports/2,
-    get_provider_support/2, get_provider_support/3]).
+-export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
-
 
 %%%===================================================================
 %%% API
@@ -162,33 +162,6 @@ get_provider_ids(SessionId, SpaceId) ->
     end.
 
 
--spec get_providers_supports(gs_client_worker:client(), od_space:id()) ->
-    {ok, maps:map(od_provider:id(), Size :: integer())} | gs_protocol:error().
-get_providers_supports(SessionId, SpaceId) ->
-    case get(SessionId, SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
-            {ok, Providers};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_provider_support(gs_client_worker:client(), od_space:id()) ->
-    integer() | gs_protocol:error().
-get_provider_support(SessionId, SpaceId) ->
-    get_provider_support(SessionId, SpaceId, oneprovider:get_id()).
-
--spec get_provider_support(gs_client_worker:client(), od_space:id(),
-    od_provider:id()) -> integer() | gs_protocol:error().
-get_provider_support(SessionId, SpaceId, ProviderId) ->
-    case space_logic:get_providers_supports(SessionId, SpaceId) of
-        {ok, SupportsMap} ->
-            maps:get(ProviderId, SupportsMap);
-        {error, _} = Error ->
-            Error
-    end.
-
-
 -spec is_supported(od_space:doc(), od_provider:id()) -> boolean().
 is_supported(#document{value = #od_space{providers = Providers}}, ProviderId) ->
     maps:is_key(ProviderId, Providers).
@@ -239,4 +212,3 @@ can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
 can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
     has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
         has_eff_group(SpaceDoc, GroupId).
-

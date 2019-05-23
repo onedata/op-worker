@@ -341,7 +341,7 @@ new_helper(Config) ->
         <<"credentialsType">> => atom_to_binary(?config(credentials_type, WebDAVConfig), utf8),
         <<"credentials">> => atom_to_binary(?config(credentials, WebDAVConfig), utf8)
     },
-    Helper = helper:new_helper(
+    {ok, Helper} = helper:new_helper(
         ?WEBDAV_HELPER_NAME,
         #{
             <<"endpoint">> => atom_to_binary(?config(endpoint, WebDAVConfig), utf8),

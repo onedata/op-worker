@@ -103,7 +103,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
             uid = Uid,
             gid = Gid,
             parent_uuid = ParentGuid,
-            guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+            guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
             type = Type,
             mode = Mode,
             atime = ATime,

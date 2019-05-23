@@ -153,8 +153,7 @@ rename_or_delete(FileCtx,
         }},
     {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename
 ) ->
-    {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, TargetSpaceId),
-    case lists:member(oneprovider:get_id(), Providers) of
+    case provider_logic:supports_space(TargetSpaceId) of
         true ->
             {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
             case sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
@@ -163,7 +162,7 @@ rename_or_delete(FileCtx,
                 ok -> ok;
                 {error, ?ENOENT} -> ok
             end,
-            NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
+            NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
             {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
 
             RenamedDoc = Doc#document{value = Loc#file_location{

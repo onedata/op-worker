@@ -13,11 +13,11 @@
 
 -behaviour(listener_behaviour).
 
--include("http/gui_paths.hrl").
 -include("global_definitions.hrl").
--include_lib("gui/include/gui.hrl").
+-include("http/gui_paths.hrl").
+-include("http/op_gui.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("gui/include/new_gui.hrl").
+-include_lib("gui/include/gui.hrl").
 
 % Listener config
 -define(PORT, application:get_env(?APP_NAME, https_server_port, 443)).
@@ -55,33 +55,29 @@ start() ->
     {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
     ChainFile = application:get_env(?APP_NAME, web_cert_chain_file, undefined),
 
-    {ok, CustomRoot} = application:get_env(?APP_NAME, gui_static_root_override),
-    {ok, DefaultRoot} = application:get_env(?APP_NAME, gui_default_static_root),
-
     CustomCowboyRoutes = lists:flatten([
         {?NAGIOS_PATH, nagios_handler, []},
-        {?CLIENT_PROTOCOL_PATH, incoming_connection, []},
-        {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
+        {?CLIENT_PROTOCOL_PATH, connection, []},
+        {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
         rest_router:top_level_routing()
     ]),
 
     DynamicPageRoutes = [
-        {?LOGIN_PATH, [<<"GET">>], page_login},
-        {?LOGOUT_PATH, [<<"GET">>], page_logout},
-        {?VALIDATE_LOGIN_PATH_DEPRECATED, [<<"GET">>], page_consume_onezone_login},
-        {?VALIDATE_LOGIN_PATH, [<<"GET">>], page_consume_onezone_login},
         {?NAGIOS_OZ_CONNECTIVITY_PATH, [<<"GET">>], page_oz_connectivity},
         {?IDENTITY_MACAROON_PATH, [<<"GET">>], page_identity_macaroon},
         {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
-        {?FILE_UPLOAD_PATH, [<<"POST">>], page_file_upload},
-        {?FILE_DOWNLOAD_PATH ++ "/:id", [<<"GET">>], page_file_download}
+        {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
+        {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
+        {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
+        {?FAVICON_PATH, [<<"GET">>], page_favicon},
+        {"/", [<<"GET">>], page_redirect_to_onezone}
     ],
 
     % Call gui init, which will call init on all modules that might need state.
-    gui:init(),
+    op_gui:init(),
 
-    new_gui:start(#gui_config{
+    gui:start(#gui_config{
         port = port(),
         key_file = KeyFile,
         cert_file = CertFile,
@@ -90,9 +86,7 @@ start() ->
         max_keepalive = ?MAX_KEEPALIVE,
         request_timeout = ?REQUEST_TIMEOUT,
         dynamic_pages = DynamicPageRoutes,
-        custom_cowboy_routes = CustomCowboyRoutes,
-        default_static_root = DefaultRoot,
-        static_root_override = CustomRoot
+        custom_cowboy_routes = CustomCowboyRoutes
     }).
 
 
@@ -104,9 +98,9 @@ start() ->
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
     % Call gui cleanup, which will call cleanup on all modules that
-    % were previously set up with gui:init/0.
-    gui:cleanup(),
-    new_gui:stop().
+    % were previously set up with op_gui:init/0.
+    op_gui:cleanup(),
+    gui:stop().
 
 
 %%--------------------------------------------------------------------
@@ -116,7 +110,7 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    new_gui:healthcheck().
+    gui:healthcheck().
 
 
 %%--------------------------------------------------------------------
@@ -126,4 +120,4 @@ healthcheck() ->
 %%--------------------------------------------------------------------
 -spec get_cert_chain_pems() -> [public_key:der_encoded()].
 get_cert_chain_pems() ->
-    new_gui:get_cert_chain_pems().
+    gui:get_cert_chain_pems().

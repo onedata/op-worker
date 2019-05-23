@@ -270,7 +270,7 @@ subscribe_test(Config) ->
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Node, od_space, get, [?SPACE_1])
+        rpc:call(Node, od_space, get_from_cache, [?SPACE_1])
     ),
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
@@ -284,7 +284,7 @@ subscribe_test(Config) ->
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
     ?assertMatch(
         {error, not_found},
-        rpc:call(Node, od_space, get, [?SPACE_1])
+        rpc:call(Node, od_space, get_from_cache, [?SPACE_1])
     ),
 
     ok.
@@ -328,12 +328,6 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    ?assertMatch(
-        {ok, ?SPACE_PROVIDERS_MATCHER(?SPACE_1)},
-        rpc:call(Node, space_logic, get_providers_supports, [User1Sess, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % Eff users are within private scope
     ?assertMatch(
         true,
@@ -360,7 +354,7 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
     ?assertMatch(
         false,
-        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_INVITE_USER])
+        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

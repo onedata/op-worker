@@ -16,7 +16,9 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 % Key of in-memory mapping of uploads kept in session.
 -define(UPLOAD_MAP, upload_map).
@@ -25,7 +27,7 @@
 -define(MAX_UNIQUE_FILENAME_COUNTER, 20).
 
 % Maximum time a process will be waiting for chunk 1 to generate file handle.
--define(MAX_WAIT_FOR_FILE_HANDLE, 30000).
+-define(MAX_WAIT_FOR_FILE_HANDLE, 60000).
 
 % Interval between retries to resolve file handle.
 -define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).
@@ -37,9 +39,11 @@
 -export([wait_for_file_new_file_id/2]).
 -export([clean_upload_map/1]).
 
+%% For test purpose
+-export([multipart/3]).
 
 %% ====================================================================
-%% Cowboy API functions
+%% dynamic_page_behaviour API functions
 %% ====================================================================
 
 %%--------------------------------------------------------------------
@@ -47,29 +51,41 @@
 %% {@link dynamic_page_behaviour} callback handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(new_gui:method(), cowboy_req:req()) -> cowboy_req:req().
-handle(<<"POST">>, Req) ->
-    case op_gui_session:get(Req) of
-        {error, not_found} ->
+-spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
+handle(<<"OPTIONS">>, Req) ->
+    gui_cors:options_response(
+        oneprovider:get_oz_url(),
+        [<<"POST">>],
+        [<<"x-auth-token">>, <<"content-type">>],
+        Req
+    );
+handle(<<"POST">>, InitialReq) ->
+    Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
+    case op_gui_session:authenticate(Req) of
+        ?ERROR_UNAUTHORIZED ->
             cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
-        {ok, Session = #document{key = SessionId}} ->
+        false ->
+            cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
+        {ok, Identity, Auth} ->
+            Host = cowboy_req:host(Req),
+            SessionId = op_gui_session:initialize(Identity, Auth, Host),
             try
-                NewReq = multipart(Req, SessionId, []),
-                cowboy_req:reply(200, NewReq)
+                Req2 = multipart(Req, SessionId, []),
+                cowboy_req:reply(200, Req2)
             catch
                 throw:{missing_param, _} ->
                     cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req);
                 throw:stream_file_error ->
                     cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req);
                 Type:Message ->
-                    {ok, UserId} = session:get_user_id(Session),
+                    UserId = op_gui_session:get_user_id(),
                     ?error_stacktrace("Error while processing file upload "
                     "from user ~p - ~p:~p",
                         [UserId, Type, Message]),
                     % @todo VFS-1815 for now return 500,
                     % because retries are not stable
 %%                    % Return 204 - resumable will retry the upload
-%%                    gui_ctx:reply(204, [], <<"">>)
+%%                    cowboy_req:reply(204, #{}, <<"">>)
                     cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req)
             end
     end.
@@ -111,7 +127,7 @@ upload_map_insert(SessionId, UploadId, FileId) ->
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_lookup(session:id(), UploadId :: term()) -> 
+-spec upload_map_lookup(session:id(), UploadId :: term()) ->
     FileId :: term() | undefined.
 upload_map_lookup(SessionId, UploadId) ->
     {ok, Map} = op_gui_session:get_value(SessionId, ?UPLOAD_MAP, #{}),
@@ -247,6 +263,7 @@ multipart(Req, SessionId, Params) ->
 stream_file(Req, FileHandle, Offset, Opts) ->
     case cowboy_req:read_part_body(Req, Opts) of
         {ok, Body, Req2} ->
+            % @todo VFS-1815 handle errors, such as {error, enospc}
             {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
             ok = logical_file_manager:release(FileHandle),
             % @todo VFS-1815 register_chunk?
@@ -341,7 +358,7 @@ create_unique_file(SessionId, OriginalPath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_unique_file(SessionId :: session:id(),
-    OriginalPath :: file_meta:path(), Tries :: integer()) -> 
+    OriginalPath :: file_meta:path(), Tries :: integer()) ->
     {fslogic_worker:file_guid(), logical_file_manager:handle()}.
 create_unique_file(_, _, ?MAX_UNIQUE_FILENAME_COUNTER) ->
     throw(filename_occupied);

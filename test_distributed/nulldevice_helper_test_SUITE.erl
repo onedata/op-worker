@@ -378,7 +378,7 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Helper = helper:new_helper(
+    {ok, Helper} = helper:new_helper(
         ?NULL_DEVICE_HELPER_NAME,
         #{
             <<"latencyMin">> => <<"0">>,

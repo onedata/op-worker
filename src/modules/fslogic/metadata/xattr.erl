@@ -11,6 +11,8 @@
 -module(xattr).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/fslogic_common.hrl").
+
 %% API
 -export([get_by_name/2, get_by_name/3, delete_by_name/2, exists_by_name/2,
     set/5, list/2]).
@@ -43,7 +45,8 @@ get_by_name(FileCtx, XattrName) ->
 %%--------------------------------------------------------------------
 -spec get_by_name(file_ctx:ctx(), xattr:name(), boolean()) ->
     {ok, value()} | {error, term()}.
-get_by_name(FileCtx, XattrName, Inherited) ->
+get_by_name(FileCtx0, XattrName, Inherited) ->
+    {#document{}, FileCtx} = file_ctx:get_file_doc(FileCtx0), % check if file exists
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:get_xattr_metadata(FileUuid, XattrName, Inherited).
 
@@ -64,7 +67,8 @@ delete_by_name(FileCtx, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists_by_name(file_ctx:ctx(), xattr:name()) -> datastore:exists_return().
-exists_by_name(FileCtx, XattrName) ->
+exists_by_name(FileCtx0, XattrName) ->
+    {#document{}, FileCtx} = file_ctx:get_file_doc(FileCtx0), % check if file exists
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:exists_xattr_metadata(FileUuid, XattrName).
 
@@ -75,7 +79,8 @@ exists_by_name(FileCtx, XattrName) ->
 %%--------------------------------------------------------------------
 -spec set(file_ctx:ctx(), name(), value(), Create :: boolean(), Replace :: boolean()) ->
     {ok, datastore:key()} | {error, term()}.
-set(FileCtx, XattrName, XattrValue, Create, Replace) ->
+set(FileCtx0, XattrName, XattrValue, Create, Replace) ->
+    {#document{}, FileCtx} = file_ctx:get_file_doc(FileCtx0), % check if file exists
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattrValue, Create, Replace).
@@ -86,6 +91,7 @@ set(FileCtx, XattrName, XattrValue, Create, Replace) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list(file_ctx:ctx(), boolean()) -> {ok, [xattr:name()]} | {error, term()}.
-list(FileCtx, Inherited) ->
+list(FileCtx0, Inherited) ->
+    {#document{}, FileCtx} = file_ctx:get_file_doc(FileCtx0), % check if file exists
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:list_xattr_metadata(FileUuid, Inherited).

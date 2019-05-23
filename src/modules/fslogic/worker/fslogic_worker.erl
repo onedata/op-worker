@@ -24,7 +24,6 @@
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
-% for tests
 
 %%%===================================================================
 %%% Types
@@ -44,7 +43,7 @@
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flag() :: helpers:open_flag().
 -type posix_permissions() :: file_meta:posix_permissions().
--type file_guid() :: binary().
+-type file_guid() :: file_id:file_guid().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
 -export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
@@ -52,15 +51,18 @@
 
 % requests
 -define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
--define(PERIODICAL_SPACES_CLEANUP, periodical_spaces_cleanup).
+-define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
+
+-define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
+    application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
 
 % delays and intervals
 -define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
     application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
--define(PERIODICAL_SPACES_CLEANUP_INTERVAL,
-    application:get_env(?APP_NAME, periodical_spaces_cleanup_interval, timer:minutes(15))).
+-define(PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL,
+    application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
     application:get_env(?APP_NAME, rerun_transfers_delay, 0)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
@@ -78,8 +80,6 @@
     list_xattr, fsync]).
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
--define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
-
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -93,11 +93,12 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     transfer:init(),
+    clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
-    schedule_periodical_spaces_cleanup(),
+    schedule_periodical_spaces_autocleaning_check(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -113,6 +114,7 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
+    fslogic_delete:delete_all_opened_files(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -145,10 +147,14 @@ handle(?RESTART_AUTOCLEANING_RUNS) ->
     ?debug("Restarting unfinished auto-cleaning runs"),
     restart_autocleaning_runs(),
     ok;
-handle(?PERIODICAL_SPACES_CLEANUP) ->
-    ?debug("Triggering periodical spaces cleanup"),
-    periodical_spaces_cleanup(),
-    schedule_periodical_spaces_cleanup();
+handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
+    case ?SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK of
+        true ->
+            periodical_spaces_autocleaning_check();
+        false ->
+            ok
+    end,
+    schedule_periodical_spaces_autocleaning_check();
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -216,11 +222,6 @@ init_report() ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
-
-
-%%%===================================================================
-%%% functions exported for tests
-%%%===================================================================
 
 %%%===================================================================
 %%% Internal functions
@@ -533,7 +534,7 @@ process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
     case space_strategies:is_import_on(SpaceId) of
         true ->
             SessId = user_ctx:get_session_id(UserCtx),
-            Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
+            Path0 = fslogic_uuid:uuid_to_path(SessId, file_id:guid_to_uuid(ParentGuid)),
             {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
             Tokens = Tokens0 ++ [FileName],
             Path = fslogic_path:join(Tokens),
@@ -598,9 +599,9 @@ schedule_rerun_transfers() ->
 schedule_restart_autocleaning_runs() ->
     schedule(?RESTART_AUTOCLEANING_RUNS, ?RESTART_AUTOCLEANING_RUNS_DELAY).
 
--spec schedule_periodical_spaces_cleanup() -> ok.
-schedule_periodical_spaces_cleanup() ->
-    schedule(?PERIODICAL_SPACES_CLEANUP, ?PERIODICAL_SPACES_CLEANUP_INTERVAL).
+-spec schedule_periodical_spaces_autocleaning_check() -> ok.
+schedule_periodical_spaces_autocleaning_check() ->
+    schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
@@ -616,18 +617,20 @@ invalidate_permissions_cache() ->
             ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
     end.
 
--spec periodical_spaces_cleanup() -> ok.
-periodical_spaces_cleanup() ->
+-spec periodical_spaces_autocleaning_check() -> ok.
+periodical_spaces_autocleaning_check() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) ->
                 autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
             end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            ?debug("Skipping spaces cleanup due to unregistered provider");
         Error = {error, _} ->
-            ?error("Unable to trigger spaces cleanup due to: ~p", [Error])
+            ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?error_stacktrace("Unable to trigger spaces cleanup due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}])
     end.
 
 -spec rerun_transfers() -> ok.

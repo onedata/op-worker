@@ -27,9 +27,13 @@
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
+-export([webdav_fill_admin_id/1]).
 
 %% Test utils
--export([new_posix_user_ctx/2, new_ceph_user_ctx/2]).
+-export([new_ceph_user_ctx/2,new_cephrados_user_ctx/2,  new_posix_user_ctx/2,
+    new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
+    new_webdav_user_ctx/2, new_webdav_user_ctx/3, new_nulldevice_user_ctx/2]).
+
 
 %% For Onepanel RPC
 -export([filter_args/2, filter_user_ctx/2]).
@@ -39,8 +43,10 @@
 -type params() :: #helper_params{}.
 -type user_ctx() :: #{binary() => binary() | integer()}.
 -type group_ctx() :: #{binary() => binary() | integer()}.
+-type optional_field() :: {optional, binary()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
+
 
 
 %%%===================================================================
@@ -48,19 +54,19 @@
 %%%===================================================================
 
 -spec new_helper(name(), args(), user_ctx(), Insecure :: boolean(),
-    storage_path_type()) -> helpers:helper().
+    storage_path_type()) -> {ok, helpers:helper()}.
 new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
     {Required, _} = expected_helper_args(HelperName),
     ok = check_args(Required, Args),
     ok = validate_user_ctx(HelperName, AdminCtx),
-    #helper{
+    {ok, #helper{
         name = HelperName,
         args = Args,
         admin_ctx = AdminCtx,
         insecure = Insecure andalso allow_insecure(HelperName),
         extended_direct_io = extended_direct_io(HelperName),
         storage_path_type = StoragePathType
-    }.
+    }}.
 
 
 %% @private
@@ -145,8 +151,9 @@ expected_helper_args(?NULL_DEVICE_HELPER_NAME) ->
 %%--------------------------------------------------------------------
 -spec filter_user_ctx(name(), #{binary() => term()}) -> #{binary() => term()}.
 filter_user_ctx(HelperName, Params) ->
-    Expected = expected_user_ctx(HelperName),
-    maps:with(Expected, Params).
+    Required = expected_user_ctx_params(HelperName, Params),
+    Optional = optional_user_ctx_params(HelperName, Params),
+    maps:with(Required ++ Optional, Params).
 
 
 %%--------------------------------------------------------------------
@@ -155,23 +162,34 @@ filter_user_ctx(HelperName, Params) ->
 %% Returns required fields for the user ctx of given storage type.
 %% @end
 %%--------------------------------------------------------------------
--spec expected_user_ctx(name()) -> [binary()].
-expected_user_ctx(?CEPH_HELPER_NAME) ->
+-spec expected_user_ctx_params(name(), Params :: #{binary() => term()}) -> [binary()].
+expected_user_ctx_params(?CEPH_HELPER_NAME, _) ->
     [<<"username">>, <<"key">>];
-expected_user_ctx(?CEPHRADOS_HELPER_NAME) ->
+expected_user_ctx_params(?CEPHRADOS_HELPER_NAME, _) ->
     [<<"username">>, <<"key">>];
-expected_user_ctx(?POSIX_HELPER_NAME) ->
+expected_user_ctx_params(?POSIX_HELPER_NAME, _) ->
     [<<"uid">>, <<"gid">>];
-expected_user_ctx(?S3_HELPER_NAME) ->
+expected_user_ctx_params(?S3_HELPER_NAME, _) ->
     [<<"accessKey">>, <<"secretKey">>];
-expected_user_ctx(?SWIFT_HELPER_NAME) ->
+expected_user_ctx_params(?SWIFT_HELPER_NAME, _) ->
     [<<"username">>, <<"password">>];
-expected_user_ctx(?GLUSTERFS_HELPER_NAME) ->
+expected_user_ctx_params(?GLUSTERFS_HELPER_NAME, _) ->
     [<<"uid">>, <<"gid">>];
-expected_user_ctx(?WEBDAV_HELPER_NAME) ->
+expected_user_ctx_params(?WEBDAV_HELPER_NAME, #{<<"credentialsType">> := <<"none">>}) ->
+    [<<"credentialsType">>];
+expected_user_ctx_params(?WEBDAV_HELPER_NAME, _) ->
     [<<"credentialsType">>, <<"credentials">>];
-expected_user_ctx(?NULL_DEVICE_HELPER_NAME) ->
+expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME, _) ->
     [<<"uid">>, <<"gid">>].
+
+
+optional_user_ctx_params(?WEBDAV_HELPER_NAME, _) ->
+    [<<"credentials">>, <<"adminId">>,
+        <<"onedataAccessToken">>, <<"accessToken">>,
+        <<"accessTokenTTL">>];
+
+optional_user_ctx_params(_, _) ->
+    [].
 
 
 %%--------------------------------------------------------------------
@@ -185,7 +203,11 @@ validate_user_ctx(#helper{name = StorageType}, UserCtx) ->
     validate_user_ctx(StorageType, UserCtx);
 
 validate_user_ctx(StorageType, UserCtx) ->
-    check_user_or_group_ctx_fields(expected_user_ctx(StorageType), UserCtx).
+    Required = expected_user_ctx_params(StorageType, UserCtx),
+    Optional = [{optional, Field} || Field <-
+        optional_user_ctx_params(StorageType, UserCtx) -- Required],
+    Fields = Required ++ Optional,
+    check_user_or_group_ctx_fields(Fields, UserCtx).
 
 
 %%--------------------------------------------------------------------
@@ -322,30 +344,19 @@ set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
         {error, Reason} -> {error, Reason}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Constructs POSIX storage helper user context record.
-%% @end
-%%--------------------------------------------------------------------
--spec new_posix_user_ctx(integer(), integer()) -> user_ctx().
-new_posix_user_ctx(Uid, Gid) ->
-    #{
-        <<"uid">> => integer_to_binary(Uid),
-        <<"gid">> => integer_to_binary(Gid)
-    }.
 
+-spec webdav_fill_admin_id(UserCtx :: user_ctx()) -> user_ctx().
+webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := <<>>}) ->
+    {ok, UserCtx};
+webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := Token}) ->
+    {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
+    {ok, UserCtx#{
+        <<"adminId">> => AdminId
+    }};
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Constructs Ceph storage helper user context record.
-%% @end
-%%--------------------------------------------------------------------
--spec new_ceph_user_ctx(binary(), binary()) -> user_ctx().
-new_ceph_user_ctx(Username, Key) ->
-    #{
-        <<"username">> => Username,
-        <<"key">> => Key
-    }.
+webdav_fill_admin_id(UserCtx) ->
+    UserCtx.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -400,6 +411,131 @@ translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
 translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
 
+
+%%%===================================================================
+%%% Test utils
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs Ceph storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_ceph_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_ceph_user_ctx(Username, Key) ->
+    {ok, #{
+        <<"username">> => Username,
+        <<"key">> => Key
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs CephRados storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_cephrados_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_cephrados_user_ctx(Username, Key) ->
+    {ok, #{
+        <<"username">> => Username,
+        <<"key">> => Key
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs POSIX storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_posix_user_ctx(integer(), integer()) -> {ok, user_ctx()}.
+new_posix_user_ctx(Uid, Gid) ->
+    {ok, #{
+        <<"uid">> => integer_to_binary(Uid),
+        <<"gid">> => integer_to_binary(Gid)
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs S3 storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_s3_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_s3_user_ctx(AccessKey, SecretKey) ->
+    {ok, #{
+        <<"accessKey">> => AccessKey,
+        <<"secretKey">> => SecretKey
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs Swift storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_swift_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_swift_user_ctx(Username, Password) ->
+    {ok, #{
+        <<"username">> => Username,
+        <<"password">> => Password
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs GlusterFS storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_glusterfs_user_ctx(integer(), integer()) -> {ok, user_ctx()}.
+new_glusterfs_user_ctx(Uid, Gid) ->
+    {ok, #{
+        <<"uid">> => integer_to_binary(Uid),
+        <<"gid">> => integer_to_binary(Gid)
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs WebDAV storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_webdav_user_ctx(CredentialsType = <<"none">>, _Credentials) ->
+    {ok, #{
+        <<"credentialsType">> => CredentialsType
+    }};
+new_webdav_user_ctx(CredentialsType, Credentials) ->
+    {ok, #{
+        <<"credentialsType">> => CredentialsType,
+        <<"credentials">> => Credentials
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs WebDAV storage helper user context record.
+%% This function is used by Onepanel to construct admin user_ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_user_ctx(binary(), binary(), binary()) -> {ok, user_ctx()}.
+new_webdav_user_ctx(CredentialsType, Credentials, <<>>) ->
+    % todo VFS-5304 verify parameters
+    % todo i. e. when type == oauth2 and insecure == true token cannot be empty
+    new_webdav_user_ctx(CredentialsType, Credentials);
+new_webdav_user_ctx(CredentialsType, Credentials, OnedataAccessToken) ->
+    {ok, AdminId} = user_identity:get_or_fetch_user_id(OnedataAccessToken),
+    {ok, UserCtx} = new_webdav_user_ctx(CredentialsType, Credentials),
+    {ok, UserCtx#{
+        <<"onedataAccessToken">> => OnedataAccessToken,
+        <<"adminId">> => AdminId
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs Null Device storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_nulldevice_user_ctx(integer(), integer()) -> {ok, user_ctx()}.
+new_nulldevice_user_ctx(Uid, Gid) ->
+    {ok, #{
+        <<"uid">> => integer_to_binary(Uid),
+        <<"gid">> => integer_to_binary(Gid)
+    }}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -413,22 +549,35 @@ translate_arg_name(Name) -> Name.
 %%--------------------------------------------------------------------
 -spec check_user_or_group_ctx_fields([binary()], user_ctx() | group_ctx()) ->
     ok | {error, Reason :: term()}.
-check_user_or_group_ctx_fields([], UserCtx) ->
-    case maps:size(UserCtx) of
-        0 -> ok;
-        _ -> {error, {invalid_additional_fields, UserCtx}}
+check_user_or_group_ctx_fields([], Ctx) when Ctx == #{} ->
+    ok;
+check_user_or_group_ctx_fields([], Ctx) ->
+    {error, {invalid_additional_fields, Ctx}};
+check_user_or_group_ctx_fields([Field | Fields], Ctx) ->
+    case check_ctx_field(Field, Ctx) of
+        ok -> check_user_or_group_ctx_fields(Fields, Ctx);
+        Error -> Error
+    end.
+
+%% @private
+-spec check_ctx_field(Key, Ctx :: #{binary() := term()}) ->
+    ok | {error, Reason :: term()} when
+    Key :: binary() | optional_field().
+check_ctx_field({optional, Field}, Ctx) ->
+    case check_ctx_field(Field, Ctx) of
+        {error, {missing_field, _}} -> ok;
+        Result -> Result
     end;
-check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
-    case maps:find(Field, UserCtx) of
-        {ok, Value = <<"null">>} ->
+
+check_ctx_field(Field, Ctx) ->
+    case Ctx of
+        #{Field := Value = <<"null">>} ->
             {error, {invalid_field_value, Field, Value}};
-        {ok, <<_/binary>>} ->
-            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
-        {ok, Value} when is_integer(Value) ->
-            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
-        {ok, Value} ->
+        #{Field := Value} when is_binary(Value) -> ok;
+        #{Field := Value} when is_integer(Value) -> ok;
+        #{Field := Value} ->
             {error, {invalid_field_value, Field, Value}};
-        error ->
+        #{} ->
             {error, {missing_field, Field}}
     end.
 

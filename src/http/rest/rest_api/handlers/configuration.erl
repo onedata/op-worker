@@ -14,6 +14,7 @@
 
 -include("http/http_common.hrl").
 -include("global_definitions.hrl").
+-include("modules/rtransfer/rtransfer.hrl").
 
 -include_lib("ctool/include/logging.hrl").
 
@@ -79,7 +80,7 @@ gather_configuration() ->
     end,
     OnezoneDomain = case ProviderId of
         undefined -> undefined;
-        _ -> list_to_binary(oneprovider:get_oz_domain())
+        _ -> oneprovider:get_oz_domain()
     end,
     CompOzVersions = application:get_env(?APP_NAME, compatible_oz_versions, []),
     CompOpVersions = application:get_env(?APP_NAME, compatible_op_versions, []),
@@ -92,6 +93,7 @@ gather_configuration() ->
         <<"onezoneDomain">> => gs_protocol:undefined_to_null(OnezoneDomain),
         <<"version">> => oneprovider:get_version(),
         <<"build">> => oneprovider:get_build(),
+        <<"rtransferPort">> => ?RTRANSFER_PORT,
         <<"compatibleOnezoneVersions">> => ?to_binaries(CompOzVersions),
         <<"compatibleOneproviderVersions">> => ?to_binaries(CompOpVersions),
         <<"compatibleOneclientVersions">> => ?to_binaries(CompOcVersions)

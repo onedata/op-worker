@@ -50,12 +50,17 @@ get_provider_to_reroute([ProviderId | _]) ->
     fslogic_worker:response().
 reroute(UserCtx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
-    SessId = user_ctx:get_session_id(UserCtx),
+
+    SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
+    EffSessionId = user_ctx:get_session_id(UserCtx),
     Auth = user_ctx:get_auth(UserCtx),
-    {ok, #server_message{message_body = MsgBody}} =
-        communicator:communicate_with_provider(#client_message{
-            message_body = Request,
-            proxy_session_id = SessId,
-            proxy_session_auth = Auth
-        }, session_utils:get_provider_session_id(outgoing, ProviderId)),
+    Msg = #client_message{
+        message_body = Request,
+        effective_session_id = EffSessionId,
+        effective_session_auth = Auth
+    },
+
+    {ok, #server_message{
+        message_body = MsgBody
+    }} = communicator:communicate_with_provider(SessionId, Msg),
     MsgBody.

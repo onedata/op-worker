@@ -62,7 +62,7 @@
 -spec report_transfer_start(fslogic_worker:file_guid(), transfer:id(),
     transfer:timestamp()) -> ok | {error, term()}.
 report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     Entry = build_entry(TransferId, ScheduleTime),
     Key = file_guid_to_id(FileGuid),
 
@@ -94,7 +94,7 @@ report_transfer_start(FileGuid, TransferId, ScheduleTime) ->
 -spec report_transfer_finish(fslogic_worker:file_guid(), transfer:id(),
     transfer:timestamp(), transfer:timestamp()) -> ok | {error, term()}.
 report_transfer_finish(FileGuid, TransferId, ScheduleTime, FinishTime) ->
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     OldEntry = build_entry(TransferId, ScheduleTime),
     NewEntry = build_entry(TransferId, FinishTime),
 
@@ -139,7 +139,7 @@ report_transfer_deletion(#document{key = TransferId, value = Transfer}) ->
         finish_time = FinishTime
     } = Transfer,
 
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     OngoingEntry = build_entry(TransferId, ScheduleTime),
     PastEntry = build_entry(TransferId, FinishTime),
 
@@ -330,7 +330,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
 %%%===================================================================
 
 %% @private
--spec file_guid_to_id(file_meta:guid()) -> id().
+-spec file_guid_to_id(fslogic_worker:file_guid()) -> id().
 file_guid_to_id(FileGuid) ->
     datastore_utils:gen_key(<<>>, FileGuid).
 

@@ -167,16 +167,16 @@ run({return_none, Jobs}) ->
 -spec start_strategies() -> ok | {error, term()}.
 start_strategies() ->
     try
-        ProviderId = oneprovider:get_id(),
-        case provider_logic:get_spaces(ProviderId) of
+        case provider_logic:get_spaces() of
             {ok, Spaces} ->
                 check_strategies(Spaces, true);
             Error = {error, _} ->
+                ?debug("Unable to start space strategies due to: ~p", [Error]),
                 Error
         end
     catch
         throw:?ERROR_UNREGISTERED_PROVIDER ->
-            {error, ?ERROR_UNREGISTERED_PROVIDER};
+            ?ERROR_UNREGISTERED_PROVIDER;
         Error2:Reason ->
             ?error_stacktrace("Unable to start space strategies due to: ~p",
                 [{Error2, Reason}]),
@@ -194,10 +194,16 @@ start_strategies() ->
 -spec check_strategies() -> ok.
 check_strategies() ->
     try
-        ProviderId = oneprovider:get_id(),
-        {ok, Spaces} = provider_logic:get_spaces(ProviderId),
-        check_strategies(Spaces, false)
+        case provider_logic:get_spaces() of
+            {ok, Spaces} ->
+                check_strategies(Spaces, false);
+            Error = {error, _} ->
+                ?debug("Unable to check space strategies due to: ~p", [Error]),
+                Error
+        end
     catch
+        throw:?ERROR_UNREGISTERED_PROVIDER ->
+            ?debug("Unable to check space strategies - unregistered provider");
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
     end.

@@ -191,7 +191,7 @@ create_index(Req, State) ->
         Options, Spatial, Providers
     ) of
         ok ->
-            {stop, cowboy_req:reply(?HTTP_OK, Req8), State8};
+            {stop, cowboy_req:reply(?HTTP_200_OK, Req8), State8};
         {error, already_exists} ->
             throw(?ERROR_INDEX_ALREADY_EXISTS)
     end.
@@ -234,7 +234,7 @@ update_index(Req, State) ->
 
     case index:update(SpaceId, IndexName, MapFunction, Options, Spatial, Providers) of
         ok ->
-            {stop, cowboy_req:reply(?HTTP_OK, Req8), State8};
+            {stop, cowboy_req:reply(?HTTP_200_OK, Req8), State8};
         {error, not_found} ->
             throw(?ERROR_INDEX_NOT_FOUND)
     end.

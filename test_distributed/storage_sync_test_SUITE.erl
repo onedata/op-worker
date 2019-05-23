@@ -15,6 +15,7 @@
 
 -include("storage_sync_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -83,7 +84,8 @@
     append_file_not_changing_mtime_update_test/1,
     sync_should_not_invalidate_file_after_replication/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
-    delete_many_subfiles_test/1, sync_should_not_reimport_deleted_but_still_opened_file/1]).
+    delete_many_subfiles_test/1, sync_should_not_reimport_deleted_but_still_opened_file/1,
+    create_file_import_race_test/1, close_file_import_race_test/1]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -147,14 +149,180 @@
     update_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
     should_not_sync_file_during_replication,
-    sync_should_not_invalidate_file_after_replication
+    sync_should_not_invalidate_file_after_replication,
+    create_file_import_race_test,
+    close_file_import_race_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
 
+-define(WRITE_TEXT, <<"overwrite_test_data">>).
+
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
+
+create_file_import_race_test(Config) ->
+    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+
+    Master = self(),
+    CreateProc = spawn(fun() ->
+        Ans = receive
+            create ->
+                try
+                    {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
+                    {ok, Handle} = lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, write),
+                    {ok, _} = lfm_proxy:write(W1, Handle, 0, ?WRITE_TEXT),
+                    ok = lfm_proxy:close(W1, Handle)
+                catch
+                    E1:E2  ->
+                        {E1, E2}
+                end
+        after
+            60000 ->
+                timeout
+        end,
+        Master ! {create_ans, Ans}
+    end),
+
+    test_utils:mock_new(Workers, simple_scan, [passthrough]),
+    test_utils:mock_expect(Workers, simple_scan, import_file,
+        fun(Job, FileUuid) ->
+            CreateProc ! create,
+            timer:sleep(5000),
+            meck:passthrough([Job, FileUuid])
+        end),
+
+    StorageTestFilePath = storage_sync_test_base:storage_test_file_path(
+        W1MountPoint, ?SPACE_ID, ?TEST_FILE1, false),
+    %% Create file on storage
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_import(Config),
+
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    CreateAns = receive
+                    {create_ans, A} -> A
+                after
+                    60000 -> timeout
+                end,
+    ?assertEqual(ok, CreateAns),
+
+    %% Check if file was imported on W1
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    {ok, Handle1} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?WRITE_TEXT},
+        lfm_proxy:read(W1, Handle1, 0, 1000)),
+    lfm_proxy:close(W1, Handle1),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was imported on W2
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), 5 * ?ATTEMPTS),
+    {ok, Handle2} = ?assertMatch({ok, _},
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read)),
+    ?assertMatch({ok, ?WRITE_TEXT},
+        lfm_proxy:read(W2, Handle2, 0, 100), ?ATTEMPTS).
+
+close_file_import_race_test(Config) ->
+    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+
+    {ok, {_, CreateHandle}} = lfm_proxy:create_and_open(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
+    {ok, _} = lfm_proxy:write(W1, CreateHandle, 0, ?WRITE_TEXT),
+    ok = lfm_proxy:unlink(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}),
+
+    Master = self(),
+    ActionProc = spawn(fun() ->
+        Ans = receive
+            do_action ->
+                try
+                    ok = lfm_proxy:close(W1, CreateHandle)
+                catch
+                    E1:E2  ->
+                        {E1, E2}
+                end
+        after
+            60000 ->
+                timeout
+        end,
+        Master ! {action_result, Ans}
+    end),
+
+    test_utils:mock_new(Workers, link_utils, [passthrough]),
+    test_utils:mock_expect(Workers, link_utils, try_to_resolve_child_deletion_link, fun
+        (?TEST_FILE1, ParentCtx) ->
+            ActionProc ! do_action,
+            timer:sleep(5000),
+            meck:passthrough([?TEST_FILE1, ParentCtx]);
+        (FileName, ParentCtx) ->
+            meck:passthrough([FileName, ParentCtx])
+        end),
+
+    storage_sync_test_base:enable_storage_import(Config),
+
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    ActionResult = receive
+                       {action_result, A} -> A
+                   after
+                       60000 -> timeout
+                   end,
+    ?assertEqual(ok, ActionResult),
+    timer:sleep(10000),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 0,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 0,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 0,
+        <<"importedHourHist">> => 0,
+        <<"importedDayHist">> => 0,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID, ?ATTEMPTS),
+
+    %% Check if file was imported on W1
+    ?assertMatch({error, enoent},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
@@ -333,8 +501,8 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
     {ok, H3} = lfm_proxy:open(W1, SessId, {guid, G2}, write),
     {ok, _} = lfm_proxy:write(W1, H3, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W1, H3),
-    U2 = fslogic_uuid:guid_to_uuid(G2),
-    StorageTestFilePathWithSuffix = ?FILE_WITH_SUFFIX(StorageTestFilePath, U2),
+    U2 = file_id:guid_to_uuid(G2),
+    StorageTestFilePathWithSuffix = ?CONFLICTING_STORAGE_FILE_NAME(StorageTestFilePath, U2),
 
     % there should be 2 files on storage
     ?assertMatch({ok, [_, _]}, file:list_dir(StorageSpacePath)),
@@ -429,7 +597,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
 
     % replicate file to W1
     {ok, H3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G2}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W1, H3, 0, 100)),
+    ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W1, H3, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W1, H3),
 
 
@@ -485,8 +653,8 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     {ok, H2} = lfm_proxy:open(W2, SessId2, {guid, G2}, write),
     {ok, _} = lfm_proxy:write(W2, H2, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W2, H2),
-    U2 = fslogic_uuid:guid_to_uuid(G2),
-    StorageTestFilePathWithSuffix = ?FILE_WITH_SUFFIX(StorageTestFilePath, U2),
+    U2 = file_id:guid_to_uuid(G2),
+    StorageTestFilePathWithSuffix = ?CONFLICTING_STORAGE_FILE_NAME(StorageTestFilePath, U2),
 
     % replicate file to W1
     {ok, H3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G2}, read), ?ATTEMPTS),
@@ -1046,12 +1214,13 @@ end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_
 
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes]),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
 

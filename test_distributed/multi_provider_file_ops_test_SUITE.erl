@@ -12,7 +12,7 @@
 -module(multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("fuse_utils.hrl").
+-include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

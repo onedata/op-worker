@@ -389,7 +389,7 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     GlusterFSConfig = ?config(glusterfs, ?config(glusterfs, ?config(storages, Config))),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
-    Helper = helper:new_helper(
+    {ok, Helper} = helper:new_helper(
         ?GLUSTERFS_HELPER_NAME,
         #{
             <<"volume">> => ?GLUSTERFS_VOLUME,
