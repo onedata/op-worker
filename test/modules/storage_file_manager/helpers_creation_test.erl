@@ -46,7 +46,7 @@ new_helper_test_() ->
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 
         {str_utils:format("~s helper should be created", [HelperName]),
-            ?_assertMatch(#helper{},
+            ?_assertMatch({ok, #helper{}},
                 helper:new_helper(HelperName, Args, AdminCtx, false, <<"flat">>))}
     end, ?HELPER_ARGS).
 

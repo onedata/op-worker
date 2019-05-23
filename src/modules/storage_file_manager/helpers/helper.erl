@@ -555,17 +555,18 @@ check_user_or_group_ctx_fields([], Ctx) ->
     {error, {invalid_additional_fields, Ctx}};
 check_user_or_group_ctx_fields([Field | Fields], Ctx) ->
     case check_ctx_field(Field, Ctx) of
-        ok -> check_user_or_group_ctx_fields(Fields, Ctx);
+        {ok, CtxRest} -> check_user_or_group_ctx_fields(Fields, CtxRest);
         Error -> Error
     end.
 
 %% @private
 -spec check_ctx_field(Key, Ctx :: #{binary() := term()}) ->
-    ok | {error, Reason :: term()} when
+    {ok, CtxRest :: user_ctx() | group_ctx()} |
+    {error, Reason :: term()} when
     Key :: binary() | optional_field().
 check_ctx_field({optional, Field}, Ctx) ->
     case check_ctx_field(Field, Ctx) of
-        {error, {missing_field, _}} -> ok;
+        {error, {missing_field, _}} -> {ok, Ctx};
         Result -> Result
     end;
 
@@ -573,8 +574,8 @@ check_ctx_field(Field, Ctx) ->
     case Ctx of
         #{Field := Value = <<"null">>} ->
             {error, {invalid_field_value, Field, Value}};
-        #{Field := Value} when is_binary(Value) -> ok;
-        #{Field := Value} when is_integer(Value) -> ok;
+        #{Field := Value} when is_binary(Value) -> {ok, maps:remove(Field, Ctx)};
+        #{Field := Value} when is_integer(Value) -> {ok, maps:remove(Field, Ctx)};
         #{Field := Value} ->
             {error, {invalid_field_value, Field, Value}};
         #{} ->
