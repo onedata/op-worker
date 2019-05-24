@@ -20,7 +20,7 @@
   0},
  {<<"cluster_manager">>,
   {raw,{git,"ssh://git@git.plgrid.pl:7999/vfs/cluster-manager.git",
-            {ref,"7f3cda97aaf93a7597e8c174668e49957440f302"}}},
+            {ref,"c8e29368c75727bdd4895b5884dc15371af23f96"}}},
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/cluster-worker.git",
