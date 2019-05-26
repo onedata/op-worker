@@ -11,64 +11,70 @@
 %%%-------------------------------------------------------------------
 -module(permissions_cache).
 -author("Michal Wrzeszcz").
--behaviour(model_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
-    list/0, count/0, model_init/0, 'after'/5, before/4]).
-
 %% API
--export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate/2,
-    remote_invalidation/4, check_permission_cache_size/0]).
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2]).
+-export([check_permission/1, cache_permission/2, invalidate/0]).
+
+%% datastore_model callbacks
+-export([get_ctx/0]).
+
+-type key() :: datastore:key().
+-type record() :: #permissions_cache{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
 
-% override parameters for direct driver calls
--define(OVERRIDE(Level), [{level, Level}, {hooks_config, no_hooks}]).
+-define(CTX, #{
+    model => ?MODULE,
+    disc_driver => undefined,
+    volatile => true
+}).
+
+%% First helper module to be used
+-define(START_MODULE, permissions_cache_helper).
 
 %%%===================================================================
-%%% model_behaviour callbacks
+%%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
+%% Saves permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+-spec save(doc()) -> {ok, key()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2.
+%% Updates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(key(), diff()) -> {ok, key()} | {error, term()}.
 update(?STATUS_UUID, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [?STATUS_UUID, Diff],
-        [{volatile, false}]);
+    Ctx = ?CTX#{volatile => false},
+    ?extract_key(datastore_model:update(Ctx, ?STATUS_UUID, Diff));
 update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1.
+%% Creates permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
+-spec create(doc()) -> {ok, key()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,105 +82,41 @@ create(Document) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-create_or_update(#document{key = ?STATUS_UUID} = Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff],
-        [{volatile, false}]);
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+-spec create_or_update(doc(), diff()) ->
+    {ok, key()} | {error, term()}.
+create_or_update(#document{key = ?STATUS_UUID, value = Default}, Diff) ->
+    Ctx = ?CTX#{volatile => false},
+    ?extract_key(datastore_model:update(Ctx, ?STATUS_UUID, Diff, Default));
+create_or_update(#document{key = Key, value = Default}, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback get/1.
+%% Returns permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback delete/1.
+%% Deletes permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1.
+%% Checks whether permission cache exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(key()) -> boolean().
 exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:ext_key()]} | datastore:generic_error() | no_return().
-list() ->
-    Filter = fun
-        ('$end_of_table', Acc) ->
-            {abort, Acc};
-        (?STATUS_UUID, Acc) ->
-            {next, Acc};
-        (Uuid, Acc) ->
-            {next, [Uuid | Acc]}
-    end,
-    model:execute_with_default_context(?MODULE, list_keys, [Filter, []]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns count of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec count() -> {ok, non_neg_integer()} | datastore:generic_error() | no_return().
-count() ->
-    Filter = fun
-        ('$end_of_table', Acc) ->
-            {abort, Acc};
-        (?STATUS_UUID, Acc) ->
-            {next, Acc};
-        (_Uuid, Acc) ->
-            {next, Acc + 1}
-    end,
-    model:execute_with_default_context(?MODULE, list_keys, [Filter, 0]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(permissions_cache_bucket, [], ?GLOBAL_ONLY_LEVEL)#model_config{
-        list_enabled = {true, return_errors}, volatile = true}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
 
 %%%===================================================================
 %%% API
@@ -187,13 +129,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec check_permission(Rule :: term()) -> {ok, term()} | calculate | no_return().
 check_permission(Rule) ->
-    case get(?STATUS_UUID) of
+    case permissions_cache:get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {clearing, _}}}} ->
             calculate;
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             get_rule(Model, Rule);
-        {error, {not_found, _}} ->
-            get_rule(?MODULE, Rule)
+        {error, not_found} ->
+            get_rule(?START_MODULE, Rule)
     end.
 
 %%--------------------------------------------------------------------
@@ -202,24 +144,24 @@ check_permission(Rule) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_permission(Rule :: term(), Value :: term()) ->
-    ok | {ok, datastore:ext_key()} | datastore:generic_error().
+    ok | {ok, key()} | {error, term()}.
 cache_permission(Rule, Value) ->
-    CurrentModel = case get(?STATUS_UUID) of
+    CurrentModel = case permissions_cache:get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;
-        {error, {not_found, _}} ->
-            ?MODULE
+        {error, not_found} ->
+            ?START_MODULE
     end,
 
     case CurrentModel of
         clearing ->
             ok;
-        permissions_cache ->
-            save(#document{key = get_uuid(Rule), value =
-            #permissions_cache{value = Value}});
         permissions_cache_helper ->
             permissions_cache_helper:save(#document{key = get_uuid(Rule), value =
-            #permissions_cache_helper{value = Value}})
+            #permissions_cache_helper{value = Value}});
+        permissions_cache_helper2 ->
+            permissions_cache_helper2:save(#document{key = get_uuid(Rule), value =
+            #permissions_cache_helper2{value = Value}})
     end.
 
 %%--------------------------------------------------------------------
@@ -227,13 +169,13 @@ cache_permission(Rule, Value) ->
 %% Clears all permissions from cache.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_permissions_cache() -> ok.
-invalidate_permissions_cache() ->
-    CurrentModel = case get(?STATUS_UUID) of
+-spec invalidate() -> ok.
+invalidate() ->
+    CurrentModel = case permissions_cache:get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;
-        {error, {not_found, _}} ->
-            ?MODULE
+        {error, not_found} ->
+            ?START_MODULE
     end,
 
     case CurrentModel of
@@ -243,106 +185,17 @@ invalidate_permissions_cache() ->
             case start_clearing(CurrentModel) of
                 {ok, _} ->
                     task_manager:start_task(fun() ->
-                        {ok, Uuids} = erlang:apply(CurrentModel, list, []),
-                        lists:foreach(fun(Uuid) ->
-                            ok = erlang:apply(CurrentModel, delete, [Uuid])
-                        end, Uuids),
-                        % TODO - remove with new links
-                        model:execute_with_default_context(CurrentModel,
-                            del_list_info, [all, ok]),
-                        ok = stop_clearing(CurrentModel),
-                        ok
+                        erlang:apply(CurrentModel, delete_all, []),
+                        ok = stop_clearing(CurrentModel)
                     end, ?CLUSTER_LEVEL);
                 {error, parallel_cleaning} ->
                     ok
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks size of cache and clears all permissions from cache if needed.
-%% @end
-%%--------------------------------------------------------------------
--spec check_permission_cache_size() -> ok.
-check_permission_cache_size() ->
-    CurrentModel = case get(?STATUS_UUID) of
-        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
-            Model;
-        {error, {not_found, _}} ->
-            ?MODULE
-    end,
-    {ok, Count} = erlang:apply(CurrentModel, count, []),
-    case Count > application:get_env(?APP_NAME, permission_cache_size, 50000) of
-        true ->
-            invalidate_permissions_cache();
-        _ ->
-            ok
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Clears all permissions from cache and inits process of invalidating
-%% permissions by other providers when change of a document is propagated.
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate(Model :: model_behaviour:model_type(), FileCtx :: file_ctx:ctx()) -> ok.
-invalidate(Model, FileCtx) ->
-    invalidate_permissions_cache(),
-    Key = file_ctx:get_uuid_const(FileCtx),
-
-    {ok, #document{rev = [RevInfo | _], scope = Scope}} =
-        model:execute_with_default_context(Model, get, [Key]),
-    {Rev, _} = memory_store_driver:rev_to_info(RevInfo),
-
-    case Scope of
-        <<>> ->
-            ok;
-        _ ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalidation)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Waits until cache invalidation by remote provider can be done and invalidates cache.
-%% @end
-%%--------------------------------------------------------------------
--spec remote_invalidation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
-    Rev :: non_neg_integer(), SpaceId :: binary()) -> ok.
-remote_invalidation(Model, Key, Rev, SpaceId) ->
-    % TODO - tmp solution before memory store manages processes
-    spawn(fun() ->
-        active_rev_check(Key, SpaceId, Model, Rev, 15, not_checked)
-    end),
-    ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
-        {?MODULE, remote_invalidation, [Model, Key, Rev, SpaceId]}),
-    invalidate_permissions_cache().
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Active check if revison appeared.
-%% @end
-%%--------------------------------------------------------------------
--spec active_rev_check(Key :: datastore:ext_key(), SpaceId :: binary(),
-    Model :: model_behaviour:model_type(), Rev :: non_neg_integer(),
-    Num :: non_neg_integer(), Status :: ok | younger_revision | not_found
-    | not_checked) -> ok.
-active_rev_check(_Key, _SpaceId, _Model, _Rev, 0, _) ->
-    ok;
-active_rev_check(_Key, _SpaceId, _Model, _Rev, _, ok) ->
-    ok;
-active_rev_check(Key, SpaceId, Model, Rev, Num, _) ->
-    timer:sleep(2000),
-    file_consistency:check_and_add_components(Key, SpaceId, [file_meta]),
-    Check = file_consistency:verify_revision(Key, Model, Rev),
-    active_rev_check(Key, SpaceId, Model, Rev, Num - 1, Check).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -363,11 +216,11 @@ get_uuid(Rule) ->
 -spec get_rule(Model :: atom(), Rule :: term()) -> {ok, term()} | calculate | no_return().
 get_rule(Model, Rule) ->
     case erlang:apply(Model, get, [get_uuid(Rule)]) of
-        {ok, #document{value = #permissions_cache{value = V}}} ->
-            {ok, V};
         {ok, #document{value = #permissions_cache_helper{value = V}}} ->
             {ok, V};
-        {error, {not_found, _}} ->
+        {ok, #document{value = #permissions_cache_helper2{value = V}}} ->
+            {ok, V};
+        {error, not_found} ->
             calculate
     end.
 
@@ -377,9 +230,9 @@ get_rule(Model, Rule) ->
 %% Saves information about clearing start.
 %% @end
 %%--------------------------------------------------------------------
--spec start_clearing(CurrentModel :: atom()) -> {ok, datastore:ext_key()} | datastore:update_error().
+-spec start_clearing(CurrentModel :: atom()) -> {ok, key()} | {error, term()}.
 start_clearing(CurrentModel) ->
-    NewDoc = #document{key = ?STATUS_UUID, value = #permissions_cache{value = {permissions_cache_helper, clearing}}},
+    NewDoc = #document{key = ?STATUS_UUID, value = #permissions_cache{value = {permissions_cache_helper2, clearing}}},
     UpdateFun = fun
         (#permissions_cache{value = {S1, clearing}}) ->
             case S1 of
@@ -431,3 +284,16 @@ stop_clearing(CurrentModel) ->
         {ok, _} -> ok;
         {error, already_cleared} -> ok
     end.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.

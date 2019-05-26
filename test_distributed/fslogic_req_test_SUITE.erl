@@ -13,16 +13,16 @@
 -author("Krzysztof Trzepla").
 -author("Rafal Slota").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -31,6 +31,7 @@
 %% tests
 -export([
     fslogic_get_file_attr_test/1,
+    fslogic_get_file_children_attrs_test/1,
     fslogic_get_child_attr_test/1,
     fslogic_mkdir_and_rmdir_test/1,
     fslogic_read_dir_test/1,
@@ -45,6 +46,7 @@
 all() ->
     ?ALL([
         fslogic_get_file_attr_test,
+        fslogic_get_file_children_attrs_test,
         fslogic_get_child_attr_test,
         fslogic_mkdir_and_rmdir_test,
         fslogic_read_dir_test,
@@ -105,15 +107,120 @@ fslogic_get_file_attr_test(Config) ->
     end, [
         {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined},
         {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined},
-        {SessId1, <<"space_name1">>, 8#1775, 0, <<"/space_name1">>, UserRootGuid1},
-        {SessId2, <<"space_name2">>, 8#1775, 0, <<"/space_name2">>, UserRootGuid2},
-        {SessId1, <<"space_name3">>, 8#1775, 0, <<"/space_name3">>, UserRootGuid1},
-        {SessId2, <<"space_name4">>, 8#1775, 0, <<"/space_name4">>, UserRootGuid2}
+        {SessId1, <<"space_name1">>, 8#775, 0, <<"/space_name1">>, UserRootGuid1},
+        {SessId2, <<"space_name2">>, 8#775, 0, <<"/space_name2">>, UserRootGuid2},
+        {SessId1, <<"space_name3">>, 8#775, 0, <<"/space_name3">>, UserRootGuid1},
+        {SessId2, <<"space_name4">>, 8#775, 0, <<"/space_name4">>, UserRootGuid2}
     ]),
     ?assertMatch(
         #fuse_response{status = #status{code = ?ENOENT}},
         ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1/t1_dir">>}
     )).
+
+fslogic_get_file_children_attrs_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ProviderID = rpc:call(Worker, oneprovider, get_id, []),
+
+    ?assertMatch(ok, test_utils:set_env(Worker, ?APP_NAME,
+        max_read_dir_plus_procs, 2)),
+
+    {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
+
+    UserRootGuid1 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
+    UserRootGuid2 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
+    UserRootGuid3 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId3), undefined),
+    UserRootGuid4 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId4), undefined),
+
+    ValidateReadDirPlus = fun({SessId, Path, AttrsList}) ->
+        #fuse_response{fuse_response = #guid{guid = FileGuid}} =
+            ?assertMatch(
+                #fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #resolve_guid{path = Path})
+            ),
+
+        lists:foreach( %% Size
+            fun(Size) ->
+                lists:foreach( %% Offset step
+                    fun(OffsetStep) ->
+                        {_, Attrs} = lists:foldl( %% foreach Offset
+                            fun(_, {Offset, CurrentChildren}) ->
+                                Response = ?file_req(Worker, SessId, FileGuid,
+                                    #get_file_children_attrs{offset = Offset, size = Size}),
+
+                                ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
+                                #fuse_response{fuse_response = #file_children_attrs{
+                                    child_attrs = ChildrenAttrs}} = Response,
+
+
+                                ?assertEqual(min(max(0, length(AttrsList) - Offset), Size), length(ChildrenAttrs)),
+
+                                {Offset + OffsetStep, lists:usort(ChildrenAttrs ++ CurrentChildren)}
+                            end, {0, []}, lists:seq(1, 2 * round(length(AttrsList) / OffsetStep))),
+
+                        lists:foreach(fun({A1, A2}) ->
+                            #file_attr{
+                                guid = Guid, name = Name, type = Type, mode = Mode,
+                                uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
+                                owner_id = OwnerID
+                            } = A1,
+                            #file_attr{
+                                guid = Guid2, name = Name2, type = Type2, mode = Mode2,
+                                uid = UID2, parent_uuid = ParentGuid2, provider_id = ProviderID2,
+                                owner_id = OwnerID2
+                            } = A2,
+
+                            ?assertMatch(Guid, Guid2),
+                            ?assertMatch(Name, Name2),
+                            ?assertMatch(Type, Type2),
+                            ?assertMatch(Mode, Mode2),
+                            ?assertMatch(UID, UID2),
+                            ?assertMatch(ParentGuid, ParentGuid2),
+                            ?assertMatch(ProviderID, ProviderID2),
+                            ?assertMatch(OwnerID, OwnerID2)
+                        end, lists:zip(AttrsList, Attrs))
+                    end, lists:seq(1, Size))
+
+            end, lists:seq(1, length(AttrsList) + 1))
+    end,
+
+    TestFun = fun({SessId, Path, NameList, UserRootGuid}) ->
+        Files = lists:map(fun(Name) ->
+            {SessId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
+        end, NameList),
+
+        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
+            #fuse_response{fuse_response = #guid{guid = Guid}} =
+                ?assertMatch(
+                    #fuse_response{status = #status{code = ?OK}},
+                    ?req(Worker, SessId, #resolve_guid{path = Path})
+                ),
+
+            #file_attr{
+                guid = Guid, name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
+                uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
+                owner_id = <<"0">>
+            }
+        end, Files),
+
+        ValidateReadDirPlus({SessId, Path, FilesAttrs})
+    end,
+
+    lists:foreach(TestFun, [
+        {SessId1, <<"/">>, [<<"space_name1">>, <<"space_name2">>,
+            <<"space_name3">>, <<"space_name4">>], UserRootGuid1},
+        {SessId2, <<"/">>, [<<"space_name2">>, <<"space_name3">>,
+            <<"space_name4">>], UserRootGuid2},
+        {SessId3, <<"/">>, [<<"space_name3">>, <<"space_name4">>], UserRootGuid3},
+        {SessId4, <<"/">>, [<<"space_name4">>], UserRootGuid4}
+    ]),
+
+    ?assertMatch(ok, test_utils:set_env(Worker, ?APP_NAME,
+        max_read_dir_plus_procs, 1000)),
+
+    ok.
 
 
 fslogic_get_child_attr_test(Config) ->
@@ -133,10 +240,10 @@ fslogic_get_child_attr_test(Config) ->
             }
         }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
     end, [
-        {SessId1, <<"space_name1">>, 8#1775, 0, UserRootGuid1, <<"space_name1">>},
-        {SessId2, <<"space_name2">>, 8#1775, 0, UserRootGuid2, <<"space_name2">>},
-        {SessId1, <<"space_name3">>, 8#1775, 0, UserRootGuid1, <<"space_name3">>},
-        {SessId2, <<"space_name4">>, 8#1775, 0, UserRootGuid2, <<"space_name4">>}
+        {SessId1, <<"space_name1">>, 8#775, 0, UserRootGuid1, <<"space_name1">>},
+        {SessId2, <<"space_name2">>, 8#775, 0, UserRootGuid2, <<"space_name2">>},
+        {SessId1, <<"space_name3">>, 8#775, 0, UserRootGuid1, <<"space_name3">>},
+        {SessId2, <<"space_name4">>, 8#775, 0, UserRootGuid2, <<"space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
         ?file_req(Worker, SessId1, UserRootGuid1, #get_child_attr{name = <<"no such child">>})).
@@ -432,8 +539,8 @@ default_permissions_test(Config) ->
             {delete, <<"/space_name4/test/test/test">>, [SessId4], ?OK},
             {delete, <<"/space_name4/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
             {delete, <<"/space_name4/test/test">>, [SessId4], ?OK},
-            {delete, <<"/space_name4/test">>, [SessId1, SessId2, SessId3], ?EACCES},
-            {delete, <<"/space_name4/test">>, [SessId4], ?OK},
+            {delete, <<"/space_name4/test">>, [SessId1], ?OK},
+            {get_attr, <<"/space_name4/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
             {chmod, <<"/space_name1">>, 8#123, [SessId1], ?EACCES},
             {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EACCES},
@@ -452,14 +559,6 @@ simple_rename_test(Config) ->
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
     {_SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
     {_SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
-
-    test_utils:mock_expect(Worker, oz_spaces, get_providers,
-        fun
-            (provider, _SpaceId) ->
-                {ok, [oneprovider:get_provider_id()]};
-            (_Client, _SpaceId) ->
-                meck:passthrough([_Client, _SpaceId])
-        end),
 
     #fuse_response{fuse_response = #guid{guid = RootGuid1}} =
         ?assertMatch(

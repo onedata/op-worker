@@ -33,7 +33,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_routing_key(Sub :: subscription:base() | subscription:type()) ->
-    {ok, Key :: event_router:key()} | {error, session_only}.
+    {ok, Key :: subscription_manager:key()} | {error, session_only}.
 get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->

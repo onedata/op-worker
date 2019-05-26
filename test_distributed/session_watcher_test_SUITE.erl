@@ -46,7 +46,7 @@ all() ->
         session_create_should_set_session_access_time
     ]).
 
--define(TIMEOUT, timer:seconds(10)).
+-define(TIMEOUT, timer:seconds(20)).
 
 -define(call(N, F, A), ?call(N, session, F, A)).
 -define(call(N, M, F, A), rpc:call(N, M, F, A)).
@@ -62,7 +62,7 @@ session_watcher_should_remove_session_without_connections(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Self = self(),
-    ?call(Worker, remove_connection, [SessId, Self]),
+    ?call(Worker, session_connections, remove_connection, [SessId, Self]),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
 session_watcher_should_remove_inactive_session(Config) ->
@@ -72,7 +72,7 @@ session_watcher_should_remove_inactive_session(Config) ->
 session_watcher_should_remove_session_on_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    ?call(Worker, delete, [SessId]),
+    ?assertEqual(ok, ?call(Worker, delete, [SessId])),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
 session_watcher_should_retry_session_removal(Config) ->
@@ -108,7 +108,7 @@ session_save_should_update_session_access_time(Config) ->
 session_create_should_set_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    Accessed1 = erlang:system_time(seconds),
+    Accessed1 = rpc:call(Worker, time_utils, cluster_time_seconds, []),
     ?call(Worker, create, [#document{key = SessId, value = #session{}}]),
     Accessed2 = get_session_access_time([{session_id, SessId} | Config]),
     ?call(Worker, delete, [SessId]),
@@ -122,7 +122,7 @@ init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
     initializer:remove_pending_messages(),
-    mock_worker_proxy(Worker),
+    mock_session_manager(Worker),
     {ok, Pid} = start_session_watcher(Worker, SessId),
     [{session_watcher, Pid}, {session_id, SessId} | Config].
 
@@ -131,7 +131,7 @@ end_per_testcase(_Case, Config) ->
     SessId = ?config(session_id, Config),
     Pid = ?config(session_watcher, Config),
     stop_session_watcher(Worker, Pid, SessId),
-    test_utils:mock_validate_and_unload(Worker, [worker_proxy]).
+    test_utils:mock_validate_and_unload(Worker, [session_manager]).
 
 %%%===================================================================
 %%% Internal functions
@@ -168,19 +168,18 @@ stop_session_watcher(Worker, Pid, SessId) ->
     ?call(Worker, delete, [SessId]),
     exit(Pid, shutdown).
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Mocks worker proxy, so that on cast it forwards all messages to this process.
+%% Mocks session_manager, so that it sends messages on session removal.
 %% @end
 %%--------------------------------------------------------------------
--spec mock_worker_proxy(Worker :: node()) -> ok.
-mock_worker_proxy(Worker) ->
+-spec mock_session_manager(Worker :: node()) -> ok.
+mock_session_manager(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, worker_proxy),
-    test_utils:mock_expect(Worker, worker_proxy, cast, fun
-        (_, Msg) -> Self ! Msg, ok
+    test_utils:mock_new(Worker, session_manager),
+    test_utils:mock_expect(Worker, session_manager, remove_session, fun
+        (SessID) -> Self ! {remove_session, SessID}, ok
     end).
 
 %%--------------------------------------------------------------------
@@ -193,7 +192,9 @@ mock_worker_proxy(Worker) ->
 set_session_status(Config, Status) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    ?call(Worker, update, [SessId, #{status => Status}]),
+    ?call(Worker, update, [SessId, fun(Sess = #session{}) ->
+        {ok, Sess#session{status = Status}}
+    end]),
     ok.
 
 %%--------------------------------------------------------------------

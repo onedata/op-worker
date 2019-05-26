@@ -25,7 +25,7 @@
 -type key() :: file_meta:name() | atom().
 
 %% API
--export([run/2, delete_imported_file/3]).
+-export([run/2, delete_imported_file/2]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -37,7 +37,9 @@
 run(Job = #space_strategy_job{
     data = #{
         space_id := SpaceId,
-        storage_file_ctx := StorageFileCtx
+        storage_id := StorageId,
+        storage_file_ctx := StorageFileCtx,
+        file_name := FileName
     }}, FileCtx) ->
 
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -48,7 +50,15 @@ run(Job = #space_strategy_job{
     try
         save_db_children_names(DBTable, FileCtx),
         save_storage_children_names(StorageTable, StorageFileCtx),
-        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId)
+        ok = remove_files_not_existing_on_storage(StorageTable, DBTable,
+            FileCtx, SpaceId, StorageId),
+        storage_sync_monitoring:mark_updated_file(SpaceId, StorageId)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("full_update:run failed for file: ~p due to ~p",
+                [FileName, {Error, Reason}]),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId)
+
     after
         true = ets:delete(StorageTable),
         true = ets:delete(DBTable)
@@ -57,26 +67,144 @@ run(Job = #space_strategy_job{
 
 %%-------------------------------------------------------------------
 %% @doc
+%% Remove files that had been earlier imported and updates suitable counters.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_delete_imported_file_and_update_counters(file_meta:name(),
+    file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId, StorageId) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    try
+        {FileCtx, _ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
+        maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId)
+    catch
+        throw:?ENOENT ->
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            ok;
+        Error:Reason ->
+            ?error_stacktrace(
+                "full_update:maybe_delete_imported_file_and_update_counters for file ~p failed with ~p",
+                [ChildName, {Error, Reason}]
+            ),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This functions checks whether file is a directory or a regular file
+%% and delegates decision about deleting or not deleting file to
+%% suitable functions.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_delete_imported_file_and_update_counters(file_ctx:ctx(), od_space:id(),
+    storage:id()) -> ok.
+maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    try
+        {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+        case IsDir of
+            true ->
+                maybe_delete_imported_dir_and_update_counters(
+                    FileCtx2, SpaceId, StorageId);
+            false ->
+                maybe_delete_imported_regular_file_and_update_counters(
+                    FileCtx2, SpaceId, StorageId)
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("maybe_delete_imported_file_and_update_counters failed due to ~p",
+                [{Error, Reason}]),
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Remove files that had been earlier imported.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
-delete_imported_file(ChildName, FileCtx, SpaceId) ->
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, -1),
+-spec delete_imported_file(file_meta:name(), file_ctx:ctx()) -> ok.
+delete_imported_file(ChildName, ParentCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, RootUserCtx),
-        ok = fslogic_delete:remove_file_and_file_meta(ChildCtx, RootUserCtx, true, false),
-        ok = fslogic_delete:remove_file_handles(ChildCtx),
-        storage_sync_monitoring:increase_deleted_files_spirals(SpaceId)
+        {FileCtx, _} = file_ctx:get_child(ParentCtx, ChildName, RootUserCtx),
+        delete_imported_file(FileCtx)
     catch
-        _:_ ->
+        throw:?ENOENT ->
             ok
     end.
 
 %%===================================================================
 %% Internal functions
 %%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove files that had been earlier imported.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_file(file_ctx:ctx()) -> ok.
+delete_imported_file(FileCtx) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    try
+        ok = fslogic_delete:remove_file_and_file_meta(FileCtx, RootUserCtx,
+            false, false, true),
+        ok = fslogic_delete:remove_file_handles(FileCtx),
+        ok = file_popularity:delete(FileUuid),
+        ok = custom_metadata:delete(FileUuid),
+        ok = file_force_proxy:delete(FileUuid),
+        ok = times:delete(FileUuid),
+        ok = transferred_file:clean_up(FileGuid)
+    catch
+        throw:?ENOENT ->
+            ok
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove directory that had been earlier imported.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+delete_imported_dir(FileCtx, SpaceId, StorageId) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
+    {ok, FileCtx2} = delete_imported_dir_children(FileCtx, RootUserCtx, 0,
+        ChunkSize, SpaceId, StorageId),
+    delete_imported_file(FileCtx2).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Recursively deleted children of imported directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_imported_dir_children(file_ctx:ctx(), user_ctx:ctx(),
+    non_neg_integer(), non_neg_integer(), od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
+delete_imported_dir_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
+    try
+        {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
+            UserCtx, Offset, ChunkSize),
+        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs)),
+        lists:foreach(fun(ChildCtx) ->
+            maybe_delete_imported_file_and_update_counters(ChildCtx, SpaceId, StorageId)
+        end, ChildrenCtxs),
+        case length(ChildrenCtxs) < ChunkSize of
+            true ->
+                {ok, FileCtx2};
+            false ->
+                delete_imported_dir_children(FileCtx2, UserCtx,
+                    Offset + ChunkSize, ChunkSize, SpaceId, StorageId)
+        end
+    catch
+        throw:?ENOENT ->
+            {ok, FileCtx}
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @private
@@ -87,7 +215,6 @@ delete_imported_file(ChildName, FileCtx, SpaceId) ->
 storage_table_name(FileUuid) ->
     ets_name(?STORAGE_TABLE_PREFIX, FileUuid).
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc @equiv  ets_name(?DB_TABLE_PREFIX, FileUuid).
@@ -96,7 +223,6 @@ storage_table_name(FileUuid) ->
 -spec db_storage_name(file_meta:uuid()) -> atom().
 db_storage_name(FileUuid) ->
     ets_name(?DB_TABLE_PREFIX, FileUuid).
-
 
 %%-------------------------------------------------------------------
 %% @private
@@ -117,7 +243,6 @@ ets_name(Prefix, FileUuid) ->
 create_ets(Name) ->
     Name = ets:new(Name, [named_table, ordered_set, public]).
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -126,12 +251,12 @@ create_ets(Name) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec remove_files_not_existing_on_storage(atom(), atom(), file_ctx:ctx(),
-    od_space:id()) -> ok.
-remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId) ->
+    od_space:id(), storage:id()) -> ok.
+remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId, StorageId) ->
     StorageFirst = ets:first(StorageTable),
     DBFirst = ets:first(DBTable),
-    ok = iterate_and_remove(StorageFirst, StorageTable, DBFirst, DBTable, 0,
-        ?DIR_BATCH, FileCtx, SpaceId).
+    ok = iterate_and_remove(StorageFirst, StorageTable, DBFirst, DBTable,
+        FileCtx, SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -141,50 +266,36 @@ remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId) ->
 %% have matching files on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec iterate_and_remove(key(), atom(), key(), atom(), non_neg_integer(),
-    non_neg_integer(), file_ctx:ctx(), od_space:id()) -> ok.
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx, SpaceId)
-when (Offset + 1) rem BatchSize == 0  ->
-    % finished batch
-    iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset + 1,
-        BatchSize, FileCtx, SpaceId);
-iterate_and_remove('$end_of_table', _, '$end_of_table', _,  _Offset, _BatchSize,
-    _FileCtx, _SpaceId) ->
+-spec iterate_and_remove(key(), atom(), key(), atom(),file_ctx:ctx(),
+    od_space:id(), storage:id()) -> ok.
+iterate_and_remove('$end_of_table', _, '$end_of_table', _, _FileCtx, _SpaceId, _StorageId) ->
     ok;
 iterate_and_remove(StKey, StorageTable, DBKey = '$end_of_table', DBTable,
-    Offset, BatchSize, FileCtx, SpaceId
+    FileCtx, SpaceId, StorageId
 ) ->
     Next = ets:next(StorageTable, StKey),
-    iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset,
-        BatchSize, FileCtx, SpaceId);
-iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, Offset,
-    BatchSize, FileCtx, SpaceId
+    iterate_and_remove(Next, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId);
+iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, FileCtx,
+    SpaceId, StorageId
 ) ->
     Next = ets:next(DBTable, DBKey),
-    cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
-    iterate_and_remove(StKey, StTable, Next, DBTable, Offset,
-        BatchSize, FileCtx, SpaceId);
-iterate_and_remove(Key, StorageTable, Key, DBTable, Offset, BatchSize, FileCtx,
-    SpaceId
-) ->
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
+    iterate_and_remove(StKey, StTable, Next, DBTable, FileCtx, SpaceId, StorageId);
+iterate_and_remove(Key, StorageTable, Key, DBTable, FileCtx, SpaceId, StorageId) ->
     StNext = ets:next(StorageTable, Key),
     DBNext = ets:next(DBTable, Key),
-    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, Offset, BatchSize,
-        FileCtx, SpaceId);
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx, SpaceId)
-when StKey > DBKey ->
+    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, FileCtx, SpaceId,
+        StorageId);
+iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId
+) when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
-    cast_deletion_of_imported_file(DBKey, FileCtx, SpaceId),
-    iterate_and_remove(StKey, StorageTable, Next, DBTable, Offset, BatchSize,
-        FileCtx, SpaceId);
-iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
-    FileCtx, SpaceId
-) ->
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
+    iterate_and_remove(StKey, StorageTable, Next, DBTable, FileCtx, SpaceId, StorageId);
+iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId) ->
     Next = ets:next(StorageTable, StKey),
-    iterate_and_remove(Next, StorageTable, DBKey, DBTable, Offset, BatchSize,
-        FileCtx, SpaceId).
+    iterate_and_remove(Next, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -193,19 +304,76 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, Offset, BatchSize,
 %% and save their names in ets TableName.
 %% @end
 %%-------------------------------------------------------------------
--spec save_db_children_names(atom(), file_ctx:ctx()) -> term().
+-spec save_db_children_names(atom(), file_ctx:ctx()) -> ok.
 save_db_children_names(TableName, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    file_meta:foreach_child({uuid, FileUuid}, fun
-        (LinkName, _LinkTarget, AccIn) ->
-            case file_meta:is_hidden(LinkName) of
-                true ->
-                    AccIn;
-                false ->
-                    ets:insert(TableName, {LinkName, undefined}),
-                    AccIn
-            end
-    end, []).
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    save_db_children_names(TableName, FileCtx, UserCtx, 0, ?DIR_BATCH),
+    First = ets:first(TableName),
+    filter_children_in_db(First, FileCtx, UserCtx, TableName).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Helper function for save_db_children_names/2
+%% @end
+%%-------------------------------------------------------------------
+-spec save_db_children_names(atom(), file_ctx:ctx(), user_ctx:ctx(),
+    non_neg_integer(), non_neg_integer()) -> ok.
+save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
+    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Batch),
+    lists:foreach(fun(ChildCtx) ->
+        {FileName, _} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
+        ets:insert(TableName, {FileName, undefined})
+    end, ChildrenCtxs),
+
+    case length(ChildrenCtxs) < Batch of
+        true ->
+            ok;
+        false ->
+            save_db_children_names(TableName, FileCtx2, UserCtx, Offset + Batch, Batch)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Iterates over all children (in db ets) and deletes files/dirs without
+%% location doc.
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_children_in_db(key(), file_ctx:ctx(), user_ctx:ctx(), atom()) -> ok.
+filter_children_in_db('$end_of_table', _FileCtx, _UserCtx, _TableName) ->
+    ok;
+filter_children_in_db(LinkName, FileCtx, UserCtx, TableName) ->
+    try
+        {ChildCtx, _} = file_ctx:get_child(FileCtx, LinkName, UserCtx),
+        {IsDir, ChildCtx2} = file_ctx:is_dir(ChildCtx),
+        case IsDir of
+            true ->
+                {DirLocation, _} = file_ctx:get_dir_location_doc(ChildCtx2),
+                case dir_location:is_storage_file_created(DirLocation) of
+                    true ->
+                        ok;
+                    _ ->
+                        ets:delete(TableName, LinkName)
+                end;
+            _ ->
+                {FileLocation, _} = file_ctx:get_local_file_location_doc(ChildCtx2, false),
+                case file_location:is_storage_file_created(FileLocation) of
+                    true ->
+                        ok;
+                    _ ->
+                        ets:delete(TableName, LinkName)
+                end
+        end
+    catch
+        throw:?ENOENT ->
+            ?warning_stacktrace("full_update:filter_children_in_db failed with enoent for file ~p", [LinkName]),
+            ets:delete(TableName, LinkName);
+        Error:Reason  ->
+            ?error_stacktrace("full_update:filter_children_in_db failed with unexpected ~p:~p for file ~p", [Error, Reason, LinkName]),
+            ets:delete(TableName, LinkName)
+    end,
+    filter_children_in_db(ets:next(TableName, LinkName), FileCtx, UserCtx, TableName).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -228,7 +396,7 @@ save_storage_children_names(TableName, StorageFileCtx) ->
 -spec save_storage_children_names(atom(), storage_file_ctx:ctx(),
     non_neg_integer(), non_neg_integer()) -> term().
 save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
-    SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
     {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, BatchSize),
 
     lists:foreach(fun(ChildId) ->
@@ -244,19 +412,37 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
         true ->
             ok;
         _ ->
-            save_storage_children_names(TableName, StorageFileCtx,
+            save_storage_children_names(TableName, StorageFileCtx2,
                 Offset + ListedChildrenNumber, BatchSize)
     end.
 
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
-%% Remove files that had been earlier imported.
+%% Checks whether given directory can be deleted by sync.
+%% If true, this function deletes it and update syn counters.
 %% @end
 %%-------------------------------------------------------------------
--spec cast_deletion_of_imported_file(file_meta:name(), file_ctx:ctx(), od_space:id()) -> ok.
-cast_deletion_of_imported_file(ChildName, FileCtx, SpaceId) ->
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
-    worker_pool:cast(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE,
-        delete_imported_file, [ChildName, FileCtx, SpaceId]},
-        worker_pool:default_strategy()).
+-spec maybe_delete_imported_dir_and_update_counters(file_ctx:ctx(),
+    od_space:id(), storage:id()) -> ok.
+maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    delete_imported_dir(FileCtx, SpaceId, StorageId),
+    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
+    storage_sync_utils:log_deletion(StorageFileId, SpaceId),
+    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
+    ok.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function deletes regular file and update syn counters.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_delete_imported_regular_file_and_update_counters(file_ctx:ctx(),
+    od_space:id(), storage:id()) -> ok.
+maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    delete_imported_file(FileCtx),
+    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
+    storage_sync_utils:log_deletion(StorageFileId, SpaceId),
+    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
+    ok.
+
+

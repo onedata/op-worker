@@ -10,142 +10,35 @@
 %%%-------------------------------------------------------------------
 -module(space_quota).
 -author("Rafal Slota").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("global_definitions.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([
-    apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
-    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, soft_assert_write/2
-]).
+-export([create/1, get/1, delete/1, update/2]).
+-export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
+    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1,
+    create_or_update/2, update_last_check_timestamp/2]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
--export([record_struct/1]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
+    upgrade_record/2]).
 
 -type id() :: binary().
+-type diff() :: datastore_doc:diff(record()).
+-type record() :: #space_quota{}.
+-type doc() :: datastore_doc:doc(record()).
+-export_type([id/0, record/0, doc/0]).
 
--export_type([id/0]).
+-define(CTX, #{model => ?MODULE}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {current_size, integer}
-    ]}.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    case model:execute_with_default_context(?MODULE, get, [Key]) of
-        {error, {not_found, _}} ->
-            %% Create empty entry
-            case create(#document{key = Key, value = #space_quota{current_size = 0}}) of
-                {ok, _} ->
-                    get(Key);
-                {error, already_exists} ->
-                    get(Key);
-                Other0 ->
-                    Other0
-            end;
-        Other1 ->
-            Other1
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(space_quota_bucket, [], ?GLOBALLY_CACHED_LEVEL).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-define(AUTOCLEANING_CHECK_INTERVAL,
+    application:get_env(?APP_NAME, autocleaning_check_interval, 1000)). % 1s
 
 %%%===================================================================
 %%% API
@@ -153,52 +46,112 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates space quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(doc()) -> {ok, id()} | {error, term()}.
+create(Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(SpaceId) ->
+    case datastore_model:get(?CTX, SpaceId) of
+        {ok, Doc} ->
+            {ok, Doc};
+        {error, not_found} ->
+            case space_quota:create(default_doc(SpaceId)) of
+                {ok, _} -> space_quota:get(SpaceId);
+                {error, already_exists} -> space_quota:get(SpaceId);
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec update(id(), diff()) -> {ok, doc()}.
+update(SpaceId, UpdateFun) ->
+    datastore_model:update(?CTX, SpaceId, UpdateFun).
+
+-spec create_or_update(id(), diff()) -> {ok, doc()}.
+create_or_update(SpaceId, UpdateFun) ->
+    {ok, DefaultValue} = UpdateFun(#space_quota{}),
+    datastore_model:update(?CTX, SpaceId, UpdateFun, default_doc(SpaceId, DefaultValue)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes space quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id()) -> ok | {error, term()}.
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Records total space size change.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_size_change(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec apply_size_change(id(), integer()) -> {ok, doc()} | {error, term()}.
 apply_size_change(SpaceId, SizeDiff) ->
-    % TODO - use create_or_update
-    critical_section:run([?MODEL_NAME, term_to_binary({quota, SpaceId})],
-        fun() ->
-            {ok, #document{value = Quot = #space_quota{current_size = OldSize}} = Doc} = get(SpaceId),
-            save(Doc#document{value = Quot#space_quota{current_size = OldSize + SizeDiff}})
-        end).
+    Diff = fun(Quota = #space_quota{current_size = Size}) ->
+        {ok, Quota#space_quota{current_size = Size + SizeDiff}}
+    end,
+    create_or_update(SpaceId, Diff).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Records total space size change. If space becomes accessible or
-%% is getting disabled because of this change, QuotaExeeded event is sent.
+%% is getting disabled because of this change, QuotaExceeded event is sent.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_size_change_and_maybe_emit(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
-    ok | {error, Reason :: any()}.
+-spec apply_size_change_and_maybe_emit(id(), integer()) -> ok | {error, any()}.
+apply_size_change_and_maybe_emit(_SpaceId, 0) ->
+    ok;
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
-    Before = space_quota:available_size(SpaceId),
     {ok, _} = space_quota:apply_size_change(SpaceId, SizeDiff),
+    Before = space_quota:available_size(SpaceId),
     After = space_quota:available_size(SpaceId),
     case Before * After =< 0 of
-        true -> fslogic_event_emitter:emit_quota_exeeded();
+        true -> fslogic_event_emitter:emit_quota_exceeded();
         false -> ok
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns current storage occupancy.
+%% @end
+%%-------------------------------------------------------------------
+-spec current_size(id()) -> non_neg_integer().
+current_size(#document{value = SQ}) ->
+    current_size(SQ);
+current_size(#space_quota{current_size = CurrentSize}) ->
+    CurrentSize;
+current_size(SpaceId) ->
+    case space_quota:get(SpaceId) of
+        {ok, #document{value = SQ}} ->
+            current_size(SQ);
+        {error, not_found} ->
+            0
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns current available size of given space. Values below 0 mean that there are more
-%% bytes written to the space then quota allows.
+%% Returns current available size of given space.
+%% Values below 0 mean that there are more bytes written to the space
+%% then quota allows.
 %% @end
 %%--------------------------------------------------------------------
--spec available_size(SpaceId :: od_space:id()) ->
-    AvailableSize :: integer().
+-spec available_size(id()) -> integer().
 available_size(SpaceId) ->
     try
-        {ok, #document{value = #space_quota{current_size = CSize}}} = get(SpaceId),
-        {ok, #document{value = #od_space{providers_supports = ProvSupport}}} =
-            od_space:get_or_fetch(provider, SpaceId, ?ROOT_USER_ID),
-        SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
+        {ok, SupSize} = provider_logic:get_support_size(SpaceId),
+        CSize = ?MODULE:current_size(SpaceId),
         SupSize - CSize
     catch
         _:Reason ->
@@ -213,8 +166,7 @@ available_size(SpaceId) ->
 %% @equiv assert_write(SpaceId, 1)
 %% @end
 %%--------------------------------------------------------------------
--spec assert_write(SpaceId :: od_space:id()) ->
-    ok | no_return().
+-spec assert_write(SpaceId :: id()) -> ok | no_return().
 assert_write(SpaceId) ->
     space_quota:assert_write(SpaceId, 1).
 
@@ -224,8 +176,7 @@ assert_write(SpaceId) ->
 %% Checks if write operation with given size is permitted for given space.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_write(SpaceId :: od_space:id(), WriteSize :: integer()) ->
-    ok | no_return().
+-spec assert_write(SpaceId :: id(), WriteSize :: integer()) -> ok | no_return().
 assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
 assert_write(SpaceId, WriteSize) ->
@@ -234,37 +185,121 @@ assert_write(SpaceId, WriteSize) ->
         false -> throw(?ENOSPC)
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if write operation with given size is permitted for given space while taking into
-%% consideration soft quota limit set in op_worker configuration.
-%% @end
-%%--------------------------------------------------------------------
--spec soft_assert_write(SpaceId :: od_space:id(), WriteSize :: integer()) ->
-    ok | no_return().
-soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
-    ok;
-soft_assert_write(SpaceId, WriteSize) ->
-    {ok, SoftQuotaSize} = application:get_env(?APP_NAME, soft_quota_limit_size),
-    case space_quota:available_size(SpaceId) + SoftQuotaSize >= WriteSize of
-        true -> ok;
-        false -> throw(?ENOSPC)
-    end.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of spaces that are currently over quota limit.
 %% @end
 %%--------------------------------------------------------------------
--spec get_disabled_spaces() -> [od_space:id()].
+-spec get_disabled_spaces() -> [id()] | {error, term()}.
 get_disabled_spaces() ->
-    %% @todo: use locally cached data after resolving VFS-2087
-    {ok, SpaceIds} = oz_providers:get_spaces(provider),
-    SpacesWithASize = lists:map(fun(SpaceId) ->
-        {SpaceId, catch space_quota:available_size(SpaceId)}
-                                end, SpaceIds),
+    case provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            SpacesWithASize = lists:map(fun(SpaceId) ->
+                {SpaceId, catch space_quota:available_size(SpaceId)}
+            end, SpaceIds),
 
-    [SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize,
-        AvailableSize =< 0 orelse not is_integer(AvailableSize)].
+            {ok, [
+                SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize,
+                AvailableSize =< 0 orelse not is_integer(AvailableSize)
+            ]};
+        {error, _} = Error ->
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Posthook responsible for checking whether auto-cleaning run
+%% should be triggered. If true, the function also starts
+%% auto-cleaning run.
+%% @end
+%%-------------------------------------------------------------------
+-spec autocleaning_check_posthook(atom(), term(), term()) -> term().
+autocleaning_check_posthook(create, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
+    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
+    Result;
+autocleaning_check_posthook(update, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
+    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
+    Result;
+autocleaning_check_posthook(_, _, Result) ->
+    Result.
+
+-spec update_last_check_timestamp(id(), non_neg_integer()) -> ok | {error, term()}.
+update_last_check_timestamp(SpaceId, NewLastCheckTimestamp) ->
+    ok = ?extract_ok(update(SpaceId, fun(SQ) ->
+        {ok, SQ#space_quota{last_autocleaning_check = NewLastCheckTimestamp}}
+    end)).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec default_doc(id()) -> doc().
+default_doc(SpaceId) ->
+    default_doc(SpaceId, #space_quota{}).
+
+-spec default_doc(id(), record()) -> doc().
+default_doc(SpaceId, DefaultValue) ->
+    #document{
+        key = SpaceId,
+        value = DefaultValue,
+        scope = SpaceId
+    }.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {current_size, integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {current_size, integer},
+        {last_autocleaning_check, integer}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, CurrentSize}) ->
+    {2, {?MODULE, CurrentSize, 0}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun autocleaning_check_posthook/3].

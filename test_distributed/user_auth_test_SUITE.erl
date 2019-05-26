@@ -12,12 +12,11 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -25,41 +24,38 @@
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([token_authentication/1]).
+-export([macaroon_authentication/1]).
 
 -define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(DISCH_MACAROONS, [<<"DM1">>, <<"DM2">>]).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
-all() -> ?ALL([token_authentication]).
+all() -> ?ALL([macaroon_authentication]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-token_authentication(Config) ->
+macaroon_authentication(Config) ->
     % given
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    mock_oz_certificates(Config),
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
+    {ok, Sock} = connect_via_macaroon(Worker1, ?MACAROON, ?DISCH_MACAROONS, SessionId),
 
     % then
-    ?assertMatch(
-        {ok, #document{value = #od_user{name = ?USER_NAME}}},
-        rpc:call(Worker1, od_user, get, [?USER_ID])
-    ),
     ?assertMatch(
         {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
         rpc:call(Worker1, session, get, [SessionId])
     ),
     ?assertMatch(
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, user_identity, get, [#token_auth{token = ?MACAROON}])
+        rpc:call(Worker1, user_identity, get, [#macaroon_auth{
+            macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS
+        }])
     ),
-    test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = ssl:close(Sock).
 
 %%%===================================================================
@@ -68,11 +64,13 @@ token_authentication(Config) ->
 
 init_per_testcase(_Case, Config) ->
     ssl:start(),
-    mock_oz_spaces(Config),
+    mock_space_logic(Config),
+    mock_user_logic(Config),
     Config.
 
 end_per_testcase(_Case, Config) ->
-    unmock_oz_spaces(Config),
+    unmock_space_logic(Config),
+    unmock_user_logic(Config),
     ssl:stop().
 
 %%%===================================================================
@@ -81,29 +79,53 @@ end_per_testcase(_Case, Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using token, and custom sessionId
+%% Connect to given node using macaroon, and custom sessionId
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), TokenVal :: binary(), SessionId :: session:id()) ->
+-spec connect_via_macaroon(Node :: node(), MacaroonVal :: binary(),
+    DischMacaroons :: [binary()], SessionId :: session:id()) ->
     {ok, Sock :: term()}.
-connect_via_token(Node, TokenVal, SessionId) ->
+connect_via_macaroon(Node, Macaroon, DischMacaroons, SessionId) ->
+    {ok, [Version | _]} = rpc:call(
+        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+    ),
+
     % given
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
-    TokenAuthMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{
-        session_id = SessionId,
-        token = #'Token'{value = TokenVal}
-    }}},
-    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
+    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+        #'ClientHandshakeRequest'{
+            session_id = SessionId,
+            macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
+            version = list_to_binary(Version)}
+    }},
+    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
-    {ok, Sock} = ssl:connect(utils:get_host(Node), Port, [binary, {packet, 4}, {active, true}]),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
+    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
 
     % then
-    HandshakeResponse = receive_server_message(),
-    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, HandshakeResponse),
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        status = 'OK'
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
     {ok, Sock}.
+
+
+connect_and_upgrade_proto(Hostname, Port) ->
+    {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
+        {active, once}, {reuse_sessions, false}
+    ], timer:minutes(1))),
+    ssl:send(Sock, protocol_utils:protocol_upgrade_request(list_to_binary(Hostname))),
+    receive {ssl, Sock, Data} ->
+        ?assert(protocol_utils:verify_protocol_upgrade_response(Data)),
+        ssl:setopts(Sock, [{active, once}, {packet, 4}]),
+        {ok, Sock}
+    after timer:minutes(1) ->
+        exit(timeout)
+    end.
+
 
 receive_server_message() ->
     receive_server_message([message_stream_reset]).
@@ -123,63 +145,26 @@ receive_server_message(IgnoredMsgList) ->
         {error, timeout}
     end.
 
-mock_oz_spaces(Config) ->
+mock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, oz_spaces, get_details,
-        fun(_, _) -> {ok, #space_details{}} end),
-    test_utils:mock_expect(Workers, oz_spaces, get_users,
-        fun(_, _) -> {ok, []} end),
-    test_utils:mock_expect(Workers, oz_spaces, get_groups,
-        fun(_, _) -> {ok, []} end).
+    test_utils:mock_new(Workers, space_logic, []),
+    test_utils:mock_expect(Workers, space_logic, get,
+        fun(_, _) ->
+            {ok, #document{value = #od_space{}}}
+        end).
 
-unmock_oz_spaces(Config) ->
+unmock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, oz_spaces).
+    test_utils:mock_validate_and_unload(Workers, space_logic).
 
-mock_oz_certificates(Config) ->
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    OZUrl = rpc:call(Worker1, oz_plugin, get_oz_url, []),
-    OZRestPort = rpc:call(Worker1, oz_plugin, get_oz_rest_port, []),
-    OZRestApiPrefix = rpc:call(Worker1, oz_plugin, get_oz_rest_api_prefix, []),
-    OzRestApiUrl = str_utils:format("~s:~B~s", [
-        OZUrl,
-        OZRestPort,
-        OZRestApiPrefix
-    ]),
+mock_user_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, user_logic, []),
+    test_utils:mock_expect(Workers, user_logic, get_by_auth,
+        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+            {ok, #document{key = ?USER_ID, value = #od_user{name = ?USER_NAME}}}
+        end).
 
-    % save key and cert files on the workers
-    % read the files
-    {ok, KeyBin} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, CertBin} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    % choose paths for the files
-    KeyPath = "/tmp/user_auth_test_key.pem",
-    CertPath = "/tmp/user_auth_test_cert.pem",
-    % and save them on workers
-    lists:foreach(
-        fun(Node) ->
-            ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
-            ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
-        end, Workers),
-    % Use the cert paths on workers to mock oz_endpoint
-    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
-
-    test_utils:mock_new(Workers, oz_endpoint),
-    test_utils:mock_expect(Workers, oz_endpoint, provider_request,
-        fun
-        % @todo for now, in rest we only use the root macaroon
-            (#macaroon_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"content-type">> => <<"application/json">>,
-                    <<"macaroon">> => Macaroon
-                }, Body, [SSLOpts, insecure | Options]);
-            (#token_auth{token = Token}, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"content-type">> => <<"application/json">>,
-                    <<"x-auth-token">> => Token
-                }, Body, [SSLOpts, insecure | Options]);
-            (_, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, OzRestApiUrl ++ URN,
-                    Headers#{<<"content-type">> => <<"application/json">>},
-                    Body, [SSLOpts, insecure | Options])
-        end
-    ).
+unmock_user_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, user_logic).

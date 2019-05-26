@@ -14,9 +14,10 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([truncate/3]).
+-export([truncate/3, truncate_insecure/4]).
 
 %%%===================================================================
 %%% API
@@ -31,12 +32,8 @@
 truncate(UserCtx, FileCtx, Size) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size],
-        fun truncate_insecure/3).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+        [UserCtx, FileCtx, Size, true],
+        fun truncate_insecure/4).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,21 +42,50 @@ truncate(UserCtx, FileCtx, Size) ->
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
+-spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size) ->
+truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     FileCtx2 = update_quota(FileCtx, Size),
-    SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    case storage_file_manager:open(SFMHandle, write) of
-        {ok, Handle} ->
-            ok = storage_file_manager:truncate(Handle, Size),
-            ok = storage_file_manager:release(Handle);
-        {error, ?ENOENT} ->
+
+    FileCtx4 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
+        true ->
+            FileCtx2;
+        _ ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+            case storage_file_manager:open(SFMHandle, write) of
+                {ok, Handle} ->
+                    {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
+                    case storage_file_manager:truncate(Handle, Size, CurrentSize) of
+                        ok ->
+                            ok;
+                        Error = {error, ?EBUSY} ->
+                            log_warning(storage_file_manager, truncate, Error, FileCtx3)
+                    end,
+                    case storage_file_manager:release(Handle) of
+                        ok -> ok;
+                        Error2 = {error, ?EDOM} ->
+                            log_warning(storage_file_manager, release, Error2, FileCtx3)
+                    end,
+                    ok = file_popularity:update_size(FileCtx3, Size);
+                {error, ?ENOENT} ->
+                    ok
+            end,
+            FileCtx3
+    end,
+
+    case UpdateTimes of
+        true ->
+            fslogic_times:update_mtime_ctime(FileCtx4);
+        false ->
             ok
     end,
-    fslogic_times:update_mtime_ctime(FileCtx3),
     #fuse_response{status = #status{code = ?OK}}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
@@ -70,6 +96,14 @@ truncate_insecure(UserCtx, FileCtx, Size) ->
 -spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFileCtx :: file_ctx:ctx().
 update_quota(FileCtx, Size) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    OldSize = fslogic_blocks:get_file_size(FileCtx),
+    {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    FileCtx.
+    FileCtx2.
+
+-spec log_warning(atom(), atom(), {error, term()}, file_ctx:ctx()) -> ok.
+log_warning(Module, Function, Error, FileCtx) ->
+    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    Guid = file_ctx:get_guid_const(FileCtx3),
+    ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p",
+        [Module, Function, Path, Guid, StorageFileId, Error]).

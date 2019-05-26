@@ -13,7 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -61,7 +61,7 @@ event_manager_should_update_session_on_init(Config) ->
 event_manager_should_update_session_on_terminate(Config) ->
     stop_event_manager(?config(event_manager, Config)),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual({error, {not_found, missing}}, rpc:call(
+    ?assertEqual({error, not_found}, rpc:call(
         Worker, session, get_event_manager, [?config(session_id, Config)]
     ), 10).
 
@@ -73,22 +73,25 @@ event_manager_should_register_event_stream(Config) ->
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, {register_stream, stream_1, self()}),
     gen_server:cast(Mgr, #event{type = stream_1}),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    {_, From, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
+    gen_server:reply(From, ok).
 
 event_manager_should_unregister_event_stream(Config) ->
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, {unregister_stream, stream_1}),
     gen_server:cast(Mgr, {unregister_stream, stream_2}),
     gen_server:cast(Mgr, #event{type = stream_1}),
-    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
     Mgr = ?config(event_manager, Config),
     gen_server:cast(Mgr, #event{type = stream_1}),
     gen_server:cast(Mgr, #event{type = stream_2}),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    {_, From, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
+    gen_server:reply(From, ok),
+    {_, From2, _} = ?assertReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT),
+    gen_server:reply(From2, ok),
+    ?assertNotReceivedMatch({'$gen_call', _, #event{}}, ?TIMEOUT).
 
 event_manager_should_start_stream_on_subscription(Config) ->
     Mgr = ?config(event_manager, Config),
@@ -237,8 +240,11 @@ mock_event_stream_sup(Worker) ->
     Self = self(),
     Loop = fun Fun() ->
         receive
-            {'$gen_cast', {remove_subscription, _}} -> ok;
-            Msg -> Self ! Msg, Fun()
+            {'$gen_call', From, {remove_subscription, _}} ->
+                gen_server:reply(From, ok),
+                ok;
+            Msg ->
+                Self ! Msg, Fun()
         end
     end,
     {Stm, _} = spawn_monitor(Loop),
@@ -269,7 +275,7 @@ mock_subscription(Worker) ->
 -spec mock_subscription(Worker :: node(), Subs :: [#document{}]) -> ok.
 mock_subscription(Worker, Docs) ->
     test_utils:mock_new(Worker, [subscription]),
-    test_utils:mock_expect(Worker, subscription, list, fun
+    test_utils:mock_expect(Worker, subscription, list_durable_subscriptions, fun
         () -> {ok, Docs}
     end).
 

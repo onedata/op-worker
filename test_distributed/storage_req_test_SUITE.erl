@@ -26,6 +26,7 @@
 %% tests
 -export([
     get_configuration_test/1,
+    get_helper_params_test/1,
     create_storage_test_file_test/1,
     verify_storage_test_file_test/1
 ]).
@@ -33,6 +34,7 @@
 all() ->
     ?ALL([
         get_configuration_test,
+        get_helper_params_test,
         create_storage_test_file_test,
         verify_storage_test_file_test
     ]).
@@ -58,6 +60,52 @@ get_configuration_test(Config) ->
 
     ?assertMatch(#configuration{subscriptions = [_ | _], root_guid = UserRootGuid},
         ?fcm_req(Worker, get_configuration, [SessId])).
+
+get_helper_params_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+
+    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#644)),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
+        undefined -> throw(?ENOENT);
+        <<_/binary>> = Id -> Id
+    end,
+
+    %% Test forced proxy mode
+    Response1 = ?req(Worker, SessId, #get_helper_params{
+        storage_id = StorageId,
+        space_id = SpaceId,
+        helper_mode = ?FORCE_PROXY_HELPER_MODE
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK},
+        fuse_response = #helper_params{}}, Response1),
+    HelperName1 = Response1#fuse_response.fuse_response#helper_params.helper_name,
+    ?assertMatch(<<"proxy">>, HelperName1),
+
+    %% Test forced direct mode
+    Response2 = ?req(Worker, SessId, #get_helper_params{
+        storage_id = StorageId,
+        space_id = SpaceId,
+        helper_mode = ?FORCE_DIRECT_HELPER_MODE
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK},
+        fuse_response = #helper_params{}}, Response2),
+    HelperName2 = Response2#fuse_response.fuse_response#helper_params.helper_name,
+    ?assertMatch(<<"posix">>, HelperName2),
+
+    %% Test auto mode
+    Response3 = ?req(Worker, SessId, #get_helper_params{
+        storage_id = StorageId,
+        space_id = SpaceId,
+        helper_mode = ?AUTO_HELPER_MODE
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK},
+        fuse_response = #helper_params{}}, Response3),
+    HelperName3 = Response3#fuse_response.fuse_response#helper_params.helper_name,
+    ?assertMatch(<<"proxy">>, HelperName3).
 
 create_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

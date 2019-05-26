@@ -1,31 +1,27 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Zmuda
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module defines datastore config related to op_worker.
+%%% This module provides datastore config.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore_config_plugin).
 -author("Michal Zmuda").
 
--behaviour(datastore_config_behaviour).
-
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
-
-%% datastore_config_behaviour callbacks
--export([models/0, throttled_models/0, get_mutator/0]).
+%% datastore_config callbacks
+-export([get_models/0, get_throttled_models/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link datastore_config_behaviour} callback models/0.
+%% Returns list of datastore custom models.
 %% @end
 %%--------------------------------------------------------------------
--spec models() -> Models :: [model_behaviour:model_type()].
-models() -> [
+-spec get_models() -> [datastore_model:model()].
+get_models() -> [
     od_user,
     od_group,
     od_space,
@@ -33,7 +29,8 @@ models() -> [
     od_provider,
     od_handle_service,
     od_handle,
-    subscriptions_state,
+    provider_auth,
+    authorization_nonce,
     subscription,
     file_subscription,
     session,
@@ -41,39 +38,45 @@ models() -> [
     file_meta,
     storage,
     file_location,
+    file_local_blocks,
     space_storage,
-    dbsync_state2,
+    dbsync_state,
     files_to_chown,
     space_quota,
     monitoring_state,
     file_handles,
     sfm_handle,
-    dbsync_batches,
     custom_metadata,
-    indexes,
-    file_consistency,
     permissions_cache,
     permissions_cache_helper,
-    change_propagation_controller,
+    permissions_cache_helper2,
     times,
     helper_handle,
     space_strategies,
-    file_force_proxy
+    file_force_proxy,
+    luma_cache,
+    file_popularity,
+    space_transfer_stats,
+    space_transfer_stats_cache,
+    transfer,
+    transferred_file,
+    autocleaning,
+    dir_location,
+    storage_sync_monitoring,
+    storage_sync_info,
+    replica_deletion,
+    replica_deletion_lock,
+    index,
+    autocleaning_run,
+    file_popularity_config,
+    idp_access_token
 ].
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link datastore_config_behaviour} callback throttled_models/0.
+%% Returns list of throttled datastore models.
 %% @end
 %%--------------------------------------------------------------------
--spec throttled_models() -> Models :: [model_behaviour:model_type()].
-throttled_models() -> [file_meta].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link datastore_config_behaviour} callback get_mutator/0.
-%% @end
-%%--------------------------------------------------------------------
--spec get_mutator() -> datastore:mutator() | undefined.
-get_mutator() ->
-    oneprovider:get_provider_id().
+-spec get_throttled_models() -> [datastore_model:model()].
+get_throttled_models() ->
+    [file_meta].

@@ -14,9 +14,12 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+
+-define(AUTO_HELPER_MODE, 'AUTO').
+-define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
+-define(FORCE_DIRECT_HELPER_MODE, 'FORCE_DIRECT').
 
 -record(child_link_uuid, {
     uuid :: file_meta:uuid(),
@@ -37,7 +40,14 @@
 
 -record(get_file_children, {
     offset :: file_meta:offset(),
-    size :: file_meta:size()
+    size :: file_meta:size(),
+    index_token :: undefined | binary()
+}).
+
+-record(get_file_children_attrs, {
+    offset :: file_meta:offset(),
+    size :: file_meta:size(),
+    index_token :: undefined | binary()
 }).
 
 -record(create_dir, {
@@ -79,6 +89,10 @@
     flag :: fslogic_worker:open_flag()
 }).
 
+-record(open_file_with_extended_info, {
+    flag :: fslogic_worker:open_flag()
+}).
+
 -record(get_file_location, {
 }).
 
@@ -92,11 +106,20 @@
 
 -record(synchronize_block, {
     block :: #file_block{},
-    prefetch = false :: boolean()
+    prefetch = false :: boolean(),
+    priority :: non_neg_integer()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
-    block :: #file_block{}
+    block :: #file_block{},
+    prefetch = false :: boolean(),
+    priority :: non_neg_integer()
+}).
+
+-record(block_synchronization_request, {
+    block :: #file_block{},
+    prefetch = false :: boolean(),
+    priority :: non_neg_integer()
 }).
 
 -record(get_xattr, {
@@ -124,16 +147,22 @@
     handle_id :: undefined | binary()
 }).
 
+-record(storage_file_created, {
+}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
+    #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{} | #fsync{}.
+    #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
+    #storage_file_created{} | #open_file_with_extended_info{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
+    extended_direct_io :: boolean(),
     file_request :: file_request_type()
 }).
 
@@ -143,7 +172,8 @@
 
 -record(get_helper_params, {
     storage_id :: storage:id(),
-    force_proxy_io = false :: boolean()
+    space_id :: od_space:id(),
+    helper_mode :: ?AUTO_HELPER_MODE | ?FORCE_PROXY_HELPER_MODE | ?FORCE_DIRECT_HELPER_MODE
 }).
 
 -record(create_storage_test_file, {
@@ -167,7 +197,15 @@
 }).
 
 -record(file_children, {
-    child_links :: [#child_link{}]
+    child_links :: [#child_link{}],
+    index_token :: binary(),
+    is_last :: boolean()
+}).
+
+-record(file_children_attrs, {
+    child_attrs :: [#file_attr{}],
+    index_token :: binary(),
+    is_last :: boolean()
 }).
 
 -record(helper_arg, {
@@ -177,7 +215,8 @@
 
 -record(helper_params, {
     helper_name :: helper:name(),
-    helper_args :: [#helper_arg{}]
+    helper_args :: [#helper_arg{}],
+    extended_direct_io :: boolean()
 }).
 
 -record(storage_test_file, {
@@ -187,9 +226,15 @@
     file_content :: binary()
 }).
 
+-record(file_location_changed, {
+    file_location :: #file_location{},
+    change_beg_offset :: undefined | non_neg_integer(),
+    change_end_offset :: undefined | non_neg_integer()
+}).
+
 -record(sync_response, {
     checksum :: binary(),
-    file_location :: #file_location{}
+    file_location_changed :: #file_location_changed{}
 }).
 
 -record(file_created, {
@@ -200,6 +245,13 @@
 
 -record(file_opened, {
     handle_id :: binary()
+}).
+
+-record(file_opened_extended, {
+    handle_id :: binary(),
+    provider_id,
+    file_id,
+    storage_id
 }).
 
 -record(file_renamed, {
@@ -219,6 +271,7 @@
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
+    #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
     undefined.
 
 -record(fuse_response, {

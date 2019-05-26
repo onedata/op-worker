@@ -11,151 +11,65 @@
 %%%-------------------------------------------------------------------
 -module(space_storage).
 -author("Krzysztof Trzepla").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
+-include("global_definitions.hrl").
 
 %% API
 -export([add/2, add/3]).
+-export([get/1, delete/1, update/2]).
 -export([get_storage_ids/1, get_mounted_in_root/1]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
--export([record_struct/1, record_upgrade/2]).
+%% datastore_model callbacks
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: od_space:id().
--type model() :: #space_storage{}.
--type doc() :: #document{value :: model()}.
+-type record() :: #space_storage{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0, model/0, doc/0]).
+-export_type([id/0, record/0, doc/0, diff/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) ->
-    datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {storage_ids, [string]}
-    ]};
-record_struct(2) ->
-    {record, [
-        {storage_ids, [string]},
-        {mounted_in_root, [string]}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades record from specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_upgrade(datastore_json:record_version(), tuple()) ->
-    {datastore_json:record_version(), tuple()}.
-record_upgrade(1, {?MODEL_NAME, StorageIds}) ->
-    {2, #space_storage{storage_ids = StorageIds}}.
-
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-%TODO - luma gets undefined storage
-get(undefined) ->
-    {error, {not_found, ?MODULE}};
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    Config = ?MODEL_CONFIG(space_storage_bucket, [], ?GLOBALLY_CACHED_LEVEL),
-    Config#model_config{version = 2}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
-    datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(model_behaviour:model_type(), model_behaviour:model_action(),
-    datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+-define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates space storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+update(Key, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(undefined | id()) -> {ok, doc()} | {error, term()}.
+get(undefined) ->
+    {error, not_found};
+get(Key) ->
+    datastore_model:get(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes space storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id()) -> ok | {error, term()}.
+delete(Key) ->
+    autocleaning_api:disable(Key),
+    autocleaning_api:delete_config(Key),
+    file_popularity_api:disable(Key),
+    file_popularity_api:delete_config(Key),
+    space_strategies:delete(Key),
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -167,7 +81,6 @@ before(_ModelName, _Method, _Level, _Context) ->
 add(SpaceId, StorageId) ->
     add(SpaceId, StorageId, false).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Adds storage to the space.
@@ -176,7 +89,6 @@ add(SpaceId, StorageId) ->
 -spec add(od_space:id(), storage:id(), boolean()) ->
     {ok, od_space:id()} | {error, Reason :: term()}.
 add(SpaceId, StorageId, MountInRoot) ->
-    Doc = new(SpaceId, StorageId, MountInRoot),
     Diff = fun(#space_storage{
         storage_ids = StorageIds,
         mounted_in_root = MountedInRoot
@@ -197,10 +109,11 @@ add(SpaceId, StorageId, MountInRoot) ->
                 end
         end
     end,
+    #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
 
-    case model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]) of
-        {ok, SpaceId} ->
-            ok = space_strategies:add_storage(SpaceId, StorageId, MountInRoot),
+    case datastore_model:update(?CTX, SpaceId, Diff, Default) of
+        {ok, _} ->
+            ok = space_strategies:add_storage(SpaceId, StorageId),
             {ok, SpaceId};
         {error, Reason} ->
             {error, Reason}
@@ -211,11 +124,14 @@ add(SpaceId, StorageId, MountInRoot) ->
 %% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(model() | doc()) -> [storage:id()].
+-spec get_storage_ids(record() | doc() | id()) -> [storage:id()].
 get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
     StorageIds;
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
-    get_storage_ids(Value).
+    get_storage_ids(Value);
+get_storage_ids(SpaceId) ->
+    {ok, Doc} = ?MODULE:get(SpaceId),
+    get_storage_ids(Doc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -223,11 +139,14 @@ get_storage_ids(#document{value = #space_storage{} = Value}) ->
 %% storage root.
 %% @end
 %%--------------------------------------------------------------------
--spec get_mounted_in_root(model() | doc()) -> [storage:id()].
+-spec get_mounted_in_root(record() | doc() | id()) -> [storage:id()].
 get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
     StorageIds;
 get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
-    get_mounted_in_root(Value).
+    get_mounted_in_root(Value);
+get_mounted_in_root(SpaceId) ->
+    {ok, Doc} = ?MODULE:get(SpaceId),
+    get_mounted_in_root(Doc).
 
 %%%===================================================================
 %%% Internal functions
@@ -248,3 +167,75 @@ new(SpaceId, StorageId, _) ->
     #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
 
 
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    5.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {storage_ids, [string]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {storage_ids, [string]},
+        {mounted_in_root, [string]}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {storage_ids, [string]},
+        {mounted_in_root, [string]},
+        {cleanup_enabled, boolean}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {storage_ids, [string]},
+        {mounted_in_root, [string]},
+        {file_popularity_enabled, boolean},
+        {cleanup_enabled, boolean},
+        {cleanup_in_progress, string},
+        {autocleaning_config, {record, [
+            {lower_file_size_limit, integer},
+            {upper_file_size_limit, integer},
+            {max_file_not_opened_hours, integer},
+            {target, integer},
+            {threshold, integer}
+        ]}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {storage_ids, [string]},
+        {mounted_in_root, [string]}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, StorageIds}) ->
+    {2, {?MODULE, StorageIds, []}};
+upgrade_record(2, {?MODULE, StorageIds, MountedInRoot}) ->
+    {3, {?MODULE, StorageIds, MountedInRoot, false}};
+upgrade_record(3, {?MODULE, StorageIds, MountedInRoot, CleanupEnabled}) ->
+    {4, {?MODULE, StorageIds, MountedInRoot, false, CleanupEnabled, undefined, undefined}};
+upgrade_record(4, {?MODULE, StorageIds, MountedInRoot, _FilePopularityEnabled,
+    _CleanupEnabled, _CleanupInProgress, _AutocleaningConfig}) ->
+    {5, {?MODULE, StorageIds, MountedInRoot}}.

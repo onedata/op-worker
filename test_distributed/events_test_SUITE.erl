@@ -18,7 +18,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -67,7 +67,8 @@ all() ->
 subscribe_should_create_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_subscription(default, Worker),
-    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])),
+    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription,
+        list_durable_subscriptions, [])),
     unsubscribe(Worker, SubId).
 
 unsubscribe_should_remove_subscription(Config) ->
@@ -75,7 +76,8 @@ unsubscribe_should_remove_subscription(Config) ->
     SessId = ?config(session_id, Config),
     SubId = subscribe(Worker, SessId),
     unsubscribe(Worker, SubId),
-    ?assertMatch({ok, []}, rpc:call(Worker, subscription, list, [])).
+    ?assertMatch({ok, []}, rpc:call(Worker, subscription,
+        list_durable_subscriptions, [])).
 
 subscribe_should_notify_event_manager(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -130,7 +132,7 @@ flush_should_notify_awaiting_process(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-        initializer:clear_models(Worker, [subscription]),
+        initializer:clear_subscriptions(Worker),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -180,12 +182,13 @@ init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
-    test_utils:mock_new(Workers, od_space),
-    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, space_logic),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
+        {ok, [oneprovider:get_id()]}
     end),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+        [{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
@@ -218,7 +221,7 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, od_space),
+    test_utils:mock_unload(Workers, space_logic),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
@@ -301,7 +304,7 @@ subscribe(Worker, SessId, Sub, Handler, EmRule, EmTime) ->
     {ok, SubId :: subscription:id()}.
 create_subscription(Case, Worker) ->
     Sub = subscription_type_for_testcase_name(Case),
-    rpc:call(Worker, subscription, create, [subscription(
+    rpc:call(Worker, subscription, create_durable_subscription, [subscription(
         Sub,
         forward_events_event_handler(),
         fun(_) -> true end,
@@ -376,7 +379,7 @@ emit(Worker, SessId, Evt) ->
 -spec flush(Worker :: node(), SubId :: subscription:id(), Notify :: pid(),
     SessId :: session:id()) -> ok.
 flush(Worker, SubId, Notify, SessId) ->
-    ProvId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ProvId = rpc:call(Worker, oneprovider, get_id, []),
     rpc:call(Worker, event, flush, [ProvId, undefined, SubId, Notify, SessId]).
 
 %%--------------------------------------------------------------------

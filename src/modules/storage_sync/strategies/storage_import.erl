@@ -23,13 +23,13 @@
 %%%===================================================================
 %%% Types
 %%%===================================================================
-
+-type state() :: not_started | in_progress | finished.
 %%%===================================================================
 %%% Exports
 %%%===================================================================
 
 %% Types
--export_type([]).
+-export_type([state/0]).
 
 %% space_strategy_behaviour callbacks
 -export([available_strategies/0, strategy_init_jobs/3, strategy_handle_job/1,
@@ -38,7 +38,7 @@
 ]).
 
 %% API
--export([start/5]).
+-export([start/6]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -60,6 +60,11 @@ available_strategies() ->
                     name = max_depth,
                     type = integer,
                     description = <<"Max depth of file tree that will be scanned">>
+                },
+                #space_strategy_argument{
+                    name = sync_acl,
+                    type = boolean,
+                    description = <<"Enables synchronization of NFSv4 ACLs">>
                 }
             ],
             description = <<"Simple full filesystem scan">>
@@ -80,15 +85,19 @@ available_strategies() ->
     space_strategy:job_data()) -> [space_strategy:job()].
 strategy_init_jobs(no_import, _, _) ->
     [];
-strategy_init_jobs(_, _, #{last_import_time := LastImportTime})
-    when is_integer(LastImportTime) -> [];
-strategy_init_jobs(simple_scan, Args = #{max_depth := MaxDepth},
+strategy_init_jobs(_, _, #{import_start_time := ImportStartTime})
+    when is_integer(ImportStartTime) -> [];
+strategy_init_jobs(simple_scan, Args = #{
+    max_depth := MaxDepth
+},
     Data = #{
-        last_import_time := undefined,
-        space_id := SpaceId
+        import_start_time := undefined,
+        space_id := SpaceId,
+        storage_id := StorageId
 }) ->
-    storage_sync_monitoring:update_queue_length_spirals(SpaceId, 1),
-    storage_sync_monitoring:update_files_to_import_counter(SpaceId, 1),
+    CurrentTimestamp = time_utils:cluster_time_seconds(),
+    {ok, _} = storage_sync_monitoring:prepare_new_import_scan(SpaceId, StorageId, CurrentTimestamp),
+    ?debug("Starting storage_import for space: ~p and storage: ~p", [SpaceId, StorageId]),
     [#space_strategy_job{
         strategy_name = simple_scan,
         strategy_args = Args,
@@ -105,6 +114,7 @@ strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
 -spec strategy_handle_job(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(Job = #space_strategy_job{strategy_name = simple_scan}) ->
+    ok = datastore_throttling:throttle(import),
     simple_scan:run(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
@@ -134,12 +144,7 @@ strategy_merge_result(_Jobs, Results) ->
     LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
-strategy_merge_result(#space_strategy_job{
-    data=#{
-        space_id := SpaceId,
-        storage_id := StorageId}
-}, ok, ok) ->
-    {ok, _} = space_strategies:update_last_import_time(SpaceId, StorageId, os:system_time(milli_seconds)),
+strategy_merge_result(_Job, ok, ok) ->
     ok;
 strategy_merge_result(_Job, Error, ok) ->
     Error;
@@ -154,13 +159,10 @@ strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec worker_pools_config() -> [{worker_pool:name(), non_neg_integer()}].
-worker_pools_config() -> 
-    {ok, FileWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM_KEY),
-    {ok, DirWorkersNum} = application:get_env(?APP_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM_KEY),
-    [
-        {?STORAGE_SYNC_DIR_POOL_NAME, DirWorkersNum},
-        {?STORAGE_SYNC_FILE_POOL_NAME, FileWorkersNum}
-    ].
+worker_pools_config() -> [
+    {?STORAGE_SYNC_DIR_POOL_NAME, ?STORAGE_SYNC_DIR_WORKERS_NUM},
+    {?STORAGE_SYNC_FILE_POOL_NAME, ?STORAGE_SYNC_FILE_WORKERS_NUM}
+].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -171,23 +173,22 @@ worker_pools_config() ->
 main_worker_pool() ->
     ?STORAGE_SYNC_DIR_POOL_NAME.
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Function responsible for starting storage import.
 %% @end
 %%--------------------------------------------------------------------
--spec start(od_space:id(), storage:id(), integer() | undefined, file_ctx:ctx(),
-    file_meta:path()) ->
+-spec start(od_space:id(), storage:id(), space_strategy:timestamp(),
+    space_strategy:timestamp(), file_ctx:ctx(), file_meta:path()) ->
     [space_strategy:job_result()] | space_strategy:job_result().
-start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName) ->
+start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, ParentCtx, FileName) ->
     InitialImportJobData = #{
-        last_import_time => LastImportTime,
+        import_start_time => ImportStartTime,
+        import_finish_time => ImportFinishTime,
         space_id => SpaceId,
         storage_id => StorageId,
         file_name => FileName,
@@ -197,6 +198,3 @@ start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName) ->
     space_sync_worker:run(ImportInit).
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

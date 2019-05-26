@@ -14,10 +14,6 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/message_id.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([generate/1, generate/2, encode/1, decode/1]).
@@ -29,6 +25,10 @@
 
 -define(INT64, 16#FFFFFFFFFFFFFFF).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Generates ID with encoded handler pid.
@@ -36,7 +36,7 @@
 %%--------------------------------------------------------------------
 -spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: #message_id{}}.
 generate(Recipient) ->
-    generate(Recipient, oneprovider:get_provider_id()).
+    generate(Recipient, oneprovider:get_id()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,13 +47,13 @@ generate(Recipient) ->
 generate(undefined, Issuer) ->
     {ok, #message_id{
         issuer = Issuer,
-        id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
+        id = integer_to_binary(rand:uniform(?INT64 + 1) - 1),
         recipient = undefined
     }};
 generate(Recipient, Issuer) ->
     {ok, #message_id{
         issuer = Issuer,
-        id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
+        id = integer_to_binary(rand:uniform(?INT64 + 1) - 1),
         recipient = term_to_binary(Recipient)
     }}.
 
@@ -86,7 +86,3 @@ decode(Id) ->
         _:_ ->
             {ok, #message_id{issuer = client, id = Id}}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

@@ -1,25 +1,24 @@
 %%%-------------------------------------------------------------------
-%%% @author Konrad Zemek
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Michal Stanisz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common includes, defines and macros for rtransfer modules.
+%%% This file contains common definitions concerning rtransfer.
 %%% @end
 %%%-------------------------------------------------------------------
+-author("Michal Stanisz").
 
--ifndef(RTRANSFER_HRL).
--define(RTRANSFER_HRL, true).
 
--record(request_transfer, {
-    file_id :: binary(),
-    offset :: non_neg_integer(),
-    size :: pos_integer(),
-    provider_id :: binary(),
-    notify :: undefined | rtransfer:notify_fun(),
-    on_complete :: undefined | rtransfer:on_complete_fun()
-}).
+-ifndef(OP_WORKER_MODULES_RTRANSFER_HRL).
+-define(OP_WORKER_MODULES_RTRANSFER_HRL, 1).
+
+%% Port number used by rtransfer
+-define(RTRANSFER_PORT, proplists:get_value(server_port,
+    application:get_env(rtransfer_link, transfer, []),
+    6665)).
 
 -endif.
+

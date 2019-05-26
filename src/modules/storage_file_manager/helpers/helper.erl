@@ -16,25 +16,31 @@
 
 -include("global_definitions.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([new_ceph_helper/6, new_posix_helper/3, new_s3_helper/6,
-    new_swift_helper/6, new_glusterfs_helper/5]).
--export([new_ceph_user_ctx/2, new_posix_user_ctx/2, new_s3_user_ctx/2,
-    new_swift_user_ctx/2, new_glusterfs_user_ctx/2, validate_user_ctx/2]).
+-export([new_ceph_helper/7, new_cephrados_helper/7, new_posix_helper/4,
+    new_s3_helper/7, new_swift_helper/7, new_glusterfs_helper/6,
+    new_webdav_helper/5, new_nulldevice_helper/4]).
+-export([new_ceph_user_ctx/2,new_cephrados_user_ctx/2,  new_posix_user_ctx/2,
+    new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
+    new_webdav_user_ctx/2, new_webdav_user_ctx/3, new_nulldevice_user_ctx/2,
+    validate_user_ctx/2, validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
-    get_proxy_params/2, get_timeout/1]).
+    get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
 -type name() :: binary().
 -type args() :: #{binary() => binary()}.
 -type params() :: #helper_params{}.
--type user_ctx() :: #{binary() => binary()}.
+-type user_ctx() :: #{binary() => binary() | integer()}.
+-type group_ctx() :: #{binary() => binary() | integer()}.
+-type optional_field() :: {optional, binary()}.
 
--export_type([name/0, args/0, params/0, user_ctx/0]).
+-export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -45,12 +51,11 @@
 %% Constructs Ceph storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_helper(binary(), binary(), binary(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
+-spec new_ceph_helper(binary(), binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> {ok, helpers:helper()}.
 new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
-    Insecure) ->
-
-    #helper{
+    Insecure, StoragePathType) ->
+    {ok, #helper{
         name = ?CEPH_HELPER_NAME,
         args = maps:merge(OptArgs, #{
             <<"monitorHostname">> => MonitorHostname,
@@ -58,32 +63,60 @@ new_ceph_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
             <<"poolName">> => PoolName
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
-    }.
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs CephRados storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_cephrados_helper(binary(), binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_cephrados_helper(MonitorHostname, ClusterName, PoolName, OptArgs, AdminCtx,
+    Insecure, StoragePathType) ->
+    {ok, #helper{
+        name = ?CEPHRADOS_HELPER_NAME,
+        args = maps:merge(OptArgs, #{
+            <<"monitorHostname">> => MonitorHostname,
+            <<"clusterName">> => ClusterName,
+            <<"poolName">> => PoolName
+        }),
+        admin_ctx = AdminCtx,
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs POSIX storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_helper(binary(), args(), user_ctx()) -> helpers:helper().
-new_posix_helper(MountPoint, OptArgs, AdminCtx) ->
-    #helper{
+-spec new_posix_helper(binary(), args(), user_ctx(),
+    helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_posix_helper(MountPoint, OptArgs, AdminCtx, StoragePathType) ->
+    {ok, #helper{
         name = ?POSIX_HELPER_NAME,
         args = maps:merge(OptArgs, #{<<"mountPoint">> => MountPoint}),
         admin_ctx = AdminCtx,
-        insecure = false
-    }.
+        insecure = false,
+        extended_direct_io = false,
+        storage_path_type = StoragePathType
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs S3 storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_s3_helper(binary(), binary(), boolean(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
-new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
-    #helper{
+-spec new_s3_helper(binary(), binary(), boolean(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure,
+    StoragePathType) ->
+    {ok, #helper{
         name = ?S3_HELPER_NAME,
         args = maps:merge(OptArgs, #{
             <<"hostname">> => Hostname,
@@ -94,18 +127,21 @@ new_s3_helper(Hostname, BucketName, UseHttps, OptArgs, AdminCtx, Insecure) ->
             end
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
-    }.
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs Swift storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_swift_helper(binary(), binary(), binary(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
-new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure) ->
-    #helper{
+-spec new_swift_helper(binary(), binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx,
+    Insecure, StoragePathType) ->
+    {ok, #helper{
         name = ?SWIFT_HELPER_NAME,
         args = maps:merge(OptArgs, #{
             <<"authUrl">> => AuthUrl,
@@ -113,86 +149,186 @@ new_swift_helper(AuthUrl, ContainerName, TenantName, OptArgs, AdminCtx, Insecure
             <<"tenantName">> => TenantName
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
-    }.
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs GlusterFS storage helper record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(), boolean()) ->
-    helpers:helper().
-new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, Insecure) ->
-    #helper{
+-spec new_glusterfs_helper(binary(), binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_glusterfs_helper(Volume, Hostname, OptArgs, AdminCtx, _Insecure,
+    StoragePathType) ->
+    {ok, #helper{
         name = ?GLUSTERFS_HELPER_NAME,
         args = maps:merge(OptArgs, #{
             <<"volume">> => Volume,
             <<"hostname">> => Hostname
         }),
         admin_ctx = AdminCtx,
-        insecure = Insecure
-    }.
+        insecure = false,   % todo remove Insecure arg VFS-5256
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs WebDAV storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_helper(binary(), args(), user_ctx(),
+    boolean(), helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_webdav_helper(Endpoint, OptArgs, AdminCtx, Insecure,
+    StoragePathType) ->
+    {ok, #helper{
+        name = ?WEBDAV_HELPER_NAME,
+        args = maps:merge(OptArgs, #{
+            <<"endpoint">> => Endpoint
+        }),
+        admin_ctx = AdminCtx,
+        insecure = Insecure,
+        extended_direct_io = true,
+        storage_path_type = StoragePathType
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs Null Device storage helper record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_nulldevice_helper(args(), user_ctx(), boolean(),
+    helpers:storage_path_type()) -> {ok, helpers:helper()}.
+new_nulldevice_helper(OptArgs, AdminCtx, _Insecure, StoragePathType) ->
+    {ok, #helper{
+        name = ?NULL_DEVICE_HELPER_NAME,
+        args = OptArgs,
+        admin_ctx = AdminCtx,
+        insecure = false,   % todo remove Insecure arg VFS-5256
+        storage_path_type = StoragePathType
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs Ceph storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_user_ctx(binary(), binary()) -> user_ctx().
+-spec new_ceph_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
 new_ceph_user_ctx(Username, Key) ->
-    #{
+    {ok, #{
         <<"username">> => Username,
         <<"key">> => Key
-    }.
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs CephRados storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_cephrados_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_cephrados_user_ctx(Username, Key) ->
+    {ok, #{
+        <<"username">> => Username,
+        <<"key">> => Key
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs POSIX storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_user_ctx(integer(), integer()) -> user_ctx().
+-spec new_posix_user_ctx(integer(), integer()) -> {ok, user_ctx()}.
 new_posix_user_ctx(Uid, Gid) ->
-    #{
+    {ok, #{
         <<"uid">> => integer_to_binary(Uid),
         <<"gid">> => integer_to_binary(Gid)
-    }.
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs S3 storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_s3_user_ctx(binary(), binary()) -> user_ctx().
+-spec new_s3_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
 new_s3_user_ctx(AccessKey, SecretKey) ->
-    #{
+    {ok, #{
         <<"accessKey">> => AccessKey,
         <<"secretKey">> => SecretKey
-    }.
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs Swift storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_swift_user_ctx(binary(), binary()) -> user_ctx().
+-spec new_swift_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
 new_swift_user_ctx(Username, Password) ->
-    #{
+    {ok, #{
         <<"username">> => Username,
         <<"password">> => Password
-    }.
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Constructs GlusterFS storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_glusterfs_user_ctx(integer(), integer()) -> user_ctx().
+-spec new_glusterfs_user_ctx(integer(), integer()) -> {ok, user_ctx()}.
 new_glusterfs_user_ctx(Uid, Gid) ->
-    #{
+    {ok, #{
         <<"uid">> => integer_to_binary(Uid),
         <<"gid">> => integer_to_binary(Gid)
-    }.
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs WebDAV storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_user_ctx(binary(), binary()) -> {ok, user_ctx()}.
+new_webdav_user_ctx(CredentialsType = <<"none">>, _Credentials) ->
+    {ok, #{
+        <<"credentialsType">> => CredentialsType
+    }};
+new_webdav_user_ctx(CredentialsType, Credentials) ->
+    {ok, #{
+        <<"credentialsType">> => CredentialsType,
+        <<"credentials">> => Credentials
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs WebDAV storage helper user context record.
+%% This function is used by Onepanel to construct admin user_ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_webdav_user_ctx(binary(), binary(), binary()) -> {ok, user_ctx()}.
+new_webdav_user_ctx(CredentialsType, Credentials, <<>>) ->
+    % todo VFS-5304 verify parameters
+    % todo i. e. when type == oauth2 and insecure == true token cannot be empty
+    new_webdav_user_ctx(CredentialsType, Credentials);
+new_webdav_user_ctx(CredentialsType, Credentials, OnedataAccessToken) ->
+    {ok, AdminId} = user_identity:get_or_fetch_user_id(OnedataAccessToken),
+    {ok, UserCtx} = new_webdav_user_ctx(CredentialsType, Credentials),
+    {ok, UserCtx#{
+        <<"onedataAccessToken">> => OnedataAccessToken,
+        <<"adminId">> => AdminId
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs Null Device storage helper user context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_nulldevice_user_ctx(integer(), integer()) -> {ok, user_ctx()}.
+new_nulldevice_user_ctx(Uid, Gid) ->
+    {ok, #{
+        <<"uid">> => integer_to_binary(Uid),
+        <<"gid">> => integer_to_binary(Gid)
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -202,23 +338,56 @@ new_glusterfs_user_ctx(Uid, Gid) ->
 -spec validate_user_ctx(storage:helper(), user_ctx()) ->
     ok | {error, Reason :: term()}.
 validate_user_ctx(#helper{name = ?CEPH_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"username">>, <<"key">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"username">>, <<"key">>], UserCtx);
+validate_user_ctx(#helper{name = ?CEPHRADOS_HELPER_NAME}, UserCtx) ->
+    check_user_or_group_ctx_fields([<<"username">>, <<"key">>], UserCtx);
 validate_user_ctx(#helper{name = ?POSIX_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
 validate_user_ctx(#helper{name = ?S3_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"accessKey">>, <<"secretKey">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"accessKey">>, <<"secretKey">>], UserCtx);
 validate_user_ctx(#helper{name = ?SWIFT_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"username">>, <<"password">>], UserCtx);
+    check_user_or_group_ctx_fields([<<"username">>, <<"password">>], UserCtx);
 validate_user_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, UserCtx) ->
-    check_user_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
+    check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx);
+validate_user_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, UserCtx) ->
+    % todo refactor VFS-5256
+    % todo change onedataAccessToken adminAccessToken (helpers, swagger, oneclient)
+    check_user_or_group_ctx_fields([
+        <<"credentialsType">>, {optional, <<"credentials">>},
+        {optional, <<"adminId">>},
+        {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
+        {optional, <<"accessTokenTTL">>}
+    ], UserCtx);
+validate_user_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, UserCtx) ->
+    check_user_or_group_ctx_fields([<<"uid">>, <<"gid">>], UserCtx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether user context is valid for the storage helper.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_group_ctx(storage:helper(), group_ctx()) ->
+    ok | {error, Reason :: term()}.
+validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
+    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
+    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
+    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
+    ok;
+validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
+    {error, {group_ctx_not_supported, HelperName}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns helper name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(helpers:helper()) -> name().
+-spec get_name(helpers:helper() | params()) -> name().
 get_name(#helper{name = Name}) ->
+    Name;
+get_name(#helper_params{helper_name = Name}) ->
     Name.
 
 %%--------------------------------------------------------------------
@@ -226,9 +395,11 @@ get_name(#helper{name = Name}) ->
 %% Returns helper arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec get_args(helpers:helper()) -> args().
+-spec get_args(helpers:helper() | params()) -> args().
 get_args(#helper{args = Args}) ->
-    Args.
+    Args;
+get_args(#helper_params{helper_args = Args}) ->
+    maps:from_list([{K, V} || #helper_arg{key = K, value = V} <- Args]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -250,17 +421,28 @@ is_insecure(#helper{insecure = Insecure}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns helper storage path type.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_path_type(helpers:helper()) -> helper:storage_path_type().
+get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
+    StoragePathType.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns helper parameters.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_params(helpers:helper(), user_ctx()) -> params().
 get_params(Helper, UserCtx) ->
-    {ok, #helper{name = Name, args = Args}} = set_user_ctx(Helper, UserCtx),
+    {ok, #helper{name = Name, args = Args, extended_direct_io = DS}} =
+        set_user_ctx(Helper, UserCtx),
     #helper_params{
         helper_name = Name,
         helper_args = maps:fold(fun(Key, Value, Acc) ->
             [#helper_arg{key = Key, value = Value} | Acc]
-        end, [], Args)
+        end, [], Args),
+        extended_direct_io = DS
     }.
 
 %%--------------------------------------------------------------------
@@ -278,7 +460,8 @@ get_proxy_params(Helper, StorageId) ->
         helper_args = [
             #helper_arg{key = <<"storageId">>, value = StorageId},
             #helper_arg{key = <<"timeout">>, value = TimeoutValue}
-        ]
+        ],
+        extended_direct_io = false
     }.
 
 %%--------------------------------------------------------------------
@@ -319,10 +502,14 @@ set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec translate_name(OldName :: binary()) -> NewName :: binary().
 translate_name(<<"Ceph">>) -> ?CEPH_HELPER_NAME;
+translate_name(<<"CephRados">>) -> ?CEPHRADOS_HELPER_NAME;
 translate_name(<<"DirectIO">>) -> ?POSIX_HELPER_NAME;
 translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
 translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;
 translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
+translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
+translate_name(<<"WebDAV">>) -> ?WEBDAV_HELPER_NAME;
+translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
 translate_name(Name) -> Name.
 
 %%--------------------------------------------------------------------
@@ -345,6 +532,20 @@ translate_arg_name(<<"secret_key">>) -> <<"secretKey">>;
 translate_arg_name(<<"tenant_name">>) -> <<"tenantName">>;
 translate_arg_name(<<"user_name">>) -> <<"username">>;
 translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
+translate_arg_name(<<"verify_server_certificate">>) -> <<"verifyServerCertificate">>;
+translate_arg_name(<<"credentials_type">>) -> <<"credentialsType">>;
+translate_arg_name(<<"authorization_header">>) -> <<"authorizationHeader">>;
+translate_arg_name(<<"range_write_support">>) -> <<"rangeWriteSupport">>;
+translate_arg_name(<<"connection_pool_size">>) -> <<"connectionPoolSize">>;
+translate_arg_name(<<"maximum_upload_size">>) -> <<"maximumUploadSize">>;
+translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
+translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
+translate_arg_name(<<"timeout_probability">>) -> <<"timeoutProbability">>;
+translate_arg_name(<<"simulated_filesystem_parameters">>) ->
+    <<"simulatedFilesystemParameters">>;
+translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
+    <<"simulatedFilesystemGrowSpeed">>;
+translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
 
 %%%===================================================================
@@ -354,23 +555,45 @@ translate_arg_name(Name) -> Name.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether user context map contains only provided fields and they
-%% have valid type.
+%% Checks whether user/group context map contains only provided/optional
+%% fields and whether they have valid type.
 %% @end
 %%--------------------------------------------------------------------
--spec check_user_ctx_fields([binary()], user_ctx()) ->
-    ok | {error, Reason :: term()}.
-check_user_ctx_fields([], UserCtx) ->
+-spec check_user_or_group_ctx_fields([binary() | optional_field()],
+    user_ctx() | group_ctx()) -> ok | {error, Reason :: term()}.
+check_user_or_group_ctx_fields([], UserCtx) ->
     case maps:size(UserCtx) of
         0 -> ok;
         _ -> {error, {invalid_additional_fields, UserCtx}}
     end;
-check_user_ctx_fields([Field | Fields], UserCtx) ->
+check_user_or_group_ctx_fields([{optional, Field} | Fields], UserCtx) ->
     case maps:find(Field, UserCtx) of
+        {ok, <<"null">>} ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, null} ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
         {ok, <<_/binary>>} ->
-            check_user_ctx_fields(Fields, maps:remove(Field, UserCtx));
-        {ok, _} ->
-            {error, {invalid_field_value, Field}};
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} when is_integer(Value) ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} ->
+            % Field has invalid type (other than integer/binary)
+            {error, {invalid_field_value, Field, Value}};
+        error ->
+            % Field is optional so ignore it
+            check_user_or_group_ctx_fields(Fields, UserCtx)
+    end;
+check_user_or_group_ctx_fields([Field | Fields], UserCtx) ->
+    case maps:find(Field, UserCtx) of
+        {ok, Value = <<"null">>} ->
+            {error, {invalid_field_value, Field, Value}};
+        {ok, <<_/binary>>} ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} when is_integer(Value) ->
+            check_user_or_group_ctx_fields(Fields, maps:remove(Field, UserCtx));
+        {ok, Value} ->
+            % Field has invalid type (other than integer/binary)
+            {error, {invalid_field_value, Field, Value}};
         error ->
             {error, {missing_field, Field}}
     end.

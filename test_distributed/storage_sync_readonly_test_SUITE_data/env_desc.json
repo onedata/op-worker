@@ -62,7 +62,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }
@@ -95,7 +96,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }
@@ -105,17 +107,33 @@
         "users": {
             "user1": {
                 "default_space": "space1"
+            },
+            "user2": {
+                "default_space": "space1"
             }
         },
         "groups": {
+            "group1": {
+                "users": [
+                "user1"
+                ]
+            },
+            "group2": {
+                "users": [
+                    "user2"
+                ]
+            }
         },
         "spaces": {
             "space1": {
                 "displayed_name": "space_name1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
+                    "group1",
+                    "group2"
                 ],
                 "providers": {
                     "p1": {

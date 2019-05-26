@@ -17,15 +17,16 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/2, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -33,7 +34,7 @@
 
 -type streams() :: #{event_stream:key() => pid()}.
 -type subscriptions() :: #{subscription:id() => {local, event_stream:key()} |
-{remote, oneprovider:id()}}.
+                                                {remote, oneprovider:id()}}.
 -type providers() :: #{file_meta:uuid() => oneprovider:id()}.
 -type ctx() :: event_type:ctx() | subscription_type:ctx().
 
@@ -66,6 +67,15 @@
 start_link(MgrSup, SessId) ->
     gen_server2:start_link(?MODULE, [MgrSup, SessId], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to event_manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
+send(Manager, Message) ->
+    gen_server2:call(Manager, Message, timer:minutes(1)).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -86,7 +96,10 @@ start_link(MgrSup, SessId) ->
 init([MgrSup, SessId]) ->
     ?debug("Initializing event manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{event_manager => self()}),
+    Self = self(),
+    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{event_manager = Self}}
+    end),
     {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -103,9 +116,9 @@ init([MgrSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(Request, _From, State) ->
-    ?log_bad_request(Request),
-    {reply, ok, State}.
+handle_call(Request, From, State) ->
+    gen_server2:reply(From, ok),
+    handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -117,9 +130,10 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(Request, State = #state{session_id = SessId}) ->
+handle_cast({internal, RetryCounter, Request},
+    State = #state{session_id = SessId}) ->
     try
-        ProviderId = oneprovider:get_provider_id(),
+        ProviderId = oneprovider:get_id_or_undefined(),
         {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
         case get_provider(Request, State, ProxyVia) of
             {ProviderId, NewState} ->
@@ -128,10 +142,22 @@ handle_cast(Request, State = #state{session_id = SessId}) ->
                 handle_remotely(Request, RemoteProviderId, NewState)
         end
     catch
-        _:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, Reason2]),
-            {noreply, State}
-    end.
+        exit:{noproc, _} ->
+            ?debug("No proc to handle request ~p, retry", [Request]),
+            retry_handle(State, Request, RetryCounter);
+        exit:{normal, _} ->
+            ?debug("Exit of stream process for request ~p, retry", [Request]),
+            retry_handle(State, Request, RetryCounter);
+        exit:{timeout, _} ->
+            ?debug("Timeout of stream process for request ~p, retry", [Request]),
+            retry_handle(State, Request, RetryCounter);
+        Reason1:Reason2 ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+            retry_handle(State, Request, RetryCounter)
+    end;
+handle_cast(Request, State) ->
+    Retries = application:get_env(?APP_NAME, event_manager_retries, 1),
+    handle_cast({internal, Retries, Request}, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -146,14 +172,9 @@ handle_cast(Request, State = #state{session_id = SessId}) ->
 handle_info({'EXIT', MgrSup, shutdown}, #state{manager_sup = MgrSup} = State) ->
     {stop, normal, State};
 
-handle_info(timeout, #state{manager_sup = MgrSup, session_id = SessId} = State) ->
-    {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
-    {Stms, Subs} = start_event_streams(StmsSup, SessId),
-    {noreply, State#state{
-        streams_sup = StmsSup,
-        streams = Stms,
-        subscriptions = Subs
-    }};
+handle_info(timeout, State) ->
+    State2 = start_event_streams(State),
+    {noreply, State2};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -172,7 +193,9 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session:update(SessId, #{event_manager => undefined}).
+    session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{event_manager = undefined}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -211,7 +234,7 @@ get_provider(#event{type = Type}, State, ProxyVia)
     orelse is_record(Type, file_renamed_event)
     orelse is_record(Type, quota_exceeded_event) ->
     {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
+        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_id_or_undefined()),
         State
     };
 get_provider(Req, State, _ProxyVia) ->
@@ -230,7 +253,7 @@ get_provider(Request, #state{providers = Providers} = State) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
         undefined ->
-            {oneprovider:get_provider_id(), State};
+            {oneprovider:get_id_or_undefined(), State};
         {file, FileCtx} ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             case maps:find(FileGuid, Providers) of
@@ -254,19 +277,20 @@ get_provider(Request, #state{providers = Providers} = State) ->
 -spec get_provider_for_file(file_ctx:ctx(), #state{}) ->
     ProviderId :: oneprovider:id() | no_return().
 get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
-    ProviderId = oneprovider:get_provider_id(),
+    ProviderId = oneprovider:get_id(),
     case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             ProviderId;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {ok, UserId} = session:get_user_id(SessId),
-            {ok, #document{value = #od_space{providers = ProviderIds}}} =
-                od_space:get_or_fetch(SessId, SpaceId, UserId),
-            case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
-                {_, true} -> ProviderId;
-                {[RemoteProviderId | _], _} -> RemoteProviderId;
-                {[], _} -> throw(unsupported_space)
+            case provider_logic:supports_space(SpaceId) of
+                true ->
+                    ProviderId;
+                false ->
+                    case space_logic:get_provider_ids(SessId, SpaceId) of
+                        {ok, []} -> throw(unsupported_space);
+                        {ok, [RemoteProviderId | _]} -> RemoteProviderId
+                    end
             end
     end.
 
@@ -287,7 +311,7 @@ handle_locally({unregister_stream, StmKey}, #state{streams = Stms} = State) ->
 handle_locally(#event{} = Evt, #state{streams = Stms} = State) ->
     StmKey = event_type:get_stream_key(Evt),
     Stm = maps:get(StmKey, Stms, undefined),
-    gen_server2:cast(Stm, Evt),
+    ok = event_stream:send(Stm, Evt),
     {noreply, State};
 
 handle_locally(#flush_events{} = Request, #state{} = State) ->
@@ -295,7 +319,7 @@ handle_locally(#flush_events{} = Request, #state{} = State) ->
     #state{streams = Stms, subscriptions = Subs} = State,
     {_, StmKey} = maps:get(SubId, Subs, {local, undefined}),
     Stm = maps:get(StmKey, Stms, undefined),
-    gen_server2:cast(Stm, {flush, NotifyFun}),
+    ok = event_stream:send(Stm, {flush, NotifyFun}),
     {noreply, State};
 
 handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
@@ -308,7 +332,7 @@ handle_locally(#subscription{id = Id} = Sub, #state{} = State) ->
     StmKey = subscription_type:get_stream_key(Sub),
     NewStms = case maps:find(StmKey, Stms) of
         {ok, Stm} ->
-            gen_server2:cast(Stm, {add_subscription, Sub}),
+            ok = event_stream:send(Stm, {add_subscription, Sub}),
             Stms;
         error ->
             {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
@@ -324,7 +348,7 @@ handle_locally(#subscription_cancellation{id = SubId} = Can, #state{} = State) -
     case maps:get(SubId, Subs, {local, undefined}) of
         {local, StmKey} ->
             Stm = maps:get(StmKey, Stms, undefiend),
-            gen_server2:cast(Stm, {remove_subscription, SubId});
+            ok = event_stream:send(Stm, {remove_subscription, SubId});
         {remote, ProviderId} ->
             handle_remotely(Can, ProviderId, State)
     end,
@@ -354,16 +378,17 @@ handle_remotely(#flush_events{} = Request, ProviderId, #state{} = State) ->
         proxy_session_id = SessId,
         proxy_session_auth = Auth
     },
-    Ref = session_manager:get_provider_session_id(outgoing, ProviderId),
+    Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
         receive
+            % VFS-5206 - handle heartbeats
             #server_message{message_body = #status{}} = Msg ->
                 Notify(Msg)
         after timer:minutes(10) ->
-            ok
+            Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
-    provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
+    communicator:communicate_with_provider(ClientMsg, Ref, RequestTranslator),
     {noreply, State};
 
 handle_remotely(#event{} = Evt, ProviderId, State) ->
@@ -373,11 +398,11 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, Auth} = session:get_auth(SessId),
-    provider_communicator:stream(StreamId, #client_message{
+    communicator:stream_to_provider(#client_message{
         message_body = Request,
         proxy_session_id = SessId,
         proxy_session_auth = Auth
-    }, session_manager:get_provider_session_id(outgoing, ProviderId), 1),
+    }, session_utils:get_provider_session_id(outgoing, ProviderId), StreamId),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -405,13 +430,58 @@ get_context(_) ->
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_streams(StmsSup :: pid(), SessId :: session:id()) ->
-    {Stms :: streams(), Subs :: subscriptions()}.
-start_event_streams(StmsSup, SessId) ->
-    {ok, Docs} = subscription:list(),
+-spec start_event_streams(#state{}) -> #state{}.
+start_event_streams(#state{streams_sup = undefined, manager_sup = MgrSup} = State) ->
+    {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
+    start_event_streams(State#state{streams_sup = StmsSup});
+start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) ->
+    {ok, Docs} = subscription:list_durable_subscriptions(),
 
-    lists:foldl(fun(#document{value = #subscription{id = Id} = Sub}, {Stms, Subs}) ->
+    {Stms, Subs} = lists:foldl(fun(#document{value = #subscription{id = Id} = Sub},
+        {Stms, Subs}) ->
         StmKey = subscription_type:get_stream_key(Sub),
         {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
         {maps:put(StmKey, Stm, Stms), maps:put(Id, {local, StmKey}, Subs)}
-    end, {#{}, #{}}, Docs).
+    end, {#{}, #{}}, Docs),
+
+    State#state{
+        streams_sup = StmsSup,
+        streams = Stms,
+        subscriptions = Subs
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Retries to handle request if counter is not 0.
+%% @end
+%%--------------------------------------------------------------------
+-spec retry_handle(#state{}, Request :: term(), RetryCounter :: non_neg_integer()) -> {noreply, NewState :: #state{}}.
+retry_handle(State, Request, 0) ->
+    case application:get_env(?APP_NAME, log_event_manager_errors, false) of
+        true -> ?error("Max retries for request: ~p", [Request]);
+        false -> ?debug("Max retries for request: ~p", [Request])
+    end,
+    {noreply, State};
+retry_handle(State, Request, RetryCounter) ->
+    State2 = check_streams(State),
+    handle_cast({internal, RetryCounter - 1, Request}, State2).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if any stream registration/unregistration happened.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_streams(#state{}) -> NewState :: #state{}.
+check_streams(State) ->
+    receive
+        {'$gen_cast',{unregister_stream, _} = Request} ->
+            {noreply, State2} = handle_locally(Request, State),
+            check_streams(State2);
+        {'$gen_cast',{register_stream, _, _} = Request} ->
+            {noreply, State2} = handle_locally(Request, State),
+            check_streams(State2)
+    after
+        50 -> State
+    end.

@@ -221,7 +221,7 @@ remove_xattr_insecure(_UserCtx, FileCtx, XattrName) ->
         ok ->
             fslogic_times:update_ctime(FileCtx),
             #fuse_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -297,7 +297,7 @@ get_custom_xattr_insecure(_UserCtx, FileCtx, XattrName, Inherited) ->
                 status = #status{code = ?OK},
                 fuse_response = #xattr{name = XattrName, value = XattrValue}
             };
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #fuse_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -317,6 +317,6 @@ set_custom_xattr_insecure(_UserCtx, FileCtx,
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #fuse_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.

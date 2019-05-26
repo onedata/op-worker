@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements worker_plugin_behaviour callbacks.
 %%% Also it decides whether request has to be handled locally or rerouted
-%%% to other priovider.
+%%% to other provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_worker).
@@ -19,8 +19,11 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -export([init/1, handle/1, cleanup/0]).
+-export([init_counters/0, init_report/0]).
 
 %%%===================================================================
 %%% Types
@@ -46,6 +49,36 @@
 -export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
     posix_permissions/0, file_guid/0, file_guid_or_path/0]).
 
+% requests
+-define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
+-define(PERIODICAL_SPACES_CLEANUP, periodical_spaces_cleanup).
+-define(RERUN_TRANSFERS, rerun_transfers).
+-define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
+
+% delays and intervals
+-define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
+    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
+-define(PERIODICAL_SPACES_CLEANUP_INTERVAL,
+    application:get_env(?APP_NAME, periodical_spaces_cleanup_interval, timer:minutes(15))).
+-define(RERUN_TRANSFERS_DELAY,
+    application:get_env(?APP_NAME, rerun_transfers_delay, 0)).
+-define(RESTART_AUTOCLEANING_RUNS_DELAY,
+    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 0)).
+
+% exometer macros
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
+-define(EXOMETER_COUNTERS, [get_file_attr, get_child_attr, change_mode,
+    update_times, delete_file, create_dir, get_file_children,
+    get_file_children_attrs, rename, create_file, make_file, open_file, release,
+    get_file_location, truncate, synchronize_block,
+    synchronize_block_and_compute_checksum, get_xattr, set_xattr, remove_xattr,
+    list_xattr, fsync]).
+-define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
+
+-define(FSLOGIC_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?MODULE)).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -58,10 +91,12 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
-        {ok, true} -> rtransfer_config:start_rtransfer();
-        _ -> ok
-    end,
+    transfer:init(),
+
+    schedule_invalidate_permissions_cache(),
+    schedule_rerun_transfers(),
+    schedule_restart_autocleaning_runs(),
+    schedule_periodical_spaces_cleanup(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -69,8 +104,10 @@ init(_Args) ->
             {error, already_exists} -> ok
         end
     end, [
-        {fun subscription:create/1, [fslogic_event_subscriptions:file_read_subscription()]},
-        {fun subscription:create/1, [fslogic_event_subscriptions:file_written_subscription()]},
+        {fun subscription:create_durable_subscription/1,
+            [fslogic_event_durable_subscriptions:file_read_subscription()]},
+        {fun subscription:create_durable_subscription/1,
+            [fslogic_event_durable_subscriptions:file_written_subscription()]},
         {fun session_manager:create_root_session/0, []},
         {fun session_manager:create_guest_session/0, []}
     ]),
@@ -95,6 +132,22 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
+handle(?INVALIDATE_PERMISSIONS_CACHE) ->
+    ?debug("Invalidating permissions cache"),
+    invalidate_permissions_cache(),
+    schedule_invalidate_permissions_cache();
+handle(?RERUN_TRANSFERS) ->
+    ?debug("Rerunning unfinished transfers"),
+    rerun_transfers(),
+    ok;
+handle(?RESTART_AUTOCLEANING_RUNS) ->
+    ?debug("Restarting unfinished auto-cleaning runs"),
+    restart_autocleaning_runs(),
+    ok;
+handle(?PERIODICAL_SPACES_CLEANUP) ->
+    ?debug("Triggering periodical spaces cleanup"),
+    periodical_spaces_cleanup(),
+    schedule_periodical_spaces_cleanup();
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -123,7 +176,45 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    transfer:cleanup(),
+    replica_synchronizer:terminate_all(),
     ok.
+
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
+        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), uniform, [{size, Size}]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
 
 %%%===================================================================
 %%% Internal functions
@@ -137,16 +228,18 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
-    Response = try
-        handle_request(SessId, Request)
-    catch
-        Type:Error ->
-            fslogic_errors:handle_error(Request, Type, Error)
-    end,
-
-    try %todo TL move this storage_sync logic out of here
+    try
         UserCtx = user_ctx:new(SessId),
-        process_response(UserCtx, Request, Response)
+        FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
+        Providers = fslogic_request:get_target_providers(UserCtx,
+            FilePartialCtx, Request),
+        case lists:member(oneprovider:get_id(), Providers) of
+            true ->
+                handle_request_and_process_response_locally(UserCtx, Request,
+                    FilePartialCtx);
+            false ->
+                handle_request_remotely(UserCtx, Request, Providers)
+        end
     catch
         Type2:Error2 ->
             fslogic_errors:handle_error(Request, Type2, Error2)
@@ -155,27 +248,27 @@ handle_request_and_process_response(SessId, Request) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Analyze request data and handle it locally or remotely.
+%% Handle request locally and do postprocessing of the response
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request(session:id(), request()) -> response().
-handle_request(SessId, Request) ->
-    UserCtx = user_ctx:new(SessId),
-    FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
-    Providers = fslogic_request:get_target_providers(UserCtx, FilePartialCtx, Request),
+-spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
+    file_partial_ctx:ctx() | undefined) -> response().
+handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
+    {FileCtx, SpaceID} = case FilePartialCtx of
+        undefined ->
+            {undefined, undefined};
+        _ ->
+            file_ctx:new_by_partial_context(FilePartialCtx)
+    end,
+    Response = try
+        handle_request_locally(UserCtx, Request, FileCtx)
+    catch
+        Type:Error ->
+            fslogic_errors:handle_error(Request, Type, Error)
+    end,
 
-    case lists:member(oneprovider:get_provider_id(), Providers) of
-        true ->
-            FileCtx = case FilePartialCtx of
-                undefined ->
-                    undefined;
-                _ ->
-                    file_ctx:new_by_partial_context(FilePartialCtx)
-            end,
-            handle_request_locally(UserCtx, Request, FileCtx);
-        false ->
-            handle_request_remotely(UserCtx, Request, Providers)
-    end.
+    %todo TL move this storage_sync logic out of here
+    process_response(UserCtx, Request, Response, SpaceID).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -184,20 +277,26 @@ handle_request(SessId, Request) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_request = Req}}, FileCtx) ->
-    handle_file_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx)  ->
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
+    file_request = Req, extended_direct_io = ExtDIO}}, FileCtx) ->
+    [ReqName | _] = tuple_to_list(Req),
+    ?update_counter(?EXOMETER_NAME(ReqName)),
+    Now = os:timestamp(),
+    FileCtx2 = file_ctx:set_extended_direct_io(FileCtx, ExtDIO),
+    Ans = handle_file_request(UserCtx, Req, FileCtx2),
+    Time = timer:now_diff(os:timestamp(), Now),
+    ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
+    Ans;
+handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx)  ->
+handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
     handle_provider_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #proxyio_request{
-    storage_id = StorageId,
-    file_id = FileId,
     parameters = Parameters,
     proxyio_request = Req
-}, FileCtx)  ->
+}, FileCtx) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    handle_proxyio_request(UserCtx, Req, FileCtx, HandleId, StorageId, FileId).
+    handle_proxyio_request(UserCtx, Req, FileCtx, HandleId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -206,7 +305,7 @@ handle_request_locally(UserCtx, #proxyio_request{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
-handle_request_remotely(UserCtx, Req, Providers)  ->
+handle_request_remotely(UserCtx, Req, Providers) ->
     ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
     fslogic_remote:reroute(UserCtx, ProviderId, Req).
 
@@ -221,10 +320,11 @@ handle_request_remotely(UserCtx, Req, Providers)  ->
 handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #get_helper_params{
-    storage_id = SID,
-    force_proxy_io = ForceProxy
+    storage_id = StorageId,
+    space_id = SpaceId,
+    helper_mode = HelperMode
 }, undefined) ->
-    storage_req:get_helper_params(UserCtx, SID, ForceProxy);
+    storage_req:get_helper_params(UserCtx, StorageId, SpaceId, HelperMode);
 handle_fuse_request(UserCtx, #create_storage_test_file{
     file_guid = Guid,
     storage_id = StorageId
@@ -236,7 +336,15 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
     file_id = FileId,
     file_content = FileContent
 }, undefined) ->
-    storage_req:verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent).
+    case storage_req:verify_storage_test_file(UserCtx, SpaceId,
+        StorageId, FileId, FileContent) of
+        #fuse_response{status = #status{code = ?OK}} = Ans ->
+            Session = user_ctx:get_session_id(UserCtx),
+            session:set_direct_io(Session, true),
+            Ans;
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -258,8 +366,12 @@ handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
     delete_req:delete(UserCtx, FileCtx, Silent);
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
-handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size}, FileCtx) ->
-    dir_req:read_dir(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size,
+    index_token = Token}, FileCtx) ->
+    dir_req:read_dir(UserCtx, FileCtx, Offset, Size, Token);
+handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
+    size = Size, index_token = Token}, FileCtx) ->
+    dir_req:read_dir_plus(UserCtx, FileCtx, Offset, Size, Token);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -268,20 +380,29 @@ handle_file_request(UserCtx, #rename{
     rename_req:rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
 handle_file_request(UserCtx, #create_file{name = Name, flag = Flag, mode = Mode}, ParentFileCtx) ->
     file_req:create_file(UserCtx, ParentFileCtx, Name, Mode, Flag);
+handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
+    file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
+handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
+    file_req:open_file_with_extended_info(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
-handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
-    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
-handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block);
+handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
+    priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
+handle_file_request(UserCtx, #block_synchronization_request{block = Block, prefetch = Prefetch,
+    priority = Priority}, FileCtx) ->
+    sync_req:request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, undefined, Priority);
+handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block,
+    prefetch = Prefetch, priority = Priority}, FileCtx) ->
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block, Prefetch, Priority);
 handle_file_request(UserCtx, #get_xattr{
     name = XattrName,
     inherited = Inherited
@@ -316,8 +437,20 @@ handle_file_request(UserCtx, #fsync{
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
-    sync_req:replicate_file(UserCtx, FileCtx, Block);
+handle_provider_request(UserCtx, #schedule_file_replication{
+    block = _Block, target_provider_id = TargetProviderId, callback = Callback,
+    index_name = IndexName, query_view_params = QueryViewParams
+}, FileCtx) ->
+    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
+        Callback, IndexName, QueryViewParams
+    );
+handle_provider_request(UserCtx, #schedule_replica_invalidation{
+    source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
+    index_name = IndexName, query_view_params = QueryViewParams
+}, FileCtx) ->
+    replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
+        SourceProviderId, TargetProviderId, IndexName, QueryViewParams
+    );
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
@@ -367,14 +500,13 @@ handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(user_ctx:ctx(), proxyio_request_type(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
-    FileId :: helpers:file_id()) -> proxyio_response().
+    HandleId :: storage_file_manager:handle_id()) -> proxyio_response().
 handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, FileCtx,
-    HandleId, StorageId, FileId) ->
-    read_write_req:write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences);
+    HandleId) ->
+    read_write_req:write(UserCtx, FileCtx, HandleId, ByteSequences);
 handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, FileCtx,
-    HandleId, StorageId, FileId) ->
-    read_write_req:read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size).
+    HandleId) ->
+    read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
 %%--------------------------------------------------------------------
 %% @todo refactor
@@ -383,43 +515,148 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
 %% Do posthook for request response
 %% @end
 %%--------------------------------------------------------------------
--spec process_response(user_ctx:ctx(), request(), response()) -> response().
-process_response(UserCtx, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
-    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
-    {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
-    Tokens = Tokens0 ++ [FileName],
-    Path = fslogic_path:join(Tokens),
-    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-        {path, P} ->
-            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-            case Tokens1 of
-                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
-                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
-                    space_sync_worker:run(Init);
-                _ -> Response
+-spec process_response(user_ctx:ctx(), request(), response(),
+    od_space:id() | undefined) -> response().
+process_response(_, _, Response, undefined) ->
+    Response;
+process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
+    file_request = #get_child_attr{name = FileName},
+    context_guid = ParentGuid
+}}, Response = #fuse_response{status = #status{code = ?ENOENT}},
+    SpaceId) ->
+    case space_strategies:is_import_on(SpaceId) of
+        true ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
+            {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
+            Tokens = Tokens0 ++ [FileName],
+            Path = fslogic_path:join(Tokens),
+            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
+                {path, P} ->
+                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
+                    case Tokens1 of
+                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                            Data = #{
+                                response => Response,
+                                path => Path,
+                                ctx => UserCtx,
+                                space_id => SpaceId,
+                                request => Request
+                            },
+                            Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
+                            space_sync_worker:run(Init);
+                        _ -> Response
+                    end;
+                _ ->
+                    Response
             end;
         _ ->
             Response
     end;
-process_response(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
-    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-        {path, P} ->
-            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-            case Tokens1 of
-                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
-                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
-                    space_sync_worker:run(Init);
-                _ -> Response
+process_response(UserCtx,
+    Request = #fuse_request{fuse_request = #resolve_guid{path = Path}},
+    Response = #fuse_response{status = #status{code = ?ENOENT}}, SpaceId) ->
+    case space_strategies:is_import_on(SpaceId) of
+        true ->
+            {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
+                {path, P} ->
+                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
+                    case Tokens1 of
+                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                            Data = #{response => Response, path => Path, ctx => UserCtx,
+                                space_id => SpaceId, request => Request},
+                            Init = space_sync_worker:init(enoent_handling,
+                                SpaceId, undefined, Data),
+                            space_sync_worker:run(Init);
+                        _ -> Response
+                    end;
+                _ ->
+                    Response
             end;
         _ ->
             Response
     end;
-process_response(_, _, Response) ->
+process_response(_, _, Response, _) ->
     Response.
 
+-spec schedule_invalidate_permissions_cache() -> ok.
+schedule_invalidate_permissions_cache() ->
+    schedule(?INVALIDATE_PERMISSIONS_CACHE, ?INVALIDATE_PERMISSIONS_CACHE_INTERVAL).
+
+-spec schedule_rerun_transfers() -> ok.
+schedule_rerun_transfers() ->
+    schedule(?RERUN_TRANSFERS, ?RERUN_TRANSFERS_DELAY).
+
+-spec schedule_restart_autocleaning_runs() -> ok.
+schedule_restart_autocleaning_runs() ->
+    schedule(?RESTART_AUTOCLEANING_RUNS, ?RESTART_AUTOCLEANING_RUNS_DELAY).
+
+-spec schedule_periodical_spaces_cleanup() -> ok.
+schedule_periodical_spaces_cleanup() ->
+    schedule(?PERIODICAL_SPACES_CLEANUP, ?PERIODICAL_SPACES_CLEANUP_INTERVAL).
+
+-spec schedule(term(), non_neg_integer()) -> ok.
+schedule(Request, Timeout) ->
+    erlang:send_after(Timeout, self(), {sync_timer, Request}),
+    ok.
+
+-spec invalidate_permissions_cache() -> ok.
+invalidate_permissions_cache() ->
+    try
+        permissions_cache:invalidate()
+    catch
+        _:Reason ->
+            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
+    end.
+
+-spec periodical_spaces_cleanup() -> ok.
+periodical_spaces_cleanup() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
+            end, SpaceIds);
+        Error = {error, _} ->
+            ?error("Unable to trigger spaces cleanup due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to trigger spaces cleanup due to: ~p", [{Error2, Reason}])
+    end.
+
+-spec rerun_transfers() -> ok.
+rerun_transfers() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
+                ?debug("Restarted following transfers: ~p", [Restarted])
+            end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_rerun_transfers();
+        ?ERROR_NO_CONNECTION_TO_OZ ->
+            schedule_rerun_transfers();
+        Error = {error, _} ->
+            ?error("Unable to rerun transfers due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+    end.
+
+-spec restart_autocleaning_runs() -> ok.
+restart_autocleaning_runs() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                autocleaning_api:restart_autocleaning_run(SpaceId)
+            end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_restart_autocleaning_runs();
+        ?ERROR_NO_CONNECTION_TO_OZ ->
+            schedule_restart_autocleaning_runs();
+        Error = {error, _} ->
+            ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+    end.

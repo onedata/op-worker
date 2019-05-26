@@ -72,7 +72,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }
@@ -105,7 +106,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }

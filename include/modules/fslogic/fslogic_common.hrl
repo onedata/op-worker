@@ -14,8 +14,7 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 
 %% helper macro for not implemented functions
@@ -33,8 +32,12 @@
 -define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
+-define(ROOT_AUTH, root_auth).
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
+-define(GUEST_AUTH, guest_auth).
+
+-define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
@@ -42,5 +45,16 @@
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
+
+-define(FILE_DELETION_LINK_SUFFIX, <<"####TO_DELETE">>).
+-define(FILE_DELETION_LINK_NAME(Name),
+    <<(Name)/binary, (?FILE_DELETION_LINK_SUFFIX)/binary>>).
+-define(FILE_DELETION_LINK(Name, Uuid),
+    {?FILE_DELETION_LINK_NAME(Name), Uuid}).
+
+
+-define(SUFFIX_SEPARATOR, <<"%%%%">>).
+-define(FILE_WITH_SUFFIX(Filename,Uuid), <<Filename/binary, 
+    (?SUFFIX_SEPARATOR)/binary, Uuid/binary>>).
 
 -endif.

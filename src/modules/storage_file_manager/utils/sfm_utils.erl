@@ -14,7 +14,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
@@ -25,9 +25,14 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_storage_file_if_not_exists/1, create_storage_file_location/2,
-    create_delayed_storage_file/1, create_storage_file/2, delete_storage_file/2,
+    create_storage_file_location/3, create_delayed_storage_file/1,
+    create_delayed_storage_file_and_return_location/1,
+    create_storage_file/2, delete_storage_file/2,
     delete_storage_file_without_location/2, delete_storage_dir/2,
-    create_parent_dirs/1]).
+    create_parent_dirs/1, recursive_delete/2, retry_dir_deletion/3]).
+
+-define(CLEANUP_MAX_RETRIES_NUM, 10).
+-define(CLEANUP_DELAY, 5).
 
 %%%===================================================================
 %%% API
@@ -39,7 +44,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_storage_file(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:posix_permissions()) -> ok | no_return().
+    file_meta:posix_permissions()) -> ok | {error, Reason :: term()} | no_return().
 chmod_storage_file(UserCtx, FileCtx, Mode) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case file_ctx:is_dir(FileCtx) of
@@ -49,7 +54,8 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
             {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
             case storage_file_manager:chmod(SFMHandle, Mode) of
                 ok -> ok;
-                {error, ?ENOENT} -> ok
+                {error, ?ENOENT} -> ok;
+                {error, ?EROFS} -> {error, ?EROFS}
             end
     end.
 
@@ -91,11 +97,10 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%--------------------------------------------------------------------
 -spec create_storage_file_if_not_exists(file_ctx:ctx()) -> ok | {error, term()}.
 create_storage_file_if_not_exists(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    file_location:critical_section(FileUuid,
+    replica_synchronizer:apply(FileCtx,
         fun() ->
-            case file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)) of
-                {[], _} ->
+            case file_ctx:get_local_file_location_doc(file_ctx:reset(FileCtx), false) of
+                {undefined, _} ->
                     {_, _FileCtx2} = create_storage_file_location(FileCtx, false),
                     ok;
                 _ ->
@@ -110,66 +115,159 @@ create_storage_file_if_not_exists(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
 create_delayed_storage_file(FileCtx) ->
-    {[#document{
+    {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }], FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
+    }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
 
     case StorageFileCreated of
         false ->
-            file_location:update(FileLocationId, fun
-                (#file_location{storage_file_created = true}) ->
-                    {error, already_created};
-                (FileLocation = #file_location{storage_file_created = false}) ->
-                    FileCtx3 = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx2),
-                    files_to_chown:chown_or_schedule_chowning(FileCtx3),
-                    {ok, FileLocation#file_location{storage_file_created = true}}
-            end),
-            FileCtx2;
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            replica_synchronizer:apply(FileCtx, fun() ->
+                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
+                    {ok, #document{
+                        value = #file_location{storage_file_created = true}
+                    }} ->
+                        FileCtx2;
+                    {ok, _} ->
+                        FileCtx3 = create_storage_file(
+                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx4),
+
+                        {ok, #document{}} =
+                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
+                            (FileLocation = #file_location{storage_file_created = false}) ->
+                                {ok, FileLocation#file_location{storage_file_created = true,
+                                    file_id = StorageFileId}}
+                        end, false),
+                        FileCtx4
+                end
+            end);
         true ->
             FileCtx2
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Create storage file if it hasn't been created yet (it has been delayed).
+%% Returns location document and context.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_delayed_storage_file_and_return_location(file_ctx:ctx()) ->
+    {file_location:doc(), file_ctx:ctx()}.
+create_delayed_storage_file_and_return_location(FileCtx) ->
+    {#document{
+        key = FileLocationId,
+        value = #file_location{storage_file_created = StorageFileCreated}
+    }, FileCtx2} = Ans = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+
+    case StorageFileCreated of
+        false ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            file_location:critical_section(FileUuid, fun() ->
+                case fslogic_location_cache:get_location(FileLocationId, FileUuid, false) of
+                    {ok, #document{
+                        value = #file_location{storage_file_created = true}
+                    }} ->
+                        Ans;
+                    {ok, _} ->
+                        FileCtx3 = create_storage_file(
+                            user_ctx:new(?ROOT_SESS_ID), FileCtx2),
+                        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                        files_to_chown:chown_or_schedule_chowning(FileCtx4),
+
+                        {ok, #document{} = Doc} =
+                            fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
+                                (FileLocation = #file_location{storage_file_created = false}) ->
+                                    {ok, FileLocation#file_location{storage_file_created = true, 
+                                        file_id = StorageFileId}}
+                            end, false),
+                        {Doc, FileCtx4}
+%%                        file_ctx:update_location_doc(FileCtx3, Doc)
+                end
+            end);
+        true ->
+            Ans
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates file location of storage file
+%% @equiv create_storage_file_location(FileCtx, StorageFileCreated, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean()) ->
     {#file_location{}, file_ctx:ctx()}.
 create_storage_file_location(FileCtx, StorageFileCreated) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-    Location = #file_location{
-        provider_id = oneprovider:get_provider_id(),
-        file_id = FileId,
-        storage_id = StorageId,
-        uuid = FileUuid,
-        space_id = SpaceId,
-        storage_file_created = StorageFileCreated
-    },
-    {ok, LocId} = file_location:create(#document{value = Location}),
-    ok = file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
-    {Location, file_ctx:add_file_location(FileCtx3, LocId)}.
+    create_storage_file_location(FileCtx, StorageFileCreated, false).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create file_location and storage file.
+%% Creates file location of storage file
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage_file_location(file_ctx:ctx(), StorageFileCreated :: boolean(),
+    GeneratedKey :: boolean()) -> {#file_location{}, file_ctx:ctx()}.
+create_storage_file_location(FileCtx, StorageFileCreated, GeneratedKey) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+    {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
+    Location = #file_location{
+        provider_id = oneprovider:get_id(),
+        file_id = StorageFileId,
+        storage_id = StorageId,
+        uuid = FileUuid,
+        space_id = SpaceId,
+        storage_file_created = StorageFileCreated,
+        size = Size
+    },
+    LocId = file_location:local_id(FileUuid),
+    case fslogic_location_cache:create_location(#document{
+        key = LocId,
+        value = Location
+    }, GeneratedKey) of
+        {ok, _LocId} ->
+            FileCtx5 = file_ctx:add_file_location(FileCtx4, LocId),
+            {Location, FileCtx5};
+        {error, already_exists} ->
+            {#document{value = FileLocation}, FileCtx5} =
+                file_ctx:get_local_file_location_doc(FileCtx4),
+            {FileLocation, FileCtx5}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create storage file.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
 create_storage_file(UserCtx, FileCtx) ->
-    FileCtx2 = create_parent_dirs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    {#document{value = #file_meta{mode = Mode}}, FileCtx3} =
-        file_ctx:get_file_doc(FileCtx2),
-    {SFMHandle, FileCtx4} = storage_file_manager:new_handle(SessId, FileCtx3),
-    storage_file_manager:unlink(SFMHandle),
-    ok = storage_file_manager:create(SFMHandle, Mode),
-    FileCtx4.
+    {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
+        file_ctx:get_file_doc(FileCtx),
+    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
+    {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
+        {error, ?ENOENT} ->
+            FileCtx4 = create_parent_dirs(FileCtx3),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+        {error, ?EEXIST} ->
+            {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+            {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)};
+        {error, ?EACCES} ->
+            % eacces is possible because there is race condition
+            % on creating and chowning parent dir
+            % for this reason it is acceptable to try chowning parent once
+            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
+            files_to_chown:chown_or_schedule_chowning(ParentCtx),
+            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+        Other ->
+            {Other, FileCtx3}
+    end,
+    FinalCtx.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -179,8 +277,9 @@ create_storage_file(UserCtx, FileCtx) ->
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
-    FileLocationId = delete_storage_file_without_location(FileCtx, UserCtx),
-    file_location:delete(FileLocationId).
+    delete_storage_file_without_location(FileCtx, UserCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    fslogic_location_cache:delete_location(FileUuid, file_location:local_id(FileUuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -188,14 +287,30 @@ delete_storage_file(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_file_without_location(file_ctx:ctx(), user_ctx:ctx()) ->
-    datastore:ext_key().
+    ok | {error, term()}.
 delete_storage_file_without_location(FileCtx, UserCtx) ->
-    {[#document{key = FileLocationId}], FileCtx2} =
-        file_ctx:get_local_file_location_docs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx2),
-    storage_file_manager:unlink(SFMHandle),
-    FileLocationId.
+    {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
+    {Size, _} = file_ctx:get_file_size(FileCtx),
+    storage_file_manager:unlink(SFMHandle, Size).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes given file. If it's a directory all its children will be
+%% deleted to.
+%% @end
+%%--------------------------------------------------------------------
+-spec recursive_delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+recursive_delete(FileCtx, UserCtx) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
+    case IsDir of
+        true ->
+            {ok, FileCtx3} = delete_children(FileCtx2, UserCtx, 0, ChunkSize),
+            delete_storage_dir(FileCtx3, UserCtx);
+        false ->
+            delete_storage_file_without_location(FileCtx2, UserCtx)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -203,11 +318,56 @@ delete_storage_file_without_location(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_dir(file_ctx:ctx(), user_ctx:ctx()) ->
-    datastore:ext_key().
+    ok | {error, term()}.
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {SFMHandle, _} = storage_file_manager:new_handle(SessId, FileCtx),
-    storage_file_manager:rmdir(SFMHandle).
+    case storage_file_manager:rmdir(SFMHandle) of
+        ok ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOENT} ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOTEMPTY} ->
+            % todo VFS-4997
+            spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
+            ok;
+        Error ->
+            ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is used to delay cleanup of directory on storage
+%% if it fails with ENOTEMPTY.
+%% @end
+%%-------------------------------------------------------------------
+-spec retry_dir_deletion(storage_file_manager:handle(), file_meta:uuid(),
+    non_neg_integer()) -> ok  | {error, term()}.
+retry_dir_deletion(#sfm_handle{file = FileId, space_id = SpaceId}, _FileUuid, ?CLEANUP_MAX_RETRIES_NUM) ->
+    ?error("Could not delete directory ~p on storage in space ~p", [FileId, SpaceId]);
+retry_dir_deletion(SFMHandle = #sfm_handle{
+    file = FileId,
+    space_id = SpaceId
+}, FileUuid, RetryNum) ->
+    ?debug(
+        "Delayed deletion of directory ~p on storage in space ~p. Retry number: ~p",
+        [FileId, SpaceId, RetryNum + 1]),
+    timer:sleep(timer:seconds(?CLEANUP_DELAY)),
+    case storage_file_manager:rmdir(SFMHandle) of
+        ok ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOENT} ->
+            dir_location:delete(FileUuid);
+        {error, ?ENOTEMPTY} ->
+            retry_dir_deletion(SFMHandle, FileUuid, RetryNum + 1);
+        Error ->
+            ?error(
+                "Unexpected error when trying to delete directory ~p on storage in space ~p",
+                [FileId, SpaceId]),
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -216,22 +376,134 @@ delete_storage_dir(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx),
+    {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
+    create_parent_dirs(ParentCtx, [], SpaceId, Storage),
+    FileCtx4.
 
-    LeafLess = filename:dirname(StorageFileId),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
-        FileUuid, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok ->
-            FileCtx3;
-        {error, eexist} ->
-            FileCtx3
-    end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tail recursive helper function of ?MODULE:create_parent_dirs/1
+%% @end
+%%-------------------------------------------------------------------
+-spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(),
+    storage:doc()) -> ok.
+create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            lists:foreach(fun(Ctx) ->
+                create_dir(Ctx, SpaceId, Storage)
+            end, [FileCtx | ChildrenDirCtxs]);
+        false ->
+            %TODO VFS-4297 stop recursion when parent file exists on storage,
+            %TODO currently recursion stops in space dir
+            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, Storage)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates directory on storage with suitable mode and owner.
+%% @end
+%%-------------------------------------------------------------------
+-spec create_dir(file_ctx:ctx(), od_space:id(), storage:doc()) -> file_ctx:ctx().
+create_dir(FileCtx, SpaceId, Storage) ->
+    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
+        undefined, Storage, FileId, undefined),
+    try
+        {#document{value = #file_meta{
+            mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
+        case file_ctx:is_space_dir_const(FileCtx3) of
+            true ->
+                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE,
+                    FileCtx3, false);
+            false ->
+                mkdir_and_maybe_chown(SFMHandle0, Mode, FileCtx3, true)
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Creating parent dir ~p failed due to ~p.
+            Parent dir will be create with default mode.", [FileId, {Error, Reason}]),
+            mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx, true)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates directory on storage and chowns it if ShouldChown flag is set to
+%% true.
+%% @end
+%%-------------------------------------------------------------------
+-spec mkdir_and_maybe_chown(storage_file_manager:handle(), non_neg_integer(),
+    file_ctx:ctx(), boolean()) -> any().
+mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case storage_file_manager:mkdir(SFMHandle, Mode, false) of
+        ok ->
+            case dir_location:mark_dir_created_on_storage(FileUuid, SpaceId) of
+                {ok, _} -> ok;
+                % helpers on ceph and s3 always return ok on mkdir operation
+                % so we have to handle situation when doc is already in db
+                {error, already_exists} -> ok
+            end;
+        {error, ?EEXIST} -> ok
+    end,
+    case ShouldChown of
+        true ->
+            files_to_chown:chown_or_schedule_chowning(FileCtx);
+        false ->
+            ok
+    end,
+    FileCtx.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function recursively deletes all children of given directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(),
+    non_neg_integer()) -> {ok, file_ctx:ctx()}.
+delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
+    % todo VFS-4997
+    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
+        UserCtx, Offset, ChunkSize),
+    lists:foreach(fun(ChildCtx) ->
+        ok = recursive_delete(ChildCtx, UserCtx)
+    end, ChildrenCtxs),
+    case length(ChildrenCtxs) < ChunkSize of
+        true ->
+            {ok, FileCtx2};
+        false ->
+            delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize)
+    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates file on storage with uuid as suffix
+%% @end
+%%-------------------------------------------------------------------
+-spec create_storage_file_with_suffix(storage_file_manager:handle(), 
+    file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
+create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = SFMHandle, Mode) ->
+    NewName = ?FILE_WITH_SUFFIX(FileId, Uuid),
+    SFMHandle1 = SFMHandle#sfm_handle{file = NewName},
+    
+    ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),
+    case storage_file_manager:create(SFMHandle1, Mode) of
+        ok ->
+            {ok, NewName};
+        Error ->
+            Error
+    end.

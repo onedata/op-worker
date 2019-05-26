@@ -12,15 +12,16 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_simple_scan_import/3, modify_storage_import/3,
-    modify_storage_import/4, stop_storage_import/1, stop_storage_update/1,
-    modify_storage_update/4, modify_storage_update/3,
-    start_simple_scan_update/6
+-export([
+    start_simple_scan_import/4, stop_storage_import/1,
+    modify_storage_import/3, modify_storage_import/4,
+    start_simple_scan_update/7, stop_storage_update/1,
+    modify_storage_update/4, modify_storage_update/3
 ]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -28,7 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_import(od_space:id(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, Args) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_import(SpaceId, StrategyName, StorageId, Args).
@@ -40,11 +41,10 @@ modify_storage_import(SpaceId, StrategyName, Args) ->
 %%--------------------------------------------------------------------
 -spec modify_storage_import(od_space:id(), space_strategy:name(),
     storage:id(), space_strategy:arguments()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
+    storage_sync_monitoring:ensure_created(SpaceId, StorageId),
     file_meta:make_space_exist(SpaceId),
-    {CurrentStrategyName, _} = space_strategies:get_storage_import_details(SpaceId, StorageId),
-    switch_monitoring_status(SpaceId, storage_import, CurrentStrategyName, StrategyName),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import,
         StrategyName, Args).
 
@@ -53,10 +53,13 @@ modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
 %% @equiv modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
 %% @end
 %%--------------------------------------------------------------------
--spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-start_simple_scan_import(SpaceId, StorageId, MaxDepth) ->
-    modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
+-spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer(),
+    boolean()) -> {ok, datastore:key()} | {error, term()}.
+start_simple_scan_import(SpaceId, StorageId, MaxDepth, SyncAcl) ->
+    modify_storage_import(SpaceId, simple_scan, StorageId, #{
+        max_depth => MaxDepth,
+        sync_acl => SyncAcl
+    }).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,7 +67,7 @@ start_simple_scan_import(SpaceId, StorageId, MaxDepth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_storage_import(od_space:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 stop_storage_import(SpaceId) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_import(SpaceId, no_import, StorageId, #{}).
@@ -75,7 +78,7 @@ stop_storage_import(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_update(od_space:id(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, Args) ->
     StorageId = get_supporting_storage(SpaceId),
     modify_storage_update(SpaceId, StrategyName, StorageId, Args).
@@ -86,14 +89,19 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_update(od_space:id(),space_strategy:name(), storage:id(),
-    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
+    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
+    storage_sync_monitoring:ensure_created(SpaceId, StorageId),
     file_meta:make_space_exist(SpaceId),
-    {CurrentStrategyName, _} = space_strategies:get_storage_update_details(SpaceId, StorageId),
-    switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
-        StrategyName),
-    space_strategies:set_strategy(SpaceId, StorageId, storage_update,
-        StrategyName, Args).
+    {CurrentImportStrategyName, _} =
+        space_strategies:get_storage_import_details(SpaceId, StorageId),
+    case {StrategyName, CurrentImportStrategyName} of
+        {StrategyName, no_import} when StrategyName =/= no_update ->
+            {error, import_disabled};
+        _ ->
+            space_strategies:set_strategy(SpaceId, StorageId, storage_update,
+                StrategyName, Args)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,16 +109,17 @@ modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_simple_scan_update(od_space:id(), storage:id(),
-    non_neg_integer(), non_neg_integer(), boolean(), boolean()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    non_neg_integer(), non_neg_integer(), boolean(), boolean(), boolean()) ->
+    {ok, datastore:key()} | {error, term()}.
 start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
-    DeleteEnable
+    DeleteEnable, SyncAcl
 ) ->
     modify_storage_update(SpaceId, simple_scan, StorageId, #{
         max_depth => MaxDepth,
         scan_interval => ScanInterval,
         write_once => WriteOnce,
-        delete_enable => DeleteEnable
+        delete_enable => DeleteEnable,
+        sync_acl => SyncAcl
     }).
 
 %%--------------------------------------------------------------------
@@ -119,7 +128,7 @@ start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_storage_update(od_space:id()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | {error, term()}.
 stop_storage_update(SpaceId) ->
     modify_storage_update(SpaceId, no_update, #{}).
 
@@ -138,104 +147,3 @@ get_supporting_storage(SpaceId) ->
     {ok, #document{value=#space_storage{storage_ids=StorageIds}}} =
         space_storage:get(SpaceId),
     hd(StorageIds).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns import or update metrics on or off.
-%% @end
-%%-------------------------------------------------------------------
--spec switch_monitoring_status(od_space:id(), space_strategy:type(),
-    space_strategy:name(), space_strategy:name()) -> ok.
-switch_monitoring_status(SpaceId, storage_import, CurrentStrategyName,
-    NewStrategyName) ->
-    switch_import_monitoring_status(SpaceId, CurrentStrategyName,
-        NewStrategyName);
-switch_monitoring_status(SpaceId, storage_update, CurrentStrategyName,
-    NewStrategyName) ->
-    switch_update_monitoring_status(SpaceId, CurrentStrategyName,
-        NewStrategyName).    
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns import metrics on or off, according to current and new strategy.
-%% @end
-%%-------------------------------------------------------------------
--spec switch_import_monitoring_status(od_space:id(), space_strategy:name(),
-    space_strategy:name()) -> ok.
-switch_import_monitoring_status(_SpaceId, no_import, no_import) ->
-    ok;
-switch_import_monitoring_status(SpaceId, _, no_import) ->
-    turn_import_monitoring_off(SpaceId);
-switch_import_monitoring_status(SpaceId, no_import, _) ->
-    turn_import_monitoring_on(SpaceId);
-switch_import_monitoring_status(_SpaceId, _, _) ->
-    ok.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns update metrics on or off, according to current and new strategy.
-%% @end
-%%-------------------------------------------------------------------
--spec switch_update_monitoring_status(od_space:id(), space_strategy:name(),
-    space_strategy:name()) -> ok.
-switch_update_monitoring_status(_SpaceId, no_update, no_update) ->
-    ok;
-switch_update_monitoring_status(SpaceId, _, no_update) ->
-    turn_update_monitoring_off(SpaceId);
-switch_update_monitoring_status(SpaceId, no_update, _) ->
-    turn_update_monitoring_on(SpaceId);
-switch_update_monitoring_status(_SpaceId, _, _) ->
-    ok.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns import monitoring on.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_import_monitoring_on(od_space:id()) -> ok.
-turn_import_monitoring_on(SpaceId) ->
-    storage_sync_monitoring:start_imported_files_counter(SpaceId),
-    storage_sync_monitoring:start_files_to_import_counter(SpaceId),
-    storage_sync_monitoring:start_imported_files_spirals(SpaceId),
-    storage_sync_monitoring:start_queue_length_spirals(SpaceId).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns import monitoring off.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_import_monitoring_off(od_space:id()) -> ok.
-turn_import_monitoring_off(SpaceId) ->
-    storage_sync_monitoring:stop_imported_files_counter(SpaceId),
-    storage_sync_monitoring:stop_files_to_import_counter(SpaceId),
-    storage_sync_monitoring:stop_imported_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_queue_length_spirals(SpaceId).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns update monitoring on.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_update_monitoring_on(od_space:id()) -> ok.
-turn_update_monitoring_on(SpaceId) ->
-    storage_sync_monitoring:start_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:start_deleted_files_spirals(SpaceId),
-    storage_sync_monitoring:start_files_to_update_counter(SpaceId).
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns update monitoring off.
-%% @end
-%%-------------------------------------------------------------------
--spec turn_update_monitoring_off(od_space:id()) -> ok.
-turn_update_monitoring_off(SpaceId) ->
-    storage_sync_monitoring:stop_updated_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_deleted_files_spirals(SpaceId),
-    storage_sync_monitoring:stop_files_to_update_counter(SpaceId).

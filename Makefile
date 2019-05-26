@@ -2,10 +2,11 @@
 
 REPO	        ?= op-worker
 
-# distro for package building (oneof: wily, fedora-23-x86_64)
+# distro for package building (oneof: xenial, centos-7-x86_64)
 DISTRIBUTION    ?= none
 export DISTRIBUTION
 
+RELEASE         ?= 1802
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
 PKG_ID           = op-worker-$(PKG_VERSION)
@@ -25,6 +26,8 @@ GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgr
 ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
 export ONEDATA_GIT_URL
 
+BUILD_VERSION := $(subst $(shell git describe --tags --abbrev=0)-,,$(shell git describe --tags --long))
+
 .PHONY: deps package test
 
 all: test_rel
@@ -37,13 +40,15 @@ compile:
 	$(REBAR) compile
 
 deps:
+	$(REBAR) get-deps
+	make -C _build/default/lib/helpers submodules submodule=clproto
 	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
 
 upgrade:
 	$(REBAR) upgrade
 
 ## Generates a production release
-generate: compile deps template
+generate: deps compile template
 	$(REBAR) release $(OVERLAY_VARS)
 
 clean: relclean pkgclean
@@ -60,7 +65,17 @@ distclean:
 
 .PHONY: template
 template:
+	sed "s/{build_version, \".*\"}/{build_version, \"${BUILD_VERSION}\"}/" ./rel/vars.config.template > ./rel/vars.config
 	$(TEMPLATE_SCRIPT) rel/vars.config ./rel/files/vm.args.template
+
+##
+## Submodules
+##
+
+submodules:
+	git submodule sync --recursive ${submodule}
+	git submodule update --init --recursive ${submodule}
+
 
 ##
 ## Release targets
@@ -68,22 +83,19 @@ template:
 
 rel: generate
 
-test_rel: generate cm_rel appmock_rel
+test_rel: generate cm_rel 
 
 cm_rel:
+	make -C $(LIB_DIR)/cluster_manager/ submodules
 	mkdir -p cluster_manager/bamboos/gen_dev
 	cp -rf $(LIB_DIR)/cluster_manager/bamboos/gen_dev cluster_manager/bamboos
 	printf "\n{base_dir, \"$(BASE_DIR)/cluster_manager/_build\"}." >> $(LIB_DIR)/cluster_manager/rebar.config
 	make -C $(LIB_DIR)/cluster_manager/ rel
 	sed -i "s@{base_dir, \"$(PWD)/cluster_manager/_build\"}\.@@" $(LIB_DIR)/cluster_manager/rebar.config
 
-appmock_rel:
-	make -C appmock/ rel
-
 relclean:
 	rm -rf $(REL_DIR)/test_cluster
 	rm -rf $(REL_DIR)/op_worker
-	rm -rf appmock/$(REL_DIR)/appmock
 	rm -rf cluster_manager/$(REL_DIR)/cluster_manager
 
 ##
@@ -113,7 +125,7 @@ dialyzer:
 
 check_distribution:
 ifeq ($(DISTRIBUTION), none)
-	@echo "Please provide package distribution. Oneof: 'wily', 'fedora-23-x86_64'"
+	@echo "Please provide package distribution. Oneof: 'xenial', 'centos-7-x86_64'"
 	@exit 1
 else
 	@echo "Building package for distribution $(DISTRIBUTION)"
@@ -123,6 +135,7 @@ package/$(PKG_ID).tar.gz:
 	mkdir -p package
 	rm -rf package/$(PKG_ID)
 	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
+	git submodule foreach --recursive "git archive --prefix=$(PKG_ID)/\$$path/ \$$sha1 | (cd \$$toplevel/package && tar -xf -)"
 	${MAKE} -C package/$(PKG_ID) upgrade deps
 	for dep in package/$(PKG_ID) package/$(PKG_ID)/$(LIB_DIR)/*; do \
 	     echo "Processing dependency: `basename $${dep}`"; \

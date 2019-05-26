@@ -14,8 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
@@ -23,7 +22,7 @@
 -define(MAX_ENTRIES, 1000).
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+-export([terminate/3, allowed_methods/2, is_authorized/2,
     content_types_provided/2]).
 
 %% resource functions
@@ -34,35 +33,32 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:terminate/3
+%% @equiv pre_handler:terminate/3
+%% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:allowed_methods/2
+%% @equiv pre_handler:allowed_methods/2
+%% @end
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
+%% @equiv pre_handler:is_authorized/2
+%% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_provided/2
+%% @equiv pre_handler:content_types_provided/2
+%% @end
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
@@ -83,6 +79,7 @@ content_types_provided(Req, State) ->
 %% HTTP method: GET
 %%
 %% @param path Directory path (e.g. &#39;/My Private Space/testfiles&#39;)
+%% @end
 %%--------------------------------------------------------------------
 -spec list_files(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_files(Req, State) ->
@@ -91,24 +88,22 @@ list_files(Req, State) ->
     {State4, Req4} = validator:parse_dir_limit(Req3, State3),
 
     #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
-
-    Response =
-        case onedata_file_api:stat(Auth, {path, Path}) of
-            {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-                case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
-                    {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
-                        throw(?ERROR_TOO_MANY_ENTRIES);
-                    {ok, _ChildNum} ->
-                        DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
-                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
-                        json_utils:encode_map(
-                            lists:map(fun({ChildGuid, ChildPath}) ->
-                                {ok, ObjectId} = cdmi_id:guid_to_objectid(ChildGuid),
-                                #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
-                            end, Children))
-                end;
-            {ok, #file_attr{guid = Guid}} ->
-                {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
-                json_utils:encode_map([#{<<"id">> => ObjectId, <<"path">> => Path}])
-        end,
+    Response = case onedata_file_api:stat(Auth, {path, Path}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
+            case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
+                {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
+                    throw(?ERROR_TOO_MANY_ENTRIES);
+                {ok, _ChildNum} ->
+                    DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
+                    {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
+                    json_utils:encode(
+                        lists:map(fun({ChildGuid, ChildPath}) ->
+                            {ok, ObjectId} = cdmi_id:guid_to_objectid(ChildGuid),
+                            #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
+                        end, Children))
+            end;
+        {ok, #file_attr{guid = Guid}} ->
+            {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
+            json_utils:encode([#{<<"id">> => ObjectId, <<"path">> => Path}])
+    end,
     {Response, Req4, State4}.

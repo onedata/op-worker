@@ -1,181 +1,56 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% OZ user data cache
+%%% This model server as cache for od_user records
+%%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(od_user).
--author("Tomasz Lichon").
--behaviour(model_behaviour).
+-author("Lukasz Opiola").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
+-type id() :: binary().
+-type record() :: #od_user{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+
+-type name() :: binary().
+%% Linked account is expressed in the form of map:
+%% #{
+%%     <<"idp">> => binary(),
+%%     <<"subjectId">> => binary(),
+%%     <<"name">> => undefined | binary(),
+%%     <<"alias">> => undefined | binary(),
+%%     <<"emails">> => [binary()],
+%%     <<"entitlements">> => [binary()],
+%%     <<"custom">> => jiffy:json_value()
+%% }
+-type linked_account() :: maps:map().
+
+-export_type([id/0, record/0, doc/0, diff/0]).
+-export_type([name/0, linked_account/0]).
+
+-define(CTX, #{
+    model => ?MODULE,
+    fold_enabled => true
+}).
 
 %% API
--export([fetch/1, get_or_fetch/2, create_or_update/2]).
--export([record_struct/1]).
+-export([save/1, get/1, delete/1, list/0, run_after/3]).
 
--export_type([doc/0, id/0, connected_account/0]).
-
--type doc() :: datastore:document().
--type id() :: binary().
-
-%% Oauth connected accounts in form of proplist:
-%%[
-%%    {<<"provider_id">>, binary()},
-%%    {<<"user_id">>, binary()},
-%%    {<<"login">>, binary()},
-%%    {<<"name">>, binary()},
-%%    {<<"email_list">>, [binary()]}
-%%]
--type connected_account() :: proplists:proplist().
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {name, string},
-        {alias, string},
-        {email_list, [string]},
-        {connected_accounts, [[{string, term}]]},
-        {default_space, string},
-        {space_aliases, [{string, string}]},
-        {groups, [string]},
-        {spaces, [string]},
-        {handle_services, [string]},
-        {handles, [string]},
-        {eff_groups, [string]},
-        {eff_spaces, [string]},
-        {eff_shares, [string]},
-        {eff_providers, [string]},
-        {eff_handle_services, [string]},
-        {eff_handles, [string]},
-        {public_only, boolean},
-        {revision_history, [term]}
-    ]}.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, save, [Document]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, update, [Key, Diff]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, create, [Document]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
-get(?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>, space_aliases = []}}};
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [{?MODEL_NAME, create}, {?MODEL_NAME, save},
-        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}], ?GLOBALLY_CACHED_LEVEL).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(?MODEL_NAME, create, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, create_or_update, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, save, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, update, _, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_version/0]).
+-export([get_posthooks/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -183,100 +58,266 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
+%% Saves handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    run_and_update_user(fun model:execute_with_default_context/3,
-        [?MODULE, create_or_update, [Doc, Diff]]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Fetch user from OZ and save it in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Auth) ->
-    {ok, #user_details{
-        id = UserId, name = Name, connected_accounts = ConnectedAccounts,
-        alias = Alias, email_list = EmailList}
-    } = oz_users:get_details(Auth),
-    {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-        oz_users:get_spaces(Auth),
-    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Auth),
-
-    Spaces = utils:pmap(fun(SpaceId) ->
-        {ok, #space_details{name = SpaceName}} =
-            oz_spaces:get_details(Auth, SpaceId),
-        {SpaceId, SpaceName}
-    end, SpaceIds),
-
-    OnedataUser = #od_user{
-        name = Name,
-        space_aliases = Spaces,
-        default_space = DefaultSpaceId,
-        eff_groups = EffectiveGroupIds,
-        connected_accounts = ConnectedAccounts,
-        alias = Alias,
-        email_list = EmailList
-    },
-    OnedataUserDoc = #document{key = UserId, value = OnedataUser},
-
-    case od_user:create(OnedataUserDoc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    utils:pforeach(fun(SpaceId) ->
-        od_space:get_or_fetch(Auth, SpaceId, UserId)
-    end, SpaceIds),
-
-    utils:pforeach(fun(GroupId) ->
-        od_group:get_or_fetch(Auth, GroupId)
-    end, EffectiveGroupIds),
-
-    {ok, OnedataUserDoc}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get user from cache or fetch from OZ and save in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, UserId) ->
-    try
-        case od_user:get(UserId) of
-            {ok, Doc} -> {ok, Doc};
-            {error, {not_found, _}} -> fetch(Auth);
-            Error -> Error
-        end
-    catch
-        _:Reason ->
-            ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
-                [UserId, Reason]),
-            {error, Reason}
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Run function and in case of success, update user's file_meta space structures.
-%% @end
-%%--------------------------------------------------------------------
--spec run_and_update_user(function(), list()) -> {ok, datastore:ext_key()} | datastore:update_error().
-run_and_update_user(Function, Args) ->
-    case apply(Function, Args) of
-        {ok, Uuid} ->
-            file_meta:setup_onedata_user(provider, Uuid),
-            {ok, Uuid};
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc) ->
+    case datastore_model:save(?CTX, Doc) of
+        {ok, #document{key = UserId, value = #od_user{eff_spaces = EffSpaces}}} ->
+            file_meta:setup_onedata_user(UserId, EffSpaces),
+            {ok, UserId};
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(Key) ->
+    datastore_model:get(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id()) -> ok | {error, term()}.
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [id()]} | {error, term()}.
+list() ->
+    datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% User create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(save, _, {ok, Doc = #document{key = UserId}}) ->
+    ok = permissions_cache:invalidate(),
+    ok = files_to_chown:chown_pending_files(UserId),
+    {ok, Doc};
+run_after(_Function, _Args, Result) ->
+    Result.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    4.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun(Function, Args, Result) ->
+        od_user:run_after(Function, Args, Result)
+    end].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {name, string},
+        {alias, string},
+        {email_list, [string]},
+        {connected_accounts, [[{string, term}]]},
+
+        {default_space, string},
+        {space_aliases, [{string, string}]},
+
+        {groups, [string]},
+        {spaces, [string]},
+        {handle_services, [string]},
+        {handles, [string]},
+
+        {eff_groups, [string]},
+        {eff_spaces, [string]},
+        {eff_shares, [string]},
+        {eff_providers, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
+
+        {public_only, boolean},
+        {revision_history, [term]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+        {login, string},
+        {email_list, [string]},
+        {linked_accounts, [ #{string => term} ]},
+
+        {default_space, string},
+        {space_aliases, #{string => string}},
+
+        {eff_groups, [string]},
+        {eff_spaces, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(3) ->
+    {record, Struct} = get_record_struct(2),
+    % Rename login to alias
+    {record, lists:keyreplace(login, 1, Struct, {alias, string})};
+get_record_struct(4) ->
+    {record, Struct} = get_record_struct(3),
+    % Rename email_list to emails
+    {record, lists:keyreplace(email_list, 1, Struct, {emails, [string]})}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, User) ->
+    {od_user,
+        Name,
+        Alias,
+        EmailList,
+        _ConnectedAccounts,
+
+        _DefaultSpace,
+        _SpaceAliases,
+
+        _Groups,
+        _Spaces,
+        _HandleServices,
+        _Handles,
+
+        _EffGroups,
+        _EffSpaces,
+        _EffShares,
+        _EffProviders,
+        _EffHandleServices,
+        _EffHandles,
+
+        _PublicOnly,
+        _RevisionHistory
+    } = User,
+
+    {2, {od_user,
+        Name,
+        Alias,
+        EmailList,
+        [#{}],
+
+        undefined,
+        #{},
+
+        [],
+        [],
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(2, User) ->
+    {od_user,
+        Name,
+        Alias,
+        EmailList,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    } = User,
+
+    {3, {od_user,
+        Name,
+        Alias,
+        EmailList,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    }};
+upgrade_record(3, User) ->
+    {od_user,
+        Name,
+        Alias,
+        EmailList,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    } = User,
+
+    {4, #od_user{
+        name = Name,
+        alias = Alias,
+        emails = EmailList,
+        linked_accounts = LinkedAccounts,
+
+        default_space = DefaultSpace,
+        space_aliases = SpaceAliases,
+
+        eff_groups = EffGroups,
+        eff_spaces = EffSpaces,
+        eff_handle_services = EffHandleServices,
+        eff_handles = EffHandles,
+
+        cache_state = CacheState
+    }}.

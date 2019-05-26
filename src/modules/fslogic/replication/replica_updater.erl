@@ -12,9 +12,8 @@
 -module(replica_updater).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -37,29 +36,26 @@
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    file_location:critical_section(FileUuid,
+    replica_synchronizer:apply(FileCtx,
         fun() ->
-            {[Location = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+            Location = #document{
                 value = #file_location{
                     size = OldSize
                 }
-            }], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
+            } = fslogic_cache:get_local_location(),
             UpdatedLocation = append(Location, Blocks, BumpVersion),
-
             case FileSize of
                 undefined ->
-                    file_location:save(UpdatedLocation),
+                    fslogic_location_cache:save_location(UpdatedLocation),
                     case fslogic_blocks:upper(Blocks) > OldSize of
                         true -> {ok, size_changed};
                         false -> {ok, size_not_changed}
                     end;
                 _ ->
                     TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
-                    file_location:save(TruncatedLocation),
+                    fslogic_location_cache:save_location(TruncatedLocation),
                     {ok, size_changed}
             end
-            % todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
 
 
@@ -72,11 +68,10 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 -spec rename(file_ctx:ctx(), TargetFileId :: helpers:file()) ->
     ok | {error, Reason :: term()}.
 rename(FileCtx, TargetFileId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    file_location:critical_section(FileUuid,
+    replica_synchronizer:apply(FileCtx,
         fun() ->
-            {[LocationDoc], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)),
+            {LocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(file_ctx:reset(FileCtx)),
 
             replica_changes:set_last_rename(
                 version_vector:bump_version(
@@ -115,7 +110,9 @@ do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{siz
 -spec append(file_location:doc(), fslogic_blocks:blocks(), boolean()) -> file_location:doc().
 append(Doc, [], _) ->
     Doc;
-append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
+append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
+    % TODO VFS-4743 - some changes are published but blocks does not appear (blocks are private)
+    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:merge(Blocks, OldBlocks),
     NewSize = fslogic_blocks:upper(Blocks),
 
@@ -123,13 +120,12 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
         true ->
             version_vector:bump_version(
                 replica_changes:add_change(
-                    Doc#document{value =
-                    Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}},
-                    Blocks
-                ));
+                    fslogic_location_cache:update_blocks(Doc#document{value =
+                    Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
+                    Blocks));
         false ->
-            Doc#document{value =
-                Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}}
+            fslogic_location_cache:update_blocks(Doc#document{value =
+                Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks)
     end.
 
 %%--------------------------------------------------------------------
@@ -139,13 +135,12 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %%--------------------------------------------------------------------
 -spec shrink(#document{value :: #file_location{}}, [#file_block{}] | lists:list(), non_neg_integer()) ->
     file_location:doc().
-shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks, NewSize) ->
+shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
+    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
     version_vector:bump_version(
         replica_changes:add_change(
-            Doc#document{value =
-            Loc#file_location{blocks = NewBlocks1, size = NewSize}},
-            {shrink, NewSize}
-        )
-    ).
+            fslogic_location_cache:update_blocks(Doc#document{value =
+            Loc#file_location{size = NewSize}}, NewBlocks1),
+            {shrink, NewSize})).

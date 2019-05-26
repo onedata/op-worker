@@ -14,7 +14,7 @@
 -module(file_partial_ctx).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -55,7 +55,7 @@ new_by_guid(Guid)->
 -spec new_by_logical_path(user_ctx:ctx(), file_meta:path()) -> ctx().
 new_by_logical_path(UserCtx, Path) ->
     {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-    case session:is_special(user_ctx:get_session_id(UserCtx)) of
+    case session_utils:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             throw({invalid_request, <<"Path resolution requested in the context"
             " of special session. You may only operate on guids in this context.">>});
@@ -170,17 +170,17 @@ is_user_root_dir_const(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets space alias and space id, in user context according to given space name.
+%% Gets space id, in user context according to given space name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id_from_user_spaces(od_space:name(), user_ctx:ctx()) ->
-    od_space:alias().
+    od_space:name().
 get_space_id_from_user_spaces(SpaceName, UserCtx) ->
-    #document{value = #od_user{space_aliases = Spaces}} =
-        user_ctx:get_user(UserCtx),
-    case lists:keyfind(SpaceName, 2, Spaces) of
+    UserId = user_ctx:get_user_id(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
         false ->
             throw(?ENOENT);
-        {SpaceId, SpaceName} ->
+        {true, SpaceId} ->
             SpaceId
     end.

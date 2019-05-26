@@ -12,19 +12,24 @@
 -module(node_manager_plugin).
 -author("Michal Zmuda").
 
--behaviour(node_manager_plugin_behaviour).
-
 -include("global_definitions.hrl").
+-include("graph_sync/provider_graph_sync.hrl").
 -include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
--include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([before_init/1, after_init/1, on_terminate/2, on_code_change/3,
-    handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
-    modules_with_args/0, modules_hooks/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0,
-    app_name/0, clear_memory/1, renamed_models/0]).
+-export([app_name/0, cm_nodes/0, db_nodes/0]).
+-export([listeners/0, modules_with_args/0]).
+-export([before_init/1, on_cluster_initialized/1]).
+-export([handle_cast/2]).
+-export([renamed_models/0]).
+-export([modules_with_exometer/0, exometer_reporters/0]).
+
+-type model() :: datastore_model:model().
+-type record_version() :: datastore_model:record_version().
+
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -32,7 +37,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the name of the application that bases on cluster worker.
+%% Overrides {@link node_manager_plugin_default:app_name/0}.
 %% @end
 %%--------------------------------------------------------------------
 -spec app_name() -> {ok, Name :: atom()}.
@@ -41,7 +46,7 @@ app_name() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% List cluster manager nodes to be used by node manager.
+%% Overrides {@link node_manager_plugin_default:cm_nodes/0}.
 %% @end
 %%--------------------------------------------------------------------
 -spec cm_nodes() -> {ok, Nodes :: [atom()]} | undefined.
@@ -50,7 +55,7 @@ cm_nodes() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% List db nodes to be used by node manager.
+%% Overrides {@link node_manager_plugin_default:db_nodes/0}.
 %% @end
 %%--------------------------------------------------------------------
 -spec db_nodes() -> {ok, Nodes :: [atom()]} | undefined.
@@ -58,74 +63,85 @@ db_nodes() ->
     application:get_env(?APP_NAME, db_nodes).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% {@link node_manager_plugin_behaviour} callback listeners/0.
+%% Overrides {@link node_manager_plugin_default:listeners/0}.
 %% @end
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
-listeners() -> node_manager:cluster_worker_listeners() ++ [
-    gui_listener,
-    protocol_listener,
-    rest_listener,
-    provider_listener
+listeners() -> [
+    http_listener,
+    https_listener
 ].
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% {@link node_manager_plugin_behaviour} callback modules_with_args/0.
+%% Overrides {@link node_manager_plugin_default:modules_with_args/0}.
 %% @end
 %%--------------------------------------------------------------------
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> node_manager:cluster_worker_modules() ++ [
+modules_with_args() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
     ]},
-    {subscriptions_worker, []},
     {fslogic_worker, []},
-    {dbsync_worker2, [
-        {supervisor_flags, dbsync_worker2:supervisor_flags()}
+    {dbsync_worker, [
+        {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
-    {monitoring_worker, []},
+    {monitoring_worker, [
+        {supervisor_flags, monitoring_worker:supervisor_flags()},
+        {supervisor_children_spec, monitoring_worker:supervisor_children_spec()}
+    ]},
+    {gs_worker, [
+        {supervisor_flags, gs_worker:supervisor_flags()}
+    ]},
     {fslogic_deletion_worker, []},
+    {rtransfer_worker, [
+        {supervisor_flags, rtransfer_worker:supervisor_flags()},
+        {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
+    ]},
     {space_sync_worker, []}
-].
+]).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters node_manager_plugins that were turned off in app.config
+%% @end
+%%-------------------------------------------------------------------
+-spec filter_disabled_workers(
+    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}]) ->
+    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}].
+filter_disabled_workers(WorkersSpecs) ->
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
+    DisabledWorkersSet = sets:from_list(DisabledWorkers),
+    lists:filter(fun
+        ({Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({early_init, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({singleton, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet)
+    end, WorkersSpecs).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link node_manager_plugin_behaviour} callback modules_hooks/0.
+%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec modules_hooks() -> Hooks :: [{{Module :: atom(), early_init | init},
-    {HookedModule :: atom(), Fun :: atom(), Args :: list()}}].
-modules_hooks() -> node_manager:modules_hooks().
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Maps old model name to new one.
-%% @end
-%%--------------------------------------------------------------------
--spec renamed_models() ->
-    #{OldName :: model_behaviour:model_type() => {
-        RenameVersion :: datastore_json:record_version(),
-        NewName :: model_behaviour:model_type()
-    }}.
+-spec renamed_models() -> #{{record_version(), model()} => model()}.
 renamed_models() ->
-    #{open_file => {1, file_handles}}.
+    #{{1, open_file} => file_handles}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link node_manager_plugin_behaviour} callback before_init/0.
+%% Overrides {@link node_manager_plugin_default:before_init/1}.
 %% @end
 %%--------------------------------------------------------------------
 -spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 before_init([]) ->
     try
-        ensure_correct_hostname(),
-
-        %% Load NIFs
+        op_worker_sup:start_link(),
         ok = helpers_nif:init()
     catch
         _:Error ->
@@ -136,154 +152,55 @@ before_init([]) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link node_manager_plugin_behaviour} callback after_init/0.
+%% This callback is executed when the cluster has been initialized, i.e. all
+%% nodes have connected to cluster manager.
 %% @end
 %%--------------------------------------------------------------------
--spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
-after_init([]) ->
+-spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
+on_cluster_initialized(_Nodes) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handling call messages
+%% Overrides {@link node_manager_plugin_default:handle_cast/2}.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_call_extension(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
-    Result :: {reply, Reply, NewState}
-    | {reply, Reply, NewState, Timeout}
-    | {reply, Reply, NewState, hibernate}
-    | {noreply, NewState}
-    | {noreply, NewState, Timeout}
-    | {noreply, NewState, hibernate}
-    | {stop, Reason, Reply, NewState}
-    | {stop, Reason, NewState},
-    Reply :: nagios_handler:healthcheck_response() | term(),
-    NewState :: term(),
-    Timeout :: non_neg_integer() | infinity,
-    Reason :: term().
-
-handle_call_extension(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, wrong_request, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec handle_cast_extension(Request :: term(), State :: term()) -> Result when
-    Result :: {noreply, NewState}
-    | {noreply, NewState, Timeout}
-    | {noreply, NewState, hibernate}
-    | {stop, Reason :: term(), NewState},
-    NewState :: term(),
-    Timeout :: non_neg_integer() | infinity.
-
-handle_cast_extension(_Request, State) ->
-    ?log_bad_request(_Request),
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec handle_info_extension(Info :: timeout | term(), State :: term()) -> Result when
-    Result :: {noreply, NewState}
-    | {noreply, NewState, Timeout}
-    | {noreply, NewState, hibernate}
-    | {stop, Reason :: term(), NewState},
-    NewState :: term(),
-    Timeout :: non_neg_integer() | infinity.
-
-handle_info_extension(_Request, State) ->
-    ?log_bad_request(_Request),
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
--spec on_terminate(Reason, State :: term()) -> Any :: term() when
-    Reason :: normal
-    | shutdown
-    | {shutdown, term()}
-    | term().
-on_terminate(_Reason, _State) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%% @end
-%%--------------------------------------------------------------------
--spec on_code_change(OldVsn, State :: term(), Extra :: term()) -> Result when
-    Result :: {ok, NewState :: term()} | {error, Reason :: term()},
-    OldVsn :: Vsn | {down, Vsn},
-    Vsn :: term().
-on_code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks IP address of this node by asking GR. If the check cannot be performed,
-%% it assumes a 127.0.0.1 address and logs an alert.
-%% @end
-%%--------------------------------------------------------------------
--spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
-check_node_ip_address() ->
-    try
-        application:set_env(ctool, verify_oz_cert, false), % @todo VFS-1572
-        {ok, IPBin} = oz_providers:check_ip_address(provider),
-        {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
-        IP
-    catch T:M ->
-        ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
-        {127, 0, 0, 1}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Clears permissions cache during clearing of memory
-%% (when node_manager sees that usage of memory is too high).
-%% @end
-%%--------------------------------------------------------------------
--spec clear_memory(HighMemUse :: boolean()) -> ok.
-clear_memory(true) ->
-    permissions_cache:invalidate_permissions_cache();
-clear_memory(_) ->
-    permissions_cache:check_permission_cache_size().
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Makes sure node hostname belongs to provider domain.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_correct_hostname() -> ok | no_return().
-ensure_correct_hostname() ->
-    Hostname = oneprovider:get_node_hostname(),
-    Domain = oneprovider:get_provider_domain(),
-    case string:join(tl(string:tokens(Hostname, ".")), ".") of
-        Domain ->
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
+handle_cast(update_subdomain_delegation_ips, State) ->
+    % This cast will be usually used only after acquiring connection
+    % to onezone in order to send current cluster IPs
+    case provider_logic:update_subdomain_delegation_ips() of
+        ok ->
             ok;
-        _ ->
-            ?error("Node hostname must be in provider domain. Check env conf. "
-            "Current configuration:~nHostname: ~p~nDomain: ~p",
-                [Hostname, Domain]),
-            throw(wrong_hostname)
-    end.
+        error ->
+            % Kill the connection to Onezone in case provider IPs cannot be
+            % updated, which will cause a reconnection and update retry.
+            gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME},
+                {terminate, normal})
+    end,
+    {noreply, State};
+
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of modules that register exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_exometer() -> list().
+modules_with_exometer() ->
+    [fslogic_worker, helpers, session, event_stream, event].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec exometer_reporters() -> list().
+exometer_reporters() -> [].

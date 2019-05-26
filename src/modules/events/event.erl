@@ -16,14 +16,19 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
 -export([emit/1, emit/2, flush/2, flush/5, subscribe/2, unsubscribe/2]).
+-export([get_event_managers/1]).
+
+-export([init_counters/0, init_report/0]).
 
 -export_type([key/0, base/0, type/0, stream/0, manager_ref/0]).
 
 -type key() :: term().
 -type base() :: #event{}.
+-type aggregated() :: {aggregated, [base()]}.
 -type type() :: #file_read_event{} | #file_written_event{} |
                 #file_attr_changed_event{} | #file_location_changed_event{} |
                 #file_perm_changed_event{} | #file_removed_event{} |
@@ -36,6 +41,9 @@
 % reference all event managers except those provided in list
 {exclude, [pid() | session:id()]}.
 
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
+-define(EXOMETER_COUNTERS, [emit]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -47,7 +55,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: base() | type()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    case event_router:get_subscribers(Evt) of
+    case subscription_manager:get_subscribers(Evt) of
         {ok, SessIds} -> emit(Evt, SessIds);
         {error, Reason} -> {error, Reason}
     end.
@@ -57,10 +65,10 @@ emit(Evt) ->
 %% Sends an event to selected event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: base() | type(), MgrRef :: manager_ref()) ->
+-spec emit(Evt :: base() | aggregated() | type(), MgrRef :: manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, MgrRef}) ->
-    case event_router:get_subscribers(Evt) of
+    case subscription_manager:get_subscribers(Evt) of
         {ok, SessIds} ->
             Excluded = get_event_managers(MgrRef),
             Subscribed = get_event_managers(SessIds),
@@ -70,7 +78,16 @@ emit(Evt, {exclude, MgrRef}) ->
     end;
 
 emit(#event{} = Evt, MgrRef) ->
+    ?update_counter(?EXOMETER_NAME(emit)),
     send_to_event_managers(Evt, get_event_managers(MgrRef));
+
+emit({aggregated, [#event{} | _]} = Evts, MgrRef) ->
+    ?update_counter(?EXOMETER_NAME(emit)),
+    send_to_event_managers(Evts, get_event_managers(MgrRef));
+
+emit({aggregated, Evts}, MgrRef) ->
+    WrappedEvents = lists:map(fun(Evt) -> #event{type = Evt} end, Evts),
+    emit({aggregated, WrappedEvents}, MgrRef);
 
 emit(Evt, MgrRef) ->
     emit(#event{type = Evt}, MgrRef).
@@ -140,36 +157,7 @@ unsubscribe(#subscription_cancellation{} = SubCan, MgrRef) ->
 unsubscribe(SubId, MgrRef) ->
     unsubscribe(#subscription_cancellation{id = SubId}, MgrRef).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns pid of an event manager associated with provided reference.
-%% A reference can be either an event manager pid or a session ID.
-%% @end
-%%--------------------------------------------------------------------
--spec get_event_manager(MgrRef :: manager_ref()) ->
-    {ok, Mgr :: pid()} | {error, Reason :: term()}.
-get_event_manager(MgrRef) when is_pid(MgrRef) ->
-    {ok, MgrRef};
-
-get_event_manager(MgrRef) ->
-    case session:get_event_manager(MgrRef) of
-        {ok, Mgr} ->
-            {ok, Mgr};
-        {error, {not_found, _} = Reason} ->
-            {error, Reason};
-        {error, Reason} ->
-            ?warning("Cannot get event manager for session ~p due to: ~p",
-                [MgrRef, Reason]),
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns list of event managers associated with provided references.
 %% A reference can be either an event manager pids or a session IDs.
@@ -190,17 +178,77 @@ get_event_managers([_ | _] = MgrRefs) ->
 get_event_managers(MgrRef) ->
     get_event_managers([MgrRef]).
 
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
 %%--------------------------------------------------------------------
-%% @private  @doc
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    ?init_counters(Counters).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_reports(Reports).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns pid of an event manager associated with provided reference.
+%% A reference can be either an event manager pid or a session ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_manager(MgrRef :: manager_ref()) ->
+    {ok, Mgr :: pid()} | {error, Reason :: term()}.
+get_event_manager(MgrRef) when is_pid(MgrRef) ->
+    {ok, MgrRef};
+
+get_event_manager(MgrRef) ->
+    case session:get_event_manager(MgrRef) of
+        {ok, Mgr} ->
+            {ok, Mgr};
+        {error, not_found = Reason} ->
+            {error, Reason};
+        {error, Reason} ->
+            ?warning("Cannot get event manager for session ~p due to: ~p",
+                [MgrRef, Reason]),
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Sends message to event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_event_managers(Msg :: term(), Mgrs :: [pid()]) ->
-    ok.
-send_to_event_managers(Msg, Mgrs) ->
-    lists:foreach(fun(Mgr) ->
-        gen_server2:cast(Mgr, Msg)
-    end, Mgrs).
+-spec send_to_event_managers(Message :: term(), Managers :: [pid()]) -> ok.
+send_to_event_managers({aggregated, Messages}, Managers) ->
+    lists:foreach(fun(Message) ->
+        send_to_event_managers(Message, Managers)
+    end, Messages);
+send_to_event_managers(Message, Managers) ->
+    lists:foreach(fun(Manager) ->
+        send_to_event_manager(Manager, Message, 1)
+    end, Managers).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -214,3 +262,24 @@ subtract_unique(ListA, ListB) ->
     SetA = gb_sets:from_list(ListA),
     SetB = gb_sets:from_list(ListB),
     gb_sets:to_list(gb_sets:subtract(SetA, SetB)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends message to event manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_to_event_manager(Manager :: pid(), Message :: term(), RetryCounter :: non_neg_integer()) -> ok.
+send_to_event_manager(Manager, Message, 0) ->
+    ok = event_manager:send(Manager, Message);
+send_to_event_manager(Manager, Message, RetryCounter) ->
+    try
+        ok = event_manager:send(Manager, Message)
+    catch
+        exit:{timeout, _} ->
+            ?debug("Timeout of event manager for message ~p, retry", [Message]),
+            send_to_event_manager(Manager, Message, RetryCounter - 1);
+        Reason1:Reason2 ->
+            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}]),
+            send_to_event_manager(Manager, Message, RetryCounter - 1)
+    end.

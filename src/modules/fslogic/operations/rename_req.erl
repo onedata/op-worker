@@ -136,21 +136,34 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {TargetFileType, TargetFileCtx, TargetParentFileCtx2} =
         get_child_type(TargetParentFileCtx, TargetName, UserCtx),
 
-    SourceEqualsTarget = TargetFileCtx =/= undefined
-        andalso file_ctx:equals(SourceFileCtx2, TargetFileCtx),
-    case SourceEqualsTarget of
-        true ->
-            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx2));
-        false ->
+    SourceEqualsTarget = ((TargetFileCtx =/= undefined)
+        andalso (file_ctx:equals(SourceFileCtx2, TargetFileCtx))),
+
+    {SourcePath, SourceFileCtx3} = file_ctx:get_canonical_path(SourceFileCtx2),
+    {TargetPath, TargetParentFileCtx3} = file_ctx:get_canonical_path(TargetParentFileCtx2),
+
+    SourceTokens = fslogic_path:split(SourcePath),
+    TargetTokens = fslogic_path:split(TargetPath),
+    TargetTokensBeg = lists:sublist(TargetTokens, length(SourceTokens)),
+    MoveIntoItself = (TargetTokensBeg =:= SourceTokens),
+
+    case {SourceEqualsTarget, MoveIntoItself} of
+        {true, _} ->
+            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx3));
+        {false, true} ->
+            #fuse_response{
+                status = #status{code = ?EINVAL}
+            };
+        _ ->
             rename_into_different_place_within_space(
-                UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName,
+                UserCtx, SourceFileCtx3, TargetParentFileCtx3, TargetName,
                 SourceFileType, TargetFileType, TargetFileCtx)
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Source and target files are the same, reutrns success and does nothing more.
+%% Source and target files are the same, returns success and does nothing more.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_into_itself(FileGuid :: fslogic_worker:file_guid()) ->
@@ -175,14 +188,20 @@ rename_into_itself(FileGuid) ->
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
     TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
-rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName,
-    SourceFileType, TargetFileType, TargetFileCtx) ->
-    case file_ctx:get_storage_doc(SourceFileCtx) of
-        {#document{value = #storage{helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}}, SourceFileCtx2} ->
+rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
+    TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
+    {StorageDoc, SourceFileCtx2} =
+        file_ctx:get_storage_doc(SourceFileCtx), #document{
+        value = #storage{helpers = [#helper{name = HelperName} | _]}
+    } = StorageDoc,
+    case lists:member(HelperName,
+        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
+         ?WEBDAV_HELPER_NAME]) of
+        true ->
             rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
                 TargetFileCtx);
-        {_, SourceFileCtx2} ->
+        _ ->
             rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
                 TargetFileCtx)
@@ -198,7 +217,7 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
 -spec rename_into_different_place_within_posix_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    TargetFileType :: file_meta:type(), TargetFileCtx :: file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, undefined, _
@@ -218,6 +237,11 @@ rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx
 ) ->
+    {#document{key = FileLocationId, value = #file_location{uuid = TargetFileUuid}}, _} =
+        file_ctx:get_local_file_location_doc(TargetFileCtx),
+    fslogic_location_cache:update_location(TargetFileUuid, FileLocationId, fun
+        (FileLocation) -> {ok, FileLocation#file_location{storage_file_created = false}}
+    end, false),
     #fuse_response{status = #status{code = ?OK}} =
         delete_req:delete(UserCtx, TargetFileCtx, false),
     rename_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
@@ -229,6 +253,61 @@ rename_into_different_place_within_posix_space(_, _, _, _,
     ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, _
 ) ->
     throw(?EISDIR).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file on storage with flat paths, i.e. only modifies
+%% file_meta and optionally removes the target file, if TargetGuid
+%% is not undefined, i.e. target file already exists, it will be removed
+%% first.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_file_on_flat_storage(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
+    TargetGuid :: undefined | file_ctx:ctx()) -> #fuse_response{}.
+rename_file_on_flat_storage(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
+            {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_subcontainer, 3}],
+        [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid],
+        fun rename_file_on_flat_storage_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file on storage with flat paths, i.e. only modifies
+%% file_meta and optionally removes the target file, if TargetGuid
+%% is not undefined, i.e. target file already exists, it will be removed
+%% first. Does not check permissions.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_file_on_flat_storage_insecure(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
+    TargetGuid :: undefined | file_ctx:ctx()) -> #fuse_response{}.
+rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
+    SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
+    {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
+    {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
+    ok = case TargetGuid of
+        undefined ->
+            ok;
+        _ ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false)
+    end,
+    ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
+    fslogic_times:update_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
+    update_parent_times(SourceParentFileCtx2, TargetParentFileCtx),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_renamed{
+            new_guid = SourceGuid,
+            child_entries = []
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -245,14 +324,35 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, _, undefined, _
 ) ->
-    copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+    SpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+    #document{value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+
+    case StoragePathType of
+      ?FLAT_STORAGE_PATH ->
+          rename_file_on_flat_storage(UserCtx, SourceFileCtx,
+              TargetParentFileCtx, TargetName, undefined);
+      _ ->
+        copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
+    end;
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, TheSameType, TheSameType, TargetFileCtx
 ) ->
-    SessId = user_ctx:get_session_id(UserCtx),
     TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
-    ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
-    copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+    SessId = user_ctx:get_session_id(UserCtx),
+
+    SpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+    #document{value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+
+    case StoragePathType of
+      ?FLAT_STORAGE_PATH ->
+          rename_file_on_flat_storage(UserCtx, SourceFileCtx,
+              TargetParentFileCtx, TargetName, TargetGuid);
+      _ ->
+        ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+        copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
+    end;
 rename_into_different_place_within_non_posix_space(_, _, _, _,
     ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, _
 ) ->
@@ -359,13 +459,20 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    case sfm_utils:rename_storage_file(
-        user_ctx:get_session_id(UserCtx), SpaceId, Storage, FileUuid,
-        SourceFileId, TargetFileId)
-    of
-        ok -> ok;
-        {error, ?ENOENT} -> ok
+    #document{value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+    case StoragePathType of
+      ?FLAT_STORAGE_PATH ->
+        ok;
+      _ ->
+        case sfm_utils:rename_storage_file(
+          user_ctx:get_session_id(UserCtx), SpaceId, Storage, FileUuid, SourceFileId, TargetFileId)
+        of
+          ok -> ok;
+          {error, ?ENOENT} -> ok
+        end
     end,
+    {NewChildCtx, _} = file_ctx:get_child(TargetParentFileCtx, TargetName, UserCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(NewChildCtx, TargetName, UserCtx),
     {SourceFileCtx2, TargetFileId}.
 
 %%--------------------------------------------------------------------
@@ -468,6 +575,6 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
 -spec update_parent_times(SourceParentFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx()) -> ok.
 update_parent_times(SourceParentFileCtx, TargetParentFileCtx) ->
-    CurrentTime = erlang:system_time(seconds),
+    CurrentTime = time_utils:cluster_time_seconds(),
     fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime).

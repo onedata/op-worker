@@ -14,16 +14,18 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
+-define(DEFAULT_LIMIT, 100).
+
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2, delete_resource/2]).
+-export([terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2]).
 
 %% resource functions
 -export([list_transfers/2]).
@@ -31,13 +33,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -49,98 +44,84 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) ->
+    {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"DELETE">>], Req, State}.
+    {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) ->
+    {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_provided(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, list_transfers}
     ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/transfers/{tid}'
-%% @doc Cancels a scheduled or active transfer. Returns 400 in case the transfer
-%% is already completed, canceled or failed.\n
-%%
-%% HTTP method: DELETE
-%%
-%% @param tid Transfer ID.
-%%--------------------------------------------------------------------
--spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
-delete_resource(Req, State) ->
-    {State2, Req2} = validator:parse_id(Req, State),
-
-    #{id := Id} = State2,
-
-    ok = transfer:stop(Id),
-    {true, Req2, State2}.
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/transfers'
+%% '/api/v3/oneprovider/space/:sid/transfers'
 %% @doc Returns the list of all transfer IDs.
 %%
 %% HTTP method: GET
 %%
-%% @param status Allows to limit the returned transfers only to transfers with specific status.\n
-%% @param limit Allows to limit the number of returned transfers only to the last N transfers.\n
-%%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/transfers/{tid}'
-%% @doc Returns status of specific transfer. In case the transfer has been
-%% scheduled for entire folder, the result is a list of transfer statuses for
-%% each item in the folder.
-%%
-%% HTTP method: GET
-%%
-%% @param tid Transfer ID.
+%% @param state Specifies the state of transfers to list. The default is "ongoing".\n
+%% @param limit Allows to limit the number of returned transfers.\n
 %%--------------------------------------------------------------------
 -spec list_transfers(req(), maps:map()) -> {term(), req(), maps:map()}.
-list_transfers(Req, State = #{list_all := true}) ->
-    {State2, Req2} = validator:parse_dir_limit(Req, State),
-    {State3, Req3} = validator:parse_status(Req2, State2),
-
-    #{auth := Auth, status := Status, limit := Limit} = State3,
-
-    {ok, Transfers} = session:get_transfers(Auth),
-    LimitedTransfers =
-        case Limit of
-            undefined ->
-                Transfers;
-            _ ->
-                lists:sublist(Transfers, Limit)
-        end,
-    FilteredTransfers =
-        case Status of
-            undefined ->
-                LimitedTransfers;
-            _ ->
-                lists:filter(fun(TransferId) ->
-                    TransferStatus = transfer:get_status(TransferId),
-                    atom_to_binary(TransferStatus, utf8) =:= Status
-                end, LimitedTransfers)
-        end,
-    Response = json_utils:encode_map(FilteredTransfers),
-    {Response, Req3, State3};
 list_transfers(Req, State) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State3, Req3} = validator:parse_transfer_state(Req2, State2),
+    {State4, Req4} = validator:parse_dir_limit(Req3, State3),
+    {State5, Req5} = validator:parse_page_token(Req4, State4),
 
-    #{id := Id} = State2,
+    #{
+        space_id := SpaceId, transfer_state := TransferState,
+        limit := LimitOrUndef, page_token := PageToken
+    } = State5,
 
-    Transfer = transfer:get(Id),
-    Response = json_utils:encode_map(Transfer),
-    {Response, Req2, State2}.
+    Limit = utils:ensure_defined(LimitOrUndef, undefined, ?DEFAULT_LIMIT),
+
+    {StartId, Offset} = case PageToken of
+        <<"null">> ->
+            {undefined, 0};
+        _ ->
+            % Start after the page token (link key from last listing) if it is given
+            {PageToken, 1}
+    end,
+
+    {ok, Transfers} = case TransferState of
+        ?WAITING_TRANSFERS_STATE ->
+            transfer:list_waiting_transfers(SpaceId, StartId, Offset, Limit);
+        ?ONGOING_TRANSFERS_STATE ->
+            transfer:list_ongoing_transfers(SpaceId, StartId, Offset, Limit);
+        ?ENDED_TRANSFERS_STATE ->
+            transfer:list_ended_transfers(SpaceId, StartId, Offset, Limit)
+    end,
+
+    NextPageToken = case length(Transfers) of
+        Limit ->
+            {ok, LinkKey} = transfer:get_link_key_by_state(
+                lists:last(Transfers), TransferState
+            ),
+            #{<<"nextPageToken">> => LinkKey};
+        _ ->
+            #{}
+    end,
+
+    Result = maps:merge(#{<<"transfers">> => Transfers}, NextPageToken),
+
+    Response = json_utils:encode(Result),
+    {Response, Req5, State5}.

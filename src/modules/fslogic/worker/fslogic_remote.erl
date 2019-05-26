@@ -14,7 +14,6 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -23,7 +22,6 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -55,9 +53,9 @@ reroute(UserCtx, ProviderId, Request) ->
     SessId = user_ctx:get_session_id(UserCtx),
     Auth = user_ctx:get_auth(UserCtx),
     {ok, #server_message{message_body = MsgBody}} =
-        provider_communicator:communicate(#client_message{
+        communicator:communicate_with_provider(#client_message{
             message_body = Request,
             proxy_session_id = SessId,
             proxy_session_auth = Auth
-        }, session_manager:get_provider_session_id(outgoing, ProviderId)),
+        }, session_utils:get_provider_session_id(outgoing, ProviderId)),
     MsgBody.

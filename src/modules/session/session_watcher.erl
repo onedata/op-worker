@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/2, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -33,7 +33,7 @@
     overloaded_connections = #{} :: #{pid() => non_neg_integer()}
 }).
 
--define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(5)).
+-define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(15)).
 -define(CONNECTION_CHECK_INTERVAL, timer:seconds(30)).
 -define(MAX_PENDING_REQUESTS_PER_CONNECTION, 100).
 
@@ -51,6 +51,15 @@
 start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to session_watcher.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
+send(SessionWatcher, Msg) ->
+    SessionWatcher ! Msg.
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -66,7 +75,10 @@ start_link(SessId, SessType) ->
     {stop, Reason :: term()} | ignore.
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
-    {ok, _} = session:update(SessId, #{watcher => self()}),
+    Self = self(),
+    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{watcher = Self}}
+    end),
     TTL = get_session_ttl(SessType),
     schedule_session_status_checkup(TTL),
     schedule_connections_status_checkup(?CONNECTION_CHECK_INTERVAL),
@@ -115,7 +127,9 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(remove_session, #state{session_id = SessId} = State) ->
-    worker_proxy:cast(?SESSION_MANAGER_WORKER, {remove_session, SessId}),
+    spawn(fun() ->
+        session_manager:remove_session(SessId)
+    end),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
@@ -148,7 +162,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
         fun({Pid, QueueLen}, AccIn) ->
             case utils:process_info(Pid, message_queue_len) of
                 undefined ->
-                    session:remove_connection(SessId, Pid),
+                    session_connections:remove_connection(SessId, Pid),
                     AccIn;
                 {message_queue_len, NewQueueLen} when NewQueueLen < ?MAX_PENDING_REQUESTS_PER_CONNECTION ->
                     %% Queue is still not too long
@@ -159,7 +173,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
                 {message_queue_len, NewQueueLen} ->
                     ?error("Connection ~p on session ~p hang with ~p messages
                             in request queue. Removing.", [Pid, SessId, NewQueueLen]),
-                    session:remove_connection(SessId, Pid),
+                    session_connections:remove_connection(SessId, Pid),
                     erlang:exit(Pid, kill),
                     AccIn
             end
@@ -176,6 +190,8 @@ handle_info({overloaded_connection, Pid}, State = #state{overloaded_connections 
             {noreply, State#state{overloaded_connections = maps:put(Pid, QueueLen, Connections)}, hibernate}
     end;
 
+handle_info({'EXIT', _, shutdown}, State) ->
+    {stop, shutdown, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -194,7 +210,9 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    worker_proxy:cast(?SESSION_MANAGER_WORKER, {remove_session, SessId}).
+    spawn(fun() ->
+        session_manager:remove_session(SessId)
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -218,7 +236,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_session_ttl(SessType :: session:type()) ->
-    Milliseconds :: non_neg_integer().
+    Seconds :: non_neg_integer().
 get_session_ttl(gui) ->
     {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
     Period;
@@ -249,7 +267,7 @@ get_session_ttl(_) ->
 is_session_ttl_exceeded(SessId, TTL) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
-            InactivityPeriod = erlang:system_time(seconds) - Accessed,
+            InactivityPeriod = time_utils:cluster_time_seconds() - Accessed,
             case InactivityPeriod >= TTL of
                 true -> {ok, Sess#session{status = inactive}};
                 false -> {error, {ttl_not_exceeded, TTL - InactivityPeriod}}

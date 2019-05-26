@@ -12,14 +12,13 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([remove_file_and_file_meta/3, remove_file_and_file_meta/4,
+-export([remove_file_and_file_meta/3, remove_file_and_file_meta/5,
     remove_file_handles/1]).
 
 %%--------------------------------------------------------------------
@@ -29,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
 remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
-    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true).
+    remove_file_and_file_meta(FileCtx, UserCtx, Silent, true, true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,14 +36,14 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% If parameter RemoveStorageFile is false, file will not be deleted
 %% on storage.
+%% If parameter DeleteParentLink is true, link in parent is deleted.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-    boolean()) -> ok.
-remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
-    {FileDoc = #document{
-        value = #file_meta{
-            type = Type,
+    boolean(), boolean()) -> ok.
+remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile,
+    DeleteParentLink) ->
+    {FileDoc = #document{value = #file_meta{
             shares = Shares
         }
     }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
@@ -55,11 +54,16 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent, RemoveStorageFile) ->
 
     case RemoveStorageFile of
         true ->
-            maybe_remove_file_on_storage(FileCtx3, UserCtx, Type);
+            maybe_remove_file_on_storage(FileCtx3, UserCtx);
         _ -> ok
     end,
 
-    ok = file_meta:delete(FileDoc),
+    ok = case DeleteParentLink of
+        true ->
+            file_meta:delete(FileDoc);
+        _ ->
+            file_meta:delete_without_link(FileDoc)
+    end,
     maybe_emit_event(FileCtx3, UserCtx, Silent).
 
 %%--------------------------------------------------------------------
@@ -83,10 +87,10 @@ remove_file_handles(FileCtx) ->
 %% Returns ok if file doesn't exist or if it was successfully deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(),
-    file_meta:type()) -> ok | {error, term()}.
-maybe_remove_file_on_storage(FileCtx, UserCtx, FileType) ->
-    case remove_file_on_storage(FileCtx, UserCtx, FileType) of
+-spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx())
+        -> ok | {error, term()}.
+maybe_remove_file_on_storage(FileCtx, UserCtx) ->
+    case remove_file_on_storage(FileCtx, UserCtx) of
         ok -> ok;
         {error, ?ENOENT} -> ok;
         OtherError -> OtherError
@@ -98,12 +102,10 @@ maybe_remove_file_on_storage(FileCtx, UserCtx, FileType) ->
 %% Removes given file on storage
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx(), file_meta:type()) ->
+-spec remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
-remove_file_on_storage(FileCtx, UserCtx, ?REGULAR_FILE_TYPE) ->
-    sfm_utils:delete_storage_file(FileCtx, UserCtx);
-remove_file_on_storage(FileCtx, UserCtx, ?DIRECTORY_TYPE) ->
-    sfm_utils:delete_storage_dir(FileCtx, UserCtx).
+remove_file_on_storage(FileCtx, UserCtx) ->
+    sfm_utils:recursive_delete(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -115,8 +117,8 @@ remove_file_on_storage(FileCtx, UserCtx, ?DIRECTORY_TYPE) ->
 delete_shares(_UserCtx, []) ->
     ok;
 delete_shares(UserCtx, Shares) ->
-    Auth = user_ctx:get_auth(UserCtx),
-    [ok = share_logic:delete(Auth, ShareId) || ShareId <- Shares],
+    SessionId = user_ctx:get_session_id(UserCtx),
+    [ok = share_logic:delete(SessionId, ShareId) || ShareId <- Shares],
     ok.
 
 %%--------------------------------------------------------------------

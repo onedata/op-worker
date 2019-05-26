@@ -6,19 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements {@link worker_plugin_behaviour} and is responsible
-%%% for creation and removal of clients' sessions.
+%%% This module implements {@link worker_plugin_behaviour}
+%%% It is created only to allow creation of module supervision tree
+%%% TODO VFS-5156 - remove after refactor of worker_host
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_manager_worker).
 -author("Krzysztof Trzepla").
 
--behaviour(worker_plugin_behaviour).
-
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+-behaviour(worker_plugin_behaviour).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -46,23 +44,12 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck | {remove_session, SessId :: session:id()} |
-    {remove_session_if_inactive, SessId :: session:id()},
-    Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
-    {error, Reason},
-    Response :: term(),
-    Reason :: term().
+    Request :: ping | healthcheck,
+    Result :: ok | pong.
 handle(ping) ->
     pong;
 
 handle(healthcheck) ->
-    ok;
-
-handle({remove_session, SessId}) ->
-    remove_session(SessId);
-
-handle({apply, Fun}) ->
-    Fun(),
     ok;
 
 handle(_Request) ->
@@ -107,42 +94,3 @@ supervisor_children_spec() ->
         type => supervisor,
         modules => [session_sup]
     }].
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes session from cache, stops session supervisor and disconnects remote
-%% client.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
-remove_session(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
-            session:delete(SessId),
-            close_connections(Cons);
-        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
-            supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup),
-            session:delete(SessId),
-            close_connections(Cons);
-        {error, {not_found, _}} ->
-            ok;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Closes connections to remote client.
-%% @end
-%%--------------------------------------------------------------------
--spec close_connections(Cons :: [pid()]) -> ok.
-close_connections(Cons) ->
-    lists:foreach(fun(Con) ->
-        gen_server2:cast(Con, disconnect)
-    end, Cons).

@@ -13,6 +13,7 @@
 -author("Michal Wrona").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("modules/monitoring/rrd_definitions.hrl").
 
@@ -26,7 +27,7 @@
 %% Creates RRD if not exists and updates it.
 %% @end
 %%--------------------------------------------------------------------
--spec create_and_update(datastore:id(), #monitoring_id{}) -> ok.
+-spec create_and_update(datastore:key(), #monitoring_id{}) -> ok.
 create_and_update(SpaceId, MonitoringId) ->
     create_and_update(SpaceId, MonitoringId, #{}).
 
@@ -37,10 +38,10 @@ create_and_update(SpaceId, MonitoringId) ->
 %% this slot was not performed earlier.
 %% @end
 %%--------------------------------------------------------------------
--spec create_and_update(datastore:id(), #monitoring_id{}, maps:map()) -> ok.
+-spec create_and_update(datastore:key(), #monitoring_id{}, maps:map()) -> ok.
 create_and_update(SpaceId, MonitoringId, UpdateValue) ->
     try
-        CurrentTime = erlang:system_time(seconds),
+        CurrentTime = time_utils:cluster_time_seconds(),
         {PreviousPDPTime, CurrentPDPTime, WaitingTime} =
             case CurrentTime rem ?STEP_IN_SECONDS of
                 0 ->
@@ -65,6 +66,8 @@ create_and_update(SpaceId, MonitoringId, UpdateValue) ->
             [MonitoringId, UpdatedMonitoringState, CurrentPDPTime, UpdateValue]),
         ok
     catch
+        exit:{noproc, _} ->
+            ok;
         T:M ->
             ?error_stacktrace("Cannot update monitoring state for ~w - ~p:~p",
                 [MonitoringId, T, M])
@@ -76,7 +79,7 @@ create_and_update(SpaceId, MonitoringId, UpdateValue) ->
 %% Creates rrd with optional initial buffer state.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:id(), #monitoring_id{}, non_neg_integer()) -> ok.
+-spec create(datastore:key(), #monitoring_id{}, non_neg_integer()) -> ok.
 create(SpaceId, #monitoring_id{main_subject_type = space, metric_type = storage_used,
     secondary_subject_type = user} = MonitoringId, CreationTime) ->
     rrd_utils:create_rrd(SpaceId, MonitoringId, #{storage_used => 0}, CreationTime);
@@ -98,8 +101,10 @@ update(#monitoring_id{main_subject_type = space, metric_type = storage_used,
     SizeDifference = maps:get(size_difference, UpdateValue, 0),
 
     NewSize = CurrentSize + SizeDifference,
-    {ok, _} = monitoring_state:update(MonitoringId,
-        #{state_buffer => #{storage_used => NewSize}}),
+    {ok, _} = monitoring_state:update(MonitoringId, fun
+        (State = #monitoring_state{state_buffer = Buffer}) ->
+            {ok, State#monitoring_state{state_buffer = Buffer#{storage_used => NewSize}}}
+    end),
 
     ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [NewSize]);
 
@@ -113,9 +118,7 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_quota} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    {ok, #document{value = #od_space{providers_supports = ProvSupport}}} =
-        od_space:get(SpaceId),
-    SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
+    {ok, SupSize} = provider_logic:get_support_size(SpaceId),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, SupSize);
 
@@ -123,8 +126,8 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = connected_users} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    {ok, #document{value = #od_space{users = Users}}} = od_space:get(SpaceId),
-    ConnectedUsers = length(Users),
+    {ok, EffUsers} = space_logic:get_eff_users(?ROOT_SESS_ID, SpaceId),
+    ConnectedUsers = maps:size(EffUsers),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, ConnectedUsers);
 
@@ -161,7 +164,9 @@ update(#monitoring_id{main_subject_type = space, metric_type = remote_transfer} 
 %%--------------------------------------------------------------------
 -spec maybe_update(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), term()) -> ok.
 maybe_update(MonitoringId, MonitoringState, UpdateTime, UpdateValue) ->
-    {ok, _} = monitoring_state:update(MonitoringId,
-        #{state_buffer => #{previous_value => UpdateValue}}),
+    {ok, _} = monitoring_state:update(MonitoringId, fun
+        (State = #monitoring_state{state_buffer = Buffer}) ->
+            {ok, State#monitoring_state{state_buffer = Buffer#{previous_value => UpdateValue}}}
+    end),
 
     ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [UpdateValue]).

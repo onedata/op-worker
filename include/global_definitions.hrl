@@ -13,9 +13,8 @@
 -ifndef(GLOBAL_DEFINITIONS_HRL).
 -define(GLOBAL_DEFINITIONS_HRL, 1).
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
 
 %%%===================================================================
 %%% Global names
@@ -37,6 +36,9 @@
 
 %% Local name (name and node is used to identify it) of rrdtool supervisor.
 -define(RRDTOOL_SUPERVISOR, rrdtool_supervisor).
+
+%% ID of provider that is not currently registered in Onezone
+-define(UNREGISTERED_PROVIDER_ID, <<"unregistered_provider">>).
 
 %%%===================================================================
 %%% Global identities

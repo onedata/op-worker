@@ -82,7 +82,7 @@ all() ->
 emit_should_aggregate_events_with_the_same_key(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?CTR_THR(5), ?EVT_NUM(20), ?EVT_SIZE(10)]},
         {description, "Check whether events for the same file are properly aggregated."},
         {config, [{name, small_counter_threshold},
@@ -147,7 +147,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
 emit_should_not_aggregate_events_with_different_key(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?CTR_THR(10), ?EVT_NUM(1000), ?EVT_SIZE(10), ?FILE_NUM(2)]},
         {description, "Check whether events for different files are properly aggregated."},
         {config, [{name, small_files_number},
@@ -220,7 +220,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
 emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?EVT_NUM(20)]},
         {description, "Check whether event stream executes handlers when events number "
         "exceeds counter threshold which is equal to the number of events."},
@@ -273,7 +273,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
 subscribe_should_work_for_multiple_sessions(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
-        {success_rate, 90},
+        {success_rate, 100},
         {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(1000), ?EVT_SIZE(1)]},
         {description, "Check whether event stream executes handlers for multiple clients."},
         {config, [{name, small_client_number},
@@ -359,7 +359,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-        initializer:clear_models(Worker, [subscription]),
+        initializer:clear_subscriptions(Worker),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -370,14 +370,14 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, fun
-        (#file_written_subscription{} = Msg, _) -> Self ! Msg, ok;
-        (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
-        (_, _) -> ok
+    test_utils:mock_expect(Workers, communicator, send_to_client, fun
+        (#file_written_subscription{} = Msg, _, _) -> Self ! Msg, ok;
+        (#subscription_cancellation{} = Msg, _, _) -> Self ! Msg, ok;
+        (_, _, _) -> ok
     end),
-    test_utils:mock_new(Workers, od_space),
-    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, space_logic),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
+        {ok, [oneprovider:get_id()]}
     end),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
@@ -389,12 +389,12 @@ init_per_testcase(_Case, Config) ->
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send, fun
-        (_, _) -> ok
+    test_utils:mock_expect(Worker, communicator, send_to_client, fun
+        (_, _, _) -> ok
     end),
-    test_utils:mock_new(Workers, od_space),
-    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, space_logic),
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
+        {ok, [oneprovider:get_id()]}
     end),
     session_setup(Worker, SessId, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
@@ -405,7 +405,7 @@ end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
-    test_utils:mock_unload(Workers, od_space),
+    test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Workers, [communicator]);
 
 end_per_testcase(_Case, Config) ->
@@ -414,7 +414,7 @@ end_per_testcase(_Case, Config) ->
     session_teardown(Worker, SessId),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
-    test_utils:mock_unload(Workers, od_space),
+    test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================
@@ -536,7 +536,7 @@ evt_per_sec(EvtNum, Time) ->
     [event:type()] | {error, timeout}.
 receive_file_written_events(SubId, SessId) ->
     receive_file_written_events(SubId, SessId,
-        fun event_utils:aggregate_file_written_events/2, #{}).
+        fun fslogic_event_handler:aggregate_file_written_events/2, #{}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -574,7 +574,7 @@ receive_file_written_events(SubId, SessId, AggRule, AggEvts) ->
 %%--------------------------------------------------------------------
 -spec flush(Worker :: node(), SubId :: subscription:id(), SessId :: session:id()) -> ok.
 flush(Worker, SubId, SessId) ->
-    ProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
     rpc:call(Worker, event, flush, [#flush_events{
         provider_id = ProviderId,
         subscription_id = SubId

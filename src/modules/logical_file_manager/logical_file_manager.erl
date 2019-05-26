@@ -21,7 +21,7 @@
     try
         F()
     catch
-        _:{badmatch, {error, {not_found, file_meta}}} ->
+        _:{badmatch, {error, not_found}} ->
             {error, ?ENOENT};
         _:{badmatch, Error} ->
             Error;
@@ -30,6 +30,7 @@
             {error, ___Reason}
     end).
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -41,12 +42,16 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2, get_parent/2]).
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, read_dir_plus/4, read_dir_plus/5,
+    get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
+-export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
+-export([schedule_file_replication/3, schedule_file_replication/4,
+    schedule_replica_eviction/4, schedule_replication_by_index/6, schedule_replica_eviction_by_index/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
-    truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
+    silent_read/3, truncate/3, release/1, get_file_distribution/2,
+    create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -110,6 +115,44 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Lists some contents of a directory.
+%% Returns up to Limit of entries, starting with Offset-th entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
+        IsLast :: boolean()} | error_reply().
+ls(SessId, FileKey, Offset, Limit, Token) ->
+    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists some contents of a directory. Returns attributes of files.
+%% Returns up to Limit of entries. Uses token to choose starting entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(), Limit :: integer()) ->
+    {ok, [#file_attr{}]} | logical_file_manager:error_reply().
+read_dir_plus(SessId, FileKey, Offset, Limit) ->
+    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists some contents of a directory. Returns attributes of files.
+%% Returns up to Limit of entries, starting with Offset-th entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
+    {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
+    logical_file_manager:error_reply().
+read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
+    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Gets attribute of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
@@ -165,10 +208,20 @@ cp(SessId, FileEntry, TargetPath) ->
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(session:id(), FileGUID :: fslogic_worker:file_guid()) ->
+-spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
-get_file_path(SessId, FileGUID) ->
-    ?run(fun() -> lfm_files:get_file_path(SessId, FileGUID) end).
+get_file_path(SessId, FileGuid) ->
+    ?run(fun() -> lfm_files:get_file_path(SessId, FileGuid) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns guid of file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_guid(session:id(), fslogic_worker:file_guid_or_path()) ->
+    {ok, fslogic_worker:file_guid()}.
+get_file_guid(SessId, FilePath) ->
+    ?run(fun() -> lfm_files:get_file_guid(SessId, FilePath) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -182,14 +235,139 @@ unlink(SessId, FileEntry, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Replicates file on given provider.
+%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id()) ->
-    ok | error_reply().
-replicate_file(SessId, FileKey, ProviderId) ->
-    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
+-spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
+    TargetProviderId :: oneprovider:id()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_file_replication(SessId, FileKey, TargetProviderId) ->
+    schedule_file_replication(SessId, FileKey, TargetProviderId, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replication to given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
+    TargetProviderId :: oneprovider:id(), transfer:callback()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    % Scheduling and target providers must support given space
+    HasAccess = provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
+
+    case HasAccess of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_file_replication(SessId, FileKey,
+                    TargetProviderId, Callback)
+            end)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replication to given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replication_by_index(session:id(), TargetProviderId :: oneprovider:id(),
+    transfer:callback(), od_space:id(), transfer:index_name(),
+    transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
+schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
+    IndexName, QueryParams
+) ->
+    % Scheduling and target providers must support given space
+    HasAccess = provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
+    IndexSupported = index:is_supported(SpaceId, IndexName, TargetProviderId),
+    case HasAccess and IndexSupported of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_replication_by_index(SessId,
+                    TargetProviderId, Callback, SpaceId, IndexName, QueryParams)
+            end)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replica eviction on given provider, migrates unique data
+%% to provider given as MigrateProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
+    SourceProviderId :: oneprovider:id(), TargetProviderId :: undefined | oneprovider:id()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+
+    SupportedByTarget = case TargetProviderId of
+        undefined -> true;
+        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId)
+    end,
+
+    % Scheduling, source and target providers must support given space
+    HasAccess = SupportedByTarget
+        andalso provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, SourceProviderId),
+
+    case HasAccess of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_replica_eviction(SessId, FileKey,
+                    SourceProviderId, TargetProviderId)
+            end)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replica eviction on given provider, migrates unique data
+%% to provider given as MigrateProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_replica_eviction_by_index(session:id(), oneprovider:id(),
+    undefined | oneprovider:id(), od_space:id(),
+    transfer:index_name(), transfer:query_view_params()) ->
+    {ok, transfer:id()} | error_reply().
+schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProviderId,
+    SpaceId, IndexName, QueryViewParams
+) ->
+    SupportedByTarget = case ReplicatingProviderId of
+        undefined -> true;
+        _ -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ReplicatingProviderId)
+    end,
+
+    % Scheduling, source and target providers must support given space
+    HasAccess = SupportedByTarget
+        andalso provider_logic:supports_space(SpaceId)
+        andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, EvictingProviderId),
+
+    IndexSupported = index:is_supported(SpaceId, IndexName, EvictingProviderId)
+        andalso (
+            (ReplicatingProviderId == undefined)
+            or
+            (index:is_supported(SpaceId, IndexName, ReplicatingProviderId))
+        ),
+
+    case HasAccess and IndexSupported of
+        false ->
+            {error, ?EACCES};
+        true ->
+            ?run(fun() ->
+                lfm_files:schedule_replica_eviction_by_index(SessId,
+                    EvictingProviderId, ReplicatingProviderId, SpaceId,
+                    IndexName, QueryViewParams)
+            end)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -219,7 +397,7 @@ create(SessId, ParentGuid, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_and_open(session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
+    Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
     {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
     | error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->
@@ -285,6 +463,18 @@ read(FileHandle, Offset, MaxSize) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Reads requested part of a file (no events or prefetching).
+%% @end
+%%--------------------------------------------------------------------
+-spec silent_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: handle(), binary()} | error_reply().
+silent_read(FileHandle, Offset, MaxSize) ->
+    ?run(fun() ->
+        lfm_files:silent_read(FileHandle, Offset, MaxSize)
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
@@ -308,7 +498,7 @@ release(FileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, list()} | error_reply().
+    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
 get_file_distribution(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
 

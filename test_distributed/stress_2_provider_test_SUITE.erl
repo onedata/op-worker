@@ -39,7 +39,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 75}, % TODO - check error i proxy test
+            {success_rate, 90}, % TODO - check error i proxy test
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -61,8 +61,11 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
+    ct:print("db_sync_test many_ops_test"),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
+    ct:print("db_sync_test distributed_modification_test"),
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts),
+    ct:print("db_sync_test distributed_delete_test"),
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
 
 %%%===================================================================
@@ -78,7 +81,9 @@ proxy_test1(Config) ->
 proxy_test1_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
+    ct:print("proxy_test1 many_ops_test"),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,2,1}, 0, Dirs, Files),
+    ct:print("proxy_test1 distributed_modification_test"),
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,2,1}, 0).
 
 %%%===================================================================
@@ -94,7 +99,9 @@ proxy_test2(Config) ->
 proxy_test2_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
+    ct:print("proxy_test2 many_ops_test"),
     multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,2,1}, 0, Dirs, Files),
+    ct:print("proxy_test2 distributed_modification_test"),
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,2,1}, 0).
 
 %%%===================================================================
@@ -109,7 +116,6 @@ init_per_testcase(stress_test, Config) ->
     ssl:start(),
     hackney:start(),
     initializer:disable_quota_limit(Config),
-    initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
 
@@ -120,7 +126,6 @@ end_per_testcase(stress_test, Config) ->
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
     ssl:stop();

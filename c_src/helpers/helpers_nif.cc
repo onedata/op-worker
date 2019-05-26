@@ -1,8 +1,7 @@
 #include "../nifpp.h"
+#include "helpers/init.h"
 #include "helpers/storageHelperCreator.h"
-
-#include <asio.hpp>
-#include <asio/executor_work.hpp>
+#include "monitoring/monitoring.h"
 
 #include <chrono>
 #include <map>
@@ -19,6 +18,8 @@
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <folly/executors/IOThreadPoolExecutor.h>
 
 namespace {
 /**
@@ -40,8 +41,8 @@ using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
 struct HelpersNIF {
     struct HelperIOService {
         asio::io_service service;
-        asio::executor_work<asio::io_service::executor_type> work =
-            asio::make_work(service);
+        asio::executor_work_guard<asio::io_service::executor_type> work =
+            asio::make_work_guard(service);
         folly::fbvector<std::thread> workers;
     };
 
@@ -54,11 +55,13 @@ struct HelpersNIF {
         for (const auto &entry :
             std::unordered_map<folly::fbstring, folly::fbstring>(
                 {{CEPH_HELPER_NAME, "ceph_helper_threads_number"},
+                    {CEPHRADOS_HELPER_NAME, "cephrados_helper_threads_number"},
                     {POSIX_HELPER_NAME, "posix_helper_threads_number"},
                     {S3_HELPER_NAME, "s3_helper_threads_number"},
                     {SWIFT_HELPER_NAME, "swift_helper_threads_number"},
-                    {GLUSTERFS_HELPER_NAME,
-                        "glusterfs_helper_threads_number"}})) {
+                    {GLUSTERFS_HELPER_NAME, "glusterfs_helper_threads_number"},
+                    {NULL_DEVICE_HELPER_NAME,
+                        "nulldevice_helper_threads_number"}})) {
             auto threads = std::stoul(args[entry.second].toStdString());
             services.emplace(entry.first, std::make_unique<HelperIOService>());
             auto &service = services[entry.first]->service;
@@ -68,12 +71,17 @@ struct HelpersNIF {
             }
         }
 
+        webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
+            std::stoul(args["webdav_helper_threads_number"].toStdString()));
+
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
+            services[CEPHRADOS_HELPER_NAME]->service,
             services[POSIX_HELPER_NAME]->service,
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
-            services[GLUSTERFS_HELPER_NAME]->service,
+            services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
+            services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
@@ -96,11 +104,13 @@ struct HelpersNIF {
                 worker.join();
             }
         }
+        webDAVExecutor->stop();
     }
 
     bool bufferingEnabled = false;
     std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
         services;
+    std::shared_ptr<folly::IOThreadPoolExecutor> webDAVExecutor;
     std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
 };
 
@@ -244,7 +254,8 @@ std::map<std::error_code, nifpp::str_atom> error_to_atom = {
     {make_sys_error_code(std::errc::too_many_links), "emlink"},
     {make_sys_error_code(std::errc::too_many_symbolic_link_levels), "eloop"},
     {make_sys_error_code(std::errc::value_too_large), "eoverflow"},
-    {make_sys_error_code(std::errc::wrong_protocol_type), "eprototype"}};
+    {make_sys_error_code(std::errc::wrong_protocol_type), "eprototype"},
+    {make_sys_error_code(EKEYEXPIRED), "ekeyexpired"}};
 /** @} */
 
 /**
@@ -414,12 +425,97 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
         });
 }
 
+/**
+ * Configure performance monitoring metrics based on environment
+ * configuration.
+ */
+static void configurePerformanceMonitoring(
+    std::unordered_map<folly::fbstring, folly::fbstring> &args)
+{
+    if (args.find("helpers_performance_monitoring_enabled") != args.end() &&
+        args["helpers_performance_monitoring_enabled"] == "true") {
+        if (args["helpers_performance_monitoring_type"] == "graphite") {
+            auto config = std::make_shared<
+                one::monitoring::GraphiteMonitoringConfiguration>();
+            config->fromGraphiteURL("tcp://" +
+                args["graphite_host"].toStdString() + ":" +
+                args["graphite_port"].toStdString());
+            config->namespacePrefix = args["graphite_prefix"].toStdString();
+            config->reportingPeriod = std::stoul(
+                args["helpers_performance_monitoring_period"].toStdString());
+            if (args["helpers_performance_monitoring_level"] == "full") {
+                config->reportingLevel = cppmetrics::core::ReportingLevel::Full;
+            }
+            else {
+                config->reportingLevel =
+                    cppmetrics::core::ReportingLevel::Basic;
+            }
+
+            // Configure and start performance monitoring threads
+            one::helpers::configureMonitoring(config, true);
+
+            // Initialize the configuration options counter values
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.ceph_helper_thread_count",
+                std::stoul(args["ceph_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.cephrados_helper_thread_count",
+                std::stoul(
+                    args["cephrados_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.posix_helper_thread_count",
+                std::stoul(args["posix_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.s3_helper_thread_count",
+                std::stoul(args["s3_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.swift_helper_thread_count",
+                std::stoul(args["swift_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.glusterfs_helper_thread_count",
+                std::stoul(
+                    args["glusterfs_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.nulldevice_helper_thread_count",
+                std::stoul(
+                    args["nulldevice_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
+                                   "scheduler_helper_thread_count",
+                std::stoul(
+                    args["buffer_scheduler_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_min_size",
+                std::stoul(args["read_buffer_min_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_max_size",
+                std::stoul(args["read_buffer_max_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_min_size",
+                std::stoul(args["write_buffer_min_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_max_size",
+                std::stoul(args["write_buffer_max_size"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.read_buffer_prefetch_duration",
+                std::stoul(
+                    args["read_buffer_prefetch_duration"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.write_buffer_flush_delay",
+                std::stoul(args["write_buffer_flush_delay"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.monitoring_reporting_period",
+                std::stoul(args["helpers_performance_monitoring_period"]
+                               .toStdString()));
+        }
+    }
+}
+
 /*********************************************************************
-*
-*                          WRAPPERS (NIF based)
-*       All functions below are described in helpers_nif.erl
-*
-*********************************************************************/
+ *
+ *                          WRAPPERS (NIF based)
+ *       All functions below are described in helpers_nif.erl
+ *
+ *********************************************************************/
 
 ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -430,6 +526,15 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     auto resource = nifpp::construct_resource<helper_ptr>(helper);
 
     return nifpp::make(env, std::make_tuple(ok, resource));
+}
+
+ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
+{
+    handle_result(ctx,
+        helper->refreshParams(
+            one::helpers::StorageHelperParams::create(helper->name(), args)));
+
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM getattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
@@ -468,9 +573,10 @@ ERL_NIF_TERM mkdir(
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM unlink(NifCTX ctx, helper_ptr helper, folly::fbstring file)
+ERL_NIF_TERM unlink(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const size_t currentSize)
 {
-    handle_result(ctx, helper->unlink(file));
+    handle_result(ctx, helper->unlink(file, currentSize));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -515,10 +621,38 @@ ERL_NIF_TERM chown(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM truncate(
-    NifCTX ctx, helper_ptr helper, folly::fbstring file, const off_t size)
+ERL_NIF_TERM truncate(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const off_t size, const size_t currentSize)
 {
-    handle_result(ctx, helper->truncate(file, size));
+    handle_result(ctx, helper->truncate(file, size, currentSize));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM setxattr(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    folly::fbstring name, folly::fbstring value, const bool create,
+    const bool replace)
+{
+    handle_result(ctx, helper->setxattr(file, name, value, create, replace));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM getxattr(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file, folly::fbstring name)
+{
+    handle_result(ctx, helper->getxattr(file, name));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM removexattr(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file, folly::fbstring name)
+{
+    handle_result(ctx, helper->removexattr(file, name));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM listxattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
+{
+    handle_result(ctx, helper->listxattr(file));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -561,20 +695,54 @@ ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM refresh_helper_params(
+    NifCTX ctx, file_handle_ptr handle, helper_args_t args)
+{
+    handle_result(ctx,
+        handle->refreshHelperParams(one::helpers::StorageHelperParams::create(
+            handle->helper()->name(), args)));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM start_monitoring(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    ONE_MONITORING_COLLECTOR()->start();
+    return nifpp::make(env, std::make_tuple(ok, 1));
+}
+
+ERL_NIF_TERM stop_monitoring(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    ONE_MONITORING_COLLECTOR()->stop();
+    return nifpp::make(env, std::make_tuple(ok, 1));
+}
+
 } // namespace
 
 extern "C" {
 
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
+    one::helpers::init();
+
     auto args =
         nifpp::get<std::unordered_map<folly::fbstring, folly::fbstring>>(
             env, load_info);
+
+    configurePerformanceMonitoring(args);
+
     application = std::make_unique<HelpersNIF>(std::move(args));
 
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
         nifpp::register_resource<file_handle_ptr>(
             env, nullptr, "file_handle_ptr"));
+}
+
+static ERL_NIF_TERM sh_refresh_params(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(refresh_params, env, argv);
 }
 
 static ERL_NIF_TERM sh_readdir(
@@ -654,6 +822,30 @@ static ERL_NIF_TERM sh_truncate(
     return wrap(truncate, env, argv);
 }
 
+static ERL_NIF_TERM sh_setxattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(setxattr, env, argv);
+}
+
+static ERL_NIF_TERM sh_getxattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(getxattr, env, argv);
+}
+
+static ERL_NIF_TERM sh_removexattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(removexattr, env, argv);
+}
+
+static ERL_NIF_TERM sh_listxattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(listxattr, env, argv);
+}
+
 static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(open, env, argv);
@@ -662,6 +854,12 @@ static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 static ERL_NIF_TERM sh_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(read, env, argv);
+}
+
+static ERL_NIF_TERM sh_refresh_helper_params(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(refresh_helper_params, env, argv);
 }
 
 static ERL_NIF_TERM sh_write(
@@ -689,12 +887,18 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
+    {"start_monitoring", 0, start_monitoring},
+    {"stop_monitoring", 0, stop_monitoring},
+    {"refresh_params", 2, sh_refresh_params},
+    {"refresh_helper_params", 2, sh_refresh_helper_params},
     {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
     {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
-    {"unlink", 2, sh_unlink}, {"rmdir", 2, sh_rmdir},
+    {"unlink", 3, sh_unlink}, {"rmdir", 2, sh_rmdir},
     {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
     {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
-    {"truncate", 3, sh_truncate}, {"open", 3, sh_open}, {"read", 3, sh_read},
+    {"truncate", 4, sh_truncate}, {"setxattr", 6, sh_setxattr},
+    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
+    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
     {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
     {"fsync", 2, sh_fsync}};
 

@@ -17,14 +17,18 @@
 
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
-    read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
-    get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
-    write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5,
+    create_and_open/5, unlink/3, open/4, close/2, close_all/1,
+    read/4, silent_read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5,
+    ls/6, read_dir_plus/5, read_dir_plus/6, set_perms/4,
+    update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
+    get_acl/3, set_acl/4, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
-    remove_share/3, remove_share_by_guid/3, resolve_guid/3]).
+    remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
+    schedule_file_replication/4, get_file_distribution/3,
+    schedule_replication_by_index/6, schedule_replica_eviction_by_index/7]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -92,6 +96,26 @@ truncate(Worker, SessId, FileKey, Size) ->
 create(Worker, SessId, FilePath, Mode) ->
     ?EXEC(Worker, logical_file_manager:create(SessId, FilePath, Mode)).
 
+-spec create(node(), session:id(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:posix_permissions()) ->
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+create(Worker, SessId, ParentGuid, Name, Mode) ->
+    ?EXEC(Worker, logical_file_manager:create(SessId, ParentGuid, Name, Mode)).
+
+-spec create_and_open(node(), session:id(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:posix_permissions()) ->
+    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}} |
+    logical_file_manager:error_reply().
+create_and_open(Worker, SessId, ParentGuid, Name, Mode) ->
+    ?EXEC(Worker,
+        case logical_file_manager:create_and_open(SessId, ParentGuid, Name, Mode, rdwr) of
+            {ok, {Guid, Handle}} ->
+                TestHandle = crypto:strong_rand_bytes(10),
+                ets:insert(lfm_handles, {TestHandle, Handle}),
+                {ok, {Guid, TestHandle}};
+            Other -> Other
+        end).
+
 -spec unlink(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | logical_file_manager:error_reply().
 unlink(Worker, SessId, FileKey) ->
@@ -104,7 +128,7 @@ open(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker,
         case logical_file_manager:open(SessId, uuid_to_guid(Worker, FileKey), OpenFlag) of
             {ok, Handle} ->
-                TestHandle = crypto:rand_bytes(10),
+                TestHandle = crypto:strong_rand_bytes(10),
                 ets:insert(lfm_handles, {TestHandle, Handle}),
                 {ok, TestHandle};
             Other -> Other
@@ -116,8 +140,8 @@ close(Worker, TestHandle) ->
     ?EXEC(Worker,
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            logical_file_manager:fsync(Handle),
-            logical_file_manager:release(Handle),
+            ok = logical_file_manager:fsync(Handle),
+            ok = logical_file_manager:release(Handle),
             ets:delete(lfm_handles, TestHandle),
             ok
         end).
@@ -141,6 +165,20 @@ read(Worker, TestHandle, Offset, Size) ->
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
             case logical_file_manager:read(Handle, Offset, Size) of
+                {ok, NewHandle, Res}  ->
+                    ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                    {ok, Res};
+                Other -> Other
+            end
+        end).
+
+-spec silent_read(node(), logical_file_manager:handle(), integer(), integer()) ->
+    {ok, binary()} | logical_file_manager:error_reply().
+silent_read(Worker, TestHandle, Offset, Size) ->
+    ?EXEC(Worker,
+        begin
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            case logical_file_manager:silent_read(Handle, Offset, Size) of
                 {ok, NewHandle, Res}  ->
                     ets:insert(lfm_handles, {TestHandle, NewHandle}),
                     {ok, Res};
@@ -194,10 +232,33 @@ mkdir(Worker, SessId, Path) ->
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path, Mode)).
 
+-spec mkdir(node(), session:id(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:posix_permissions()) ->
+    {ok, DirUuid :: file_meta:uuid()} | logical_file_manager:error_reply().
+mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
+    ?EXEC(Worker, logical_file_manager:mkdir(SessId, ParentGuid, Name, Mode)).
+
 -spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit) ->
     ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
+
+-spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer(), undefined | binary()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], binary(), boolean()} | logical_file_manager:error_reply().
+ls(Worker, SessId, FileKey, Offset, Limit, Token) ->
+    ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
+
+-spec read_dir_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
+    {ok, [#file_attr{}]} | logical_file_manager:error_reply().
+read_dir_plus(Worker, SessId, FileKey, Offset, Limit) ->
+    ?EXEC(Worker, logical_file_manager:read_dir_plus(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
+
+-spec read_dir_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer(), undefined | binary()) ->
+    {ok, [#file_attr{}],  binary(), boolean()} | logical_file_manager:error_reply().
+read_dir_plus(Worker, SessId, FileKey, Offset, Limit, Token) ->
+    ?EXEC(Worker, logical_file_manager:read_dir_plus(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
 
 -spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
@@ -355,6 +416,38 @@ resolve_guid(Worker, SessId, Path) ->
         fun(#guid{guid = Guid}) ->
             {ok, Guid}
         end)).
+
+-spec schedule_file_replica_eviction(node(), session:id(), logical_file_manager:file_key(),
+    ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
+    {ok, transfer:id()} | {error, term()}.
+schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
+    ?EXEC(Worker, logical_file_manager:schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId)).
+
+-spec schedule_file_replication(node(), session:id(), logical_file_manager:file_key(),
+    ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
+schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
+    ?EXEC(Worker, logical_file_manager:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
+
+-spec schedule_replication_by_index(node(), session:id(),
+    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), IndexName :: transfer:index_name(),
+    transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
+schedule_replication_by_index(Worker, SessId, ProviderId, SpaceId, IndexName, QueryViewParams) ->
+    ?EXEC(Worker, logical_file_manager:schedule_replication_by_index(SessId,
+        ProviderId, undefined, SpaceId, IndexName, QueryViewParams)).
+
+-spec schedule_replica_eviction_by_index(node(), session:id(), ProviderId :: oneprovider:id(),
+    MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
+    transfer:index_name(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
+schedule_replica_eviction_by_index(Worker, SessId, ProviderId, MigrationProviderId,
+    SpaceId, IndexName, QueryViewParams
+) ->
+    ?EXEC(Worker, logical_file_manager:schedule_replica_eviction_by_index(
+        SessId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams
+    )).
+
+-spec get_file_distribution(node(), session:id(), logical_file_manager:file_key()) -> {ok, list()}.
+get_file_distribution(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, logical_file_manager:get_file_distribution(SessId, FileKey)).
 
 %%%===================================================================
 %%% Internal functions

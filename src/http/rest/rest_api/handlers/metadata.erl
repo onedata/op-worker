@@ -14,15 +14,14 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+-export([terminate/3, allowed_methods/2, is_authorized/2,
     content_types_provided/2, content_types_accepted/2]).
 
 %% resource functions
@@ -31,13 +30,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -56,7 +48,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
@@ -116,7 +108,7 @@ get_json_internal(Req, State) ->
 
     {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithInherited),
         DefinedMetadataType, FilterList, Inherited),
-    Response = json_utils:encode_map(Meta),
+    Response = json_utils:encode(Meta),
     {Response, ReqWithInherited, StateWithInherited}.
 
 %%--------------------------------------------------------------------
@@ -165,9 +157,9 @@ set_json_internal(Req, State) ->
     {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
     {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
     {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
-    {ok, Body, FinalReq} = cowboy_req:body(ReqWithFilter),
+    {ok, Body, FinalReq} = cowboy_req:read_body(ReqWithFilter),
 
-    Json = json_utils:decode_map(Body),
+    Json = json_utils:decode(Body),
     #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType,
         filter := Filter} = StateWithFilter,
     DefinedMetadataType = validate_metadata_type(MetadataType, json),
@@ -195,7 +187,7 @@ set_rdf(Req, State) ->
 -spec set_rdf_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 set_rdf_internal(Req, State) ->
     {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
-    {ok, Rdf, FinalReq} = cowboy_req:body(ReqWithMetadataType),
+    {ok, Rdf, FinalReq} = cowboy_req:read_body(ReqWithMetadataType),
 
     #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
     DefinedMetadataType = validate_metadata_type(MetadataType, rdf),

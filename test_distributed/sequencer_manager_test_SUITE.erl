@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -73,7 +73,7 @@ sequencer_manager_should_update_session_on_init(Config) ->
 sequencer_manager_should_update_session_on_terminate(Config) ->
     stop_sequencer_manager(?config(sequencer_manager, Config)),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual({error, {not_found, missing}}, rpc:call(
+    ?assertEqual({error, not_found}, rpc:call(
         Worker, session, get_sequencer_manager, [?config(session_id, Config)]
     ), 10).
 
@@ -309,6 +309,6 @@ mock_sequencer_stream_sup(Worker) ->
 mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send, fun
+    test_utils:mock_expect(Worker, communicator, send_to_client, fun
         (Msg, _, _) -> Self ! Msg, ok
     end).

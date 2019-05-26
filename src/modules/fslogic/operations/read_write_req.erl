@@ -16,11 +16,11 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([read/7, write/6]).
+-export([read/5, write/4]).
 
 %%%===================================================================
 %%% API functions
@@ -32,14 +32,10 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec read(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
-    StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
-read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
-    #fuse_response{status = #status{code = ?OK}} =
-        sync_req:synchronize_block(UserCtx, FileCtx,
-            #file_block{offset = Offset, size = Size}, false),
-    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, read),
+read(UserCtx, FileCtx, HandleId, Offset, Size) ->
+    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
     #proxyio_response{
         status = #status{code = ?OK},
@@ -52,19 +48,19 @@ read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
-    FileId :: helpers:file(), ByteSequences :: [#byte_sequence{}]) ->
-    fslogic_worker:proxyio_response().
-write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
-    {ok, Handle} = get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, write),
-    Wrote =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
-            Acc + write_all(Handle, Offset, Data, 0)
-        end, 0, ByteSequences),
+    HandleId :: storage_file_manager:handle_id(),
+    ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
+write(UserCtx, FileCtx, HandleId, ByteSequences) ->
+    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId),
+    {Written, _} =
+        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+            {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
+            {Acc + WrittenNow, NewHandle}
+        end, {0, Handle0}, ByteSequences),
 
     #proxyio_response{
         status = #status{code = ?OK},
-        proxyio_response = #remote_write_result{wrote = Wrote}
+        proxyio_response = #remote_write_result{wrote = Written}
     }.
 
 %%%===================================================================
@@ -77,21 +73,36 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
 %% Returns handle by either retrieving it from session or opening file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
-    StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
+-spec get_handle(user_ctx:ctx(), file_ctx:ctx(),
+    HandleId :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
-get_handle(UserCtx, FileCtx, undefined, StorageId, FileId, OpenFlag) ->
+get_handle(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, Storage} = storage:get(StorageId),
-    ShareId = file_ctx:get_share_id_const(FileCtx),
-    SFMHandle =
-        storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, ShareId),
-    storage_file_manager:open(SFMHandle, OpenFlag);
-get_handle(UserCtx, _FileCtx, HandleId, _StorageId, _FileId, _OpenFlag) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    session:get_handle(SessId, HandleId).
+    case session_handles:get(SessId, HandleId) of
+        {error, not_found} ->
+            ?warning("Hanlde not found, session id: ~p, handle id: ~p",
+                [SessId, HandleId]),
+            create_handle(UserCtx, FileCtx, HandleId),
+            session_handles:get(SessId, HandleId);
+        Other ->
+            Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates handle to file.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
+    HandleId :: storage_file_manager:handle_id()) -> ok.
+create_handle(UserCtx, FileCtx, HandleId) ->
+    Node = consistent_hasing:get_node(file_ctx:get_uuid_const(FileCtx)),
+    #fuse_response{
+        status = #status{code = ?OK}
+    } = rpc:call(Node, file_req, open_file_insecure,
+        [UserCtx, FileCtx, rdwr, HandleId]),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -101,10 +112,11 @@ get_handle(UserCtx, _FileCtx, HandleId, _StorageId, _FileId, _OpenFlag) ->
 %%--------------------------------------------------------------------
 -spec write_all(Handle :: storage_file_manager:handle(),
     Offset :: non_neg_integer(), Data :: binary(),
-    Wrote :: non_neg_integer()) -> non_neg_integer().
-write_all(_Handle, _Offset, <<>>, Wrote) -> Wrote;
-write_all(Handle, Offset, Data, Wrote) ->
-    {ok, WroteNow} = storage_file_manager:write(Handle, Offset, Data),
-    write_all(Handle, Offset + WroteNow,
-              binary_part(Data, {byte_size(Data), WroteNow - byte_size(Data)}),
-              Wrote + WroteNow).
+    Wrote :: non_neg_integer()) -> {non_neg_integer(), storage_file_manager:handle()}.
+write_all(Handle, _Offset, <<>>, Written) -> {Written, Handle};
+write_all(Handle, Offset, Data, Written) ->
+    {ok, WrittenNow} = storage_file_manager:write(Handle, Offset, Data),
+    Handle2 = storage_file_manager:increase_size(Handle, WrittenNow),
+    write_all(Handle2, Offset + WrittenNow,
+              binary_part(Data, {byte_size(Data), WrittenNow - byte_size(Data)}),
+              Written + WrittenNow).

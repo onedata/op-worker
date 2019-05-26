@@ -13,9 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/common_messages.hrl").
--include("modules/dbsync/common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -34,27 +33,34 @@
     ok | {error, term()}.
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     value = #file_location{
-        uuid = Uuid,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        file_id = FileId
     }}
 ) ->
-    file_location:critical_section(Uuid,
-        fun() ->
-            case oneprovider:get_provider_id() =/= ProviderId of
-                true ->
-                    {[LocalLocation], FileCtx2} =
-                        file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)), %todo VFS-2813 support multi location
-                    update_local_location_replica(FileCtx2, LocalLocation, ChangedLocationDoc);
-                false ->
-                    ok
-            end
-        end).
+    replica_synchronizer:apply(FileCtx, fun() ->
+        case oneprovider:is_self(ProviderId) of
+            false ->
+                % set file_id as the same as for remote file, because
+                % computing it requires parent links which may be not here yet.
+                FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
+                FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
+                case file_ctx:get_local_file_location_doc(FileCtx3) of
+                    {undefined, FileCtx4} ->
+                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
+                    {LocalLocation, FileCtx4} ->
+                        update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
+                end;
+            true ->
+                ok
+        end
+    end).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Update local location replica according to external changes.
 %% @end
@@ -77,6 +83,7 @@ update_local_location_replica(FileCtx,
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Update local location replica according to external changes, which are
 %% strictly greater in version.
@@ -86,6 +93,7 @@ update_local_location_replica(FileCtx,
     file_location:doc()) -> ok.
 update_outdated_local_location_replica(FileCtx,
     LocalDoc = #document{value = #file_location{
+        size = OldSize,
         version_vector = VV1
     }},
     ExternalDoc = #document{value = #file_location{
@@ -98,15 +106,19 @@ update_outdated_local_location_replica(FileCtx,
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = replica_changes:get_changes(ExternalDoc, Diff),
-    case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize) of
-        {deleted, _FileCtx2} ->
+    case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize, []) of
+        {deleted, _FileCtx2, _} ->
             ok;
-        {NewDoc, FileCtx2} ->
-            notify_block_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc),
-            notify_size_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc)
+        {NewDoc, FileCtx2, ChangedBlocks} ->
+            {ok, FileCtx3} = maybe_truncate_file_on_storage(FileCtx2, OldSize, NewSize),
+            {Location, FileCtx4} = file_ctx:get_file_location_with_filled_gaps(FileCtx3, ChangedBlocks),
+            {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
+            ok = fslogic_cache:cache_event([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
+            notify_size_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc)
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Reconcile conflicted local replica according to external changes.
 %% @end
@@ -117,17 +129,17 @@ reconcile_replicas(FileCtx,
         value = #file_location{
             uuid = Uuid,
             version_vector = VV1,
-            blocks = LocalBlocks,
             size = LocalSize
-        }},
+        } = LocalFL},
     ExternalDoc = #document{
         value = #file_location{
             version_vector = VV2,
             size = ExternalSize
         }}
 ) ->
+    LocalBlocks = fslogic_location_cache:get_blocks(LocalDoc),
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    ?info("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
+    ?debug("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
     {ExternalChanges, ExternalShrink, ExternalRename} =
@@ -205,13 +217,11 @@ reconcile_replicas(FileCtx,
             end
     end,
 
-    NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
-    NewDoc2 = NewDoc#document{
-        value = NewDoc#document.value#file_location{
-            blocks = TruncatedNewBlocks,
+    NewDoc = version_vector:merge_location_versions(
+        LocalDoc#document{value = LocalFL#file_location{
             size = NewSize
-        }
-    },
+        }}, ExternalDoc),
+    NewDoc2 = fslogic_location_cache:set_blocks(NewDoc, TruncatedNewBlocks),
 
     RenameResult = case Rename of
         skip ->
@@ -224,11 +234,11 @@ reconcile_replicas(FileCtx,
         {deleted, _} ->
             ok;
         {skipped, FileCtx2} ->
-            {ok, _} = file_location:save(NewDoc2),
+            {ok, _} = fslogic_location_cache:save_location(NewDoc2),
             notify_block_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2),
             notify_size_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
-            {ok, _} = file_location:save(RenamedDoc),
+            {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
             RenamedFileCtx =
                 file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId)),
             files_to_chown:chown_file(RenamedFileCtx),
@@ -237,6 +247,7 @@ reconcile_replicas(FileCtx,
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Notify clients if blocks has changed.
 %% @end
@@ -244,12 +255,16 @@ reconcile_replicas(FileCtx,
 -spec notify_block_change_if_necessary(file_ctx:ctx(), file_location:doc(),
     file_location:doc()) -> ok.
 %%notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}}, %todo VFS-2132
+%% %TODO VFS-4412 use fslogic_blocks to get blocks from document
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(FileCtx, _, _) ->
-    ok = fslogic_event_emitter:emit_file_location_changed(FileCtx, []).
+    {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx),
+    {Offset, Size} = fslogic_location_cache:get_blocks_range(Location),
+    ok = fslogic_cache:cache_event([], {Location, Offset, Size}).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Notify clients if file size has changed.
 %% @end
@@ -263,3 +278,30 @@ notify_size_change_if_necessary(_FileCtx,
     ok;
 notify_size_change_if_necessary(FileCtx, _, _) ->
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Truncates file on storage if its size has decreased and if storage
+%% is not synced.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_truncate_file_on_storage(file_ctx:ctx(), non_neg_integer(),
+    non_neg_integer()) -> {ok, file_ctx:ctx()}.
+maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize ->
+    {IsImportOn, FileCtx2} = file_ctx:is_import_on(FileCtx),
+    case IsImportOn of
+        true ->
+            {ok, FileCtx2};
+        false ->
+            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2),
+            case storage_file_manager:open(SFMHandle, write) of
+                {ok, Handle} ->
+                    ok = storage_file_manager:truncate(Handle, NewSize, OldSize);
+                {error, ?ENOENT} ->
+                    ok
+            end,
+            {ok, FileCtx3}
+    end;
+maybe_truncate_file_on_storage(FileCtx, _OldSize, _NewSize) ->
+    {ok, FileCtx}.

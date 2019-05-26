@@ -17,6 +17,33 @@
 %% API
 -export([top_level_routing/0]).
 
+-define(HANDLERS, [
+    attributes,
+    configuration,
+    changes,
+    files,
+    index_by_name,
+    index_collection,
+    index_reduce,
+    metadata,
+    onedata_metrics,
+    query_index,
+    replicas,
+    replicas_index,
+    spaces,
+    space_by_id,
+    shares_by_id,
+    transfers,
+    transfer_by_id,
+    transfers_mock,
+    cdmi_capabilities_handler,
+    cdmi_container_capabilities_handler,
+    cdmi_container_handler,
+    cdmi_dataobject_capabilities_handler,
+    cdmi_object_handler,
+    cdmi_objectid_handler
+]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -29,6 +56,10 @@
 %%--------------------------------------------------------------------
 -spec top_level_routing() -> list().
 top_level_routing() ->
+    % Handler modules must be loaded to ensure proper working of
+    % erlang:function_exported used to check if given handler implements
+    % optional callback; otherwise it will always return false
+    lists:foreach(fun(Module) -> code:ensure_loaded(Module) end, ?HANDLERS),
     {ok, Plugins} = application:get_env(?APP_NAME, protocol_plugins),
     PluginRoutes = [Plugin:routes() || Plugin <- Plugins],
     FlattenPluginRoutes = lists:flatten(PluginRoutes),

@@ -14,6 +14,9 @@
 
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
@@ -29,13 +32,18 @@
 %% API
 -export([malformed_request/2, parse_path/2,
     parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
-    parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
+    parse_provider_id/2, parse_migration_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
-    parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
+    parse_transfer_state/2, parse_page_token/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
     parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2,
-    parse_spatial/2, parse_start_range/2, parse_end_range/2]).
+    parse_spatial/2, parse_spatial/3, parse_start_range/2, parse_end_range/2,
+
+    parse_index_name/2, parse_update_min_changes/2,
+    parse_replica_update_min_changes/2,
+    parse_index_providers/2, parse_index_providers/3
+]).
 
 %% TODO VFS-2574 Make validation of result map
 -type parse_result() :: maps:map().
@@ -60,12 +68,11 @@ malformed_request(Req, State) ->
 -spec parse_path(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_path(Req, State) ->
-    {Path, NewReq} = cowboy_req:path_info(Req),
-    case Path of
+    case cowboy_req:path_info(Req) of
         undefined ->
             throw(?ERROR_NOT_FOUND);
-        _ ->
-            {State#{path => filename:join([<<"/">> | Path])}, NewReq}
+        Path ->
+            {State#{path => filename:join([<<"/">> | Path])}, Req}
     end.
 
 %%--------------------------------------------------------------------
@@ -76,8 +83,7 @@ parse_path(Req, State) ->
 -spec parse_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_id(Req, State) ->
-    {Id, NewReq} = cowboy_req:binding(id, Req),
-    {State#{id => Id}, NewReq}.
+    {State#{id => cowboy_req:binding(id, Req)}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -87,10 +93,9 @@ parse_id(Req, State) ->
 -spec parse_objectid(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_objectid(Req, State) ->
-    {Id, NewReq} = cowboy_req:binding(id, Req),
-    case catch cdmi_id:objectid_to_guid(Id) of
+    case catch cdmi_id:objectid_to_guid(cowboy_req:binding(id, Req)) of
         {ok, Guid} ->
-            {State#{id => Guid}, NewReq};
+            {State#{id => Guid}, Req};
         _Error ->
             throw(?ERROR_INVALID_OBJECTID)
     end.
@@ -103,8 +108,7 @@ parse_objectid(Req, State) ->
 -spec parse_user_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_user_id(Req, State) ->
-    {Id, NewReq} = cowboy_req:binding(uid, Req),
-    {State#{user_id => Id}, NewReq}.
+    {State#{user_id => cowboy_req:binding(uid, Req)}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,7 +118,7 @@ parse_user_id(Req, State) ->
 -spec parse_extended(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_extended(Req, State) ->
-    {Extended, NewReq} = cowboy_req:qs_val(<<"extended">>, Req, ?DEFAULT_EXTENDED),
+    {Extended, NewReq} = qs_val(<<"extended">>, Req, ?DEFAULT_EXTENDED),
     case Extended of
         <<"true">> ->
             {State#{extended => true}, NewReq};
@@ -132,7 +136,7 @@ parse_extended(Req, State) ->
 -spec parse_attribute(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_attribute(Req, State = #{extended := true}) ->
-    {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
+    {Attribute, NewReq} = qs_val(<<"attribute">>, Req),
     case Attribute =:= undefined orelse is_binary(Attribute) of
         true ->
             {State#{attribute => Attribute}, NewReq};
@@ -140,7 +144,7 @@ parse_attribute(Req, State = #{extended := true}) ->
             throw(?ERROR_INVALID_ATTRIBUTE_NAME)
     end;
 parse_attribute(Req, State) ->
-    {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
+    {Attribute, NewReq} = qs_val(<<"attribute">>, Req),
     {State#{attribute => Attribute}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -151,9 +155,9 @@ parse_attribute(Req, State) ->
 -spec parse_attribute_body(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_attribute_body(Req, State = #{extended := Extended}) ->
-    {ok, Body, Req2} = cowboy_req:body(Req),
+    {ok, Body, Req2} = cowboy_req:read_body(Req),
 
-    Json = json_utils:decode_map(Body),
+    Json = json_utils:decode(Body),
     case {
         maps:to_list(Json),
         Extended
@@ -163,8 +167,8 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
                 Mode ->
                     {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
             catch
-               _:_ ->
-                   throw(?ERROR_INVALID_MODE)
+                _:_ ->
+                    throw(?ERROR_INVALID_MODE)
             end;
         {[{_Attr, _Value}], false} ->
             throw(?ERROR_INVALID_ATTRIBUTE);
@@ -184,8 +188,19 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
 -spec parse_provider_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_provider_id(Req, State) ->
-    {ProviderId, NewReq} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_provider_id()),
+    {ProviderId, NewReq} = qs_val(<<"provider_id">>, Req, oneprovider:get_id()),
     {State#{provider_id => ProviderId}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's migration_provider_id parameter and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_migration_provider_id(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_migration_provider_id(Req, State) ->
+    {ProviderId, NewReq} = qs_val(<<"migration_provider_id">>, Req, undefined),
+    {State#{migration_provider_id => ProviderId}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -195,14 +210,14 @@ parse_provider_id(Req, State) ->
 -spec parse_callback(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_callback(Req, State) ->
-    {ok, Body, NewReq} = cowboy_req:body(Req),
+    {ok, Body, NewReq} = cowboy_req:read_body(Req),
 
     Callback =
         case Body of
             <<"">> ->
                 undefined;
             _ ->
-                Json = json_utils:decode_map(Body),
+                Json = json_utils:decode(Body),
                 maps:get(<<"url">>, Json, undefined)
         end,
     {State#{callback => Callback}, NewReq}.
@@ -214,15 +229,26 @@ parse_callback(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_space_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_space_id(Req, State = #{auth := Auth}) ->
-    {Id, NewReq} = cowboy_req:binding(sid, Req),
-    {ok, UserId} = session:get_user_id(Auth),
-    case od_space:get(Id, UserId) of
-        {ok, _} ->
-            {State#{space_id => Id}, NewReq};
-        {error, {not_found, od_space}} ->
+parse_space_id(Req, State = #{auth := SessionId}) ->
+    Id = cowboy_req:binding(sid, Req),
+    {ok, UserId} = session:get_user_id(SessionId),
+    case user_logic:has_eff_space(SessionId, UserId, Id) of
+        true ->
+            {State#{space_id => Id}, Req};
+        false ->
             throw(?ERROR_SPACE_NOT_FOUND)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's index name and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_name(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_name(Req, State) ->
+    Name = cowboy_req:binding(index_name, Req),
+    {State#{index_name => Name}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -232,7 +258,7 @@ parse_space_id(Req, State = #{auth := Auth}) ->
 -spec parse_timeout(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_timeout(Req, State) ->
-    {RawTimeout, NewReq} = cowboy_req:qs_val(<<"timeout">>, Req, ?DEFAULT_TIMEOUT),
+    {RawTimeout, NewReq} = qs_val(<<"timeout">>, Req, ?DEFAULT_TIMEOUT),
     case RawTimeout of
         <<"infinity">> ->
             {State#{timeout => infinity}, NewReq};
@@ -254,10 +280,10 @@ parse_timeout(Req, State) ->
 -spec parse_last_seq(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_last_seq(Req, #{space_id := SpaceId} = State) ->
-    {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
+    {RawLastSeq, NewReq} = qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
         <<"now">> ->
-            LastSeq = dbsync_state2:get_seq(SpaceId, oneprovider:get_provider_id()),
+            LastSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
             {State#{last_seq => LastSeq}, NewReq};
         Number ->
             try binary_to_integer(Number) of
@@ -277,7 +303,7 @@ parse_last_seq(Req, #{space_id := SpaceId} = State) ->
 -spec parse_offset(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_offset(Req, State) ->
-    {RawOffset, NewReq} = cowboy_req:qs_val(<<"offset">>, Req, ?DEFAULT_OFFSET),
+    {RawOffset, NewReq} = qs_val(<<"offset">>, Req, ?DEFAULT_OFFSET),
     try binary_to_integer(RawOffset) of
         Offset ->
             {State#{offset => Offset}, NewReq}
@@ -294,19 +320,23 @@ parse_offset(Req, State) ->
 -spec parse_dir_limit(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_dir_limit(Req, State) ->
-    {RawLimit, NewReq} = cowboy_req:qs_val(<<"limit">>, Req),
+    {RawLimit, NewReq} = qs_val(<<"limit">>, Req),
     case RawLimit of
         undefined ->
             {State#{limit => undefined}, NewReq};
         _ ->
-            try binary_to_integer(RawLimit) of
-                Limit ->
-                    case Limit > ?MAX_LIMIT of
-                        true ->
-                            throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT));
-                        false ->
-                            {State#{limit => Limit}, NewReq}
-                    end
+            try
+                Limit = binary_to_integer(RawLimit),
+                case Limit > 0 of
+                    true -> ok;
+                    false -> throw(?ERROR_INVALID_LIMIT)
+                end,
+                case Limit < ?MAX_LIMIT of
+                    true ->
+                        {State#{limit => Limit}, NewReq};
+                    false ->
+                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
+                end
             catch
                 _:_ ->
                     throw(?ERROR_INVALID_LIMIT)
@@ -315,14 +345,28 @@ parse_dir_limit(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's limit and adds it to State.
+%% Retrieves request's transfer state param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_status(cowboy_req:req(), maps:map()) ->
+-spec parse_transfer_state(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
-parse_status(Req, State) ->
-    {Status, NewReq} = cowboy_req:qs_val(<<"status">>, Req),
-    {State#{status => Status}, NewReq}.
+parse_transfer_state(Req, State) ->
+    {TransferState, NewReq} = qs_val(<<"state">>, Req, <<"ongoing">>),
+    case lists:member(TransferState, [<<"waiting">>, <<"ongoing">>, <<"ended">>]) of
+        true -> {State#{transfer_state => TransferState}, NewReq};
+        _ -> throw(?ERROR_INVALID_STATUS)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's status and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_page_token(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_page_token(Req, State) ->
+    {PageToken, NewReq} = qs_val(<<"page_token">>, Req, <<"null">>),
+    {State#{page_token => PageToken}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -332,7 +376,7 @@ parse_status(Req, State) ->
 -spec parse_metadata_type(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_metadata_type(Req, State) ->
-    {MetadataType, NewReq} = cowboy_req:qs_val(<<"metadata_type">>, Req),
+    {MetadataType, NewReq} = qs_val(<<"metadata_type">>, Req),
     case lists:member(MetadataType, ?ALLOWED_METADATA_TYPES) of
         true ->
             case MetadataType of
@@ -353,8 +397,9 @@ parse_metadata_type(Req, State) ->
 -spec parse_name(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_name(Req, State) ->
-    {Name, NewReq} = cowboy_req:qs_val(<<"name">>, Req),
-    {State#{name => Name}, NewReq}.
+    {ok, Body, NewReq} = cowboy_req:read_body(Req),
+    JsonMap = json_utils:decode(Body),
+    {State#{name => maps:get(<<"name">>, JsonMap, undefined)}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -364,7 +409,7 @@ parse_name(Req, State) ->
 -spec parse_query_space_id(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_query_space_id(Req, State) ->
-    {SpaceId, NewReq} = cowboy_req:qs_val(<<"space_id">>, Req),
+    {SpaceId, NewReq} = qs_val(<<"space_id">>, Req),
     {State#{space_id => SpaceId}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -375,25 +420,37 @@ parse_query_space_id(Req, State) ->
 -spec parse_function(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_function(Req, State) ->
-    {ok, Body, NewReq} = cowboy_req:body(Req),
+    {ok, Body, NewReq} = cowboy_req:read_body(Req),
     {State#{function => Body}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv parse_spatial(Req, State, ?DEFAULT_SPATIAL)
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_spatial(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_spatial(Req, State) ->
+    parse_spatial(Req, State, ?DEFAULT_SPATIAL).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves request's spatial param and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_spatial(cowboy_req:req(), maps:map()) ->
+-spec parse_spatial(cowboy_req:req(), maps:map(), term()) ->
     {parse_result(), cowboy_req:req()}.
-parse_spatial(Req, State) ->
-    {Spatial, NewReq} = cowboy_req:qs_val(<<"spatial">>, Req, ?DEFAULT_SPATIAL),
+parse_spatial(Req, State, DefaultValue) ->
+    {Spatial, NewReq} = qs_val(<<"spatial">>, Req, DefaultValue),
     case Spatial of
         <<"true">> ->
             {State#{spatial => true}, NewReq};
         <<"false">> ->
             {State#{spatial => false}, NewReq};
+        DefaultValue ->
+            {State#{spatial => DefaultValue}, NewReq};
         _ ->
-            throw(?ERROR_INVALID_EXTENDED_FLAG)
+            throw(?ERROR_INVALID_SPATIAL_FLAG)
     end.
 
 %%--------------------------------------------------------------------
@@ -404,7 +461,7 @@ parse_spatial(Req, State) ->
 -spec parse_bbox(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_bbox(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"bbox">>, Req),
+    {Val, NewReq} = qs_val(<<"bbox">>, Req),
     try
         case Val of
             undefined ->
@@ -417,7 +474,7 @@ parse_bbox(Req, State) ->
                 true = is_float(catch binary_to_float(N)) orelse is_integer(catch binary_to_integer(N))
         end
     catch
-        _:_  ->
+        _:_ ->
             throw(?ERROR_INVALID_BBOX)
     end,
     {State#{bbox => Val}, NewReq}.
@@ -430,7 +487,7 @@ parse_bbox(Req, State) ->
 -spec parse_descending(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_descending(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"descending">>, Req),
+    {Val, NewReq} = qs_val(<<"descending">>, Req),
     {State#{descending => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -441,7 +498,7 @@ parse_descending(Req, State) ->
 -spec parse_endkey(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_endkey(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"endkey">>, Req),
+    {Val, NewReq} = qs_val(<<"endkey">>, Req),
     {State#{endkey => Val}, NewReq}.
 
 
@@ -453,7 +510,7 @@ parse_endkey(Req, State) ->
 -spec parse_inclusive_end(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_inclusive_end(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"inclusive_end">>, Req),
+    {Val, NewReq} = qs_val(<<"inclusive_end">>, Req),
     {State#{inclusive_end => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -464,7 +521,7 @@ parse_inclusive_end(Req, State) ->
 -spec parse_key(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_key(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"key">>, Req),
+    {Val, NewReq} = qs_val(<<"key">>, Req),
     {State#{key => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -475,7 +532,7 @@ parse_key(Req, State) ->
 -spec parse_keys(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_keys(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"keys">>, Req),
+    {Val, NewReq} = qs_val(<<"keys">>, Req),
     {State#{keys => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -486,7 +543,7 @@ parse_keys(Req, State) ->
 -spec parse_limit(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_limit(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"limit">>, Req),
+    {Val, NewReq} = qs_val(<<"limit">>, Req),
     {State#{limit => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -497,7 +554,7 @@ parse_limit(Req, State) ->
 -spec parse_skip(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_skip(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"skip">>, Req),
+    {Val, NewReq} = qs_val(<<"skip">>, Req),
     {State#{skip => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -508,7 +565,7 @@ parse_skip(Req, State) ->
 -spec parse_stale(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_stale(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"stale">>, Req),
+    {Val, NewReq} = qs_val(<<"stale">>, Req),
     {State#{stale => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -519,7 +576,7 @@ parse_stale(Req, State) ->
 -spec parse_startkey(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_startkey(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"startkey">>, Req),
+    {Val, NewReq} = qs_val(<<"startkey">>, Req),
     {State#{startkey => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -530,7 +587,7 @@ parse_startkey(Req, State) ->
 -spec parse_start_range(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_start_range(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"start_range">>, Req),
+    {Val, NewReq} = qs_val(<<"start_range">>, Req),
     {State#{start_range => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -541,7 +598,7 @@ parse_start_range(Req, State) ->
 -spec parse_end_range(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_end_range(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"end_range">>, Req),
+    {Val, NewReq} = qs_val(<<"end_range">>, Req),
     {State#{end_range => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -552,7 +609,7 @@ parse_end_range(Req, State) ->
 -spec parse_filter(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_filter(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"filter">>, Req),
+    {Val, NewReq} = qs_val(<<"filter">>, Req),
     {State#{filter => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -563,7 +620,7 @@ parse_filter(Req, State) ->
 -spec parse_filter_type(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_filter_type(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"filter_type">>, Req),
+    {Val, NewReq} = qs_val(<<"filter_type">>, Req),
     {State#{filter_type => Val}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -574,7 +631,7 @@ parse_filter_type(Req, State) ->
 -spec parse_inherited(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_inherited(Req, State) ->
-    {Inherited, NewReq} = cowboy_req:qs_val(<<"inherited">>, Req, ?DEFAULT_EXTENDED),
+    {Inherited, NewReq} = qs_val(<<"inherited">>, Req, ?DEFAULT_EXTENDED),
     case Inherited of
         <<"true">> ->
             {State#{inherited => true}, NewReq};
@@ -584,6 +641,109 @@ parse_inherited(Req, State) ->
             throw(?ERROR_INVALID_INHERITED_FLAG)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's update min changes param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_update_min_changes(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_update_min_changes(Req, State) ->
+    {Val, NewReq} = qs_val(<<"update_min_changes">>, Req),
+    {State#{update_min_changes => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's replica update min changes param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_replica_update_min_changes(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_replica_update_min_changes(Req, State) ->
+    {Val, NewReq} = qs_val(<<"replica_update_min_changes">>, Req),
+    {State#{replica_update_min_changes => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv parse_index_providers(Req, State, [oneprovider:get_id()])
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State) ->
+    parse_index_providers(Req, State, [oneprovider:get_id()]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's providers param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_index_providers(cowboy_req:req(), maps:map(), term()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_index_providers(Req, State, DefaultValue) ->
+    {RawProviders, NewReq} = qs_val(<<"providers[]">>, Req),
+    Providers = case RawProviders of
+        undefined ->
+            DefaultValue;
+        _ when is_binary(RawProviders) ->
+            [RawProviders];
+        _ ->
+            RawProviders
+    end,
+    {State#{providers => Providers}, NewReq}.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves qs param.
+%% @end
+%%--------------------------------------------------------------------
+-spec qs_val(Name :: binary(), Req :: cowboy_req:req()) ->
+    {binary() | undefined, cowboy_req:req()}.
+qs_val(Name, Req) ->
+    qs_val(Name, Req, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves qs param and cache parsed params.
+%% @end
+%%--------------------------------------------------------------------
+-spec qs_val(Name :: binary(), Req :: cowboy_req:req(), Default :: any()) ->
+    {any(), cowboy_req:req()}.
+qs_val(Name, Req, Default) ->
+    case maps:get('_params', Req, undefined) of
+        undefined ->
+            Params = parse_qs(Req),
+            {maps:get(Name, Params, Default), Req#{'_params' => Params}};
+        Map ->
+            {maps:get(Name, Map, Default), Req}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parse query string.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_qs(cowboy_req:req()) -> any().
+parse_qs(Req) ->
+    Params = lists:foldl(fun({Key, Val}, AccMap) ->
+        case maps:get(Key, AccMap, undefined) of
+            undefined ->
+                AccMap#{Key => Val};
+            OldVal when is_list(OldVal) ->
+                AccMap#{Key => [Val | OldVal]};
+            OldVal ->
+                AccMap#{Key => [Val, OldVal]}
+        end
+    end, #{}, cowboy_req:parse_qs(Req)),
+    maps:fold(fun
+        (K, V, AccIn) when is_list(V) ->
+            AccIn#{K => lists:reverse(V)};
+        (_K, _V, AccIn) ->
+            AccIn
+    end, Params, Params).
+
+

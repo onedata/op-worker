@@ -13,9 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("http/http_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -31,27 +30,14 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {ok, Auth} ->
             {true, Req, State#{auth => Auth}};
-        {error, {not_found, _}} ->
-            GrUrl = oz_plugin:get_oz_url(),
-            ProviderId = oneprovider:get_provider_id(),
-            {_, NewReq2} = cowboy_req:host(Req),
-            {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
-
-            {ok, NewReq4} = cowboy_req:reply(
-                307,
-                [
-                    {<<"location">>, <<(list_to_binary(GrUrl))/binary,
-                        "/user/providers/", ProviderId/binary, "/auth_proxy?ref=https://", Url/binary>>}
-                ],
-                <<"">>,
-                NewReq3
-            ),
-            {halt, NewReq4, State};
+        {error, not_found} ->
+            NewReq = cowboy_req:reply(401, Req),
+            {stop, NewReq, State};
         {error, Error} ->
             ?debug("Authentication error ~p", [Error]),
             {{false, <<"authentication_error">>}, Req, State}
@@ -60,10 +46,10 @@ is_authorized(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user based on request headers or certificate.
+%% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Req :: req()) -> {ok, session:id()} | {error, term()}.
+-spec authenticate(req()) -> {ok, session:id()} | {error, term()}.
 authenticate(Req) ->
     case resolve_auth(Req) of
         {error, Reason} ->
@@ -83,66 +69,44 @@ authenticate(Req) ->
             end
     end.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Resolves authorization carried by request (if any). Types of authorization
-%% supported:
-%% - macaroon
-%% - token
-%% - basic auth
-%% - certificate
+%% Resolves authorization carried by request (if any).
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(Req :: req()) -> user_identity:credentials() | {error, term()}.
+-spec resolve_auth(req()) -> user_identity:credentials() | {error, term()}.
 resolve_auth(Req) ->
-    resolve_auth(macaroon, Req).
+    case parse_macaroon_from_header(Req) of
+        undefined -> {error, not_found};
+        Macaroon -> #macaroon_auth{macaroon = Macaroon}
+    end.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Resolves authorization carried by request (if any). Tries all possible types
-%% of authorization, starting with macaroon.
-%% Types of authorization supported:
-%% - macaroon
-%% - token
-%% - basic auth
-%% - certificate
+%% Parses macaroon from request headers, accepted headers:
+%%  * Macaroon
+%%  * X-Auth-Token
+%%  * Bearer Authentication
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(Type :: macaroon | token | basic | certificate, Req :: req()) ->
-    user_identity:credentials() | {error, term()}.
-resolve_auth(macaroon, Req) ->
-    case cowboy_req:header(<<"macaroon">>, Req) of
-        {undefined, _} ->
-            resolve_auth(token, Req);
-        {Macaroon, _} ->
-            #macaroon_auth{macaroon = Macaroon}
-    end;
-resolve_auth(token, Req) ->
-    case cowboy_req:header(<<"x-auth-token">>, Req) of
-        {undefined, _} ->
-            resolve_auth(basic, Req);
-        {Token, _} ->
-            #token_auth{token = Token}
-    end;
-resolve_auth(basic, Req) ->
+-spec parse_macaroon_from_header(req()) -> undefined | binary().
+parse_macaroon_from_header(Req) ->
     case cowboy_req:header(<<"authorization">>, Req) of
-        {undefined, _} ->
-            resolve_auth(certificate, Req);
-        {BasicAuthHeader, _} ->
-            #basic_auth{credentials = BasicAuthHeader}
-    end;
-resolve_auth(certificate, Req) ->
-    Socket = cowboy_req:get(socket, Req),
-    case ssl:peercert(Socket) of
-        {ok, Der} ->
-            Certificate = public_key:pkix_decode_cert(Der, otp),
-            #certificate_auth{otp_cert = Certificate};
-        {error, Reason} ->
-            {error, Reason}
+        <<"Bearer ", Macaroon/binary>> ->
+            Macaroon;
+        _ ->
+            case cowboy_req:header(<<"macaroon">>, Req) of
+                undefined ->
+                    cowboy_req:header(<<"x-auth-token">>, Req);
+                Value ->
+                    Value
+            end
     end.
+

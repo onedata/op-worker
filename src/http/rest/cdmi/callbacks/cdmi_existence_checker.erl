@@ -49,7 +49,7 @@ object_resource_exists(Req, State) ->
 %% Redirect this request to the same url but without trailing '/'.
 %% @end
 %%--------------------------------------------------------------------
--spec redirect_to_object(cowboy_req:req(), maps:map()) -> {halt, cowboy_req:req(), maps:map()}.
+-spec redirect_to_object(cowboy_req:req(), maps:map()) -> {stop, cowboy_req:req(), maps:map()}.
 redirect_to_object(Req, #{path := Path} = State) ->
     redirect_to(Req, State, binary_part(Path, {0, byte_size(Path) - 1})).
 
@@ -58,7 +58,7 @@ redirect_to_object(Req, #{path := Path} = State) ->
 %% Redirect this request to the same url but with trailing '/'.
 %% @end
 %%--------------------------------------------------------------------
--spec redirect_to_container(cowboy_req:req(), maps:map()) -> {halt, cowboy_req:req(), maps:map()}.
+-spec redirect_to_container(cowboy_req:req(), maps:map()) -> {stop, cowboy_req:req(), maps:map()}.
 redirect_to_container(Req, #{path := Path} = State) ->
     redirect_to(Req, State, <<Path/binary, "/">>).
 
@@ -67,17 +67,16 @@ redirect_to_container(Req, #{path := Path} = State) ->
 %% Redirect a request to the given path.
 %% @end
 %%--------------------------------------------------------------------
--spec redirect_to(cowboy_req:req(), maps:map(), binary()) -> {halt, cowboy_req:req(), maps:map()}.
-redirect_to(Req, State, Path) ->
-    {Hostname, _} = cowboy_req:header(<<"host">>, Req),
+-spec redirect_to(cowboy_req:req(), maps:map(), binary()) -> {stop, cowboy_req:req(), maps:map()}.
+redirect_to(#{qs := Qs} = Req, State, Path) ->
+    Hostname = cowboy_req:header(<<"host">>, Req),
 
-    {QS, _} = cowboy_req:qs(Req),
-    Location = case QS of
-                   <<"">> -> <<"https://", Hostname/binary, "/cdmi", Path/binary>>;
-                   _ -> <<"https://", Hostname/binary, "/cdmi", Path/binary, "?", QS/binary>>
-               end,
-    {ok, Req2} = cowboy_req:reply(?MOVED_PERMANENTLY, [{<<"Location">>, Location}], Req),
-    {halt, Req2, State}.
+    Location = case Qs of
+        <<"">> -> <<"https://", Hostname/binary, "/cdmi", Path/binary>>;
+        _ -> <<"https://", Hostname/binary, "/cdmi", Path/binary, "?", Qs/binary>>
+    end,
+    NewReq = cowboy_req:reply(?MOVED_PERMANENTLY, #{<<"location">> => Location}, Req),
+    {stop, NewReq, State}.
 
 
 %%--------------------------------------------------------------------

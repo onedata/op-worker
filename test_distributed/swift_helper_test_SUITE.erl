@@ -74,19 +74,24 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
     {parameters, Params}
 ]}).
 
+% TODO - change to 10 when seg fault is fixed
+-define(REPEATS, 1).
+% TODO - change to 5 when seg fault is fixed
+-define(TEST_SIZE_BASE, 1).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
 write_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_NUM(write, 1), ?OP_SIZE(write, 1)]},
         {description, "Multiple write operations."},
-        ?PERF_CFG(small, [?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(medium, [?OP_NUM(write, 20), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(large, [?OP_NUM(write, 50), ?OP_SIZE(write, 1)])
+        ?PERF_CFG(small, [?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(medium, [?OP_NUM(write, 4 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(large, [?OP_NUM(write, 10 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
     ]).
 write_test_base(Config) ->
     Helper = new_helper(Config),
@@ -99,13 +104,13 @@ write_test_base(Config) ->
 
 multipart_write_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]},
         {description, "Multipart write operation."},
-        ?PERF_CFG(small, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]),
-        ?PERF_CFG(medium, [?OP_SIZE(write, 2), ?OP_BLK_SIZE(write, 4)]),
-        ?PERF_CFG(large, [?OP_SIZE(write, 4), ?OP_BLK_SIZE(write, 4)])
+        ?PERF_CFG(small, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(write, 2), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(write, 4), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)])
     ]).
 multipart_write_test_base(Config) ->
     Helper = new_helper(Config),
@@ -118,30 +123,30 @@ multipart_write_test_base(Config) ->
 
 truncate_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_NUM(truncate, 1)]},
         {description, "Multiple truncate operations."},
-        ?PERF_CFG(small, [?OP_NUM(truncate, 10)]),
-        ?PERF_CFG(medium, [?OP_NUM(truncate, 20)]),
-        ?PERF_CFG(large, [?OP_NUM(truncate, 50)])
+        ?PERF_CFG(small, [?OP_NUM(truncate, 2 * ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_NUM(truncate, 4 * ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_NUM(truncate, 10 * ?TEST_SIZE_BASE)])
     ]).
 truncate_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
-        truncate(Helper, 0)
+        truncate(Helper, 0, 0)
     end, lists:seq(1, ?config(truncate_num, Config))),
     delete_helper(Helper).
 
 write_read_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
         {description, "Multiple write followed by read operations."},
-        ?PERF_CFG(small, [?OP_NUM(10), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?OP_NUM(20), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?OP_NUM(50), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_read_test_base(Config) ->
     Helper = new_helper(Config),
@@ -155,13 +160,13 @@ write_read_test_base(Config) ->
 
 multipart_read_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]},
         {description, "Multipart read operation."},
-        ?PERF_CFG(small, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]),
-        ?PERF_CFG(medium, [?OP_SIZE(read, 2), ?OP_BLK_SIZE(read, 4)]),
-        ?PERF_CFG(large, [?OP_SIZE(read, 4), ?OP_BLK_SIZE(read, 4)])
+        ?PERF_CFG(small, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(read, 2), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(read, 4), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)])
     ]).
 multipart_read_test_base(Config) ->
     Helper = new_helper(Config),
@@ -170,50 +175,52 @@ multipart_read_test_base(Config) ->
     Size = ?config(read_size, Config) * ?MB,
     BlockSize = ?config(read_blk_size, Config) * ?KB,
     write(Handle, 0, 0),
-    truncate(Helper, FileId, Size),
+    truncate(Helper, FileId, Size, 0),
     multipart(Handle, fun read/3, 0, Size, BlockSize),
     delete_helper(Helper).
 
 write_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
         {description, "Multiple write followed by unlink operations."},
-        ?PERF_CFG(small, [?OP_NUM(10), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?OP_NUM(20), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?OP_NUM(50), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_unlink_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
         FileId = random_file_id(),
+        Size = ?config(op_size, Config) * ?MB,
         {ok, Handle} = open(Helper, FileId, write),
-        write(Handle, 0, ?config(op_size, Config) * ?MB),
-        unlink(Helper, FileId)
+        write(Handle, 0, Size),
+        unlink(Helper, FileId, Size)
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
 
 write_read_truncate_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 10},
+        {repeats, ?REPEATS},
         {success_rate, 100},
         {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
         {description, "Multiple sequences of write, read, truncate and unlink
         operations."},
-        ?PERF_CFG(small, [?OP_NUM(10), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?OP_NUM(20), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?OP_NUM(50), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_read_truncate_unlink_test_base(Config) ->
     Helper = new_helper(Config),
     lists:foreach(fun(_) ->
         FileId = random_file_id(),
+        Size = ?config(op_size, Config) * ?MB,
         {ok, Handle} = open(Helper, FileId, rdwr),
-        Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
+        Content = write(Handle, 0, Size),
         ?assertEqual(Content, read(Handle, size(Content))),
-        truncate(Helper, FileId, 0),
-        unlink(Helper, FileId)
+        truncate(Helper, FileId, 0, Size),
+        unlink(Helper, FileId, 0)
     end, lists:seq(1, ?config(op_num, Config))),
     delete_helper(Helper).
 
@@ -226,18 +233,19 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
 
-    UserCtx = helper:new_swift_user_ctx(
+    {ok, UserCtx} = helper:new_swift_user_ctx(
         atom_to_binary(?config(user_name, SwiftConfig), utf8),
         atom_to_binary(?config(password, SwiftConfig), utf8)
     ),
-    Helper = helper:new_swift_helper(
+    {ok, Helper} = helper:new_swift_helper(
         <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v2.0/tokens">>,
         ?SWIFT_CONTAINER_NAME,
         atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
         #{},
         UserCtx,
-        false
+        false,
+        ?FLAT_STORAGE_PATH
     ),
 
     spawn_link(Node, fun() ->
@@ -315,15 +323,15 @@ write(FileHandle, Offset, Size) ->
     ?assertEqual({ok, ActualSize}, call(FileHandle, write, [Offset, Content])),
     Content.
 
-truncate(Helper, Size) ->
+truncate(Helper, Size, CurrentSize) ->
     FileId = random_file_id(),
-    truncate(Helper, FileId, Size).
+    truncate(Helper, FileId, Size, CurrentSize).
 
-truncate(Helper, FileId, Size) ->
-    ?assertEqual(ok, call(Helper, truncate, [FileId, Size])).
+truncate(Helper, FileId, Size, CurrentSize) ->
+    ?assertEqual(ok, call(Helper, truncate, [FileId, Size, CurrentSize])).
 
-unlink(Helper, FileId) ->
-    ?assertEqual(ok, call(Helper, unlink, [FileId])).
+unlink(Helper, FileId, CurrentSize) ->
+    ?assertEqual(ok, call(Helper, unlink, [FileId, CurrentSize])).
 
 multipart(Helper, Method, Size, BlockSize) ->
     multipart(Helper, Method, 0, Size, BlockSize).

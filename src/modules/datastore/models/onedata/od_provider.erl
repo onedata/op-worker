@@ -1,148 +1,44 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Zmuda
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for space details fetched from Global Registry.
+%%% @doc
+%%% This model server as cache for od_provider records
+%%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(od_provider).
--author("Michal Zmuda").
--behaviour(model_behaviour).
+-author("Lukasz Opiola").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/oz/oz_providers.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% API
--export([create_or_update/2, get_or_fetch/1, fetch/1]).
-
-%% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
--export([record_struct/1]).
-
 -type id() :: binary().
+-type record() :: #od_provider{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0]).
+-type name() :: binary().
+-type domain() :: domain().
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {client_name, string},
-        {urls, [string]},
-        {spaces, [string]},
-        {public_only, boolean},
-        {revision_history, [term]}
-    ]}.
+-export_type([id/0, record/0, doc/0, diff/0]).
+-export_type([name/0, domain/0]).
 
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
+-define(CTX, #{
+    model => ?MODULE,
+    fold_enabled => true
+}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
+%% API
+-export([save/1, get/1, delete/1, list/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(provider_info_bucket, [], ?GLOBALLY_CACHED_LEVEL).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_version/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -150,63 +46,166 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
+%% Saves handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
-
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get provider from cache or fetch from OZ and save in cache.
+%% Returns handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(ProviderId :: id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(ProviderId) ->
-    case od_provider:get(ProviderId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(ProviderId);
-        Error -> Error
-    end.
-
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(Key) ->
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch provider from OZ and save it in cache.
+%% Deletes handle.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(ProviderId :: id()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(ProviderId) ->
-    try
-        {ok, #provider_details{name = Name, urls = URLs}} =
-            oz_providers:get_details(provider, ProviderId),
-        {PublicOnly, SpaceIDs} = case oz_providers:get_spaces(provider) of
-            {ok, SIDs} -> {false, SIDs};
-            {error, Res} ->
-                ?warning("Unable to fetch public info for provider ~p due to ~p", [
-                    ProviderId, Res]),
-                {true, []}
-        end,
+-spec delete(id()) -> ok | {error, term()}.
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
 
-        Doc = #document{key = ProviderId, value = #od_provider{
-            client_name = Name,
-            urls = URLs,
-            spaces = SpaceIDs,
-            public_only = PublicOnly
-        }},
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [id()]} | {error, term()}.
+list() ->
+    datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
-        case od_provider:create(Doc) of
-            {ok, _} -> ok;
-            {error, already_exists} -> ok
-        end,
-        {ok, Doc}
-    catch
-        _:Reason ->
-            {error, Reason}
-    end.
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    3.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {client_name, string},
+        {urls, [string]},
+
+        {spaces, [string]},
+
+        {public_only, boolean},
+        {revision_history, [term]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+        {urls, [string]},
+
+        {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {name, string},
+        {admin_email, string},
+        {subdomain_delegation, boolean},
+        {domain, string},
+        {subdomain, string},
+        {latitude, float},
+        {longitude, float},
+        {online, boolean},
+
+        {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Provider) ->
+    {
+        od_provider,
+        Name,
+        Urls,
+        _Spaces,
+
+        _PublicOnly,
+        _RevisionHistory
+    } = Provider,
+    {2, {od_provider,
+        Name,
+        Urls,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(2, Provider) ->
+    {
+        od_provider,
+        Name,
+        Urls,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    } = Provider,
+    #{host := Domain} = url_utils:parse(hd(Urls)),
+    {3, #od_provider{
+        name = Name,
+        admin_email = undefined,
+        subdomain_delegation = false,
+        domain = Domain,
+        subdomain = undefined,
+        latitude = 0.0,
+        longitude = 0.0,
+        online = false,
+
+        spaces = #{},
+
+        eff_users = [],
+        eff_groups = [],
+
+        cache_state = #{}
+    }}.

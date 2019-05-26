@@ -1,260 +1,218 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for space details fetched from Global Registry.
+%%% @doc
+%%% This model server as cache for od_space records
+%%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(od_space).
--author("Krzysztof Trzepla").
--behaviour(model_behaviour).
+-author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 
--type doc() :: datastore:document().
--type info() :: #od_space{}.
 -type id() :: binary().
+-type record() :: #od_space{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+
 -type alias() :: binary().
 -type name() :: binary().
--export_type([doc/0, info/0, id/0, alias/0, name/0]).
+
+-export_type([id/0, record/0, doc/0, diff/0]).
+-export_type([alias/0, name/0]).
+
+-define(CTX, #{
+    model => ?MODULE,
+    fold_enabled => true
+}).
 
 %% API
--export([create_or_update/2, get/2, get_or_fetch/3, get_or_fetch/2]).
--export([record_struct/1]).
+-export([save/1, get/1, delete/1, list/0, run_after/3]).
 
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns structure of the record in specified version.
-%% @end
-%%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
-    {record, [
-        {name, string},
-        {providers_supports, [{string, integer}]},
-        {providers, [string]},
-        {users, [{string, [atom]}]},
-        {groups, [{string, [atom]}]},
-        {shares, [string]},
-        {eff_users, [{string, [atom]}]},
-        {eff_groups, [{string, [atom]}]},
-        {revision_history, [term]}
-    ]}.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
-get(Key) ->
-    case model:execute_with_default_context(?MODULE, get, [Key]) of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, D = #document{value = S = #od_space{providers_supports = Supports}}} when is_list(Supports) ->
-            {ProviderIds, _} = lists:unzip(Supports),
-            {ok, D#document{value = S#od_space{providers = ProviderIds}}};
-        {ok, Doc} ->
-            {ok, Doc}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(od_space_bucket, [{?MODULE, create}, {?MODULE, save},
-        {?MODULE, create_or_update}, {?MODULE, update}], ?GLOBALLY_CACHED_LEVEL).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(?MODULE, create, _, _, {ok, SpaceId}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate_permissions_cache(),
-    emit_monitoring_event(SpaceId);
-'after'(?MODULE, create_or_update, _, _, {ok, SpaceId}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate_permissions_cache(),
-    emit_monitoring_event(SpaceId);
-'after'(?MODULE, save, _, _, {ok, SpaceId}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate_permissions_cache(),
-    emit_monitoring_event(SpaceId);
-'after'(?MODULE, update, _, _, {ok, SpaceId}) ->
-    ok = permissions_cache:invalidate_permissions_cache(),
-    emit_monitoring_event(SpaceId);
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_version/0]).
+-export([get_posthooks/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(doc()) -> {ok, id()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
+%% Returns handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-create_or_update(Doc, Diff) ->
-    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(Key) ->
+    datastore_model:get(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets space info from the database in user context.
+%% Deletes handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get(SpaceId :: binary(), UserId :: od_user:id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get(SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
-    case od_space:get(SpaceId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, Reason} -> {error, Reason}
-    end;
-get(SpaceId, UserId) ->
-    case get(SpaceId, ?ROOT_USER_ID) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            case od_user:get(UserId) of
-                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
-                    {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-                    {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-spec delete(id()) -> ok | {error, term()}.
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
+%% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(session:id(), SpaceId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(SessionId, SpaceId) ->
-    {ok, UserId} = session:get_user_id(SessionId),
-    get_or_fetch(SessionId, SpaceId, UserId).
-
+-spec list() -> {ok, [id()]} | {error, term()}.
+list() ->
+    datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
+%% Space create/update posthook.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
-    UserId :: od_user:id()) -> {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
-    case get(SpaceId, SpecialUser) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Auth, SpaceId);
-        {error, Reason} -> {error, Reason}
-    end;
-get_or_fetch(Auth, SpaceId, UserId) ->
-    case get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            case od_user:get_or_fetch(Auth, UserId) of
-                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
-                    case lists:keyfind(SpaceId, 1, Spaces) of
-                        false ->
-                            {ok, Doc};
-                        {_, SpaceName} ->
-                            {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}}
-                    end;
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-spec run_after(atom(), list(), term()) -> term().
+run_after(create, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    space_strategies:create(space_strategies:new(SpaceId)),
+    ok = permissions_cache:invalidate(),
+    emit_monitoring_event(SpaceDoc);
+run_after(update, [_, _, _, _], {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    space_strategies:create(space_strategies:new(SpaceId)),
+    ok = permissions_cache:invalidate(),
+    emit_monitoring_event(SpaceDoc);
+run_after(save, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    space_strategies:create(space_strategies:new(SpaceId)),
+    ok = permissions_cache:invalidate(),
+    emit_monitoring_event(SpaceDoc);
+run_after(update, _, {ok, SpaceDoc = #document{}}) ->
+    ok = permissions_cache:invalidate(),
+    emit_monitoring_event(SpaceDoc);
+run_after(_Function, _Args, Result) ->
+    Result.
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {name, string},
+
+        {providers_supports, [{string, integer}]},
+        {providers, [string]},
+        {users, [{string, [atom]}]},
+        {groups, [{string, [atom]}]},
+        {shares, [string]},
+
+        {eff_users, [{string, [atom]}]},
+        {eff_groups, [{string, [atom]}]},
+        {revision_history, [term]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {name, string},
+
+        {direct_users, #{string => [atom]}},
+        {eff_users, #{string => [atom]}},
+
+        {direct_groups, #{string => [atom]}},
+        {eff_groups, #{string => [atom]}},
+
+        {providers, #{string => integer}},
+        {shares, [string]},
+
+        {cache_state, #{atom => term}}
+    ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Space) ->
+    {
+        od_space,
+        Name,
+
+        _ProviderSupports,
+        _Providers,
+        _Users,
+        _Groups,
+        _Shares,
+
+        _EffUsers,
+        _EffGroups,
+
+        _RevisionHistory
+    } = Space,
+    {2, #od_space{
+        name = Name,
+
+        direct_users = #{},
+        eff_users = #{},
+
+        direct_groups = #{},
+        eff_groups = #{},
+
+        providers = #{},
+        shares = [],
+
+        cache_state = #{}
+    }}.
 
 %%%===================================================================
 %%% Internal functions
@@ -263,64 +221,14 @@ get_or_fetch(Auth, SpaceId, UserId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Fetches space info from onezone and stores it in the database.
+%% Sends event informing about od_space update if provider supports the space.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
-fetch(Auth, SpaceId) ->
-    {ok, #space_details{
-        name = Name,
-        providers_supports = Supports,
-        shares = Shares
-    }} = oz_spaces:get_details(Auth, SpaceId),
-
-    {ok, GroupIds} = oz_spaces:get_groups(Auth, SpaceId),
-    {ok, UserIds} = oz_spaces:get_users(Auth, SpaceId),
-
-    {ok, ProviderIds} = oz_spaces:get_providers(Auth, SpaceId),
-
-    GroupsWithPrivileges = utils:pmap(fun(GroupId) ->
-        {ok, Privileges} =
-            oz_spaces:get_group_privileges(Auth, SpaceId, GroupId),
-        {GroupId, Privileges}
-    end, GroupIds),
-    UsersWithPrivileges = utils:pmap(fun(UserId) ->
-        {ok, Privileges} =
-            oz_spaces:get_user_privileges(Auth, SpaceId, UserId),
-        {UserId, Privileges}
-    end, UserIds),
-
-    Doc = #document{key = SpaceId, value = #od_space{
-        name = Name,
-        users = UsersWithPrivileges,
-        groups = GroupsWithPrivileges,
-        providers_supports = Supports,
-        providers = ProviderIds,
-        shares = Shares
-    }},
-
-    case create(Doc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
+-spec emit_monitoring_event(doc()) -> no_return().
+emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
+    case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
+        true -> monitoring_event_emitter:emit_od_space_updated(SpaceId);
+        false -> ok
     end,
+    {ok, SpaceId}.
 
-    {ok, Doc}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends event informing about od_space update if provider supports space.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_monitoring_event(datastore:id()) -> no_return().
-emit_monitoring_event(SpaceId) ->
-    case od_space:get(SpaceId) of
-        {ok, #document{value = #od_space{providers = Providers}}} ->
-            case lists:member(oneprovider:get_provider_id(), Providers) of
-                true ->
-                    monitoring_event:emit_od_space_updated(SpaceId);
-                _ -> ok
-            end;
-        _ -> ok
-    end.

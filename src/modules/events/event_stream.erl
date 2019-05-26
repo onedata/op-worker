@@ -16,15 +16,22 @@
 
 -behaviour(gen_server).
 
+-include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([start_link/3, execute_event_handler/2]).
+-export([start_link/3, send/2]).
+%% export for spawning
+-export([execute_event_handler/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
+
+-export([init_counters/0, init_report/0]).
 
 -export_type([key/0, ctx/0, metadata/0, init_handler/0, terminate_handler/0,
     event_handler/0, aggregation_rule/0, transition_rule/0, emission_rule/0,
@@ -41,7 +48,7 @@
 -type transition_rule() :: fun((metadata(), Evt :: event:object()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
--type subscriptions() :: #{subscription:id() => event_router:key() | local}.
+-type subscriptions() :: #{subscription:id() => subscription_manager:key() | local}.
 -type events() :: #{event:key() => event:type()}.
 
 %% event stream state:
@@ -66,6 +73,12 @@
     handler_ref :: undefined | {pid(), reference()}
 }).
 
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
+-define(EXOMETER_COUNTERS, [events_handler_execution]).
+-define(EXOMETER_HISTOGRAM_COUNTERS, [events_handler_map_size,
+    events_handler_execution_time_ms]).
+-define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -82,38 +95,50 @@ start_link(Mgr, Sub, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes event handler. If another event handler is being executed, waits
-%% until it is finished.
+%% Sends message to event_stream.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
-execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
-    ctx = Ctx, stream = #event_stream{event_handler = Handler},
-    session_id = SessId, key = StmKey} = State) ->
-    try
-        Start = erlang:monotonic_time(milli_seconds),
-        EvtsList = maps:values(Evts),
-        case {Force, EvtsList} of
-            {true, _} -> Handler(EvtsList, Ctx);
-            {false, []} -> ok;
-            {_, _} -> Handler(EvtsList, Ctx)
-        end,
-        Duration = erlang:monotonic_time(milli_seconds) - Start,
-        ?debug("Execution of handler on events ~p in event stream ~p and session
-        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
-    catch
-        Error:Reason ->
-            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                [?MODULE, State, Error, Reason])
-    end;
+-spec send(pid() | undefined, term()) -> ok.
+send(undefined, _Message) ->
+    ok;
+send(Stream, Message) ->
+    gen_server2:call(Stream, Message, timer:minutes(1)).
 
-execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
-    MonitorRef = monitor(process, Pid),
-    receive
-        {'DOWN', MonitorRef, _, _, _} -> ok
-    end,
-    execute_event_handler(Force, State#state{handler_ref = undefined}).
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
+        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), uniform, [{size, Size}]}
+    end, ?EXOMETER_HISTOGRAM_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_HISTOGRAM_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -152,10 +177,12 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}}.
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, ok, State}.
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_call(Request, From, State) ->
+    gen_server2:reply(From, ok),
+    handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -256,6 +283,56 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%%===================================================================
+%%% Internal functions exported for spawning
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes event handler. If another event handler is being executed, waits
+%% until it is finished.
+%% @end
+%%--------------------------------------------------------------------
+-spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
+execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
+    ctx = Ctx, stream = #event_stream{event_handler = Handler},
+    session_id = SessId, key = StmKey} = State) ->
+    try
+        Start = erlang:monotonic_time(milli_seconds),
+        EvtsList = maps:values(Evts),
+
+        ?update_counter(?EXOMETER_NAME(events_handler_execution)),
+        ?update_counter(?EXOMETER_NAME(events_handler_map_size), length(EvtsList)),
+
+        case {Force, EvtsList} of
+            {true, _} -> Handler(EvtsList, Ctx);
+            {false, []} -> ok;
+            {_, _} -> Handler(EvtsList, Ctx)
+        end,
+
+        Duration = erlang:monotonic_time(milli_seconds) - Start,
+        ?update_counter(?EXOMETER_NAME(events_handler_execution_time_ms),
+            Duration),
+        ?debug("Execution of handler on events ~p in event stream ~p and session
+        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
+    catch
+        Error:Reason ->
+            case Ctx of
+                #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?EAGAIN}});
+                _ -> ok
+            end,
+
+            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+                [?MODULE, State, Error, Reason])
+    end;
+
+execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
+    MonitorRef = monitor(process, Pid),
+    receive
+        {'DOWN', MonitorRef, _, _, _} -> ok
+    end,
+    execute_event_handler(Force, State#state{handler_ref = undefined}).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -268,7 +345,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
     Subs :: subscriptions()) -> NewSubs :: subscriptions().
 add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
-    case event_router:add_subscriber(Sub, SessId) of
+    case subscription_manager:add_subscriber(Sub, SessId) of
         {ok, Key} -> maps:put(SubId, Key, Subs);
         {error, session_only} -> maps:put(SubId, session_only, Subs)
     end.
@@ -286,7 +363,7 @@ remove_subscription(SessId, SubId, Subs) ->
         {ok, session_only} ->
             maps:remove(SubId, Subs);
         {ok, Key} ->
-            event_router:remove_subscriber(Key, SessId),
+            ok = subscription_manager:remove_subscriber(Key, SessId),
             maps:remove(SubId, Subs);
         error ->
             Subs
@@ -302,8 +379,17 @@ remove_subscription(SessId, SubId, Subs) ->
 -spec remove_subscriptions(State :: #state{}) -> ok.
 remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
     maps:fold(fun
-        (session_only, _, _) -> ok;
-        (Key, _, _) -> event_router:remove_subscriber(Key, SessId)
+        (_, session_only, _) ->
+            ok;
+        (_, Key, _) ->
+            case subscription_manager:remove_subscriber(Key, SessId) of
+                ok ->
+                    ok;
+                Error ->
+                    ?error("Removing subscriptions error: ~p, for key ~p, session ~p",
+                        [Error, Key, SessId]),
+                    Error
+            end
     end, ok, Subs).
 
 %%--------------------------------------------------------------------

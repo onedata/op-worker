@@ -13,15 +13,13 @@
 -module(user_ctx).
 -author("Rafal Slota").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Context definition
 -record(user_ctx, {
-    session :: session:doc(),
-    user_doc :: od_user:doc()
+    session :: session:doc()
 }).
 
 -type ctx() :: #user_ctx{}.
@@ -29,7 +27,7 @@
 %% API
 -export([new/1]).
 -export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
--export([is_root/1, is_guest/1, is_normal_user/1]).
+-export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/1]).
 
 %%%===================================================================
 %%% API functions
@@ -42,14 +40,9 @@
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
-    {ok, Session = #document{value = #session{
-        auth = Auth,
-        identity = #user_identity{user_id = UserId}
-    }}} = session:get(SessId),
-    {ok, User} = od_user:get_or_fetch(Auth, UserId),
+    {ok, Session} = session:get(SessId),
     #user_ctx{
-        session = Session,
-        user_doc = User
+        session = Session
     }.
 
 %%--------------------------------------------------------------------
@@ -58,8 +51,17 @@ new(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
-get_user(#user_ctx{user_doc = User}) ->
-    User.
+get_user(#user_ctx{session = #document{key = SessId, value = #session{
+    identity = #user_identity{user_id = UserId}
+}}}) ->
+    case get(user_ctx_cache) of
+        undefined ->
+            {ok, User} = user_logic:get(SessId, UserId),
+            put(user_ctx_cache, User),
+            User;
+        CachedUser ->
+            CachedUser
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,7 +98,7 @@ get_auth(#user_ctx{session = Session}) ->
 %%--------------------------------------------------------------------
 -spec is_root(ctx()) -> boolean().
 is_root(#user_ctx{session = #document{key = SessId}}) ->
-    session:is_root(SessId).
+    session_utils:is_root(SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,7 +107,7 @@ is_root(#user_ctx{session = #document{key = SessId}}) ->
 %%--------------------------------------------------------------------
 -spec is_guest(ctx()) -> boolean().
 is_guest(#user_ctx{session = #document{key = SessId}}) ->
-    session:is_guest(SessId).
+    session_utils:is_guest(SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,4 +116,15 @@ is_guest(#user_ctx{session = #document{key = SessId}}) ->
 %%--------------------------------------------------------------------
 -spec is_normal_user(ctx()) -> boolean().
 is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
-    not session:is_special(SessId).
+    not session_utils:is_special(SessId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if session uses direct_io.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_direct_io(ctx()) -> boolean().
+is_direct_io(#user_ctx{session = #document{
+    value = #session{direct_io = DirectIO}
+}}) ->
+    DirectIO.

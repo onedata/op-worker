@@ -15,22 +15,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delegate_rest_init/2, delegate_terminate/3,
+-export([delegate_terminate/3,
     delegate_content_types_provided/2, delegate_content_types_accepted/2,
     delegate_accept_resource/2, delegate_provide_resource/2, delegate/5]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Delegates rest_init function
-%% @end
-%%--------------------------------------------------------------------
--spec delegate_rest_init(cowboy_req:req(), term()) -> term().
-delegate_rest_init(Req, Opts) ->
-    call_and_handle_exception(Req, Opts, rest_init, [Req, Opts]).
 
 %%--------------------------------------------------------------------
 %% @doc

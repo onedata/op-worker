@@ -32,7 +32,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_by_name(file_ctx:ctx(), xattr:name()) ->
-    {ok, value()} | datastore:get_error().
+    {ok, value()} | {error, term()}.
 get_by_name(FileCtx, XattrName) ->
     get_by_name(FileCtx, XattrName, false).
 
@@ -42,7 +42,7 @@ get_by_name(FileCtx, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_by_name(file_ctx:ctx(), xattr:name(), boolean()) ->
-    {ok, value()} | datastore:get_error().
+    {ok, value()} | {error, term()}.
 get_by_name(FileCtx, XattrName, Inherited) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:get_xattr_metadata(FileUuid, XattrName, Inherited).
@@ -53,7 +53,7 @@ get_by_name(FileCtx, XattrName, Inherited) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_by_name(file_ctx:ctx(), xattr:name()) ->
-    ok | datastore:generic_error().
+    ok | {error, term()}.
 delete_by_name(FileCtx, XattrName) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:remove_xattr_metadata(FileUuid, XattrName).
@@ -74,18 +74,18 @@ exists_by_name(FileCtx, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set(file_ctx:ctx(), name(), value(), Create :: boolean(), Replace :: boolean()) ->
-    {ok, datastore:key()} | datastore:generic_error().
-set(FileCtx, XattrName, XattreValue, Create, Replace) ->
+    {ok, datastore:key()} | {error, term()}.
+set(FileCtx, XattrName, XattrValue, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattreValue, Create, Replace).
+    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattrValue, Create, Replace).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Lists names of all extended attributes associated with given file
 %% @end
 %%--------------------------------------------------------------------
--spec list(file_ctx:ctx(), boolean()) -> {ok, [xattr:name()]} | datastore:generic_error().
+-spec list(file_ctx:ctx(), boolean()) -> {ok, [xattr:name()]} | {error, term()}.
 list(FileCtx, Inherited) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:list_xattr_metadata(FileUuid, Inherited).

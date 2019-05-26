@@ -40,7 +40,7 @@ start_link(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns event stream supervisor associated with event manager.
+%% Returns pid of stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sequencer_stream_sup(SeqManSup :: pid(), Id :: atom()) ->

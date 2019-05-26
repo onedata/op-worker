@@ -24,7 +24,7 @@
 -include_lib("proto/oneclient/common_messages.hrl").
 -include_lib("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("proto/oneclient/event_messages.hrl").
--include_lib("proto/oneclient/handshake_messages.hrl").
+-include_lib("proto/common/handshake_messages.hrl").
 -include_lib("proto/oneclient/stream_messages.hrl").
 -include_lib("proto/oneclient/proxyio_messages.hrl").
 
@@ -65,9 +65,13 @@ translate_write_event_from_protobuf_test() ->
     {Internal, Protobuf} = get_write_event(2, 512, 2048, 100, 1024),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
-translate_handshake_request_from_protobuf_test() ->
-    Token = <<"DUMMY-MACAROON">>,
-    {Internal, Protobuf} = get_handshake_request(Token, 1),
+translate_client_handshake_request_from_protobuf_test() ->
+    Macaroon = <<"DUMMY-MACAROON">>,
+    {Internal, Protobuf} = get_client_handshake_request(Macaroon, 1),
+    ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
+
+translate_provider_handshake_request_from_protobuf_test() ->
+    {Internal, Protobuf} = get_provider_handshake_request(<<"abcd">>, <<"nonce">>),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_message_stream_from_protobuf_test() ->
@@ -78,9 +82,9 @@ translate_end_of_message_stream_from_protobuf_test() ->
     {Internal, Protobuf} = get_end_of_message_stream(),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
-translate_token_from_protobuf_test() ->
-    Token = <<"DUMMY-MACAROON">>,
-    {Internal, Protobuf} = get_token(Token),
+translate_macaroon_from_protobuf_test() ->
+    Macaroon = <<"DUMMY-MACAROON">>,
+    {Internal, Protobuf} = get_macaroon(Macaroon),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_ping_from_protobuf_test() ->
@@ -171,9 +175,9 @@ translate_handshake_response_to_protobuf_test() ->
         status = 'OK'
     })),
     ?assertEqual({handshake_response, #'HandshakeResponse'{
-        status = 'INVALID_TOKEN'
+        status = 'INVALID_MACAROON'
     }}, translator:translate_to_protobuf(#handshake_response{
-        status = 'INVALID_TOKEN'
+        status = 'INVALID_MACAROON'
     })).
 
 translate_message_stream_to_protobuf_test() ->
@@ -314,14 +318,25 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
             file_size = FileSize, blocks = ProtobufBlocks}
     }.
 
-get_token(Val) ->
-    {#token_auth{token = Val}, #'Token'{value = Val}}.
-
-get_handshake_request(TokenVal, SessionId) ->
-    {IntToken, PBToken} = get_token(TokenVal),
+get_macaroon(Val) ->
+    DM1 = <<Val/binary, "-DM1">>,
+    DM2 = <<Val/binary, "-DM2">>,
     {
-        #handshake_request{auth = IntToken, session_id = SessionId},
-        #'HandshakeRequest'{token = PBToken, session_id = SessionId}
+        #macaroon_auth{macaroon = Val, disch_macaroons = [DM1, DM2]},
+        #'Macaroon'{macaroon = Val, disch_macaroons = [DM1, DM2]}
+    }.
+
+get_client_handshake_request(Macaroon, SessionId) ->
+    {IntMacaroon, PBMacaroon} = get_macaroon(Macaroon),
+    {
+        #client_handshake_request{auth = IntMacaroon, session_id = SessionId},
+        #'ClientHandshakeRequest'{macaroon = PBMacaroon, session_id = SessionId}
+    }.
+
+get_provider_handshake_request(ProviderId, Nonce) ->
+    {
+        #provider_handshake_request{provider_id = ProviderId, nonce = Nonce},
+        #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
     }.
 
 get_message_stream(StmId, SeqNum) ->

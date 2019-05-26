@@ -11,8 +11,7 @@
 -module(fslogic_times).
 -author("Mateusz Paciorek").
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -30,21 +29,28 @@
 %%--------------------------------------------------------------------
 -spec update_atime(file_ctx:ctx()) -> ok.
 update_atime(FileCtx) ->
-    CurrentTime = erlang:system_time(seconds),
+    CurrentTime = time_utils:cluster_time_seconds(),
     case calculate_atime(FileCtx, CurrentTime) of
         actual ->
             ok;
         NewATime ->
-            ok = update_times_and_emit(FileCtx, #{atime => NewATime})
+            ok = update_times_and_emit(FileCtx, fun(Times = #times{atime = Time}) ->
+                case Time of
+                    NewATime ->
+                        {error, not_changed};
+                    _ ->
+                        {ok, Times#times{atime = NewATime}}
+                end
+            end)
     end.
 
 %%--------------------------------------------------------------------
-%% @equiv update_ctime(FileCtx, erlang:system_time(seconds)).
+%% @equiv update_ctime(FileCtx, time_utils:cluster_time_seconds()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx()) -> ok.
 update_ctime(FileCtx) ->
-    update_ctime(FileCtx, erlang:system_time(seconds)).
+    update_ctime(FileCtx, time_utils:cluster_time_seconds()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -53,16 +59,23 @@ update_ctime(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
 update_ctime(FileCtx, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, #{ctime => CurrentTime}).
+    ok = update_times_and_emit(FileCtx, fun(Times = #times{ctime = Time}) ->
+        case Time of
+            CurrentTime ->
+                {error, not_changed};
+            _ ->
+                {ok, Times#times{ctime = CurrentTime}}
+        end
+    end).
 
 %%--------------------------------------------------------------------
-%% @equiv update_mtime_ctime(FileCtx, erlang:system_time(seconds)).
+%% @equiv update_mtime_ctime(FileCtx, time_utils:cluster_time_seconds()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx()) ->
     ok.
 update_mtime_ctime(FileCtx) ->
-    update_mtime_ctime(FileCtx, erlang:system_time(seconds)).
+    update_mtime_ctime(FileCtx, time_utils:cluster_time_seconds()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,23 +84,33 @@ update_mtime_ctime(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
 update_mtime_ctime(FileCtx, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, #{mtime => CurrentTime, ctime => CurrentTime}).
+    ok = update_times_and_emit(FileCtx, fun(Times = #times{mtime = MTime, ctime = CTime}) ->
+        case {MTime, CTime} of
+            {CurrentTime, CurrentTime} ->
+                {error, not_changed};
+            _ ->
+                {ok, Times#times{mtime = CurrentTime, ctime = CurrentTime}}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry with given map and emits times update event
 %% @end
 %%--------------------------------------------------------------------
--spec update_times_and_emit(file_ctx:ctx(),
-    TimesMap :: #{atom() => file_meta:time()}) -> ok.
-update_times_and_emit(FileCtx, TimesMap) ->
+-spec update_times_and_emit(file_ctx:ctx(), times:diff()) -> ok.
+update_times_and_emit(FileCtx, TimesDiff) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    Times = prepare_times(TimesMap),
-    {ok, FileUuid} = times:create_or_update(#document{key = FileUuid,
-        value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesMap),
-    spawn(fun() ->
-        fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
-    end),
+    Times = prepare_times(TimesDiff),
+    case times:create_or_update(#document{key = FileUuid,
+        value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
+        {ok, FileUuid} ->
+            spawn(fun() ->
+                fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
+            end),
+            ok;
+        {error, not_changed} -> ok
+    end,
     ok.
 
 %%%===================================================================
@@ -125,10 +148,7 @@ calculate_atime(FileCtx, CurrentTime) ->
 %% Convert map to times document
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_times(#{atom() => file_meta:time()}) -> #times{}.
-prepare_times(TimesMap) ->
-    #times{
-        atime = maps:get(atime, TimesMap, 0),
-        ctime = maps:get(ctime, TimesMap, 0),
-        mtime = maps:get(mtime, TimesMap, 0)
-    }.
+-spec prepare_times(times:diff()) -> #times{}.
+prepare_times(TimesDiff) ->
+    {ok, Times} = TimesDiff(#times{}),
+    Times.

@@ -26,7 +26,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([all/0, init_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 -export([
@@ -197,6 +197,9 @@ create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
+end_per_suite(_) ->
+    ok.
+
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
@@ -209,7 +212,9 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
+    ok = test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
+    rpc:multicall(Workers, code, ensure_loaded, [cdmi_object_handler]),
+    rpc:multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),

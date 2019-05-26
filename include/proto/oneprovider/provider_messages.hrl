@@ -60,9 +60,27 @@
 -record(get_file_distribution, {
 }).
 
--record(replicate_file, {
-    provider_id :: oneprovider:id(),
-    block :: #file_block{} | undefined
+-record(schedule_file_replication, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    target_provider_id :: oneprovider:id(),
+    block :: undefined | #file_block{},
+    callback :: transfer:callback(),
+    index_name :: transfer:index_name(),
+    query_view_params :: transfer:query_view_params()
+}).
+
+-record(schedule_replica_invalidation, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    source_provider_id :: oneprovider:id(),
+    target_provider_id :: undefined | oneprovider:id(),
+    index_name :: transfer:index_name(),
+    query_view_params :: transfer:query_view_params()
+}).
+
+-record(query_view_params, {
+    params :: proplists:proplist()
 }).
 
 -record(get_metadata, {
@@ -96,8 +114,9 @@
 #get_transfer_encoding{} | #set_transfer_encoding{} |
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-#get_file_distribution{} | #replicate_file{} | #get_metadata{} | #remove_metadata{} |
-#set_metadata{} | #check_perms{} | #create_share{} | #remove_share{}.
+#get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
+#get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
+#create_share{} | #remove_share{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -134,10 +153,14 @@
     share_file_guid :: od_share:share_guid()
 }).
 
+-record(scheduled_transfer, {
+    transfer_id :: transfer:id()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    undefined.
+    #scheduled_transfer{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

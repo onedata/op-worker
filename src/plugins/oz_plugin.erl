@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements oz_plugin_behaviour in order
-%%% to customize connection settings to OneZone.
+%%% to customize connection settings to Onezone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(oz_plugin).
@@ -17,11 +17,11 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 
 %% oz_plugin_behaviour API
--export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0]).
--export([get_key_file/0, get_csr_file/0, get_cert_file/0, get_cacerts_dir/0]).
+-export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0, get_oz_rest_endpoint/1]).
+-export([get_cacerts_dir/0]).
 -export([auth_to_rest_client/1]).
 
 %%%===================================================================
@@ -30,14 +30,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a Global Registry URL.
+%% Should return a Onezone URL.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().
 get_oz_url() ->
-    {ok, Hname} = application:get_env(?APP_NAME, oz_domain),
-    Hostname = str_utils:to_list(Hname),
-    "https://" ++ Hostname.
+    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
+    "https://" ++ str_utils:to_list(Hostname).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,39 +60,21 @@ get_oz_rest_api_prefix() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a path to file containing provider's private key.
+%% @doc Should return OZ REST endpoint, ended with given Path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_key_file() -> file:name_all().
-get_key_file() ->
-    {ok, KeyFile} = application:get_env(?APP_NAME, oz_provider_key_file),
-    KeyFile.
+-spec get_oz_rest_endpoint(string() | binary()) -> binary().
+get_oz_rest_endpoint(Path) ->
+    str_utils:format_bin("~s:~B~s~s", [
+        get_oz_url(),
+        get_oz_rest_port(),
+        get_oz_rest_api_prefix(),
+        Path
+    ]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a path to file containing provider's private key.
-%% @end
-%%--------------------------------------------------------------------
--spec get_csr_file() -> file:name_all().
-get_csr_file() ->
-    {ok, CSRFile} = application:get_env(?APP_NAME, oz_provider_csr_file),
-    CSRFile.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Should return a path to file containing provider's
-%% public certificate signed by Global Registry.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cert_file() -> file:name_all().
-get_cert_file() ->
-    {ok, CertFile} = application:get_env(?APP_NAME, oz_provider_cert_file),
-    CertFile.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Should return a path to file containing Global Registry
-%% CA certificate.
+%% Should return the path to CA certs directory.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cacerts_dir() -> file:name_all().
@@ -109,23 +90,25 @@ get_cacerts_dir() ->
 %% when request is done.
 %% @end
 %%--------------------------------------------------------------------
--spec auth_to_rest_client(Auth :: term()) -> {user, token, binary()} |
-{user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
-{user, basic, binary()} | provider.
+-spec auth_to_rest_client(Auth :: term()) ->
+    {user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
+    {provider, Macaroon :: binary()} |
+    none.
+auth_to_rest_client(none) ->
+    none;
+
 auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
     {user, macaroon, {Mac, DMacs}};
 
-auth_to_rest_client(#token_auth{token = Token}) ->
-    {user, token, Token};
-
-auth_to_rest_client(#basic_auth{credentials = Credentials}) ->
-    {user, basic, Credentials};
+auth_to_rest_client(provider) ->
+    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
+    {provider, ProviderMacaroon};
 
 auth_to_rest_client(?ROOT_SESS_ID) ->
-    provider;
+    auth_to_rest_client(provider);
 
 auth_to_rest_client(?GUEST_SESS_ID) ->
-    provider;
+    auth_to_rest_client(provider);
 
 auth_to_rest_client(SessId) when is_binary(SessId) ->
     {ok, #document{
@@ -135,14 +118,9 @@ auth_to_rest_client(SessId) when is_binary(SessId) ->
         }}} = session:get(SessId),
     case Type of
         provider_outgoing ->
-            provider;
+            auth_to_rest_client(provider);
         provider_incoming ->
-            provider;
+            auth_to_rest_client(provider);
         _ ->
-            % This will evaluate either to user_token, user_basic or provider.
             auth_to_rest_client(Auth)
-    end;
-
-auth_to_rest_client(Other) ->
-    % Other can be provider|client.
-    Other.
+    end.

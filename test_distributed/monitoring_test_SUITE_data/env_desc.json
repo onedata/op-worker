@@ -50,7 +50,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }
@@ -75,7 +76,7 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 1000
+                        "supported_size": 10737418240
                     }
                 }
             }

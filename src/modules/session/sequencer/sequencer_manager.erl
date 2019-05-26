@@ -18,8 +18,7 @@
 
 -behaviour(gen_server).
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
-
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
@@ -27,7 +26,7 @@
 -include("timeouts.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/2, send/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -67,6 +66,15 @@
 start_link(SeqManSup, SessId) ->
     gen_server2:start_link(?MODULE, [SeqManSup, SessId], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends message to sequencer_manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(pid(), term()) -> ok.
+send(Manager, Message) ->
+    gen_server2:call(Manager, Message, timer:minutes(1)).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -87,7 +95,10 @@ start_link(SeqManSup, SessId) ->
 init([SeqManSup, SessId]) ->
     ?debug("Initializing sequencer manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
+    Self = self(),
+    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{sequencer_manager = Self}}
+    end),
     {ok, #state{sequencer_manager_sup = SeqManSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -110,9 +121,9 @@ handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     {ok, _, NewState} = create_sequencer_out_stream(StmId, State),
     {reply, {ok, StmId}, NewState};
 
-handle_call(Request, _From, State) ->
-    ?log_bad_request(Request),
-    {reply, ok, State}.
+handle_call(Request, From, State) ->
+    gen_server2:reply(From, ok),
+    handle_cast(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -149,7 +160,7 @@ handle_cast(#client_message{message_body = #message_stream_reset{
     session_id = SessId} = State) ->
     ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     maps:map(fun(_, SeqStm) ->
-        gen_server2:cast(SeqStm, Msg)
+        sequencer_out_stream:send(SeqStm, Msg)
     end, Stms),
     {noreply, State};
 
@@ -174,18 +185,18 @@ handle_cast(#client_message{message_body = #message_acknowledgement{
 %% Handle outgoing messages
 handle_cast(#client_message{message_stream = #message_stream{sequence_number = undefined}} = Msg, State) ->
     {ok, SeqStm, NewState} = get_or_create_sequencer_out_stream(Msg, State),
-    gen_server2:cast(SeqStm, Msg),
+    sequencer_out_stream:send(SeqStm, Msg),
     {noreply, NewState};
 
 %% Handle incoming messages
 handle_cast(#client_message{} = Msg, State) ->
     {ok, SeqStm, NewState} = get_or_create_sequencer_in_stream(Msg, State),
-    gen_fsm:send_event(SeqStm, Msg),
+    sequencer_in_stream:send(SeqStm, Msg),
     {noreply, NewState};
 
 handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
     case get_sequencer_out_stream(Msg#server_message{proxy_session_id = SessionId}, State) of
-        {ok, SeqStm} -> gen_server2:cast(SeqStm, Msg);
+        {ok, SeqStm} -> sequencer_out_stream:send(SeqStm, Msg);
         {error, not_found} -> ok
     end,
     {noreply, State};
@@ -240,7 +251,9 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session:update(SessId, #{sequencer_manager => undefined}).
+    session:update(SessId, fun(Session = #session{}) ->
+        {ok, Session#session{sequencer_manager = undefined}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -266,7 +279,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec ensure_sent(Msg :: term(), SessId :: session:id()) -> ok.
 ensure_sent(Msg, SessId) ->
-    case communicator:send(Msg, SessId) of
+    case communicator:send_to_client(Msg, SessId) of
         ok ->
             ok;
         {error, Reason} ->
@@ -341,7 +354,7 @@ create_sequencer_out_stream(StmId, #state{sequencer_out_stream_sup = SeqStmSup,
     State :: #state{}) -> ok.
 forward_to_sequencer_out_stream(Msg, StmId, State) ->
     case get_sequencer_out_stream(StmId, State) of
-        {ok, SeqStm} -> gen_server2:cast(SeqStm, Msg);
+        {ok, SeqStm} -> sequencer_out_stream:send(SeqStm, Msg);
         {error, not_found} -> ok
     end.
 

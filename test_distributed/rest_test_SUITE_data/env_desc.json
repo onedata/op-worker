@@ -49,19 +49,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
-                    }
-                }
-            }
-        }
-    },
-    "appmock_domains": {
-        "oz": {
-            "appmock": {
-                "node1": {
-                    "mocked_app": "oz_worker",
-                    "sys.config": {
-                        "app_description_file": "./oz_mock_description.erl.cfg"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }

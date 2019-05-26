@@ -21,8 +21,9 @@ The main objective of *op-worker*, and *oneprovider* as a whole, is to unify acc
 Comprehensive [documentation](https://beta.onedata.org/docs/index.html) explains basic concepts of onedata, provides "Getting started" and introduces to advanced topics.
 
 ## Building
-To build *oz-worker* use the provided build script:
+To build *op-worker* make sure submodules are initialized and use the provided build script:
 ```
+make submodules
 ./make.py
 ```
 
@@ -45,6 +46,6 @@ After the script has finished, you should have a running, dockerized *oneprovide
 
 - web - web-based, graphical user interface for managing user account and accessing data, available on https://&lt;oneprovider-hostname&gt:/
 - [oneclient](https://github.com/onedata/oneclient) - FUSE client for accessing user's spaces of data,
-- [CDMI](http://www.snia.org/cdmi) - Cloud Data Management Interface in version 1.1.1 is available on https://&lt;ip&gt;:8443/cdmi/ endpoint. To authorize yourself the X-Auth-Token header should be provided to each request, with valid user token obtained from [onezone](https://github.com/onedata/onezone),
-- [REST](https://beta.onedata.org/docs/doc/advanced/rest.html) - rest api for operations such as data replication or reading metrics, available on  https://&lt;oneprovider-hostname&gt:8443/api/v3/oneprovider/ endpoint.
+- [CDMI](http://www.snia.org/cdmi) - Cloud Data Management Interface in version 1.1.1 is available on https://&lt;ip&gt;:443/cdmi/ endpoint. To authorize yourself the X-Auth-Token header should be provided to each request, with valid user token obtained from [onezone](https://github.com/onedata/onezone),
+- [REST](https://beta.onedata.org/docs/doc/advanced/rest.html) - rest api for operations such as data replication or reading metrics, available on  https://&lt;oneprovider-hostname&gt:443/api/v3/oneprovider/ endpoint.
 

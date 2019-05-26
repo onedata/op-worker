@@ -16,14 +16,20 @@
 
 -include("global_definitions.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("cluster_worker/include/exometer_utils.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_helper_handle/2]).
--export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/3, open/3, read/3, write/3,
-    release/1, flush/1, fsync/2, readdir/4]).
+-export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
+    mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
+    chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
+    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2, readdir/4]).
+-export([init_counters/0, init_report/0]).
+%% For tests
+-export([apply_helper_nif/3, receive_loop/2]).
 
 -record(file_handle, {
     handle :: helpers_nif:file_handle(),
@@ -38,6 +44,15 @@
 -type file_handle() :: #file_handle{}.
 
 -export_type([file_id/0, open_flag/0, helper/0, helper_handle/0, file_handle/0]).
+
+-define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
+-define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
+    list_to_atom(atom_to_list(Param) ++ "_time"))).
+-define(EXOMETER_COUNTERS, [get_helper_handle, readdir, getattr, access, mknod,
+    mkdir, unlink, rmdir, symlink, rename, link, chmod, chown, truncate,
+    setxattr, getxattr, removexattr, listxattr, open, read, write, release,
+    flush, fsync]).
+-define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 %%%===================================================================
 %%% API
@@ -60,13 +75,25 @@ get_helper_handle(Helper, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Calls {@link helpers_nif:refresh_params/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec refresh_params(helper_handle() | file_handle(), maps:map()) ->
+    ok | {error, Reason :: term()}.
+refresh_params(#helper_handle{} = Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
+refresh_params(#file_handle{} = Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Calls {@link helpers_nif:readdir/4} function.
 %% @end
 %%--------------------------------------------------------------------
 -spec readdir(helper_handle(), file_id(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) -> {ok, [file_id()]} | {error, Reason :: term()}.
 readdir(Handle, FileId, Offset, Count) ->
-    apply_helper_nif(Handle, readdir, [FileId, Offset, Count]).
+    ?MODULE:apply_helper_nif(Handle, readdir, [FileId, Offset, Count]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,7 +103,7 @@ readdir(Handle, FileId, Offset, Count) ->
 -spec getattr(helper_handle(), file_id()) ->
     {ok, #statbuf{}} | {error, Reason :: term()}.
 getattr(Handle, FileId) ->
-    apply_helper_nif(Handle, getattr, [FileId]).
+    ?MODULE:apply_helper_nif(Handle, getattr, [FileId]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +113,7 @@ getattr(Handle, FileId) ->
 -spec access(helper_handle(), file_id(), Mask :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 access(Handle, FileId, Mask) ->
-    apply_helper_nif(Handle, access, [FileId, Mask]).
+    ?MODULE:apply_helper_nif(Handle, access, [FileId, Mask]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,7 +123,7 @@ access(Handle, FileId, Mask) ->
 -spec mknod(helper_handle(), file_id(), Mode :: non_neg_integer(), Type :: atom()) ->
     ok | {error, Reason :: term()}.
 mknod(Handle, FileId, Mode, Type) ->
-    apply_helper_nif(Handle, mknod, [FileId, Mode, [file_type_for_nif(Type)], 0]).
+    ?MODULE:apply_helper_nif(Handle, mknod, [FileId, Mode, [file_type_for_nif(Type)], 0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,16 +133,17 @@ mknod(Handle, FileId, Mode, Type) ->
 -spec mkdir(helper_handle(), file_id(), Mode :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 mkdir(Handle, FileId, Mode) ->
-    apply_helper_nif(Handle, mkdir, [FileId, Mode]).
+    ?MODULE:apply_helper_nif(Handle, mkdir, [FileId, Mode]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Calls {@link helpers_nif:unlink/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(helper_handle(), file_id()) -> ok | {error, Reason :: term()}.
-unlink(Handle, FileId) ->
-    apply_helper_nif(Handle, unlink, [FileId]).
+-spec unlink(helper_handle(), file_id(), CurrentSize :: non_neg_integer())
+    -> ok | {error, Reason :: term()}.
+unlink(Handle, FileId, CurrentSize) ->
+    ?MODULE:apply_helper_nif(Handle, unlink, [FileId, CurrentSize]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,7 +152,7 @@ unlink(Handle, FileId) ->
 %%--------------------------------------------------------------------
 -spec rmdir(helper_handle(), file_id()) -> ok | {error, Reason :: term()}.
 rmdir(Handle, FileId) ->
-    apply_helper_nif(Handle, rmdir, [FileId]).
+    ?MODULE:apply_helper_nif(Handle, rmdir, [FileId]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,7 +162,7 @@ rmdir(Handle, FileId) ->
 -spec symlink(helper_handle(), From :: file_id(), To :: file_id()) ->
     ok | {error, Reason :: term()}.
 symlink(Handle, From, To) ->
-    apply_helper_nif(Handle, symlink, [From, To]).
+    ?MODULE:apply_helper_nif(Handle, symlink, [From, To]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -144,7 +172,7 @@ symlink(Handle, From, To) ->
 -spec rename(helper_handle(), From :: file_id(), To :: file_id()) ->
     ok | {error, Reason :: term()}.
 rename(Handle, From, To) ->
-    apply_helper_nif(Handle, rename, [From, To]).
+    ?MODULE:apply_helper_nif(Handle, rename, [From, To]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -154,7 +182,7 @@ rename(Handle, From, To) ->
 -spec link(helper_handle(), From :: file_id(), To :: file_id()) ->
     ok | {error, Reason :: term()}.
 link(Handle, From, To) ->
-    apply_helper_nif(Handle, link, [From, To]).
+    ?MODULE:apply_helper_nif(Handle, link, [From, To]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -164,7 +192,7 @@ link(Handle, From, To) ->
 -spec chmod(helper_handle(), file_id(), Mode :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 chmod(Handle, FileId, Mode) ->
-    apply_helper_nif(Handle, chmod, [FileId, Mode]).
+    ?MODULE:apply_helper_nif(Handle, chmod, [FileId, Mode]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -174,17 +202,59 @@ chmod(Handle, FileId, Mode) ->
 -spec chown(helper_handle(), file_id(), posix_user:uid(), posix_user:gid()) ->
     ok | {error, Reason :: term()}.
 chown(Handle, FileId, UID, GID) ->
-    apply_helper_nif(Handle, chown, [FileId, UID, GID]).
+    ?MODULE:apply_helper_nif(Handle, chown, [FileId, UID, GID]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Calls {@link helpers_nif:truncate/3} function.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(helper_handle(), file_id(), Size :: non_neg_integer()) ->
+-spec truncate(helper_handle(), file_id(), Size :: non_neg_integer(),
+    CurrentSize :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
-truncate(Handle, FileId, Size) ->
-    apply_helper_nif(Handle, truncate, [FileId, Size]).
+truncate(Handle, FileId, Size, CurrentSize) ->
+    ?MODULE:apply_helper_nif(Handle, truncate, [FileId, Size, CurrentSize]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:setxattr/6} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec setxattr(helper_handle(), file_id(), Name :: binary(),
+    Value :: binary(), Create :: boolean(), Replace :: boolean()) ->
+    ok | {error, Reason :: term()}.
+setxattr(Handle, FileId, Name, Value, Create, Replace) ->
+    ?MODULE:apply_helper_nif(Handle, setxattr, [FileId, Name, Value, Create, Replace]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:getxattr/3} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec getxattr(helper_handle(), file_id(), Name :: binary()) ->
+    {ok, binary()} | {error, Reason :: term()}.
+getxattr(Handle, FileId, Name) ->
+    ?MODULE:apply_helper_nif(Handle, getxattr, [FileId, Name]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:removexattr/3} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec removexattr(helper_handle(), file_id(), Name :: binary()) ->
+    ok | {error, Reason :: term()}.
+removexattr(Handle, FileId, Name) ->
+    ?MODULE:apply_helper_nif(Handle, removexattr, [FileId, Name]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:listxattr/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec listxattr(helper_handle(), file_id()) ->
+    {ok, [binary()]} | {error, Reason :: term()}.
+listxattr(Handle, FileId) ->
+    ?MODULE:apply_helper_nif(Handle, listxattr, [FileId]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -194,12 +264,23 @@ truncate(Handle, FileId, Size) ->
 -spec open(helper_handle(), file_id(), open_flag()) ->
     {ok, file_handle()} | {error, Reason :: term()}.
 open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
-    case apply_helper_nif(Handle, open, [FileId, [open_flag_for_nif(Flag)]]) of
+    case ?MODULE:apply_helper_nif(Handle, open, [FileId, [open_flag_for_nif(Flag)]]) of
         {ok, FileHandle} ->
             {ok, #file_handle{handle = FileHandle, timeout = Timeout}};
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:refresh_params/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec refresh_helper_params(file_handle(), maps:map()) ->
+    ok | {error, Reason :: term()}.
+refresh_helper_params(Handle, Args) ->
+    ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -209,7 +290,7 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 -spec read(file_handle(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {ok, Data :: binary()} | {error, Reason :: term()}.
 read(Handle, Offset, Size) ->
-    apply_helper_nif(Handle, read, [Offset, Size]).
+    ?MODULE:apply_helper_nif(Handle, read, [Offset, Size]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -219,7 +300,7 @@ read(Handle, Offset, Size) ->
 -spec write(file_handle(), Offset :: non_neg_integer(), Data :: binary()) ->
     {ok, Size :: non_neg_integer()} | {error, Reason :: term()}.
 write(Handle, Offset, Data) ->
-    apply_helper_nif(Handle, write, [Offset, Data]).
+    ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -228,7 +309,7 @@ write(Handle, Offset, Data) ->
 %%--------------------------------------------------------------------
 -spec release(file_handle()) -> ok | {error, Reason :: term()}.
 release(Handle) ->
-    apply_helper_nif(Handle, release, []).
+    ?MODULE:apply_helper_nif(Handle, release, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -237,7 +318,7 @@ release(Handle) ->
 %%--------------------------------------------------------------------
 -spec flush(file_handle()) -> ok | {error, Reason :: term()}.
 flush(Handle) ->
-    apply_helper_nif(Handle, flush, []).
+    ?MODULE:apply_helper_nif(Handle, flush, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -247,7 +328,43 @@ flush(Handle) ->
 -spec fsync(file_handle(), IsDataSync :: boolean()) ->
     ok | {error, Reason :: term()}.
 fsync(Handle, IsDataSync) ->
-    apply_helper_nif(Handle, fsync, [boolean_for_nif(IsDataSync)]).
+    ?MODULE:apply_helper_nif(Handle, fsync, [boolean_for_nif(IsDataSync)]).
+
+%%%===================================================================
+%%% Exometer API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes all counters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_counters() -> ok.
+init_counters() ->
+    Size = application:get_env(?CLUSTER_WORKER_APP_NAME,
+        exometer_data_points_number, ?EXOMETER_DEFAULT_DATA_POINTS_NUMBER),
+    Counters = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), counter}
+    end, ?EXOMETER_COUNTERS),
+    Counters2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), uniform, [{size, Size}]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_counters(Counters ++ Counters2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Subscribe for reports for all parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_report() -> ok.
+init_report() ->
+    Reports = lists:map(fun(Name) ->
+        {?EXOMETER_NAME(Name), [value]}
+    end, ?EXOMETER_COUNTERS),
+    Reports2 = lists:map(fun(Name) ->
+        {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
+    end, ?EXOMETER_COUNTERS),
+    ?init_reports(Reports ++ Reports2).
 
 %%%===================================================================
 %%% Internal functions
@@ -277,8 +394,26 @@ apply_helper_nif(#file_handle{handle = Handle, timeout = Timeout}, Function, Arg
     timeout(), Function :: atom(), Args :: [term()]) ->
     ok | {ok, term()} | {error, Reason :: term()}.
 apply_helper_nif(Handle, Timeout, Function, Args) ->
+    ?update_counter(?EXOMETER_NAME(Function)),
+    Now = os:timestamp(),
     {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
+    Ans = receive_loop(ResponseRef, Timeout),
+    Time = timer:now_diff(os:timestamp(), Now),
+    ?update_counter(?EXOMETER_TIME_NAME(Function), Time),
+    Ans.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Waits for helper answer.
+%% @end
+%%--------------------------------------------------------------------
+-spec receive_loop(helpers_nif:response_ref(), timeout()) ->
+    ok | {ok, term()} | {error, Reason :: term()}.
+receive_loop(ResponseRef, Timeout) ->
     receive
+        {ResponseRef, heartbeat} ->
+            receive_loop(ResponseRef, Timeout);
         {ResponseRef, Result} -> Result
     after
         Timeout -> {error, nif_timeout}

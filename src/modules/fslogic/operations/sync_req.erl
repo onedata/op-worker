@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests synchronizing and getting
+%%% This module is responsible for handling requests synchronizing and getting
 %%% synchronization state of files.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -16,11 +16,31 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+-type block() :: undefined | fslogic_blocks:block().
+-type transfer_id() :: undefined | transfer:id().
+-type provider_id() :: undefined | od_provider:id().
+-type query_view_params() :: transfer:query_view_params().
+-type fuse_response() :: fslogic_worker:fuse_response().
+-type provider_response() :: fslogic_worker:provider_response().
+
+-export_type([block/0, transfer_id/0, provider_id/0]).
 
 %% API
--export([synchronize_block/4, synchronize_block_and_compute_checksum/3,
-    get_file_distribution/2, replicate_file/3]).
+-export([
+    synchronize_block/6,
+    request_block_synchronization/6,
+    synchronize_block_and_compute_checksum/5,
+    get_file_distribution/2
+]).
+
+-export([
+    schedule_file_replication/6
+]).
 
 %%%===================================================================
 %%% API
@@ -31,14 +51,45 @@
 %% Synchronizes given block with remote replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
-    fslogic_worker:fuse_response().
-synchronize_block(UserCtx, FileCtx, undefined, Prefetch) ->
-    Size = fslogic_blocks:get_file_size(FileCtx),
-    synchronize_block(UserCtx, FileCtx, #file_block{offset = 0, size = Size}, Prefetch);
-synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
-    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch),
-    #fuse_response{status = #status{code = ?OK}}.
+-spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
+synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
+    % trigger file_location creation
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    synchronize_block(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
+        Prefetch, TransferId, Priority);
+synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        {ok, Ans} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests synchronization of given block with remote replicas.
+%% Does not wait for sync.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_block_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
+    Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
+request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
+    % trigger file_location creation
+    {_, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+    {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    request_block_synchronization(UserCtx, FileCtx3, #file_block{offset = 0, size = Size},
+        Prefetch, TransferId, Priority);
+request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+    case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
+        Prefetch, TransferId, Priority) of
+        ok ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, _} = Error ->
+            throw(Error)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,21 +97,29 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
 %% synchronized data.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block_and_compute_checksum(user_ctx:ctx(),
-    file_ctx:ctx(), fslogic_blocks:block()) -> fslogic_worker:fuse_response().
-synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{offset = Offset, size = Size}) ->
+-spec synchronize_block_and_compute_checksum(user_ctx:ctx(), file_ctx:ctx(),
+    block(), boolean(), non_neg_integer()) -> fuse_response().
+synchronize_block_and_compute_checksum(UserCtx, FileCtx,
+    Range = #file_block{offset = Offset, size = Size}, Prefetch, Priority
+) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read), %todo do not use lfm, operate on fslogic directly
-    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
+
+    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
+        Prefetch, undefined, Priority),
+
+    %todo do not use lfm, operate on fslogic directly
+    {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read),
+    % does sync internally
+    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
+    lfm_files:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
-    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
             checksum = Checksum,
-            file_location = LocationToSend
+            file_location_changed = Ans
         }
     }.
 
@@ -69,19 +128,15 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
 %% Gets distribution of file over providers' storages.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+-spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
 get_file_distribution(_UserCtx, FileCtx) ->
-    {Locations, _FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
-    ProviderDistributions = lists:map(fun(LocationId) ->
-        {ok, #document{value = #file_location{
-            provider_id = ProviderId,
-            blocks = Blocks
-        }}} = file_location:get(LocationId),
-
+    {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    ProviderDistributions = lists:map(fun(#document{
+        value = #file_location{provider_id = ProviderId}
+    } = FL) ->
         #provider_file_distribution{
             provider_id = ProviderId,
-            blocks = Blocks
+            blocks = fslogic_location_cache:get_blocks(FL)
         }
     end, Locations),
     #provider_response{
@@ -92,16 +147,21 @@ get_file_distribution(_UserCtx, FileCtx) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @equiv replicate_file_insecure/3 with permission check
+%% @doc
+%% Schedules file or dir replication, returns the id of created transfer doc
+%% wrapped in 'scheduled_transfer' provider response.
+%% Resolves file path based on file guid.
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) ->
-    fslogic_worker:provider_response().
-replicate_file(UserCtx, FileCtx, Block) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Block, 0],
-        fun replicate_file_insecure/4).
+-spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    od_provider:id(), transfer:callback(), transfer:index_name(),
+    query_view_params()) -> provider_response().
+schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
+    IndexName, QueryViewParams
+) ->
+    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
+    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
+        Callback, IndexName, QueryViewParams).
 
 %%%===================================================================
 %%% Internal functions
@@ -110,40 +170,23 @@ replicate_file(UserCtx, FileCtx, Block) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Replicates given dir or file on current provider
-%% (the space has to be locally supported).
+%% Schedules file or dir replication, returns the id of created transfer doc
+%% wrapped in 'scheduled_transfer' provider response.
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    fslogic_blocks:block(), non_neg_integer()) ->
-    fslogic_worker:provider_response().
-replicate_file_insecure(UserCtx, FileCtx, Block, Offset) ->
-    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case file_ctx:is_dir(FileCtx) of
-        {true, FileCtx2} ->
-            case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
-                {Children, _FileCtx3} when length(Children) < Chunk ->
-                    replicate_children(UserCtx, Children, Block),
-                    #provider_response{status = #status{code = ?OK}};
-                {Children, FileCtx3} ->
-                    replicate_children(UserCtx, Children, Block),
-                    replicate_file_insecure(UserCtx, FileCtx3, Block, Offset + Chunk)
-            end;
-        {false, FileCtx2} ->
-            #fuse_response{status = Status} =
-                synchronize_block(UserCtx, FileCtx2, Block, false),
-            #provider_response{status = Status}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Replicates children list.
-%% @end
-%%--------------------------------------------------------------------
--spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()],
-    fslogic_blocks:block()) -> ok.
-replicate_children(UserCtx, Children, Block) ->
-    utils:pforeach(fun(ChildCtx) ->
-        replicate_file(UserCtx, ChildCtx, Block)
-    end, Children).
+-spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    file_meta:path(), od_provider:id(), transfer:callback(),
+    transfer:index_name(), query_view_params()) -> provider_response().
+schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
+    IndexName, QueryViewParams
+) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
+        TargetProviderId, Callback, IndexName, QueryViewParams),
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #scheduled_transfer{
+            transfer_id = TransferId
+        }
+    }.

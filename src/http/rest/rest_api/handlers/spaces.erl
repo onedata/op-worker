@@ -14,15 +14,14 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+-export([terminate/3, allowed_methods/2, is_authorized/2,
     content_types_provided/2]).
 
 %% resource functions
@@ -31,13 +30,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:rest_init/2
-%%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, State) ->
-    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -56,7 +48,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
@@ -81,12 +73,13 @@ content_types_provided(Req, State) ->
 %%
 %%--------------------------------------------------------------------
 -spec list_spaces(req(), maps:map()) -> {term(), req(), maps:map()}.
-list_spaces(Req, State = #{auth := Auth}) ->
-    {ok, UserId} = session:get_user_id(Auth),
-    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get_or_fetch(Auth, UserId),
+list_spaces(Req, State = #{auth := SessionId}) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    {ok, EffSpaces} = user_logic:get_eff_spaces(SessionId, UserId),
     RawResponse =
-        lists:map(fun({SpaceId, SpaceName}) ->
-            #{<<"name">> => SpaceName, <<"spaceId">> => SpaceId}
-        end, Spaces),
-    Response = json_utils:encode_map(RawResponse),
+        lists:map(fun(SpaceId) ->
+            {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+            #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
+        end, EffSpaces),
+    Response = json_utils:encode(RawResponse),
     {Response, Req, State}.

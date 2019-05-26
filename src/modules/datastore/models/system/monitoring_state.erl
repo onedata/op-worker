@@ -6,30 +6,142 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Persistent state of Monitoring worker.
+%%% Persistent state of monitoring worker.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(monitoring_state).
 -author("Michal Wrona").
--behaviour(model_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 
-%% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, run_in_critical_section/2]).
--export([record_struct/1]).
+%% API
+-export([save/1, get/1, exists/1, update/2, delete/1, list/0]).
+-export([run_in_critical_section/2, encode_id/1]).
 
--export([encode_id/1]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_struct/1]).
+
+-type key() :: #monitoring_id{} | datastore:key().
+-type record() :: #monitoring_state{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+
+-define(CTX, #{
+    model => ?MODULE,
+    fold_enabled => true
+}).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns structure of the record in specified version.
+%% Saves monitoring state.
 %% @end
 %%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
-record_struct(1) ->
+-spec save(doc()) -> {ok, key()} | {error, term()}.
+save(Doc) ->
+    ?extract_key(datastore_model:save(?CTX, Doc)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates monitoring state.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(key(), diff()) -> {ok, key()} | {error, term()}.
+update(#monitoring_id{} = MonitoringId, Diff) ->
+    monitoring_state:update(encode_id(MonitoringId), Diff);
+update(Key, Diff) ->
+    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns monitoring state.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(key()) -> {ok, doc()} | {error, term()}.
+get(#monitoring_id{} = MonitoringId) ->
+    monitoring_state:get(encode_id(MonitoringId));
+get(Key) ->
+    datastore_model:get(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether monitoring state exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(key()) -> boolean().
+exists(#monitoring_id{} = MonitoringId) ->
+    monitoring_state:exists(encode_id(MonitoringId));
+exists(Key) ->
+    {ok, Exists} = datastore_model:exists(?CTX, Key),
+    Exists.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes monitoring state.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(key()) -> ok | {error, term()}.
+delete(#monitoring_id{} = MonitoringId) ->
+    monitoring_state:delete(encode_id(MonitoringId));
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [doc()]} | {error, term()}.
+list() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure
+%% that 2 funs with same ResourceId won't run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_in_critical_section(key(), Fun :: fun(() -> Result :: term())) ->
+    Result :: term().
+run_in_critical_section(#monitoring_id{} = MonitoringId, Fun) ->
+    monitoring_state:run_in_critical_section(encode_id(MonitoringId), Fun);
+run_in_critical_section(ResourceId, Fun) ->
+    critical_section:run([?MODULE, ResourceId], Fun).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Encodes monitoring_id record to datastore id.
+%% @end
+%%--------------------------------------------------------------------
+-spec encode_id(#monitoring_id{}) -> datastore:key().
+encode_id(MonitoringId) ->
+    http_utils:base64url_encode(crypto:hash(md5, term_to_binary(MonitoringId))).
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's record structure in provided version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
     {record, [
         {monitoring_id, {record, [
             {main_subject_type, atom},
@@ -43,147 +155,3 @@ record_struct(1) ->
         {state_buffer, #{term => term}},
         {last_update_time, integer}
     ]}.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec save(datastore:document() | #monitoring_id{}) ->
-    {ok, datastore:ext_key()} | datastore:generic_error().
-save(#document{key = #monitoring_id{} = MonitoringIdRecord} = Document) ->
-    monitoring_state:save(Document#document{key = encode_id(MonitoringIdRecord)});
-save(#document{} = Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback update/2.
-%% @end
-%%--------------------------------------------------------------------
--spec update(datastore:ext_key() | #monitoring_id{},
-    Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-update(#monitoring_id{} = MonitoringIdRecord, Diff) ->
-    monitoring_state:update(encode_id(MonitoringIdRecord), Diff);
-update(Key, Diff) ->
-    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback create/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create(datastore:document() | #monitoring_id{}) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(#document{key = #monitoring_id{} = MonitoringIdRecord} = Document) ->
-    monitoring_state:create(Document#document{key = encode_id(MonitoringIdRecord)});
-create(#document{} = Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% Sets access time to current time for user session and returns old value.
-%% @end
-%%--------------------------------------------------------------------
--spec get(datastore:ext_key() | #monitoring_id{}) ->
-    {ok, datastore:document()} | datastore:get_error().
-get(#monitoring_id{} = MonitoringIdRecord) ->
-    monitoring_state:get(encode_id(MonitoringIdRecord));
-get(Key) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback delete/1.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
-delete(#monitoring_id{} = MonitoringIdRecord) ->
-    monitoring_state:delete(encode_id(MonitoringIdRecord));
-delete(Key) ->
-    model:execute_with_default_context(?MODULE, delete, [Key]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback exists/1.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(datastore:ext_key() | #monitoring_id{}) -> datastore:exists_return().
-exists(#monitoring_id{} = MonitoringIdRecord) ->
-    monitoring_state:exists(encode_id(MonitoringIdRecord));
-exists(Key) ->
-    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback model_init/0.
-%% @end
-%%--------------------------------------------------------------------
--spec model_init() -> model_behaviour:model_config().
-model_init() ->
-    ?MODEL_CONFIG(monitoring_state_bucket, [], ?GLOBALLY_CACHED_LEVEL)#model_config{
-        list_enabled = {true, return_errors}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback 'after'/5.
-%% @end
-%%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback before/4.
-%% @end
-%%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(_ModelName, _Method, _Level, _Context) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Runs given function within locked ResourceId. This function makes sure
-%% that 2 funs with same ResourceId won't run at the same time.
-%% @end
-%%--------------------------------------------------------------------
--spec run_in_critical_section(ResourceId :: binary() | #monitoring_id{},
-    Fun :: fun(() -> Result :: term())) -> Result :: term().
-% TODO remove after update of monitoring worker
-run_in_critical_section(#monitoring_id{} = MonitoringIdRecord, Fun) ->
-    monitoring_state:run_in_critical_section(encode_id(MonitoringIdRecord), Fun);
-run_in_critical_section(ResourceId, Fun) ->
-    critical_section:run([?MODEL_NAME, ResourceId], Fun).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Encodes monitoring_id record to datastore id.
-%% @end
-%%--------------------------------------------------------------------
--spec encode_id(#monitoring_id{}) -> datastore:id().
-encode_id(MonitoringIdRecord) ->
-    http_utils:base64url_encode(crypto:hash(md5, term_to_binary(MonitoringIdRecord))).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

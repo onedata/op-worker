@@ -30,10 +30,10 @@
 %%--------------------------------------------------------------------
 -spec get_path(cowboy_req:req()) -> {path(), cowboy_req:req()}.
 get_path(Req) ->
-    {RawPath, NewReq} = cowboy_req:path(Req),
-    {Path, NewReq} = cowboy_req:path_info(Req),
+    RawPath = cowboy_req:path(Req),
+    Path = cowboy_req:path_info(Req),
     JoinedPath = join_filename(Path, RawPath),
-    {JoinedPath, NewReq}.
+    {JoinedPath, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -42,18 +42,18 @@ get_path(Req) ->
 %%--------------------------------------------------------------------
 -spec get_path_of_id_request(cowboy_req:req()) -> {path(), cowboy_req:req()}.
 get_path_of_id_request(Req) ->
-    {RawPath, Req2} = cowboy_req:path(Req),
-    {Path, Req3} = cowboy_req:path_info(Req2),
-    {Id, Req4} = cowboy_req:binding(id, Req3),
+    RawPath = cowboy_req:path(Req),
+    Path = cowboy_req:path_info(Req),
+    Id = cowboy_req:binding(id, Req),
     IdSize = byte_size(Id),
     <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, RawPathSuffix/binary>> = RawPath,
 
     case RawPathSuffix of
         <<>> ->
-            {<<>>, Req4};
+            {<<>>, Req};
         _ ->
             JoinedPath = join_filename(Path, RawPath),
-            {JoinedPath, Req4}
+            {JoinedPath, Req}
     end.
 
 %%%===================================================================

@@ -75,13 +75,16 @@ remove_acl(_UserCtx, FileCtx) ->
 get_acl_insecure(_UserCtx, FileCtx) ->
     case xattr:get_by_name(FileCtx, ?ACL_KEY) of
         {ok, Val} ->
+            % ACLs are kept in database without names, as they might change.
+            % Resolve the names here.
+            Acl = acl_names:add(acl_logic:from_json_format_to_acl(Val)),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #acl{
-                    value = acl_logic:from_json_format_to_acl(Val)
+                    value = Acl
                 }
             };
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -94,16 +97,16 @@ get_acl_insecure(_UserCtx, FileCtx) ->
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
 set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
-    case xattr:set(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val), Create, Replace) of
+    % ACLs are kept in database without names, as they might change.
+    % Strip the names here.
+    AclJson = acl_logic:from_acl_to_json_format(acl_names:strip(Val)),
+    case xattr:set(FileCtx, ?ACL_KEY, AclJson, Create, Replace) of
         {ok, _} ->
-            ok = permissions_cache:invalidate(custom_metadata, FileCtx),
-            ok = sfm_utils:chmod_storage_file(
-                user_ctx:new(?ROOT_SESS_ID),
-                FileCtx, 8#000
-            ),
+            ok = permissions_cache:invalidate(),
+            maybe_chmod_storage_file(FileCtx, 8#000),
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -117,7 +120,7 @@ set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
 remove_acl_insecure(_UserCtx, FileCtx) ->
     case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
         ok ->
-            ok = permissions_cache:invalidate(custom_metadata, FileCtx),
+            ok = permissions_cache:invalidate(),
             {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
                 file_ctx:get_file_doc(FileCtx),
             ok = sfm_utils:chmod_storage_file(
@@ -127,6 +130,26 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
             ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             fslogic_times:update_ctime(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, custom_metadata}} ->
+        {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tries to chmod file on storage. Succeeds if chmod succeeds or
+%% if chmod returns {error, ?EROFS} succeeds.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_chmod_storage_file(file_ctx:ctx(), file_meta:mode()) -> ok.
+maybe_chmod_storage_file(FileCtx, Mode) ->
+    case sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode) of
+        ok ->
+            ok;
+        {error, ?EROFS} ->
+            ok
     end.

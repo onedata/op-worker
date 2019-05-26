@@ -15,6 +15,11 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st1"
+                },
+                {
+                    "type": "cephrados",
+                    "name": "cephrados",
+                    "pool": "onedata:8"
                 }
             ],
             "users": [],
@@ -50,7 +55,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }
@@ -60,6 +66,9 @@
         "users": {
             "user1": {
                 "default_space": "space1"
+            },
+            "user2": {
+                "default_space": "space2"
             }
         },
         "groups": {
@@ -68,13 +77,30 @@
             "space1": {
                 "displayed_name": "space1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1"
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados",
+                        "supported_size": 10737418240
                     }
                 }
             }

@@ -14,16 +14,16 @@
 -author("Rafal Slota").
 -behavior(worker_plugin_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--define(SYNC_JOB_TIMEOUT,  timer:hours(24)).
--define(ASYNC_JOB_TIMEOUT,  timer:seconds(10)).
+-define(SYNC_JOB_TIMEOUT, timer:hours(24)).
+-define(ASYNC_JOB_TIMEOUT, timer:seconds(10)).
 
 %% Interval between successive check strategies.
 -define(SPACE_STRATEGIES_CHECK_INTERVAL, check_strategies_interval).
@@ -59,9 +59,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
-    storage_sync_monitoring:start_lager_reporter(),
-    storage_sync_monitoring:start_ets_reporter(),
-    schedule_check_strategy(),
+    schedule_start_strategies(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -79,6 +77,14 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
+handle(start_strategies) ->
+    ?debug("Start strategies"),
+    case start_strategies() of
+        ok ->
+            schedule_check_strategy();
+        _ ->
+            schedule_start_strategies()
+    end;
 handle(check_strategies) ->
     ?debug("Check strategies"),
     check_strategies(),
@@ -100,8 +106,6 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     stop_pools(),
-    storage_sync_monitoring:delete_lager_reporter(),
-    storage_sync_monitoring:delete_ets_reporter(),
     ok.
 
 %%%===================================================================
@@ -155,14 +159,44 @@ run({return_none, Jobs}) ->
 %% @doc
 %% This function is responsible for checking and optionally starting
 %% storage_import and storage_update strategies for given provider.
+%% It behaves similarly to check_strategies/0. It's called after
+%% start/restart until it succeeds. After first success,
+%% check_strategies is called.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_strategies() -> ok | {error, term()}.
+start_strategies() ->
+    try
+        ProviderId = oneprovider:get_id(),
+        case provider_logic:get_spaces(ProviderId) of
+            {ok, Spaces} ->
+                check_strategies(Spaces, true);
+            Error = {error, _} ->
+                Error
+        end
+    catch
+        throw:?ERROR_UNREGISTERED_PROVIDER ->
+            {error, ?ERROR_UNREGISTERED_PROVIDER};
+        Error2:Reason ->
+            ?error_stacktrace("Unable to start space strategies due to: ~p",
+                [{Error2, Reason}]),
+            {Error2, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is responsible for checking and optionally starting
+%% storage_import and storage_update strategies for given provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_strategies() -> ok.
 check_strategies() ->
-    try od_provider:get_or_fetch(oneprovider:get_provider_id()) of
-        {ok, #document{value = #od_provider{spaces = SpaceIds}}} ->
-            check_strategies(SpaceIds);
-        {error, _} -> ok
+    try
+        ProviderId = oneprovider:get_id(),
+        {ok, Spaces} = provider_logic:get_spaces(ProviderId),
+        check_strategies(Spaces, false)
     catch
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
@@ -174,16 +208,18 @@ check_strategies() ->
 %% This function is responsible for checking and optionally starting
 %% storage_import and storage_update strategies for each space supported
 %% by provider.
+%% Flag FirstRun will be passed down to check_strategies/3
+%% function for special handling of first run after restart.
 %% @end
 %%--------------------------------------------------------------------
--spec check_strategies([od_space:id()]) -> ok.
-check_strategies(SpaceIds) ->
+-spec check_strategies([od_space:id()], boolean()) -> ok.
+check_strategies(SpaceIds, FirstRun) ->
     lists:foreach(fun(SpaceId) ->
         case space_storage:get(SpaceId) of
             {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
-                check_strategies(SpaceId, StorageIds);
+                check_strategies(SpaceId, StorageIds, FirstRun);
             _ ->
-                storage_sync_monitoring:ensure_all_metrics_stopped(SpaceId)
+                ok
         end
     end, SpaceIds).
 
@@ -196,18 +232,10 @@ check_strategies(SpaceIds) ->
 %% supported by given storages
 %% @end
 %%--------------------------------------------------------------------
--spec check_strategies(od_space:id(), [storage:id()]) -> ok.
-check_strategies(SpaceId, StorageIds) ->
+-spec check_strategies(od_space:id(), [storage:id()], boolean()) -> ok.
+check_strategies(SpaceId, StorageIds, FirstRun) ->
     lists:foreach(fun(StorageId) ->
-        case space_strategies:get(SpaceId) of
-            {ok, #document{value = #space_strategies{
-                storage_strategies = StorageStrategies
-            }}} ->
-                maybe_start_storage_import_and_update(SpaceId, StorageId,
-                    StorageStrategies);
-            _ ->
-                ok
-        end
+        maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun)
     end, StorageIds).
 
 %%--------------------------------------------------------------------
@@ -218,12 +246,14 @@ check_strategies(SpaceId, StorageIds) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_start_storage_import_and_update(od_space:id(), storage:id(),
-    maps:map()) -> ok.
-maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
-    case maps:find(StorageId, StorageStrategies) of
-        {ok, #storage_strategies{last_import_time = LastImportTime}} ->
-            start_storage_import_and_update(SpaceId, StorageId, LastImportTime);
-        error ->
+    boolean()) -> ok.
+maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun) ->
+    case storage_sync_monitoring:get(SpaceId, StorageId) of
+        {ok, #document{value = SSM}} ->
+            SyncTimestamps =
+                storage_sync_monitoring:get_previous_sync_timestamps(SSM, FirstRun),
+            start_storage_import_and_update(SpaceId, StorageId, SyncTimestamps);
+        _Error ->
             ok
     end.
 
@@ -235,15 +265,17 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
-    integer() | undefined) -> ok.
-start_storage_import_and_update(SpaceId, StorageId, LastImportTime) ->
+    {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()}) -> ok.
+start_storage_import_and_update(SpaceId, StorageId, {ImportStartTime, ImportFinishTime,
+    LastUpdateStartTime, LastUpdateFinishTime
+}) ->
     RootDirCtx = file_ctx:new_root_ctx(),
-    ImportAns = storage_import:start(SpaceId, StorageId, LastImportTime,
+    ImportAns = storage_import:start(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
         RootDirCtx, SpaceId),
     log_import_answer(ImportAns, SpaceId, StorageId),
 
-    UpdateAns = storage_update:start(SpaceId, StorageId, LastImportTime,
-        RootDirCtx, SpaceId),
+    UpdateAns = storage_update:start(SpaceId, StorageId, ImportStartTime, ImportFinishTime,
+        LastUpdateStartTime, LastUpdateFinishTime, RootDirCtx, SpaceId),
     log_update_answer(UpdateAns, SpaceId, StorageId).
 
 
@@ -340,11 +372,16 @@ run_and_merge_all([]) -> ok;
 run_and_merge_all(Jobs = [
     #space_strategy_job{
         strategy_type = StrategyType}
-| _]) ->
+    | _]) ->
     PoolName = StrategyType:main_worker_pool(),
     Responses = utils:pmap(fun(Job) ->
-        worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
-            PoolName, ?SYNC_JOB_TIMEOUT)
+        case (StrategyType =:= storage_import) or (StrategyType =:= storage_update) of
+            true ->
+                worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
+                    PoolName, ?SYNC_JOB_TIMEOUT);
+            false ->
+                worker_proxy:call_direct(?MODULE, {run_job, undefined, Job}, ?SYNC_JOB_TIMEOUT)
+        end
     end, Jobs),
     StrategyType:strategy_merge_result(Jobs, Responses).
 
@@ -370,6 +407,7 @@ run_and_return_first(Jobs) ->
         Response ->
             Response
     after ?ASYNC_JOB_TIMEOUT ->
+        % TODO VFS-4025
         {error, timeout}
     end.
 
@@ -384,7 +422,7 @@ run_and_return_first(Jobs) ->
 -spec run_and_return_none([space_strategy:job()]) ->
     space_strategy:job_result().
 run_and_return_none(Jobs) ->
-    utils:pforeach(fun(Job = #space_strategy_job{strategy_type = StrategyType}) ->
+    lists:foreach(fun(Job = #space_strategy_job{strategy_type = StrategyType}) ->
         PoolName = StrategyType:main_worker_pool(),
         worker_proxy:cast_pool(?MODULE, {run_job, undefined, Job}, PoolName)
     end, Jobs),
@@ -432,10 +470,6 @@ strategy_config(StrategyType, StorageId, SpaceStrategies =
 ) ->
 
     case StrategyType of
-        filename_mapping ->
-            #storage_strategies{filename_mapping = {Strategy, Args}} =
-                maps:get(StorageId, StorageStrategies),
-            {Strategy, Args};
         storage_import ->
             #storage_strategies{storage_import = {Strategy, Args}} =
                 maps:get(StorageId, StorageStrategies),
@@ -483,7 +517,7 @@ start_pools() ->
 %%--------------------------------------------------------------------
 -spec start_pool(atom(), non_neg_integer()) -> {ok, pid()}.
 start_pool(PoolName, WorkersNum) ->
-    {ok, _ } = wpool:start_sup_pool(PoolName, [{workers, WorkersNum}]).
+    {ok, _} = worker_pool:start_sup_pool(PoolName, [{workers, WorkersNum}, {queue_type, lifo}]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -498,8 +532,20 @@ stop_pools() ->
     end, space_strategy:types()),
     Pools = [PoolName || {PoolName, _} <- PoolsConfigs],
     lists:foreach(fun(PoolName) ->
-        ok = worker_pool:stop_pool(PoolName)
+        ok = wpool:stop_sup_pool(PoolName)
     end, sets:to_list(sets:from_list(Pools))).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Maps space strategy name to worker pool name.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_start_strategies() -> {ok, term()}.
+schedule_start_strategies() ->
+    {ok, Interval} = application:get_env(?APP_NAME, ?SPACE_STRATEGIES_CHECK_INTERVAL),
+    timer:apply_after(timer:seconds(Interval), worker_proxy, cast,
+        [?MODULE, start_strategies]).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -13,8 +13,7 @@
 -author("Krzysztof Trzepla").
 
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -90,7 +89,7 @@ send_message_should_inject_stream_id_into_message(Config) ->
 route_message_should_forward_message(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Msg = client_message(?config(session_id, Config), 1, 0),
-    route_message(Worker, ?config(session_id, Config), Msg),
+    route_message(Worker, Msg),
     ?assertReceivedMatch(Msg, ?TIMEOUT).
 
 route_message_should_forward_messages_to_the_same_stream(Config) ->
@@ -98,7 +97,7 @@ route_message_should_forward_messages_to_the_same_stream(Config) ->
     SessId = ?config(session_id, Config),
     Msgs = lists:map(fun(SeqNum) ->
         Msg = client_message(SessId, 1, SeqNum),
-        route_message(Worker, SessId, Msg),
+        route_message(Worker, Msg),
         Msg
     end, lists:seq(9, 0, -1)),
     lists:foreach(fun(Msg) ->
@@ -110,7 +109,7 @@ route_message_should_forward_messages_to_different_streams(Config) ->
     SessId = ?config(session_id, Config),
     Msgs = lists:map(fun(StmId) ->
         Msg = client_message(SessId, StmId, 0),
-        route_message(Worker, SessId, Msg),
+        route_message(Worker, Msg),
         Msg
     end, lists:seq(1, 10)),
     lists:foreach(fun(Msg) ->
@@ -124,7 +123,7 @@ route_message_should_forward_messages_to_different_streams(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
-        initializer:clear_models(Worker, [subscription]),
+        initializer:clear_subscriptions(Worker),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -170,7 +169,8 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate_and_unload(Worker, [communicator, router]).
+    test_utils:mock_validate_and_unload(Worker, [communicator, router,
+        stream_router]).
 
 %%%===================================================================
 %%% Internal functions
@@ -251,9 +251,9 @@ send_message(Worker, SessId, StmId, Msg) ->
 %% Sends message to sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
--spec route_message(Worker :: node(), SessId :: session:id(), Msg :: term()) -> ok.
-route_message(Worker, SessId, Msg) ->
-    ?assertEqual(ok, rpc:call(Worker, sequencer, route_message, [Msg, SessId])).
+-spec route_message(Worker :: node(), Msg :: term()) -> ok.
+route_message(Worker, Msg) ->
+    ?assertEqual(ok, rpc:call(Worker, stream_router, route_message, [Msg])).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -288,7 +288,7 @@ mock_communicator(Worker) ->
 -spec mock_communicator(Worker :: node(), MockFun :: fun()) -> ok.
 mock_communicator(Worker, MockFun) ->
     test_utils:mock_new(Worker, [communicator]),
-    test_utils:mock_expect(Worker, communicator, send, MockFun).
+    test_utils:mock_expect(Worker, communicator, send_to_client, MockFun).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -302,5 +302,9 @@ mock_router(Worker) ->
     test_utils:mock_new(Worker, [router]),
     test_utils:mock_expect(Worker, router, route_message, fun
         (Msg) -> Self ! Msg
+    end),
+    test_utils:mock_new(Worker, [stream_router]),
+    test_utils:mock_expect(Worker, stream_router, make_message_direct, fun
+        (Msg) -> Msg
     end).
 

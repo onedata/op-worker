@@ -27,9 +27,12 @@
 %% API
 -export([init/0]).
 -export([get_handle/2]).
--export([getattr/2, access/3, mknod/5, mkdir/3, unlink/2, rmdir/2, symlink/3,
-    rename/3, link/3, chmod/3, chown/4, truncate/3, open/3, read/3, write/3,
-    release/1, flush/1, fsync/2, readdir/4]).
+-export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
+    mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
+    chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
+    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
+    readdir/4]).
+-export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
 %%% API
@@ -44,6 +47,12 @@
 -spec get_handle(helpers:name(), helpers:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
 get_handle(_Name, _Params) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec refresh_params(helper_handle(), maps:map()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+refresh_params(_Handle, _Args) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -78,9 +87,9 @@ mkdir(_Handle, _FileId, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec unlink(helper_handle(), helpers:file_id()) ->
+-spec unlink(helper_handle(), helpers:file_id(), CurrentSize :: non_neg_integer()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
-unlink(_Handle, _FileId) ->
+unlink(_Handle, _FileId, _CurrentSize) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -120,15 +129,47 @@ chown(_Handle, _FileId, _Uid, _Gid) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec truncate(helper_handle(), helpers:file_id(), Size :: non_neg_integer()) ->
+-spec truncate(helper_handle(), helpers:file_id(), Size :: non_neg_integer(),
+    CurrentSize :: non_neg_integer()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
-truncate(_Handle, _FileId, _Size) ->
+truncate(_Handle, _FileId, _Size, _CurrentSize) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec setxattr(helper_handle(), helpers:file_id(), Name :: binary(),
+    Value :: binary(), Create :: boolean(), Replace :: boolean()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+setxattr(_Handle, _FileId, _Name, _Value, _Create, _Replace) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec getxattr(helper_handle(), helpers:file_id(), Name :: binary()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+getxattr(_Handle, _FileId, _Name) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec removexattr(helper_handle(), helpers:file_id(), Name :: binary()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+removexattr(_Handle, _FileId, _Name) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec listxattr(helper_handle(), helpers:file_id()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+listxattr(_Handle, _FileId) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
 -spec open(helper_handle(), helpers:file_id(), Flags :: [open_flag()]) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 open(_Handle, _FileId, _Flags) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec refresh_helper_params(file_handle(), maps:map()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+refresh_helper_params(_Handle, _Args) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -161,12 +202,7 @@ flush(_Handle) ->
 fsync(_Handle, _IsDataSync) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Initialization function for the module.
 %% Loads the NIF native library. The library is first searched for
@@ -192,6 +228,18 @@ init() ->
         {error, Reason} -> {error, Reason}
     end.
 
+-spec start_monitoring() -> ok | {error, Reason :: term()}.
+start_monitoring() ->
+  erlang:nif_error(helpers_nif_not_loaded).
+
+-spec stop_monitoring() -> ok | {error, Reason :: term()}.
+stop_monitoring() ->
+  erlang:nif_error(helpers_nif_not_loaded).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -200,15 +248,18 @@ init() ->
 %%--------------------------------------------------------------------
 -spec prepare_args() -> #{binary() => binary()}.
 prepare_args() ->
-    lists:foldl(fun(EnvKey, Map) ->
+    OpWorkerArgs = lists:foldl(fun(EnvKey, Map) ->
         {ok, EnvValue} = application:get_env(?APP_NAME, EnvKey),
         maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
     end, #{}, [
         ceph_helper_threads_number,
+        cephrados_helper_threads_number,
         posix_helper_threads_number,
         s3_helper_threads_number,
         swift_helper_threads_number,
         glusterfs_helper_threads_number,
+        webdav_helper_threads_number,
+        nulldevice_helper_threads_number,
         buffer_helpers,
         buffer_scheduler_threads_number,
         read_buffer_min_size,
@@ -216,5 +267,17 @@ prepare_args() ->
         read_buffer_prefetch_duration,
         write_buffer_min_size,
         write_buffer_max_size,
-        write_buffer_flush_delay
+        write_buffer_flush_delay,
+        helpers_performance_monitoring_enabled,
+        helpers_performance_monitoring_type,
+        helpers_performance_monitoring_level,
+        helpers_performance_monitoring_period
+    ]),
+    lists:foldl(fun(EnvKey, Map) ->
+        {ok, EnvValue} = application:get_env(?CLUSTER_WORKER_APP_NAME, EnvKey),
+        maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
+    end, OpWorkerArgs, [
+        graphite_host,
+        graphite_port,
+        graphite_prefix
     ]).

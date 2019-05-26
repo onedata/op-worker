@@ -12,8 +12,7 @@
 -module(lfm_shares).
 
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/oz/oz_shares.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
@@ -44,8 +43,7 @@ create_share(SessId, FileKey, Name) ->
 -spec remove_share(session:id(), od_share:id()) ->
     ok | logical_file_manager:error_reply().
 remove_share(SessId, ShareID) ->
-    {ok, UserAuth} = session:get_auth(SessId),
-    case share_logic:get(UserAuth, ShareID) of
+    case share_logic:get(SessId, ShareID) of
         {ok, #document{value = #od_share{root_file = ShareGuid}}} ->
             remove_share_by_guid(SessId, ShareGuid);
         Error ->

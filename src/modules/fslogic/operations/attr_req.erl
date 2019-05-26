@@ -19,7 +19,8 @@
 
 %% API
 -export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_child_attr/3, chmod/3, update_times/5, chmod_attrs_only_insecure/2]).
+    get_file_attr_insecure/4, get_child_attr/3, chmod/3, update_times/5,
+    chmod_attrs_only_insecure/2]).
 
 %%%===================================================================
 %%% API
@@ -56,10 +57,28 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
     AllowDeletedFiles :: boolean()) ->
 fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
-    {#document{key = Uuid, value = #file_meta{
-        type = Type, mode = Mode, provider_id = ProviderId, owner = OwnerId,
-        shares = Shares}}, FileCtx2
-    } = case AllowDeletedFiles of
+    get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
+%% function will return attributes even for files that are marked as deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
+    fslogic_worker:fuse_response().
+get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
+    {#document{
+        key = Uuid,
+        value = #file_meta{
+            type = Type,
+            mode = Mode,
+            provider_id = ProviderId,
+            owner = OwnerId,
+            shares = Shares
+        }
+    }, FileCtx2} = case AllowDeletedFiles of
         true ->
             file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
@@ -68,18 +87,35 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
-    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
-    Size = fslogic_blocks:get_file_size(FileCtx4),
-    {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
-    {{ATime, CTime, MTime}, _FileCtx6} = file_ctx:get_times(FileCtx5),
+    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
 
-    #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
-        uid = Uid, gid = Gid, parent_uuid = ParentGuid,
-        guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
-        type = Type, mode = Mode, atime = ATime, mtime = MTime,
-        ctime = CTime, size = Size, name = FileName, provider_id = ProviderId,
-        shares = Shares, owner_id = OwnerId
-    }}.
+    {Size, FileCtx5} = case IncludeSize of
+        true -> file_ctx:get_file_size(FileCtx4);
+        _ -> {undefined, FileCtx4}
+    end,
+
+    {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
+    {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_attr{
+            uid = Uid,
+            gid = Gid,
+            parent_uuid = ParentGuid,
+            guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+            type = Type,
+            mode = Mode,
+            atime = ATime,
+            mtime = MTime,
+            ctime = CTime,
+            size = Size,
+            name = FileName,
+            provider_id = ProviderId,
+            shares = Shares,
+            owner_id = OwnerId
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @equiv get_child_attr_insecure/3 with permission checks
@@ -132,7 +168,24 @@ update_times(_UserCtx, FileCtx, ATime, MTime, CTime) ->
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
 get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
     {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
-    attr_req:get_file_attr(UserCtx, ChildFileCtx).
+    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx),
+    ensure_proper_file_name(Response, Name).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function ensures that requested Name is in returned #file_attr{}.
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_proper_file_name(fslogic_worker:fuse_response(), file_meta:name()) ->
+    fslogic_worker:fuse_response().
+ensure_proper_file_name(FuseResponse = #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = FileAttr
+}, Name) ->
+    FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}};
+ensure_proper_file_name(FuseResponse, _Name) ->
+    FuseResponse.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -159,8 +212,10 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate(file_meta, FileCtx),
+    {ok, _} = file_meta:update({uuid, FileUuid}, fun(FileMeta = #file_meta{}) ->
+        {ok, FileMeta#file_meta{mode = Mode}}
+    end),
+    ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 
 %%--------------------------------------------------------------------
@@ -173,8 +228,20 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
 update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
-    UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
-    UpdateMap1 = maps:filter(fun(_Key, Value) ->
-        is_integer(Value) end, UpdateMap),
-    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1),
+    TimesDiff1 = fun
+        (Times = #times{}) when ATime == undefined -> Times;
+        (Times = #times{}) -> Times#times{atime = ATime}
+    end,
+    TimesDiff2 = fun
+        (Times = #times{}) when MTime == undefined -> Times;
+        (Times = #times{}) -> Times#times{mtime = MTime}
+    end,
+    TimesDiff3 = fun
+        (Times = #times{}) when CTime == undefined -> Times;
+        (Times = #times{}) -> Times#times{ctime = CTime}
+    end,
+    TimesDiff = fun(Times = #times{}) ->
+        {ok, TimesDiff1(TimesDiff2(TimesDiff3(Times)))}
+    end,
+    fslogic_times:update_times_and_emit(FileCtx, TimesDiff),
     #fuse_response{status = #status{code = ?OK}}.

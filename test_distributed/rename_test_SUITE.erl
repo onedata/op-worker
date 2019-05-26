@@ -15,7 +15,6 @@
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -46,6 +45,8 @@
     attributes_retaining_test/1,
     times_update_test/1,
     moving_dir_into_itself_test/1,
+    moving_dir_into_child_test/1,
+    moving_dir_permutated_path_test/1,
     moving_file_onto_itself_test/1,
     reading_from_open_file_after_rename_test/1,
     redirecting_event_to_renamed_file_test/1]).
@@ -64,6 +65,8 @@ all() ->
         attributes_retaining_test,
         times_update_test,
         moving_dir_into_itself_test,
+        moving_dir_into_child_test,
+        moving_dir_permutated_path_test,
         moving_file_onto_itself_test,
         reading_from_open_file_after_rename_test,
         redirecting_event_to_renamed_file_test
@@ -430,6 +433,7 @@ attributes_retaining_test(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W2)}}, Config),
     UserId = ?config({user_id, <<"user1">>}, Config),
+    UserName = ?config({user_name, <<"user1">>}, Config),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(1, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(2, TestDir, ""))),
@@ -447,6 +451,7 @@ attributes_retaining_test(Config) ->
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,
+        name = UserName,
         acemask = (?read_mask bor ?write_mask bor ?execute_mask)
     },
     Mimetype = <<"text/html">>,
@@ -595,8 +600,64 @@ moving_dir_into_itself_test(Config) ->
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
+    ?assertMatch({ok, [{_, <<"dir">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
 
-    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")}, filename(1, TestDir, "/dir/dir_target"))).
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
+        filename(1, TestDir, "/dir/dir_target"))),
+
+    ?assertMatch({ok, [{_, <<"dir">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
+
+moving_dir_into_child_test(Config) ->
+    [W | _] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir/dir2"))),
+    ?assertMatch({ok, [{_, <<"dir">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
+        filename(1, TestDir, "/dir/dir2/dir_target"))),
+    ?assertMatch({ok, [{_, <<"dir">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
+        filename(1, TestDir, "/dir/dir2"))),
+    ?assertMatch({ok, [{_, <<"dir">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir/dir2/dir3"))),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
+        filename(1, TestDir, "/dir/dir2/dir3/dir_target"))),
+    ?assertMatch({ok, [{_, <<"dir">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
+
+moving_dir_permutated_path_test(Config) ->
+    [W | _] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir/dir2"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir2"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir2/dir"))),
+    ?assertMatch({ok, [{_, <<"dir">>}, {_, <<"dir2">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir/dir2")},
+        filename(1, TestDir, "/dir2/dir/dir_target"))),
+
+    ?assertMatch({ok, [{_, <<"dir">>}, {_, <<"dir2">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+    ?assertMatch({ok, []},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "/dir")}, 0, 100)),
+    ?assertMatch({ok, [{_, <<"dir_target">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "/dir2/dir")}, 0, 100)).
 
 moving_file_onto_itself_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -606,7 +667,10 @@ moving_file_onto_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
 
-    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, filename(1, TestDir, "/file"))).
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")},
+        filename(1, TestDir, "/file"))),
+    ?assertMatch({ok, [{_, <<"file">>}]},
+        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
 
 reading_from_open_file_after_rename_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -697,7 +761,6 @@ init_per_testcase(Case = redirecting_event_to_renamed_file_test, Config) ->
 
 init_per_testcase(CaseName, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
     initializer:disable_quota_limit(NewConfig),
 
@@ -707,8 +770,7 @@ init_per_testcase(CaseName, Config) ->
 end_per_testcase(_CaseName, Config) ->
     initializer:unload_quota_mocks(Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions

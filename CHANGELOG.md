@@ -4,6 +4,670 @@
 CHANGELOG
 ---------
 
+### 18.02.1
+
+* VFS-5139 Handle remote events timeout
+* VFS-5180 improvements of storage_sync mechanism:     - sync now understands and properly handles suffixes for conflicted files     - sync does not synchronize files for which deletion has been delayed due to existing handles     - race between creation of file_meta and file_location docs has been removed, now file_location is always created before file_meta     - this commit also adds tests of implemented improvements
+* VFS-5196 Added bearer authentication
+* VFS-5195 return error when file referenced by explicit name and tree_id is not_found
+* VFS-5165 return error when index referenced by explicit name and tree_id is not_found
+* VFS-5165 handle conflicting indexes' names
+* VFS-5190 Add REST enpoint for creating shares, make sure only directories can be shared and only one share per dir is allowed
+* fix missing function clauses for encoding and decoding webdav credentials in luma_cache module
+* VFS-5141 Fixed conflicting files names on storage
+* VFS-5139 Add notify when flush fails
+* VFS-5154 Clean no_dot_erlang scripts
+* VFS-4751 Ensure forward compatiblity of group/space privileges changing in future Onezone versions
+* VFS-5139 Improve events reliability
+* VFS-5161 Use new configuration endpoint for op compatibility
+* VFS-5161 Check both current and deprecated endpoints for compatibility check
+* VFS-5161 Add endpoint /api/v3/oneprovider/configuration
+* VFS-5142 Clean documents from memory when session is broken
+* VFS-5121 support modification of file-popularity-config
+* VFS-5121 introduce popularity function in the file-popularity view
+* VFS-5077 Update communicator
+* VFS-5023 refactor, move autocleaning util modules to utils directory
+* VFS-5110 check arguments order when calling aggregate_file_read_events
+* VFS-5023 fix test, add 2 fields to auto_cleaning_run report to prepare for infinite scroll over reports
+* VFS-5023 code improvement, revert sorting order of file_popularity_view, fix tests
+* VFS-5077 Refactor provider communicator
+* VFS-5077 Refactor communicator
+* VFS-5077 Refactor auth managers
+* VFS-5077 Refactor session manager worker
+* VFS-5122 Update GlusterFS to 3.12.15 on CentOS
+* VFS-5077 Refactor session manager
+* VFS-5077 Refactor session open files management
+* VFS-5023 refactor of auto-cleaning
+* VFS-5077 Refactor session module
+* VFS-5077 Refactor handshake error handling
+* VFS-4650 Added writing provider macaroon to a file
+* VFS-4977 document new metadata changes API
+* VFS-5077 Further refactor of event_router
+* VFS-5077 Create async request manager
+* VFS-4977 refactor space changes streaming
+* VFS-5021 Fixed changes stream not closing on disconnection
+* VFS-5077 Refactor streams routing
+* VFS-5077 Events refactoring
+* VFS-5046 escape specified map function when updating index
+* VFS-4970 Documents expire
+* VFS-4925 Added check of origin header in ws connection handshake
+* Updating GUI, including: VFS-5038-allow-empty-handle-metadata * allow empty handle metadata * fixes in share page * fixed handle detection after save
+* VFS-4825 call replica_deletion_master:cancel on eviction cancellation
+* VFS-4825 replace eviction_worker with new one using gen_transfer_worker
+* VFS-4825 add initial implementation of transfer_worker_behaviour
+
+
+### 18.02.0-rc13
+
+* 8.Updating GUI, including: VFS-4980-index-transfers * VFS-4980 Added support for index transfers
+* VFS-4966 Using common property for file path and index name in transfer
+* VFS-4966 Added missing db_index id in GUI API
+* VFS-4998 fix provider emitting file_written_event to itself when mtime has changed
+* VFS-4978 stop calling dbsync_changes on ignored remote docs
+* VFS-4975 enable creating indexes on additional models
+* VFS-4968 Fix minor bug in synchronizer
+* VFS-4966 Fixed undefined QueryViewParams
+* VFS-4966 fix index_db_data_backend get_record to return proper proplist
+* VFS-4966 add db-index gui model, modify transfer model
+* VFS-4976 Changed gui to use create_and_open
+* Updating GUI, including: VFS-4927-transfers-loading * VFS-4927 Fixed delay before loading transfers list; error handling
+* VFS-4998 ensure that update scan does not start to fast
+* VFS-4968 Fix link problems in cluster_worker
+* VFS-4991 handle ENOENT in remove_utils:rm_children
+* VFS-4978 rm db view from provider when he no longer supports index
+* VFS-4991 fix race on cleaning up directory from storage
+* VFS-4902 Added WebDAV helper
+* VFS-4902 Added proxygen library dependency
+* VFS-4902 Added WebDAV helper integration test
+* handle undefined FileCtx in import_children. This situation occurs when files was deleted, and its link has been already deleted too, but it is still visible on storage
+* VFS-4968 Fix remote store
+* VFS-4614 Rename email_list to emails in user record
+* VFS-4952 Implement provider modification using graph sync
+* Updating GUI, including: VFS-3774-safari-opensans * VFS-3774 Fixed broken request for OpenSans font in Safari if redirecting to Onezone
+* VFS-4936 Implement supporting space via graph sync
+* VFS-4951 fix cleaning after removing file_meta doc, filter out deleted custom_metadata docs from indexes
+* VFS-4707 remove soft_quota_limit
+* VFS-4936 Use common errors API for space support change
+* VFS-4743 Refactor link trees
+* VFS-4936 Add function to change space support size
+
+
+### 18.02.0-rc12
+
+* Releasing new version 18.02.0-rc12
+
+
+### 18.02.0-rc11
+
+* VFS-4830 add add_reduce function
+* Updating GUI, including: VFS-4454-login-loader-close * VFS-4454 Fix hanging authorization loader spinner
+* Upgrade rtransfer_link.
+* VFS-4922 add parsing provider list in query string to validator
+* VFS-4614 Rename custom_static_root to static_root_override
+* VFS-4924 Fix move into itself check
+* VFS-4830 add migration by index tests
+* VFS-4830 enable replica eviction by index, add tests for that
+* Updating GUI, including: VFS-4856-cdmi-object-id * VFS-4856 Added CDMI object ID and file path info to file row
+* VFS-4830 transfer scheduling by index
+* ensure that sync does not invalidate replicated files
+* VFS-4813 Update error on quota
+* VFS-4813 Throw sync errors
+* VFS-4816 Use local time instead of Zone time when Onezone is unreachable
+* VFS-4816 Do not ivalidate GraphSync cache immediately after a connection to Onezone fails
+* VFS-4778 - refactor replica_synchronizer:get_holes
+* VFS-4778 - simplify find_overlapping logic, add unit tests for it
+* VFS-4813 Do not use local blocks in replica finder
+* VFS-4741 Prevent synchronizer from crush when provider is not connected to onezone
+* VFS-4741 Invalidation uses only public blocks
+* VFS-4741 Add async synchronization requests
+* VFS-4778 Add priority to transfer blocks in progress
+* VFS-4769 Do not get user document when it is not needed
+* Updating GUI, including: VFS-4806-fix-distribution-dir * VFS-4806 Fixed regression bug: file distribution modal for directory has no transfers buttons
+* Updating GUI, including: VFS-4791-many-chunks-render * VFS-4791 Support for highly scattered files in file distribution charts
+* VFS-4788 Add calculation of total blocks size in get_distribution API
+* VFS-4788 Implement file chunks interpolation to avoid transferring large file blocks lists to GUI frontend
+* Updating GUI, including: VFS-4242-add-cancel-button-for-transfers * VFS-4242 Added transfers cancelling and rerunning actions
+* VFS-4741 Force publishing of at least one block
+* VFS-4741 Flush synchrinizers on terminate
+* VFS-4741 Allow async local blocks flush
+* VFS-3858 Fix a minor bug in space_data_backend
+* VFS-3858 Update cluster_worker ref, adjust to new Graph Sync proto version
+* VFS-4741 Update cluster_worker to allow int keys in links
+* VFS-4757 Fix file permissions conversion in GUI backend, tidy up .gitignore
+* VFS-4741 Create local blocks store
+* VFS-4708 Minor fslogic cache fix
+* VFS-4708 Optimize sync and compute checksum
+* Upgrade rtransfer_link.
+* VFS-4055 Update bp_tree
+* VFS-4726 Add backwards compatibility for changing privileges in 18.07
+
+
+### 18.02.0-rc10
+
+* fix duplicated transfer links after restart
+* VFS-4611 Refactor od optimize replica_synchronizer and blocks management
+* VFS-4146 Renmae ip_string to ip in clproto
+* VFS-4146 Prevent silencing of failure in resolving peer domain
+* VFS-4146 Introduce proto message with rtransfer nodes
+* VFS-4029 Implement responding to Let's Encrypt http challenge
+* VFS-4660 Allow configuration of sync priorities
+* VFS-4660 Set sync priorities
+* VFS-4656 Added cephrados to luma cache
+* VFS-4660 Extend synch messages with priority option
+* VFS-4656 Added cephrados helper
+* VFS-4562 check permissions when scheduling invalidation job
+* VFS-4590 Update cluster-worker ref to include pings in Graph Sync connection
+* VFS-4652 sync files with existing links but missing file-meta
+* VFS-4574 improve transfer doc conflict resolution
+* VFS-4574 add transfer_onf_stats_aggregator
+* VFS-4574 aggregate separately file blocks and transfer stats
+* VFS-4478 do not include deleted files in file_popularity_view
+* VFS-4478 implementation of replica_eviction
+
+
+### 18.02.0-rc9
+
+* VFS-4611 Update garbage collection
+* VFS-4608 Fix leak in rtransfer quota manager
+* Updating GUI, including: VFS-4566-file-transfers-tab * VFS-4566 Added transfers list tab for specific file
+* VFS-4584 Introduce limited history of ended transfers per file
+* VFS-4611 Change algorithm of overlapping blocks finding
+* VFS-4608 Fix tp internal calls and errors during changes application
+* VFS-4532 Update node_package vars for all platforms
+* VFS-4532 Add autogenerated.config file to start params
+* Updating GUI, including: VFS-4507 * VFS-4507 Multiple improvements in transfers list view
+* VFS-4482 Set default values in http listener to more reasonable
+* VFS-4412 Update memory management
+* VFS-4569 Updated helpers and rtransfer_link
+* Updating GUI, including: VFS-4538 * VFS-4538 Better control of invalidation feature availability for files
+* VFS-4542 Ensure op-worker is backwards compatible when group and space privileges change
+
+
+### 18.02.0-rc8
+
+* Releasing new version 18.02.0-rc8
+
+
+### 18.02.0-rc7
+
+* VFS-4412 Add holes consolidation
+* Updating GUI, including: VFS-4471 * VFS-4471 Improved file chunks bar rendering
+* handle {error, ebusy} from truncate
+* VFS-4412 Fix remote driver
+* VFS-4412 Fix blocks synchronization bugs
+* VFS-4523 Allow listing transfers per space rather than per session
+* Updating GUI, including: VFS-4391 * VFS-4391 More efficient infinite scroll for transfers list and file transfer status
+
+
+### 18.02.0-rc6
+
+* Upgrade rtransfer_link.
+* VFS-4412 Fix algorithm for excluding old blocks from transfers
+* not update file location only when mtime equals previously synced mtime
+* VFS-4412 Improve performance of file_location blocks management
+* VFS-4477 - add audit log for  storage_sync
+
+
+### 18.02.0-rc5
+
+* Update rtransfer_link.
+* VFS-4422 Hotfix for broken public share download
+* VFS-4482 Do not include link ids in transfer ids (GUI backend)
+* VFS-3953 Integrate new GUI static backend
+
+
+### 18.02.0-rc4
+
+* VFS-4510 fix finish_time not set for cancellation of replication and invalidation and for failed invalidation
+* Updating GUI, including: VFS-4487 * VFS-4487 Fixed not updating completed transfer stats
+* VFS-4510 fix active transfer being restarted after restart of provider
+* Updating GUI, including: VFS-4387 * VFS-4387 Fixed not updating current transfers stats if user not scrolled view
+* VFS-4509 improve error handling in storage_sync full_update procedure
+* VFS-4481 Setting space transfer list limit to 250
+* VFS-4314 Add cleaning of tranfers history for files upon deletion or long inactivity
+* VFS-4314 Implement backend for transfers pagination in GUI   * Implement API for GUI frontend to list transfers by ranges and negative offsets   * Improve behaviour of transfer links   * Add enqueued transfer state between scheduled and active   * Add transferred_file record for tracking which files are currently being transferred
+
+
+### 18.02.0-rc3
+
+* VFS-4430 remove unused fields from space_strategies record, fix bug in storage_sync_monitoring:get_record_struct function
+* VFS-4366 fix badmatch when updating space_transfer_stats
+* Reduce default num of rtransfer connections to 16.
+* Update rtransfer to fix missing blocks.
+* Updating GUI, including: VFS-3945 * VFS-3945 Added data invalidation functionality
+* VFS-4431 Stabilize zone_connection test, update ctool ref - include better handling of end_per_suite crashes, update meck, clean up in rebar.config
+* VFS-4407 Updated helpers and rtransfer_link refs
+* Updating GUI, including: VFS-4355 * VFS-4355 Added summarized transfer charts per provider
+* VFS-4265 check if replica target provider supports space
+* VFS-4366 refactor space_data_backend
+* VFS-4366 refactor space_transfer_stats_cache
+
+
+### 18.02.0-rc2
+
+* Upgrade rtransfer_link.
+* VFS-4446 Updated jiffy ref
+* VFS-4427 ensure that sync does not updates files being replicated
+* VFS-4443 Fixed generation of source archive with submodules
+* VFS-4396 ensure that sync_file_counter has been deregistered
+* VFS-4417 do not update mtime when performing move on non-posix storage
+* VFS-4393 Upon connection failure, try to send responses via other connections of related session
+* VFS-4396 fix race when updating transfer stats
+* Update cluster_worker to enable links listing with neg offset
+* VFS-4361 increase timeout for verify_helper
+* VFS-4295 Changed subtrees to submodules
+* VFS-4361 add transfer stats aggregation and flushing
+* VFS-4394 Updated helpers and rtransfer refs
+* VFS-4241 added storage_sync_monitoring model, major refactor of storage_sync mechanism
+* VFS-4393 Close incoming connection upon unexpected errors
+* VFS-4313 Updated pkg config with new aws sdk s3 version
+* VFS-4313 Updated dockers.config
+
+
+### 18.02.0-rc1
+
+* VFS-2021 Added dockers.config
+* VFS-4238 Updated helpers and rtransfer rebar refs
+* VFS-4280 Added simulated filesystem options to null device helper
+* Updating GUI, including: VFS-4239 * VFS-4239 Infinite scroll for transfers lists
+* VFS-4369 - emit file_renamed event
+* VFS-4299 Update config
+* VFS-4369 create delayed storage file with root session id
+* Updating GUI, including: VFS-4305 * VFS-4305 Added charts for on-the-fly transfers
+* VFS-4299 Extend ls with tokens
+* VFS-4299 Use links during files listing
+* VFS-4239 Using real start time for transfers in GUI backend
+* VFS-4304 erase zeroed histograms for on the fly transfers
+* VFS-4304 fix old comments and dialyzer specs
+* VFS-4238 fix not working updating stats for on the fly transfers
+* VFS-4239 Do not present active transfers on scheduled list
+* VFS-4304 add aggregated transfer stats for on the fly transfers
+* VFS-4239 Setting development version of GUI
+* VFS-4304 handle case when space transfer stats document do not exist
+* VFS-4304 update models to store and compute on the fly transfer stats
+* VFS-4304 store on the fly transfer data
+* VFS-4239 add listing of scheduled transfers
+* VFS-4239 Disabling transfer fetch limit
+
+
+### 18.02.0-beta6
+
+* VFS-3732 - improve storage_sync tests
+* VFS-3732 - fix tests after removing sticky bit on space directory
+* VFS-3732 - remove sticky_bit on space_dir in file_meta
+* Update compatible versions
+* Releasing new version 18.02.0-beta6
+* Update vsn in app.src file
+* VFS-3731 - code style improvement
+* VFS-3731 - fix sync removing remotely created files, fix transfer model upgrader
+* VFS-3731 - fix dialysis
+* VFS-3731 - fix removing non-empty directory after remote deletion
+* VFS-4299 Add flush cooldown
+* VFS-4113 Updated exometer counters
+* VFS-4234 Updated rtransfer and helpers ref
+
+
+### 18.02.0-beta6
+
+* VFS-3731 - fix sync removing remotely created files, fix transfer model upgrader
+* VFS-3731 - fix removing non-empty directory after remote deletion
+* VFS-4299 Add flush cooldown
+* VFS-4113 Updated exometer counters
+* VFS-4234 Updated rtransfer and helpers
+
+
+### 18.02.0-beta5
+
+* don't count files' attrs hash when update is set to write_once
+* Upgrade rtransfer_link.
+* VFS-4310 Update replica management
+* Updating GUI, including: VFS-4260 * VFS-4260 Added menu for managing space root dir data distribution
+* VFS-4310 Update getting blocks for sync
+* VFS-3703 Switched from mochiweb JSON parsing to jiffy
+* VFS-4310 Update bp_tree
+* VFS-4316 - remove filename_mapping strategy
+* Fix session deletion
+* VFS-4316 deleted dirs should be removed from storage
+* fix user_logic:exists
+* improve error handling in fetch_lock_fetch_helper
+* fix displaying transfer status in GUI
+* VFS-4285 Fix restart of deletion_worker
+* VFS-4285 Add create/delete test with sync
+* VFS-4285 Update getting deleted files
+* VFS-4272 Check forward compatiblity during OP connections to OZ
+* VFS-4285 Update files deletion
+* bugfix in create_parent_dirs
+* VFS-4296 Fixed meck entry
+* VFS-4267 Adjust code to erl 20, update deps
+* Enable disabling rtransfer ssl in app.config
+* VFS-4281 pass UserCtx to create_delayed_storage_file function
+* VFS-4273 - reverse_luma cache refactored, tests fixed, added specs
+* VFS-4273 - handled direct luma cache
+* VFS-4273 - refactor of luma_cache, cache is now implemented using links
+* VFS-4274 Fixed helpers ref in rebar.config
+* VFS-4262 Updated rtransfer link
+* VFS-4262 Updated helpers with new asio version
+* refactor sfm_utils:create_parent_dirs function
+* VFS-4244 Scale helpers tests
+* VFS-4152 Fix missing event messages and performance test
+* VFS-4152 Extend rtransfer stress tests
+* Add rtransfer tests
+
+
+### 18.02.0-beta4
+
+* VFS-4274 Fixed helpers ref in rebar.config
+* refactor sfm_utils:create_parent_dirs function
+* VFS-4262 Updated rtransfer link
+* VFS-4262 Updated helpers with new asio version
+
+
+### 18.02.0-beta3
+
+* VFS-4249 storage_sync counters bugfixes and improvements
+* Enable graphite support for rtransfer_link.
+* Enable SSL for rtransfer_link.
+* Update storage select
+* Improve rtransfer prefetching counting.
+* Integrate rtransfer_link.
+* Switch to rebar-dependency helpers.
+* VFS-4114 - bugfix in storage_sync histogram
+* VFS-4155 add client keepalive msg handling
+* VFS-4155 increase cowboy and clproto timeouts.
+* VFS-4171 Added folly dependency
+* VFS-4171 Updated cberl ref to LibEvent based version
+* Updating GUI, including: VFS-4157 * VFS-4157 Requesting completed transfers list with delay to be compatible with backend fixes
+* VFS-4222 Force gs connection start only on the dedicated node
+* VFS-4217 - fix race on increasing deleted_files_counter and checking whether sync has been finished
+* Updating GUI, including: VFS-4223 * VFS-4223 Fixed long time of loading data distribution modal
+* VFS-4222 Separate graph sync status check from triggering reconnect
+* Updating GUI, including: VFS-4027 * VFS-4027 Added support for peta-, exa-, zetta- and yottabytes
+* VFS-4158 Add socket timeout test
+* VFS-4114 - transfer management fixes and refactor: this commit includes: * fix for race condition on adding transfer to active transfers link * major refactor of transfer module and model * fix for handling error when replication of not yet synced file has been scheduled * added backoff algorithm for retrying transfers * added files_to_process and files_processed counters in transfer model * refactor of multi_provider_rest_test_SUITE
+* VFS-4211 Restarting listeners is now done by node_manager because some ets tables need to be created in the process
+* Updating GUI, including: VFS-4206 * VFS-4206 Changed speed units on transfers view to bps
+* VFS-4209 Fix synchronization blocking with many spaces
+* VFS-4207 Do not match listener's stopping to ok to avoid crashes when it is not running
+* VFS-4207 Move listener restarting logic from onepanel to oneprovider, restart GS connection after ssl restart
+* VFS-4158 Fix root links scopes
+* VFS-4163 - use transfer timestamps as link keys
+* VFS-4158 Fix race in ensure connected
+* VFS-4158 Improve provider connection management
+* Updating GUI, including: VFS-4012, VFS-4154 * VFS-4012 Info about remote statistics on transfers view; fixed transfer row sort issues * VFS-4154 Dynamically adjust polling interval of transfers data; fixed transfer chart loading
+* VFS-4158 Fix minor bug in router
+* VFS-4158 Make connections asynchronous
+* VFS-4054 Make default IP undefined
+* VFS-4054 Delete check_node_ip_address from node_manager.
+* VFs-4054 Remove getting cluster ips from node_manager_plugin
+* VFS-4158 Fix batmatch in sequencer
+
+
+### 18.02.0-beta2
+
+* Update app.config
+* fallback to admin_ctx when luma is disabled
+* handle luma returning integer values
+* fix handling uid and gid from luma as integers
+* VFS-4036 Added flat storage path support
+* VFS-4040 Improve speed and reliability of datastore, improve permission cache and times update
+* disable http2
+* VFS-4128 Fix tp internal call on space_storage
+* VFS-4035 Allow non-blocking provider messages handling
+* VFS-4130 Update ctool, adjust to new time_utils API, fallback to REST when get_zone_time via GS fails
+* VFS-4035 Prevent blocking event stream by connection
+* VFS-4035 Handle processing status during provider communication
+* VFS-4035 Fix deadlock in storage file creation function
+* VFS-4124 Added posix rename handling for nulldevice and glusterfs
+* VFS-4117 Implement new read_dir_plus protocol
+* VFS-3704 update cowboy to version 2.2.2
+* VFS-4117 Control read_dir_plus threads number
+
+
+### 18.02.0-beta1
+
+* VFS-4080 Verify other providers' domains while connecting via IP addresses
+* VFS-3927 Remove support for IdP access token authorization and basic auth, only macaroon auth is now supported
+* VFS-3978 Do not distribute test CA with op-worker
+* VFS-3965 Provider now uses port 443 for protocol server
+* VFS-3965 Added an HTTP Upgrade Protocol procedure before handshake
+* VFS-3947 Use random nonce during every inter-provider connection to verify provider identity
+* VFS-3751 Ensure users can view basic info about their spaces and groups if they do not have view privileges
+* VFS-3751 Authorize providers using macaroons rather than certificates
+* VFS-3751 Rework provider communicator to work with macaroons and support verification 
+* VFS-3751 Merge provider_listener and protocol_listener into one
+* VFS-3751 Add handshake message for providers
+* VFS-3635 Remove default OZ CA cert, download it every time before registration
+* VFS-3279 Implement new synchronization channel between OP and OZ (Graph Sync)
+* VFS-3730 Separate trusted CAs from certificate chain
+* VFS-3526 Implement subdomain delegation; Combine provider record fields "redirection_point" and "urls"  into "domain"
+* VFS-3526 Remove old dns plugin module
+* Refactor datastore models to integrate them with new datastore
+* Change links storing model to use dedicated links tree for each provider
+* VFS-4088 GUI: Fixed incorrect ordering and stacking of transfer chart series
+* VFS-4068 GUI: Fixed incorrect icons positioning in transfers table
+* VFS-4062 GUI: Remember opened space when switching between data-spaces-transfers views; fixes in data-space sidebar
+* VFS-4059 GUI: Fixed provider icon scaling in transfers view
+
+
+### 17.06.2
+
+* Updating GUI, including: VFS-4088 * VFS-4088 Fixed incorrect ordering and stacking of transfer chart series
+* VFS-4074 removes option start_rtransfer_on_init, added gateway_supervisor
+* VFS-4074 add rtransfer to supervision tree
+* Updating GUI, including: VFS-4068, VFS-4062, VFS-4059 * VFS-4068 Fixed incorrect icons positioning in transfers table * VFS-4062 Remember opened space when switching between data-spaces-transfers views; fixes in data-space sidebar * VFS-4059 Fixed provider icon scaling in transfers view
+* VFS-3889 increase transfer_workers_num to 50, remove commented out code and todo
+* VFS-3889 restart transfers via rest, add test for many simultaneous transfers
+* Bump compatible versions to 17.06.0-rc9 and 17.06.0
+* VFS-3906 Transfer GUI displays charts from before several seconds rather than approximate them to present
+* VFS-3889 add cancellation of invalidation transfers
+
+
+### 17.06.1
+
+* Releasing new version 17.06.1
+
+
+### 17.06.0-rc9
+
+* VFS-3951 add zone connection test suite
+* VFS-4004 Update ctool to include safe ciphers in TLS
+* fix storage_update not restarting after provider restart
+* move setting of rtransfer port to app.config, fix transfer destination being send as string "undefined" instead of null
+* lower rtransfer_block_size, increase number of transfer_workers
+* do not allow provider to restart all transfers in supported space
+* Updating GUI, including: VFS-4002 * VFS-4002 Showing transfer type (replication/migration/invalidation) in transfers table
+* change finalizing state of transfer in gui to invalidating, update finish time when invalidation is finished
+* Updating GUI, including: VFS-4000, VFS-3956, VFS-3595, VFS-3591, VFS-3210, VFS-3710 
+* VFS-4000 Fixed fetching wrong transfer statistics for chosen timespan 
+* VFS-3956 Fixed provider name tooltip rendering in migrate menu of data distribution modal 
+* VFS-3595 Fixed locking ACL edit when switching between ACL and POSIX in permissions modal
+* VFS-3591 Fixed infinite loading of metadata panel when failed to fetch metadata for file 
+* VFS-3210 Fixed displaying long text in basic file metadata keys and values 
+* VFS-3710 Using binary prefix units for displaying sizes (MiB, GiB, etc.)
+* VFS-3951 add op ver compatibility check
+* VFS-3911 - mechanism for turning node_manager plugins on/off in app.config, turn monitoring_worker off by default
+* changes in throttling_config
+* VFS-3951 add build_version env var for op
+* VFS-3972 Fix attach-direct consoles in releases not being run with xterm terminal
+* VFS-3951 add rest endpoint for checking op version
+* add try-catch around rtransfer write, remove debug logs
+* fix bug in gateway_connection:garbage_collect function add retrying of fetching file chunk
+* VFS-3932 Reuse cluster worker graphite args
+* VFS-3911 - use exometer counter to control execution of storage_import and storage_update
+* VFS-3932 Added helper performance metrics
+* VFS-3892 Use weighted average (rather than arithmetic) to calculate transfer speeds between time windows, improve calculations on the edges of speedchart
+* VFS-3892 Move status field from transfer record to transfer-current-stat record
+* VFS-3857 make request_chunk_size and check_status_interval constants in replica_synchronizer configurable in app.config
+* VFS-3857 canceling and automatic retries of transfers
+* fallback to admin_ctx when luma is disabled
+* VFS-3811 Add exometer counters
+* handle luma returning integer values
+* Hotfix - Improve environment variables names
+* Hotfix - prevent rtransfer from crush
+* VFS-3864 Lower default request timeout to 30 seconds
+* do not restart transfers which has been deleted, create separate links trees for different spaces
+* add storageId and storageName to map_group luma request
+* create files on storage with appropriate uids and gids
+
+
+### 17.06.0-rc8
+
+* fallback to admin_ctx when luma is disabled
+* handle luma returning integer values
+* Hotfix - Improve environment variables names
+* Hotfix - update deps
+* Hotfix - prevent rtransfer from crush
+* improvements according to PR
+* improve docs according to PR, please dialyzer
+* VFS-3864 Lower default request timeout to 30 seconds
+* do not restart transfers which has been deleted, create separate links trees for different spaces
+* add storageId and storageName to map_group luma request
+* please dialyzer
+* create files on storage with appropriate uids and gids
+* VFS-3846 Do not mock oneprovider in initializer
+* Releasing new version 17.06.0-rc8
+* Update vsn in app.src file
+* do not restart failed transfers
+* Hotfix - update cluster_worker
+* VFS-3851 - fix dialyzer
+* VFS-3851 - fix rtransfer not binding to many interfaces
+* VFS-3851 fix not casting replication of first file in the tree (replication was handled by transfer_controller itself)
+* VFS-3851 - remove timeout from function awaiting rtransfer completion, delete old TODO
+* handling onedata groups in luma, added tests for luma improvements, cleaning docs after make_file or create_file failed
+* VFS-3813 Update tests
+* VFS-3813 Improve files creation performance
+* VFS-3813 Add comment to vm.args
+* refactor luma map_group request
+* fix handling uid and gid from luma as integers
+* fix storage_sync tests that use luma
+* handling onedata groups in luma, added tests for luma improvements
+* VFS-3813 Update get_provider_id
+* add spaceId to resolve_group request, split resolving acl user id and group id to different functions
+* VFS-3808 Update deps
+* add case for onedata idp in reverse_luma_proxy:get_user_id
+* VFS-3808 Update deps
+* VFS-3808 Update deps
+* VFS-3808 Update deps
+* VFS-3808 Update deps
+* Update deps
+* Update deps
+
+
+### 17.06.0-rc8
+
+* do not restart failed transfers
+* VFS-3851 - fix rtransfer not binding to many interfaces
+* VFS-3851 fix not casting replication of first file in the tree (replication was handled by transfer_controller itself)
+* VFS-3851 remove timeout from function awaiting rtransfer completion
+* VFS-3813 Improve files creation performance
+* fix reverse luma not resolving onedata groups, add storage name to reverse luma request parameters
+* VFS-3686 create autocleaning links tree for each space
+
+
+### 17.06.0-rc7
+
+* Fix failures connected with exometer timeouts
+* VFS-3815 Added erlang-observer as RPM build dependency
+* VFS-3686 allow to start space cleaning manually
+* VFS-3781 Added radosstriper library
+* VFS-3686 autocleaning API and model
+* Updating GUI, including: VFS-3710 - VFS-3710 Using binary prefixes for size units (IEC format: MiB, GiB, TiB, etc.)
+* Updating GUI, including: VFS-3668 - VFS-3668 Show file conflict names in files tree and change conflict name format to same as in Oneclient
+* VFS-3756 Repair session (prevent hang up)
+* VFS-3756 Update cluster_worker to prevent provider from crush when database is down
+* VFS-3763 Fixed helpers namespace in NIF
+* VFS-3763 Updated to folly 2017.10.02
+* VFS-3753 - fix storage sync failing when luma is enabled
+
+
+### 17.06.0-rc6
+
+* VFS-3693 Update exometer reporters management
+* VFS-3693 Reconfigure throttling
+
+
+### 17.06.0-rc5
+
+* fix error that occurs when we try to count attrs hash of deleted file
+* fix fetching luma_config
+
+
+### 17.06.0-rc4
+
+* VFS-3682 Upgraded GlusterFS libraries
+* VFS-3663 Fix delete events and improve changes broadcasting
+* VFS-3616 parallelize replication of file
+* VFS-3705 recount current file size on storage when saving sequence of blocks
+* VFS-3615 resuming transfer after restart, fix of synchronization of links in transfer model
+* VFS-3705 fix quota leak
+* VFS-3701 Update logging and cluster start procedure
+* VFS-3709 add mechanism to ensure that exometer_reporter is alive
+* VFS-3701 Better provider listener healthcheck
+* VFS-3666 Event emiter does not crush when file_meta is not synchronized
+
+
+### 17.06.0-rc3
+
+* VFS-3649 Emit attrs remote attrs change even if location does not exist
+* VFS-3500 Extend logging for wrong provider ids in tree_broadcast messages
+* VFS-3449 set sync_acl flag default to false
+* VFS-3549 Add endpoint for enabling space cleanup.
+* VFS-3500 Limit calls to storage when new file is created. Limit calls to storage_strategies.
+* VFS-3549 Add list operation and histograms to transfers.
+* VFS-3549 Add transfer model.
+* VFS-3500 Do not create locations during get_attrs
+* VFS-3567 Store missing documents in datastore cache
+* VFS-3449 adapting luma to new protocol, refactor of luma_cache module, added tests of reverse_luma and importing acls associated with groups, WIP
+* VFS-3449 adapting reverse luma for querying by acl username, groups handling, WIP
+* VFS-3541 Move file_popularity increment from open to release.
+* VFS-3541 Do not migrate data during replica invalidation when migration_provider_id is set to undefined.
+* VFS-3449 storage_sync supports NFS4 ACL, preparation of luma modules to support requests considering groups mapping, extended handling of acl principals in acl_logic
+* VFS-3560 Updating GUI ref
+* VFS-3495 Improve rest error handling.
+* VFS-3444 Adjuster default helper buffer values in app.conf
+* VFS-3495 Update ctool and use its new util function for getting system time. Introduce hard open time limit to space cleanup.
+* VFS-3500 Configure throttling
+* VFS-3500 Use cache of parent during permissions checking
+* VFS-3495 Add parameters to file_popularity_view.
+* VFS-3495 Add histograms to file_popularity model.
+* VFS-3498 Read_dir+
+* VFS-3500 Reconfigure throttling
+* VFS-3495 Do not ivalidate partially unique file as root (we cannot guarantee its synchronization), add space cleanup test.
+* VFS-3500 Update couchbase pool size control
+* VFS-3500 Reconfigure cluster for better performance
+* VFS-3494 Add popularity views and use them in space_cleanup.
+* VFS-3494 Move cleanup_enabled flag to space_storage doc.
+* VFS-3494 Add cleanup_enabled flag to storage doc
+* VFS-3494 Add file_popularity model tracking file open.
+* VFS-3494 Add invalidate_file_replica function to logical_file_manager and rest api.
+* VFS-3464 Added extended attributes support to storage helpers
+
+
+### 17.06.0-rc2
+
+* fix overlapping imports
+* VFS-3470 Improve dbsync changes filtering and queue size control
+* VFS-3454 Use silent_read in rrd_utils.
+* Generate file_meta uuid using default method.
+* VFS-3480 Remove file_location links.
+* storage_sync improvements:  * use storage_import_start_time  * set queue_type lifo in worker_poll  * reset storage_file_ctx before adding job to pool
+* VFS-3430 Adjust stress tests to refactored file_meta.
+* VFS-3430 Move periodic cleanup of permission cache to fslogic_worker, refactor file_meta.
+* VFS-3430 Adjust changes stream test to delayed creation of file_location.
+* VFS-3430 remove file_consistency.
+
+
+### 17.06.0-rc1
+
+* VFS-3384 save last_update_start_time and last_update_finish_time in storage_strategies
+* VFS-3384 save luma_api_key in luma_config, fix storage_sync chmod_file_update2 test
+* VFS-3448 Use single 'onedata' bucket
+* VFS-3384 implementation of reverse_luma and luma_cache_behaviour, update of luma tests
+* VFS-3378 Enabled native GlusterFS support on OSX
+* VFS-3363 Use no_seq for saves to default bucket
+* Reconfigure couchbase pools
+
+
 ### 17.06.0-beta6
 
 * VFS-3366 Repair lost changes scheduling

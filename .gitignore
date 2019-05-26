@@ -6,8 +6,6 @@
 .rebar
 rebar3.crashdump
 
-cluster_manager
-
 *.iml
 *.sublime*
 *.beam
@@ -15,32 +13,20 @@ cluster_manager
 *.o
 *.d
 
-rel/op_worker
-rel/test_cluster
-rel/*.rpm
+/cluster_manager
+/priv
+/_build
+/package
 
-test/eunit_results
-test_distributed/cover_tmp.spec
+rel/files/vm.args
+rel/vars.config
+
+/test/eunit_results
+/test_distributed/logs
+!/test_distributed/logs/.gitkeep
+/test_distributed/cover_tmp.spec
 test_coverage
-
-doc
-logs
-priv
-.rebar
-rebar3.crashdump
-
-c_lib
-c_src/helpers_nif/*.o
-c_src/rt_container/*.o
-c_src/oneproxy/build/*
-
-docs/_build/
 
 # OS X
 .DS_Store
 ._*
-
-_build
-compile_commands.json
-
-rel/files/vm.args

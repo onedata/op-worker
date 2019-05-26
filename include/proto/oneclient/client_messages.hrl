@@ -14,15 +14,17 @@
 -define(CLIENT_MESSAGES_HRL, 1).
 
 -include("stream_messages.hrl").
--include("handshake_messages.hrl").
+-include("proto/common/handshake_messages.hrl").
 
 -record(client_message, {
     message_id :: undefined | message_id:id(),
     session_id :: undefined | session:id(),
     proxy_session_id :: undefined | session:id(),
-    proxy_session_auth :: undefined | #macaroon_auth{} | #token_auth{},
+    proxy_session_auth :: undefined | #macaroon_auth{},
     message_stream :: undefined | #message_stream{},
     message_body :: tuple()
 }).
+
+-define(CLIENT_KEEPALIVE_MSG, <<"KA">>).
 
 -endif.
