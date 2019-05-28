@@ -68,7 +68,8 @@ get_models() -> [
     index,
     autocleaning_run,
     file_popularity_config,
-    idp_access_token
+    idp_access_token,
+    tree_travserse_job
 ].
 
 %%--------------------------------------------------------------------

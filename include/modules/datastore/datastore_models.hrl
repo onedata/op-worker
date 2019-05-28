@@ -696,4 +696,14 @@
     providers = [] :: all | [od_provider:id()]
 }).
 
+-record(tree_travserse_job, {
+    task_id :: traverse_task:key(),
+    doc_id :: file_meta:uuid(),
+    last_name :: file_meta:name(),
+    last_tree :: od_provider:id(),
+    execute_slave_on_dir :: boolean(),
+    batch_size :: non_neg_integer(),
+    traverse_info :: term()
+}).
+
 -endif.

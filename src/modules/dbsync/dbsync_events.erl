@@ -111,5 +111,9 @@ change_replicated_internal(_SpaceId, Index = #document{
 }) ->
     ?debug("change_replicated_internal: changed index ~p", [IndexId]),
     index_changes:handle(Index);
+change_replicated_internal(_SpaceId, #document{value = #traverse_task{}} = Task) ->
+    traverse:maybe_run_scheduled_task({task, Task}, oneprovider:get_id_or_undefined());
+change_replicated_internal(_SpaceId, #document{key = MainJobID, value = #tree_travserse_job{}}) ->
+    traverse:maybe_run_scheduled_task({job, massive_multi_provider_file_ops_test_SUITE, MainJobID}, oneprovider:get_id_or_undefined());
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

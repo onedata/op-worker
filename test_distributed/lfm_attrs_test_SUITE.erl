@@ -48,7 +48,7 @@
     traverse_test/1]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, task_finished/1, save_job/2]).
+-export([do_master_job/1, do_slave_job/1, task_finished/1, save_job/3, update_job/4, list_ongoing_jobs/0]).
 
 all() ->
     ?ALL([
@@ -668,5 +668,11 @@ do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}) ->
 task_finished(_) ->
     ok.
 
-save_job(_, _) ->
+save_job(_, _, _) ->
     {ok, <<"id">>}.
+
+update_job(_, _, _, _) ->
+    ok.
+
+list_ongoing_jobs() ->
+    {ok, []}.
