@@ -48,6 +48,7 @@
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
 
+% @fixme support creating webdav ctx with adminId
 
 %%%===================================================================
 %%% API
@@ -339,6 +340,7 @@ get_timeout(#helper{args = Args}) ->
 -spec set_user_ctx(helpers:helper(), user_ctx()) ->
     {ok, helpers:helper()} | {error, Reason :: term()}.
 set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
+    % @fixme look here
     case validate_user_ctx(Helper, UserCtx) of
         ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
         {error, Reason} -> {error, Reason}
@@ -572,14 +574,11 @@ check_ctx_field({optional, Field}, Ctx) ->
 
 check_ctx_field(Field, Ctx) ->
     case Ctx of
-        #{Field := Value = <<"null">>} ->
-            {error, {invalid_field_value, Field, Value}};
+        #{Field := <<"null">>} -> {error, {invalid_field_value, Field, <<"null">>}};
         #{Field := Value} when is_binary(Value) -> {ok, maps:remove(Field, Ctx)};
         #{Field := Value} when is_integer(Value) -> {ok, maps:remove(Field, Ctx)};
-        #{Field := Value} ->
-            {error, {invalid_field_value, Field, Value}};
-        #{} ->
-            {error, {missing_field, Field}}
+        #{Field := Value} -> {error, {invalid_field_value, Field, Value}};
+        #{} -> {error, {missing_field, Field}}
     end.
 
 

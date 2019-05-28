@@ -173,10 +173,10 @@ get_group_request_body(GroupId, SpaceId, #document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs user details list.
+%% Constructs user details map.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_details(session:id(), od_user:id()) -> UserDetails :: maps:map().
+-spec get_user_details(session:id(), od_user:id()) -> UserDetails :: map().
 get_user_details(SessionId, UserId) ->
     case user_logic:get_protected_data(SessionId, UserId) of
         {ok, #document{value = User}} ->
@@ -213,8 +213,6 @@ get_user_details(SessionId, UserId) ->
 %% Ensures that all values in map are binaries
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_binary_values(maps:map()) -> maps:map().
+-spec ensure_binary_values(map()) -> #{term() => binary()}.
 ensure_binary_values(Map) ->
-    maps:fold(fun(Key, Value, AccIn) ->
-        AccIn#{Key => str_utils:to_binary(Value)}
-    end, #{}, Map).
+    maps:map(fun(_, Value) -> str_utils:to_binary(Value) end, Map).
