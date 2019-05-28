@@ -53,7 +53,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -99,25 +99,25 @@ get_file_attributes(Req, State) ->
 
     case {Attribute, Extended} of
         {undefined, false} ->
-            {ok, Attrs} = onedata_file_api:stat(Auth, {path, Path}),
+            {ok, Attrs} = logical_file_manager:stat(Auth, {path, Path}),
             ResponseMap = add_attr(#{}, ?ALL_BASIC_ATTRIBUTES, Attrs),
             Response = json_utils:encode(ResponseMap),
             {Response, ReqWithAttribute, StateWithAttribute};
         {Attribute, false} ->
-            {ok, Attrs} = onedata_file_api:stat(Auth, {path, Path}),
+            {ok, Attrs} = logical_file_manager:stat(Auth, {path, Path}),
             ResponseMap = add_attr(#{}, [Attribute], Attrs),
             Response = json_utils:encode(ResponseMap),
             {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
-            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited, true),
+            {ok, Xattrs} = logical_file_manager:list_xattr(Auth, {path, Path}, Inherited, true),
             RawResponse = lists:map(fun(XattrName) ->
-                {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
+                {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(Auth, {path, Path}, XattrName, Inherited),
                 {XattrName, Value}
             end, Xattrs),
             Response = json_utils:encode(maps:from_list(RawResponse)),
             {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
-            {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
+            {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(Auth, {path, Path}, XattrName, Inherited),
             Response = json_utils:encode(#{XattrName => Value}),
             {Response, ReqWithAttribute, StateWithAttribute}
     end.
@@ -141,9 +141,13 @@ set_file_attribute(Req, State) ->
 
     case {Attribute, Extended} of
         {<<"mode">>, false} ->
-            ok = onedata_file_api:set_perms(Auth, {path, Path}, Value);
+            ok = logical_file_manager:set_perms(Auth, {path, Path}, Value);
         {_, true} when is_binary(Attribute) ->
-            ok = onedata_file_api:set_xattr(Auth, {path, Path}, #xattr{name = Attribute, value = Value})
+            ok = logical_file_manager:set_xattr(
+                Auth, {path, Path},
+                #xattr{name = Attribute, value = Value},
+                false, false
+            )
     end,
     {true, Req4, State4}.
 

@@ -50,7 +50,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
@@ -163,7 +163,7 @@ evict_file_replica_internal(Req, State = #{
 
     QueryViewParams = index_utils:sanitize_query_options(State),
 
-    {ok, TransferId} = onedata_file_api:schedule_replica_eviction_by_index(
+    {ok, TransferId} = logical_file_manager:schedule_replica_eviction_by_index(
         Auth, SourceProviderId, MigrationProviderId, SpaceId, IndexName,
         QueryViewParams
     ),
@@ -191,7 +191,7 @@ replicate_files_from_index_internal(Req, #{
 
     QueryViewParams = index_utils:sanitize_query_options(State),
 
-    {ok, TransferId} = onedata_file_api:schedule_replication_by_index(
+    {ok, TransferId} = logical_file_manager:schedule_replication_by_index(
         Auth, ProviderId, Callback, SpaceId, IndexName, QueryViewParams
     ),
 

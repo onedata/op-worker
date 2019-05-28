@@ -45,7 +45,7 @@ prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     (prepare(Tail, State))#{<<"parentID">> => <<>>};
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, #file_attr{guid = Guid}} =
-        onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
+        logical_file_manager:stat(Auth, {path, filename:dirname(Path)}),
     {ok, Id} = file_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"parentID">> => Id};
 prepare([<<"capabilitiesURI">> | Tail], State) ->

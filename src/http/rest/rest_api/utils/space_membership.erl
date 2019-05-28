@@ -27,7 +27,7 @@
 %% Check if user is in space using his auth.
 %% @end
 %%--------------------------------------------------------------------
--spec check_with_auth(onedata_auth_api:auth(), od_space:id()) -> ok | no_return().
+-spec check_with_auth(rest_auth:auth(), od_space:id()) -> ok | no_return().
 check_with_auth(SessionId, SpaceId) ->
     {ok, UserId} = session:get_user_id(SessionId),
     check_with_user(SessionId, UserId, SpaceId).

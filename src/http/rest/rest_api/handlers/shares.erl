@@ -52,7 +52,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -278,7 +278,7 @@ get_file_guid(#{auth := Auth, path := Path}) ->
 get_share_id(#{share_id := ShareId}) ->
     ShareId;
 get_share_id(State = #{auth := SessionId}) ->
-    {ok, Attrs} = onedata_file_api:stat(SessionId, {guid, get_file_guid(State)}),
+    {ok, Attrs} = logical_file_manager:stat(SessionId, {guid, get_file_guid(State)}),
     case Attrs#file_attr.shares of
         [ShareId] -> ShareId;
         _ -> throw(?ERROR_NOT_FOUND)

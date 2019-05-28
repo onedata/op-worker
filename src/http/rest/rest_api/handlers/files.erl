@@ -54,7 +54,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @equiv pre_handler:content_types_provided/2
@@ -88,14 +88,14 @@ list_files(Req, State) ->
     {State4, Req4} = validator:parse_dir_limit(Req3, State3),
 
     #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
-    Response = case onedata_file_api:stat(Auth, {path, Path}) of
+    Response = case logical_file_manager:stat(Auth, {path, Path}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
+            case logical_file_manager:get_children_count(Auth, {guid, Guid}) of
                 {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
                     throw(?ERROR_TOO_MANY_ENTRIES);
                 {ok, _ChildNum} ->
                     DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
-                    {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
+                    {ok, Children} = logical_file_manager:ls(Auth, {path, Path}, Offset, DefinedLimit),
                     json_utils:encode(
                         lists:map(fun({ChildGuid, ChildPath}) ->
                             {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),

@@ -50,7 +50,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -106,7 +106,7 @@ get_json_internal(Req, State) ->
     DefinedMetadataType = validate_metadata_type(MetadataType, json),
     FilterList = get_filter_list(FilterType, Filter),
 
-    {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithInherited),
+    {ok, Meta} = logical_file_manager:get_metadata(Auth, get_file(StateWithInherited),
         DefinedMetadataType, FilterList, Inherited),
     Response = json_utils:encode(Meta),
     {Response, ReqWithInherited, StateWithInherited}.
@@ -133,7 +133,7 @@ get_rdf_internal(Req, State) ->
     #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
     DefinedMetadataType = validate_metadata_type(MetadataType, rdf),
 
-    {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithMetadataType),
+    {ok, Meta} = logical_file_manager:get_metadata(Auth, get_file(StateWithMetadataType),
         DefinedMetadataType, [], false),
     {Meta, ReqWithMetadataType, StateWithMetadataType}.
 
@@ -165,7 +165,7 @@ set_json_internal(Req, State) ->
     DefinedMetadataType = validate_metadata_type(MetadataType, json),
     FilterList = get_filter_list(FilterType, Filter),
 
-    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, Json, FilterList),
+    ok = logical_file_manager:set_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, Json, FilterList),
 
     {true, FinalReq, StateWithFilter}.
 
@@ -192,7 +192,7 @@ set_rdf_internal(Req, State) ->
     #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
     DefinedMetadataType = validate_metadata_type(MetadataType, rdf),
 
-    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithMetadataType),
+    ok = logical_file_manager:set_metadata(Auth, get_file(StateWithMetadataType),
         DefinedMetadataType, Rdf, []),
 
     {true, FinalReq, StateWithMetadataType}.
@@ -206,7 +206,8 @@ set_rdf_internal(Req, State) ->
 %% Validate metadata type according to provided default
 %% @end
 %%--------------------------------------------------------------------
--spec validate_metadata_type(onedata_file_api:metadata_type(), onedata_file_api:metadata_type()) -> onedata_file_api:metadata_type().
+-spec validate_metadata_type(undefined | custom_metadata:type(), custom_metadata:type()) ->
+    custom_metadata:type() | no_return().
 validate_metadata_type(undefined, Default) ->
     Default;
 validate_metadata_type(MetadataType, MetadataType) ->

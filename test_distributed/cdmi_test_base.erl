@@ -2016,13 +2016,13 @@ ensure_begins_with_slash(Path) ->
 mock_opening_file_without_perms(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     test_node_starter:load_modules(Workers, [?MODULE]),
-    test_utils:mock_new(Workers, onedata_file_api),
+    test_utils:mock_new(Workers, logical_file_manager),
     test_utils:mock_expect(
-        Workers, onedata_file_api, open, fun(_, _, _) -> {error, ?EACCES} end).
+        Workers, logical_file_manager, open, fun(_, _, _) -> {error, ?EACCES} end).
 
 unmock_opening_file_without_perms(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, onedata_file_api).
+    test_utils:mock_unload(Workers, logical_file_manager).
 
 get_random_string() ->
     get_random_string(10, "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ").

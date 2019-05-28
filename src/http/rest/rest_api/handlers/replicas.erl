@@ -50,7 +50,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
@@ -172,8 +172,8 @@ evict_file_replica_internal(Req, State = #{
 
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, MigrationProviderId),
-    {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = onedata_file_api:schedule_replica_eviction(
+    {ok, _} = logical_file_manager:stat(Auth, {guid, FileGuid}),
+    {ok, TransferId} = logical_file_manager:schedule_replica_eviction(
         Auth, {guid, FileGuid}, SourceProviderId, MigrationProviderId
     ),
 
@@ -193,8 +193,8 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
 
     throw_if_non_local_space(SpaceId),
     throw_if_nonexistent_provider(SpaceId, ProviderId),
-    {ok, _} = onedata_file_api:stat(Auth, {guid, FileGuid}),
-    {ok, TransferId} = onedata_file_api:schedule_file_replication(
+    {ok, _} = logical_file_manager:stat(Auth, {guid, FileGuid}),
+    {ok, TransferId} = logical_file_manager:schedule_file_replication(
         Auth, {guid, FileGuid}, ProviderId, Callback
     ),
 
@@ -211,7 +211,7 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
 get_file_replicas_internal(Req, #{auth := Auth} = State) ->
     FileGuid = get_file_guid(State),
 
-    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, FileGuid}),
+    {ok, Distribution} = logical_file_manager:get_file_distribution(Auth, {guid, FileGuid}),
     Response = json_utils:encode(Distribution),
     {Response, Req, State}.
 

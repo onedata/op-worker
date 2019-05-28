@@ -36,6 +36,15 @@
 %% resource functions
 -export([get_metric/2]).
 
+-type subject_type() :: provider | space | user | undefined.
+-type subject_id() :: binary() | undefined.
+-type metric_type() ::
+    storage_quota | storage_used | data_access_kbs |
+    block_access_iops | block_access_latency | remote_transfer_kbs |
+    connected_users | remote_access_kbs | metada_access_ops.
+-type step() :: '5m' | '1h' | '1d' | '1m'.
+-type format() :: 'json' | 'xml'.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -59,7 +68,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -99,7 +108,7 @@ get_metric(Req, State) ->
         {ok, Providers} ->
             Json =
                 lists:map(fun(ProviderId) ->
-                    case onedata_metrics_api:get_metric(SessionId, SubjectType, SpaceId, SecondarySubjectType, UId,
+                    case get_metric_internal(SessionId, SubjectType, SpaceId, SecondarySubjectType, UId,
                         transform_metric(Metric, SubjectType, SecondarySubjectType), transform_step(Step), ProviderId, json)
                     of
                         {ok, Data} ->
@@ -126,7 +135,7 @@ get_metric(Req, State) ->
 %% Transform metric type to atom and validate it.
 %% @end
 %%--------------------------------------------------------------------
--spec transform_metric(binary() | undefined, onedata_metrics_api:subject_type(), onedata_metrics_api:subject_type()) -> onedata_metrics_api:metric_type().
+-spec transform_metric(binary() | undefined, subject_type(), subject_type()) -> metric_type().
 transform_metric(undefined, _, _) ->
     throw(?ERROR_INVALID_METRIC);
 transform_metric(MetricType, space, undefined) ->
@@ -151,7 +160,7 @@ transform_metric(MetricType, space, user) ->
 %% Transform step to atom and validate it.
 %% @end
 %%--------------------------------------------------------------------
--spec transform_step(binary() | undefined) -> onedata_metrics_api:step().
+-spec transform_step(binary() | undefined) -> step().
 transform_step(undefined) ->
     ?DEFAULT_STEP;
 transform_step(Step) ->
@@ -162,3 +171,32 @@ transform_step(Step) ->
         false ->
             throw(?ERROR_INVALID_STEP)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get RRD database for given metric.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metric_internal(rest_auth:auth(), subject_type(), subject_id(),
+    subject_type(), subject_id(), metric_type(), step(), oneprovider:id(),
+    format()) -> {ok, binary()} | {error, term()}.
+get_metric_internal(_Auth, SubjectType, SubjectId, undefined, _,
+    MetricType, Step, ProviderId, Format) ->
+    MonitoringId = #monitoring_id{
+        main_subject_type = SubjectType,
+        main_subject_id = SubjectId,
+        metric_type = MetricType,
+        provider_id = ProviderId
+    },
+    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format});
+get_metric_internal(_Auth, SubjectType, SubjectId, SecondarySubjectType, SecondarySubjectId,
+    MetricType, Step, ProviderId, Format) ->
+    MonitoringId = #monitoring_id{
+        main_subject_type = SubjectType,
+        main_subject_id = SubjectId,
+        metric_type = MetricType,
+        secondary_subject_id = SecondarySubjectId,
+        secondary_subject_type = SecondarySubjectType,
+        provider_id = ProviderId
+    },
+    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format}).
