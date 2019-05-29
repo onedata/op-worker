@@ -106,7 +106,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
             providers = maps:get(<<"providers">>, Result),
-            shares = maps:get(<<"shares">>, Result)
+            shares = maps:get(<<"shares">>, Result),
+            harvesters = maps:get(<<"harvesters">>, Result)
         }
     };
 
@@ -147,8 +148,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             online = maps:get(<<"online">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
-            eff_groups = maps:get(<<"effectiveGroups">>, Result),
-            eff_harvesters = maps:get(<<"effectiveHarvesters">>, Result)
+            eff_groups = maps:get(<<"effectiveGroups">>, Result)
         }
     };
 
@@ -272,7 +272,8 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
             direct_groups = #{},
             eff_groups = #{},
 
-            shares = []
+            shares = [],
+            harvesters = []
         }
     };
 
@@ -291,8 +292,7 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
             subdomain = undefined,
             spaces = #{},
             eff_users = [],
-            eff_groups = [],
-            eff_harvesters = []
+            eff_groups = []
         }
     };
 

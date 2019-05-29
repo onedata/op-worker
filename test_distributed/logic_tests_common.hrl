@@ -113,6 +113,7 @@
 -define(SPACE_PROVIDERS_VALUE(__Space), #{?PROVIDER_1 => 1000000000, ?PROVIDER_2 => 1000000000}).
 -define(SPACE_PROVIDERS_MATCHER(__Space), #{?PROVIDER_1 := 1000000000, ?PROVIDER_2 := 1000000000}).
 -define(SPACE_SHARES(__Space), [?SHARE_1, ?SHARE_2]).
+-define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -132,7 +133,6 @@
 -define(PROVIDER_SPACES_MATCHER(__Provider), #{?SPACE_1 := 1000000000, ?SPACE_2 := 1000000000}).
 -define(PROVIDER_EFF_USERS(__Provider), [?USER_1, ?USER_2]).
 -define(PROVIDER_EFF_GROUPS(__Provider), [?GROUP_1, ?GROUP_2]).
--define(PROVIDER_EFF_HARVESTERS(__Provider), [?HARVESTER_1, ?HARVESTER_2]).
 -define(PROVIDER_LATITUDE(__Provider), 0.0).
 -define(PROVIDER_LONGITUDE(__Provider), 0.0).
 
@@ -248,7 +248,8 @@
     direct_groups = ?SPACE_DIRECT_GROUPS_MATCHER(__Space),
     eff_groups = ?SPACE_EFF_GROUPS_MATCHER(__Space),
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
-    shares = ?SPACE_SHARES(__Space)
+    shares = ?SPACE_SHARES(__Space),
+    harvesters = ?SPACE_HARVESTERS(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -257,7 +258,8 @@
     direct_groups = #{},
     eff_groups = #{},
     providers = #{},
-    shares = []
+    shares = [],
+    harvesters = []
 }}).
 
 
@@ -285,8 +287,7 @@
     online = ?PROVIDER_ONLINE(__Provider),
     spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
-    eff_groups = ?PROVIDER_EFF_GROUPS(__Provider),
-    eff_harvesters = ?PROVIDER_EFF_HARVESTERS(__Provider)
+    eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
 }}).
 -define(PROVIDER_PROTECTED_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
@@ -294,8 +295,7 @@
     online = ?PROVIDER_ONLINE(__Provider),
     spaces = #{},
     eff_users = [],
-    eff_groups = [],
-    eff_harvesters = []
+    eff_groups = []
 }}).
 
 
@@ -388,7 +388,8 @@ end).
         <<"effectiveGroups">> => ?SPACE_EFF_GROUPS_VALUE(__SpaceId),
 
         <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-        <<"shares">> => ?SPACE_SHARES(__SpaceId)
+        <<"shares">> => ?SPACE_SHARES(__SpaceId),
+        <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
     }
 end).
 
@@ -435,12 +436,7 @@ end).
         <<"effectiveGroups">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> [];
             _ -> ?PROVIDER_EFF_GROUPS(__ProviderId)
-        end,
-        <<"effectiveHarvesters">> => case __ProviderId of
-            ?DUMMY_PROVIDER_ID -> [];
-            _ -> ?PROVIDER_EFF_HARVESTERS(__ProviderId)
         end
-
     }
 end).
 

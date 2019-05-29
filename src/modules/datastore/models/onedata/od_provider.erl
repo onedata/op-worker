@@ -69,16 +69,6 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(save, _, {ok, #document{
-    key = ProviderId,
-    value = #od_provider{eff_harvesters = EffHarvesters}
-}}) ->
-    case oneprovider:is_self(ProviderId) of
-        true ->
-            harvest_manager:revise_all_streams(EffHarvesters);
-        false ->
-            ok
-    end;
 run_after(_Function, _Args, Result) ->
     Result.
 
@@ -102,7 +92,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -148,25 +138,6 @@ get_record_struct(3) ->
 
         {eff_users, [string]},
         {eff_groups, [string]},
-
-        {cache_state, #{atom => term}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {name, string},
-        {admin_email, string},
-        {subdomain_delegation, boolean},
-        {domain, string},
-        {subdomain, string},
-        {latitude, float},
-        {longitude, float},
-        {online, boolean},
-
-        {spaces, #{string => integer}},
-
-        {eff_users, [string]},
-        {eff_groups, [string]},
-        {eff_harvesters, [string]},
 
         {cache_state, #{atom => term}}
     ]}.
@@ -229,43 +200,6 @@ upgrade_record(2, Provider) ->
         [],
 
         #{}
-    }};
-upgrade_record(3, Provider) ->
-    {
-        od_provider,
-        Name,
-        AdminEmail,
-        SubdomainDelegation,
-        Domain,
-        Subdomain,
-        Latitude,
-        Longitude,
-        Online,
-
-        Spaces,
-
-        EffUsers,
-        EffGroups,
-
-        CacheState
-    } = Provider,
-    {4, #od_provider{
-        name = Name,
-        admin_email = AdminEmail,
-        subdomain_delegation = SubdomainDelegation,
-        domain = Domain,
-        subdomain = Subdomain,
-        latitude = Latitude,
-        longitude = Longitude,
-        online = Online,
-
-        spaces = Spaces,
-
-        eff_users = EffUsers,
-        eff_groups = EffGroups,
-        eff_harvesters = [],
-
-        cache_state = CacheState
     }}.
 
 %%--------------------------------------------------------------------

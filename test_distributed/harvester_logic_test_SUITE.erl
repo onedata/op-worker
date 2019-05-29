@@ -19,15 +19,12 @@
 
 -export([
     get_test/1,
-    subscribe_test/1,
-    harvest_test/1,
-    delete_entry_test/1]).
+    subscribe_test/1
+]).
 
 all() -> ?ALL([
     get_test,
-    subscribe_test,
-    harvest_test,
-    delete_entry_test
+    subscribe_test
 ]).
 
 -define(FILE_ID, <<"dummyFileId">>).
@@ -126,41 +123,6 @@ subscribe_test(Config) ->
 
     ok.
 
-harvest_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-    
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch({ok, _},
-        rpc:call(Node, harvester_logic, submit_entry,
-            [?HARVESTER_1, ?FILE_ID, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch({ok, _},
-        rpc:call(Node, harvester_logic, submit_entry,
-            [?HARVESTER_1, ?FILE_ID, ?PAYLOAD, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
-    % get result is cached now
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
-delete_entry_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch({ok, _},
-        rpc:call(Node, harvester_logic, delete_entry,
-            [?HARVESTER_1, ?FILE_ID, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch({ok, _},
-        rpc:call(Node, harvester_logic, delete_entry,
-            [?HARVESTER_1, ?FILE_ID, ?HARVESTER_INDICES(?HARVESTER_1), 5, 10])),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -173,9 +135,15 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(_, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, main_harvesting_stream),
+    test_utils:mock_expect(Nodes, main_harvesting_stream, revise_harvester,
+        fun(_, _, _) -> ok end),
     logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(_, _Config) ->
+end_per_testcase(_, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, main_harvesting_stream),
     ok.
 
 end_per_suite(Config) ->

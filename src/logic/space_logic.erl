@@ -34,6 +34,12 @@
 -export([is_supported/2, is_supported/3]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
+-export([harvest_metadata/5]).
+-export([get_harvesters/1]).
+
+-type harvesting_result() :: {ok, harvesting_result:failure_map()} | gs_protocol:error().
+
+-export_type([harvesting_result/0]).
 
 %%%===================================================================
 %%% API
@@ -212,3 +218,51 @@ can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
 can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
     has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
         has_eff_group(SpaceDoc, GroupId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Pushes batch of metadata changes to Onezone.
+%% Metadata are harvested for given SpaceId and Destination.
+%% Destination is the structure that describes target Harvesters and
+%% associated Indices.
+%% MaxStreamSeq and MaxSeq are sent to allow for tracking progress of
+%% harvesting. MaxStreamSeq is the highest sequence number processed by the
+%% calling harvesting_stream. MaxSeq is the highest sequence number in given
+%% space.
+%% This function can return following values:
+%%     * {ok, FailureMap :: #{od_harvester:id() =>
+%%           #{od_harvester:index() => FirstFailedSeq :: couchbase_changes:seq()}
+%%        }}
+%%        FirstFailedSeq is the first sequence number on which harvesting
+%%        failed for given index.
+%%        If harvesting succeeds for whole Destination, the map is empty.
+%%     * {error, _} :: gs_protocol:error()
+%% @end
+%%--------------------------------------------------------------------
+-spec harvest_metadata(od_space:id(), harvesting_destination:destination(),
+    harvesting_batch:prepared_batch(), couchbase_changes:seq(),
+    couchbase_changes:seq()) -> harvesting_result().
+harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = SpaceId,
+            aspect = harvest_metadata, scope = private
+        },
+        data = #{
+            <<"destination">> => Destination,
+            <<"maxSeq">> => MaxSeq,
+            <<"maxStreamSeq">> => MaxStreamSeq,
+            <<"batch">> => Batch
+        }
+    }).
+
+-spec get_harvesters(od_space:doc() | od_space:id()) -> {ok, [od_harvester:id()]}.
+get_harvesters(#document{value = #od_space{harvesters = Harvesters}}) ->
+    {ok, Harvesters};
+get_harvesters(SpaceId) ->
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, Doc} ->
+            get_harvesters(Doc);
+        Error ->
+            Error
+    end.
