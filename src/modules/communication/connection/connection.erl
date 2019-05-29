@@ -117,9 +117,6 @@
 }).
 
 -type state() :: #state{}.
--type client_message() :: #client_message{}.
--type server_message() :: #server_message{}.
--type message() :: client_message() | server_message().
 -type error() :: {error, Reason :: term()}.
 
 % Default value for {packet, N} socket option. When specified, erlang first
@@ -208,7 +205,7 @@ close(Pid) ->
 %% eventual errors while serializing/sending.
 %% @end
 %%-------------------------------------------------------------------
--spec send_msg(pid(), message()) -> ok | error().
+-spec send_msg(pid(), communicator:message()) -> ok | error().
 send_msg(Pid, Msg) ->
     try
         gen_server2:call(Pid, {send_msg, Msg}, ?DEFAULT_REQUEST_TIMEOUT)
@@ -743,7 +740,8 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
 
 
 %% @private
--spec route_message(state(), message()) -> {ok, state()} | error().
+-spec route_message(state(), communicator:message()) ->
+    {ok, state()} | error().
 route_message(#state{rib = RIB} = State, Msg) ->
     case router:route_message(Msg, RIB) of
         ok ->
@@ -759,7 +757,8 @@ route_message(#state{rib = RIB} = State, Msg) ->
 
 
 %% @private
--spec send_response(state(), server_message()) -> {ok, state()} | error().
+-spec send_response(state(), communicator:server_message()) ->
+    {ok, state()} | error().
 send_response(#state{session_id = SessionId} = State, ServerMsg) ->
     case send_server_message(State, ServerMsg) of
         {ok, _NewState} = Ans ->
@@ -780,7 +779,7 @@ send_response(#state{session_id = SessionId} = State, ServerMsg) ->
 
 
 %% @private
--spec send_message(state(), message()) -> {ok, state()} | error().
+-spec send_message(state(), communicator:message()) -> {ok, state()} | error().
 send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
     send_client_message(State, Msg);
 send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
@@ -793,7 +792,7 @@ send_message(#state{type = ConnType}, Msg) ->
 
 
 %% @private
--spec send_client_message(state(), client_message()) ->
+-spec send_client_message(state(), communicator:client_message()) ->
     {ok, state()} | error().
 send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     try
@@ -809,7 +808,7 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
 
 
 %% @private
--spec send_server_message(state(), server_message()) ->
+-spec send_server_message(state(), communicator:server_message()) ->
     {ok, state()} | error().
 send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     try
