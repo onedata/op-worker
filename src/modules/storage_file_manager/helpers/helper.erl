@@ -18,6 +18,7 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("hackney/include/hackney_lib.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -29,8 +30,10 @@
 -export([translate_name/1, translate_arg_name/1]).
 -export([webdav_fill_admin_id/1]).
 
+-export([transform_helper_args/2]).
+
 %% Test utils
--export([new_ceph_user_ctx/2,new_cephrados_user_ctx/2,  new_posix_user_ctx/2,
+-export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
     new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
     new_webdav_user_ctx/2, new_webdav_user_ctx/3, new_nulldevice_user_ctx/2]).
 
@@ -39,11 +42,13 @@
 -export([filter_args/2, filter_user_ctx/2]).
 
 -type name() :: binary().
--type args() :: #{binary() => binary()}.
+-type args() :: #{field() => binary()}.
 -type params() :: #helper_params{}.
--type user_ctx() :: #{binary() => binary() | integer()}.
--type group_ctx() :: #{binary() => binary() | integer()}.
--type optional_field() :: {optional, binary()}.
+-type user_ctx() :: #{field() => binary() | integer()}.
+-type group_ctx() :: #{field() => binary() | integer()}.
+-type ctx() :: user_ctx() | group_ctx().
+-type field() :: binary().
+-type optional_field() :: {optional, field()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
@@ -57,8 +62,8 @@
 -spec new_helper(name(), args(), user_ctx(), Insecure :: boolean(),
     storage_path_type()) -> {ok, helpers:helper()}.
 new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
-    {Required, _} = expected_helper_args(HelperName),
-    ok = check_args(Required, Args),
+    Fields = expected_helper_args(HelperName),
+    ok = validate_fields(Fields, Args, false),
     ok = validate_user_ctx(HelperName, AdminCtx),
     {ok, #helper{
         name = HelperName,
@@ -93,56 +98,95 @@ filter_args(HelperName, Args) ->
     maps:with(Required ++ Optional, Args).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates storage params as specified by a user
+%% into correct helper args.
+%% @end
+%%--------------------------------------------------------------------
+-spec transform_helper_args(name(), #{binary() := binary()}) -> args().
+transform_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
+    {Required, Optional} = expected_helper_args(HelperName),
+    Expected = Required ++ Optional,
+
+    Transformed = map_flatmap(fun
+        (<<"hostname">>, URL) ->
+            {ok, HttpOrHttps, Host} = extract_scheme(URL),
+            #{
+                <<"scheme">> => atom_to_binary(HttpOrHttps, utf8),
+                <<"hostname">> => Host
+            };
+        (Key, Value) -> #{Key => Value}
+    end, Params),
+    filter_args(Expected, Transformed);
+
+transform_helper_args(HelperName, Params) ->
+    filter_args(HelperName, Params).
+
+
+-spec filter_params(AllowedFields, Params) -> Params when
+    AllowedFields :: [field() | optional_field()],
+    Params :: args() | ctx().
+filter_params(AllowedFields, Params) ->
+    Fields = strip_modifiers(AllowedFields),
+    maps:with(Fields, Params).
+
+
+%% @private
+-spec extract_scheme(URL :: binary()) -> {ok, Scheme :: http | https, binary()}.
+extract_scheme(URL) ->
+    #hackney_url{scheme = S3Scheme, host = S3Host, port = S3Port} =
+        hackney_url:parse_url(URL),
+    Scheme = case S3Scheme of
+        https -> https;
+        _ -> http
+    end,
+    {ok, Scheme, str_utils:format_bin("~s:~B", [S3Host, S3Port])}.
+
+
+-spec strip_modifiers(Fields :: [field() | optional_field()]) -> field().
+strip_modifiers(Fields) ->
+    lists:map(fun
+        ({optional, Field}) -> Field;
+        (Field) -> Field
+    end, Fields).
+
+
 %% @private
 -spec expected_helper_args(name()) ->
-    {Required :: [binary()], Optional :: [binary()]}.
-expected_helper_args(?CEPH_HELPER_NAME) ->
-    {
-        [<<"monitorHostname">>, <<"clusterName">>, <<"poolName">>],
-        [<<"timeout">>]
-    };
-expected_helper_args(?CEPHRADOS_HELPER_NAME) ->
-    {
-        [<<"monitorHostname">>, <<"clusterName">>, <<"poolName">>],
-        [<<"timeout">>, <<"blockSize">>]
-    };
-expected_helper_args(?POSIX_HELPER_NAME) ->
-    {
-        [<<"mountPoint">>],
-        [<<"timeout">>]
-    };
-expected_helper_args(?S3_HELPER_NAME) ->
-    {
-        [<<"hostname">>, <<"bucketName">>, <<"scheme">>],
-        [<<"timeout">>, <<"signatureVersion">>, <<"blockSize">>]
-    };
-expected_helper_args(?SWIFT_HELPER_NAME) ->
-    {
-        [<<"authUrl">>, <<"containerName">>, <<"tenantName">>],
-        [<<"timeout">>, <<"blockSize">>]
-    };
-expected_helper_args(?GLUSTERFS_HELPER_NAME) ->
-    {
-        [<<"volume">>, <<"hostname">>],
-        [<<"port">>, <<"mountPoint">>, <<"transport">>,
-            <<"xlatorOptions">>, <<"timeout">>, <<"blockSize">>]
-    };
-expected_helper_args(?WEBDAV_HELPER_NAME) ->
-    {
-        [<<"endpoint">>],
-        [<<"timeout">>, <<"verifyServerCertificate">>,
-            <<"authorizationHeader">>, <<"rangeWriteSupport">>,
-            <<"connectionPoolSize">>, <<"maximumUploadSize">>]
-    };
-expected_helper_args(?NULL_DEVICE_HELPER_NAME) ->
-    {
-        [],
-        [<<"timeout">>, <<"latencyMin">>, <<"latencyMax">>,
-            <<"timeoutProbability">>, <<"filter">>,
-            <<"simulatedFilesystemParameters">>,
-            <<"simulatedFilesystemGrowSpeed">>
-        ]
-    }.
+    [field() | optional_field()].
+expected_helper_args(?CEPH_HELPER_NAME) -> [
+    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
+    {optional, <<"timeout">>}];
+expected_helper_args(?CEPHRADOS_HELPER_NAME) -> [
+    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
+    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
+expected_helper_args(?POSIX_HELPER_NAME) -> [
+    <<"mountPoint">>,
+    {optional, <<"timeout">>}];
+expected_helper_args(?S3_HELPER_NAME) -> [
+    <<"hostname">>, <<"bucketName">>, <<"scheme">>,
+    {optional, <<"timeout">>}, {optional, <<"signatureVersion">>},
+    {optional, <<"blockSize">>}];
+expected_helper_args(?SWIFT_HELPER_NAME) -> [
+    <<"authUrl">>, <<"containerName">>, <<"tenantName">>,
+    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
+expected_helper_args(?GLUSTERFS_HELPER_NAME) -> [
+    <<"volume">>, <<"hostname">>,
+    {optional, <<"port">>}, {optional, <<"mountPoint">>},
+    {optional, <<"transport">>}, {optional, <<"xlatorOptions">>},
+    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
+expected_helper_args(?WEBDAV_HELPER_NAME) -> [
+    <<"endpoint">>,
+    {optional, <<"timeout">>}, {optional, <<"verifyServerCertificate">>},
+    {optional, <<"authorizationHeader">>}, {optional, <<"rangeWriteSupport">>},
+    {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>}];
+expected_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
+    {optional, <<"timeout">>}, {optional, <<"latencyMin">>},
+    {optional, <<"latencyMax">>}, {optional, <<"timeoutProbability">>},
+    {optional, <<"filter">>},
+    {optional, <<"simulatedFilesystemParameters">>},
+    {optional, <<"simulatedFilesystemGrowSpeed">>}].
 
 
 %%--------------------------------------------------------------------
@@ -152,9 +196,8 @@ expected_helper_args(?NULL_DEVICE_HELPER_NAME) ->
 %%--------------------------------------------------------------------
 -spec filter_user_ctx(name(), #{binary() => term()}) -> #{binary() => term()}.
 filter_user_ctx(HelperName, Params) ->
-    Required = expected_user_ctx_params(HelperName, Params),
-    Optional = optional_user_ctx_params(HelperName, Params),
-    maps:with(Required ++ Optional, Params).
+    AllowedFields = expected_user_ctx_params(HelperName, Params),
+    filter_params(AllowedFields, Params).
 
 
 %%--------------------------------------------------------------------
@@ -179,18 +222,13 @@ expected_user_ctx_params(?GLUSTERFS_HELPER_NAME, _) ->
 expected_user_ctx_params(?WEBDAV_HELPER_NAME, #{<<"credentialsType">> := <<"none">>}) ->
     [<<"credentialsType">>];
 expected_user_ctx_params(?WEBDAV_HELPER_NAME, _) ->
-    [<<"credentialsType">>, <<"credentials">>];
+    [<<"credentialsType">>, <<"credentials">>,
+        {optional, <<"credentials">>}, {optional, <<"adminId">>},
+        {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
+        {optional, <<"accessTokenTTL">>}
+    ];
 expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME, _) ->
     [<<"uid">>, <<"gid">>].
-
-
-optional_user_ctx_params(?WEBDAV_HELPER_NAME, _) ->
-    [<<"credentials">>, <<"adminId">>,
-        <<"onedataAccessToken">>, <<"accessToken">>,
-        <<"accessTokenTTL">>];
-
-optional_user_ctx_params(_, _) ->
-    [].
 
 
 %%--------------------------------------------------------------------
@@ -204,11 +242,8 @@ validate_user_ctx(#helper{name = StorageType}, UserCtx) ->
     validate_user_ctx(StorageType, UserCtx);
 
 validate_user_ctx(StorageType, UserCtx) ->
-    Required = expected_user_ctx_params(StorageType, UserCtx),
-    Optional = [{optional, Field} || Field <-
-        optional_user_ctx_params(StorageType, UserCtx) -- Required],
-    Fields = Required ++ Optional,
-    check_user_or_group_ctx_fields(Fields, UserCtx).
+    Fields = expected_user_ctx_params(StorageType, UserCtx),
+    validate_fields(Fields, UserCtx, true).
 
 
 %%--------------------------------------------------------------------
@@ -219,15 +254,48 @@ validate_user_ctx(StorageType, UserCtx) ->
 -spec validate_group_ctx(storage:helper(), group_ctx()) ->
     ok | {error, Reason :: term()}.
 validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
-    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+    validate_fields([<<"gid">>], GroupCtx, true);
 validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
-    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+    validate_fields([<<"gid">>], GroupCtx, true);
 validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
-    check_user_or_group_ctx_fields([<<"gid">>], GroupCtx);
+    validate_fields([<<"gid">>], GroupCtx, true);
 validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
     ok;
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
     {error, {group_ctx_not_supported, HelperName}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Injects user context into helper parameters.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_user_ctx(helpers:helper(), user_ctx()) ->
+    {ok, helpers:helper()} | {error, Reason :: term()}.
+set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
+    % @fixme look here
+    case validate_user_ctx(Helper, UserCtx) of
+        ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
+        {error, Reason} -> {error, Reason}
+    end.
+
+
+-spec webdav_fill_admin_id(UserCtx :: user_ctx()) -> user_ctx().
+webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := <<>>}) ->
+    {ok, UserCtx};
+webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := Token}) ->
+    {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
+    {ok, UserCtx#{
+        <<"adminId">> => AdminId
+    }};
+
+webdav_fill_admin_id(UserCtx) ->
+    UserCtx.
+
+
+%%%===================================================================
+%%% Getters
+%%% Functions for extracting info from helper records
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -332,33 +400,10 @@ get_timeout(#helper{args = Args}) ->
             get_timeout(undefined)
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Injects user context into helper parameters.
-%% @end
-%%--------------------------------------------------------------------
--spec set_user_ctx(helpers:helper(), user_ctx()) ->
-    {ok, helpers:helper()} | {error, Reason :: term()}.
-set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
-    % @fixme look here
-    case validate_user_ctx(Helper, UserCtx) of
-        ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
-        {error, Reason} -> {error, Reason}
-    end.
 
-
--spec webdav_fill_admin_id(UserCtx :: user_ctx()) -> user_ctx().
-webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := <<>>}) ->
-    {ok, UserCtx};
-webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := Token}) ->
-    {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
-    {ok, UserCtx#{
-        <<"adminId">> => AdminId
-    }};
-
-webdav_fill_admin_id(UserCtx) ->
-    UserCtx.
-
+%%%===================================================================
+%%% Upgrade functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -549,66 +594,60 @@ new_nulldevice_user_ctx(Uid, Gid) ->
 %% have valid type.
 %% @end
 %%--------------------------------------------------------------------
--spec check_user_or_group_ctx_fields([binary()], user_ctx() | group_ctx()) ->
+-spec validate_fields([field() | optional_field()], Params :: map(),
+    AllowIntegers :: boolean()) ->
     ok | {error, Reason :: term()}.
-check_user_or_group_ctx_fields([], Ctx) when Ctx == #{} ->
+validate_fields([], Params, _) when Params == #{} ->
     ok;
-check_user_or_group_ctx_fields([], Ctx) ->
-    {error, {invalid_additional_fields, Ctx}};
-check_user_or_group_ctx_fields([Field | Fields], Ctx) ->
-    case check_ctx_field(Field, Ctx) of
-        {ok, CtxRest} -> check_user_or_group_ctx_fields(Fields, CtxRest);
-        Error -> Error
+validate_fields([], Params, _) ->
+    {error, {invalid_additional_fields, Params}};
+validate_fields([Field | Fields], Params, AllowIntegers) ->
+    case validate_field(Field, Params, AllowIntegers) of
+        {ok, ParamsRemainder} ->
+            validate_fields(Fields, ParamsRemainder, AllowIntegers);
+        Error ->
+            Error
     end.
 
+
 %% @private
--spec check_ctx_field(Key, Ctx :: #{binary() := term()}) ->
-    {ok, CtxRest :: user_ctx() | group_ctx()} |
+-spec validate_field(Key, Params, AllowIntegers :: boolean()) ->
+    {ok, ParamsRemainder :: user_ctx() | group_ctx()} |
     {error, Reason :: term()} when
-    Key :: binary() | optional_field().
-check_ctx_field({optional, Field}, Ctx) ->
-    case check_ctx_field(Field, Ctx) of
-        {error, {missing_field, _}} -> {ok, Ctx};
+    Key :: field() | optional_field(),
+    Params :: #{binary() := term()}.
+validate_field({optional, Field}, Params, AllowIntegers) ->
+    case validate_field(Field, Params, AllowIntegers) of
+        {error, {missing_field, _}} -> {ok, Params};
         Result -> Result
     end;
 
-check_ctx_field(Field, Ctx) ->
-    case Ctx of
-        #{Field := <<"null">>} -> {error, {invalid_field_value, Field, <<"null">>}};
-        #{Field := Value} when is_binary(Value) -> {ok, maps:remove(Field, Ctx)};
-        #{Field := Value} when is_integer(Value) -> {ok, maps:remove(Field, Ctx)};
-        #{Field := Value} -> {error, {invalid_field_value, Field, Value}};
-        #{} -> {error, {missing_field, Field}}
+validate_field(Field, Params, AllowIntegers) ->
+    case Params of
+        #{Field := <<"null">>} ->
+            {error, {invalid_field_value, Field, <<"null">>}};
+        #{Field := Value} when
+            is_binary(Value);
+            is_integer(Value) andalso AllowIntegers ->
+            {ok, maps:remove(Field, Params)};
+        #{Field := Value} ->
+            {error, {invalid_field_value, Field, Value}};
+        #{} ->
+            {error, {missing_field, Field}}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Validates that a storage helper arguments map contains all
-%% required fields and all its values are binaries.
+%% Invokes Fun for each key-value pair in the map.
+%% The Fun must return a map, all of which are merged to create the result.
 %% @end
 %%--------------------------------------------------------------------
--spec check_args(RequiredFields :: [binary()], Args :: map()) ->
-    ok | {error, {missing_field, Key :: binary()}}
-    | {error, {invalid_field_value, Key :: term(), Value :: term ()}}.
-check_args(RequiredFields, Args) ->
-    Result = lists:foldl(fun
-        (_, {error, _} = Error) -> Error;
-        (Field, ok) ->
-            case maps:find(Field, Args) of
-                {ok, _Value} -> ok;
-                error -> {error, {missing_field, Field}}
-            end
-    end, ok, RequiredFields),
+-spec map_flatmap(Fun, #{K1 => V1}) -> #{K2 => V2} when
+    Fun :: fun((K1, V1) -> #{K2 => V2}).
+map_flatmap(Fun, Map) ->
+    maps:fold(fun(K, V, Acc) ->
+        maps:merge(Acc, Fun(K, V))
+    end, #{}, Map).
 
-    case Result of
-        ok ->
-            % ensure all values are binaries
-            maps:fold(fun
-                (Key, Value, ok) when not is_binary(Value) ->
-                    {error, {invalid_field_value, Key, Value}};
-                (_, _, Result) -> Result
-            end, ok, Args);
-        Error -> Error
-    end.
