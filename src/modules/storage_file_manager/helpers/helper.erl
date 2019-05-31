@@ -28,9 +28,8 @@
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
 -export([set_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
--export([webdav_fill_admin_id/1]).
 
--export([prepare_helper_args/2]).
+-export([prepare_helper_args/2, prepare_user_ctx_params/2]).
 
 %% Test utils
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
@@ -54,6 +53,8 @@
 
 
 % @fixme support creating webdav ctx with adminId
+
+% @fixme move ctx managemetn to other module
 
 %%%===================================================================
 %%% API
@@ -127,7 +128,7 @@ filter_params(AllowedFields, Params) ->
 %% but may not contain all required fields.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_helper_args(name(), #{binary() := binary()}) -> args().
+-spec prepare_helper_args(name(), args()) -> args().
 prepare_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
     Transformed = maps_flatmap(fun
         (<<"hostname">>, URL) ->
@@ -144,6 +145,19 @@ prepare_helper_args(HelperName, Params) ->
     filter_params(expected_helper_args(HelperName), Params).
 
 
+-spec prepare_user_ctx_params(name(), ctx()) -> ctx().
+prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
+    Transformed = maps_flatmap(fun
+        (Key = <<"onedataAccess>Token">>, Token) when byte_size(Token) > 0 ->
+            {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
+            #{
+                <<"adminId">> => AdminId,
+                Key => Token
+            };
+        (Key, Value) -> #{Key => Value}
+    end, Params),
+    filter_params(expected_user_ctx_params(HelperName), Transformed);
+
 prepare_user_ctx_params(HelperName, Params) ->
     filter_params(expected_user_ctx_params(HelperName), Params).
 
@@ -159,7 +173,6 @@ default_admin_ctx(_) ->
     #{}.
 
 
-
 %% @private
 -spec extract_scheme(URL :: binary()) -> {ok, Scheme :: http | https, binary()}.
 extract_scheme(URL) ->
@@ -172,7 +185,7 @@ extract_scheme(URL) ->
     {ok, Scheme, str_utils:format_bin("~s:~B", [S3Host, S3Port])}.
 
 
--spec strip_modifiers(Fields :: [field() | optional_field()]) -> field().
+-spec strip_modifiers(Fields :: [field() | optional_field()]) -> [field()].
 strip_modifiers(Fields) ->
     lists:map(fun
         ({optional, Field}) -> Field;
@@ -299,19 +312,6 @@ set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
         ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
         {error, Reason} -> {error, Reason}
     end.
-
-
--spec webdav_fill_admin_id(UserCtx :: user_ctx()) -> user_ctx().
-webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := <<>>}) ->
-    {ok, UserCtx};
-webdav_fill_admin_id(UserCtx = #{<<"onedataAccessToken">> := Token}) ->
-    {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
-    {ok, UserCtx#{
-        <<"adminId">> => AdminId
-    }};
-
-webdav_fill_admin_id(UserCtx) ->
-    UserCtx.
 
 
 %%%===================================================================
