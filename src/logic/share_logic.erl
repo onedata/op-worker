@@ -59,7 +59,7 @@ get_public_data(SessionId, ShareId) ->
 
 
 -spec create(gs_client_worker:client(), od_share:id(), od_share:name(),
-    od_space:id(), od_share:share_guid()) ->
+    od_space:id(), od_share:root_file_guid()) ->
     {ok, od_share:id()} | gs_protocol:error().
 create(SessionId, ShareId, Name, SpaceId, ShareFileGuid) ->
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{

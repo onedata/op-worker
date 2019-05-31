@@ -408,7 +408,7 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, logical_file_manager:check_perms(SessId, FileKey, OpenFlag)).
 
 -spec create_share(node(), session:id(), logical_file_manager:file_key(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:share_guid()}} | {error, term()}.
+    {ok, {od_share:id(), od_share:root_file_guid()}} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
     ?EXEC(Worker, logical_file_manager:create_share(SessId, FileKey, Name)).
 
@@ -417,7 +417,7 @@ create_share(Worker, SessId, FileKey, Name) ->
 remove_share(Worker, SessId, FileKey) ->
     ?EXEC(Worker, logical_file_manager:remove_share(SessId, FileKey)).
 
--spec remove_share_by_guid(node(), session:id(), od_share:share_guid()) ->
+-spec remove_share_by_guid(node(), session:id(), od_share:root_file_guid()) ->
     ok | {error, term()}.
 remove_share_by_guid(Worker, SessId, ShareGuid) ->
     ?EXEC(Worker, logical_file_manager:remove_share_by_guid(SessId, ShareGuid)).
