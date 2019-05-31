@@ -12,6 +12,7 @@
 -module(share_req).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -94,7 +95,7 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     check_is_dir(FileCtx),
-    check_can_manage_shares(SessionId, SpaceId, UserId),
+    assert_has_space_privilege(SessionId, SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
         {ok, _} ->
@@ -107,7 +108,7 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
                         status = #status{code = ?OK},
                         provider_response = #share{
                             share_id = ShareId,
-                            share_file_guid = ShareGuid
+                            root_file_guid = ShareGuid
                         }
                     }
             end;
@@ -125,7 +126,7 @@ remove_share_insecure(UserCtx, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     check_is_dir(FileCtx),
-    check_can_manage_shares(SessionId, SpaceId, UserId),
+    assert_has_space_privilege(SessionId, SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case file_meta:remove_share(FileCtx, ShareId) of
         {error, not_found} ->
@@ -145,9 +146,12 @@ check_is_dir(FileCtx) ->
     end.
 
 %% @private
--spec check_can_manage_shares(session:id(), od_space:id(), od_user:id()) ->
-    boolean() | no_return().
-check_can_manage_shares(SessionId, SpaceId, UserId) ->
-    false == space_logic:has_eff_privilege(
-        SessionId, SpaceId, UserId, ?SPACE_MANAGE_SHARES
-    ) andalso ?ERROR(?EACCES).
+-spec assert_has_space_privilege(session:id(), od_space:id(), od_user:id(),
+    privileges:space_privilege()) -> ok | no_return().
+assert_has_space_privilege(SessionId, SpaceId, UserId, Privilege) ->
+    case space_logic:has_eff_privilege(SessionId, SpaceId, UserId, Privilege) of
+        true ->
+            ok;
+        false ->
+            ?ERROR(?EACCES)
+    end.

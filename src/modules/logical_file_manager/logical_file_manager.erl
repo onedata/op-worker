@@ -692,8 +692,8 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), file_key(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:share_guid()}} | error_reply().
+-spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
+    {ok, {od_share:id(), od_share:root_file_guid()}} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
@@ -711,7 +711,7 @@ remove_share(SessId, ShareID) ->
 %% Removes file share by ShareGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), od_share:share_guid()) -> ok | error_reply().
+-spec remove_share_by_guid(session:id(), od_share:root_file_guid()) -> ok | error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
     ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 

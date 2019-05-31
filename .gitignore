@@ -16,6 +16,7 @@ rebar3.crashdump
 /cluster_manager
 /priv
 /_build
+/package
 
 rel/files/vm.args
 rel/vars.config

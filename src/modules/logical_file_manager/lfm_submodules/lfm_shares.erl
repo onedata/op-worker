@@ -26,13 +26,13 @@
 %% Creates a share for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), logical_file_manager:file_key(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:share_guid()}} | logical_file_manager:error_reply().
+-spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
+    {ok, {od_share:id(), od_share:root_file_guid()}} | logical_file_manager:error_reply().
 create_share(SessId, FileKey, Name) ->
     {guid, GUID} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
-        fun(#share{share_id = ShareId, share_file_guid = ShareGuid}) ->
+        fun(#share{share_id = ShareId, root_file_guid = ShareGuid}) ->
             {ok, {ShareId, ShareGuid}} end).
 
 %%--------------------------------------------------------------------
@@ -55,7 +55,7 @@ remove_share(SessId, ShareID) ->
 %% Removes file share by ShareGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), od_share:share_guid()) ->
+-spec remove_share_by_guid(session:id(), od_share:root_file_guid()) ->
     ok | logical_file_manager:error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
     remote_utils:call_fslogic(SessId, provider_request, ShareGuid,

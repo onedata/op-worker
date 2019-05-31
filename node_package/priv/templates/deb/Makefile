@@ -10,10 +10,10 @@ default:
 		-e RELEASE="$(PKG_BUILD)" \
 		-e REBAR="$(REBAR)" \
 		{{debuild_extra_options}} \
-		-uc -us -S
+		-uc -us -S -d
 	mkdir -p ../packages
-	cd .. && sg sbuild -c "sbuild -sd $(DISTRIBUTION) -j4 *$(PKG_VERSION)-$(PKG_BUILD).dsc"
-	cd .. && mv *$(PKG_VERSION).orig.tar.gz packages
+	cd .. && sg sbuild -c "sbuild -sd $(DISTRIBUTION) -j$$(nproc) *$(PKG_VERSION)-$(PKG_BUILD).dsc"
+	cd .. && mv *$(PKG_VERSION).tar.gz packages
 	cd .. && mv *$(PKG_VERSION)-$(PKG_BUILD).dsc packages
 	cd .. && mv *$(PKG_VERSION)-$(PKG_BUILD).diff.gz packages
 	cd .. && mv *$(PKG_VERSION)-$(PKG_BUILD)_amd64.changes packages
