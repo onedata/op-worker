@@ -231,6 +231,18 @@ select_helper(Storage, HelperName) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Replaces storage with a new one of the same name.
+%% @end
+%%--------------------------------------------------------------------
+-spec replace_helper(record(), helper:name(), NewHelper :: helpers:helper()) ->
+    record().
+replace_helper(#storage{helpers = OldHelpers} = Storage, HelperName, NewHelper) ->
+    NewHelpers = lists:keyreplace(HelperName, #helper.name, OldHelpers, NewHelper),
+    Storage#storage{helpers = NewHelpers}.
+
+
 -spec update_name(StorageId :: id(), NewName :: name()) -> ok.
 update_name(StorageId, NewName) ->
     Result = update(StorageId, fun(#storage{} = Storage) ->
@@ -250,11 +262,8 @@ update_name(StorageId, NewName) ->
 -spec update_helper_args(storage:id(), helper:name(), helper:args()) ->
     ok | {error, term()}.
 update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
-    Result = update_helper(StorageId, HelperName, fun
-        (#helper{args = Args} = Helper) ->
-            Helper#helper{args = maps:merge(Args, Changes)}
-    end),
-    case Result of
+    Updater = fun(Helper) -> helper:update_args(Helper, Changes) end,
+    case update_helper(StorageId, HelperName, Updater) of
         ok -> rtransfer_put_storage(StorageId);
         Error -> Error
     end.
@@ -268,10 +277,8 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
 -spec update_admin_ctx(storage:id(), helper:name(), helper:user_ctx()) ->
     ok | {error, term()}.
 update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
-    update_helper(StorageId, HelperName, fun
-        (#helper{admin_ctx = #{} = AdminCtx} = Helper) ->
-            Helper#helper{admin_ctx = maps:merge(AdminCtx, Changes)}
-    end).
+    Updater = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
+    update_helper(StorageId, HelperName, Updater).
 
 
 %%--------------------------------------------------------------------
@@ -318,7 +325,7 @@ set_luma_config(StorageId, LumaConfig) ->
     ok | {error, term()}.
 set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
     update_helper(StorageId, HelperName, fun(Helper) ->
-        Helper#helper{insecure = Insecure}
+        helper:update_insecure(Helper, Insecure)
     end).
 
 
@@ -586,16 +593,20 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
 %% Updates selected storage helper in the datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec update_helper(StorageId :: storage:id(), HelperName :: helper:name(),
-    DiffFun :: fun((helper()) -> helper())) ->
-    ok | {error, term()}.
+-spec update_helper(StorageId :: storage:id(), helper:name(), DiffFun) ->
+    ok | {error, term()} when
+    DiffFun :: fun((helper()) -> {ok, helper()} | {error, term()}).
 update_helper(StorageId, HelperName, DiffFun) ->
-    ?extract_ok(update(StorageId, fun(#storage{helpers = Helpers} = Storage) ->
+    ?extract_ok(update(StorageId, fun(Storage) ->
         case select_helper(Storage, HelperName) of
             {ok, Helper} ->
-                NewHelper = DiffFun(Helper),
-                NewHelpers = lists:keyreplace(HelperName, 2, Helpers, NewHelper),
-                {ok, Storage#storage{helpers = NewHelpers}};
+                HelperName = helper:get_name(Helper),
+                case DiffFun(Helper) of
+                    {ok, NewHelper} ->
+                        {ok, replace_helper(Storage, HelperName, NewHelper)};
+                    {error, _} = Error ->
+                        Error
+                end;
             {error, _} = Error -> Error
         end
     end)).

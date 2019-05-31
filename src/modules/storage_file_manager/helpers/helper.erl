@@ -23,6 +23,7 @@
 
 %% API
 -export([new_helper/5]).
+-export([update_args/2, update_admin_ctx/2, update_insecure/2]).
 -export([validate_user_ctx/2, validate_group_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
@@ -37,10 +38,6 @@
     new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
     new_webdav_user_ctx/2, new_webdav_user_ctx/3, new_nulldevice_user_ctx/2]).
 
-
-%% For Onepanel RPC
--export([filter_args/2, filter_user_ctx/2]).
-
 -type name() :: binary().
 -type args() :: #{field() => binary()}.
 -type params() :: #helper_params{}.
@@ -50,7 +47,7 @@
 -type ctx() :: user_ctx() | group_ctx().
 
 -type field() :: binary().
--type optional_field() :: {optional, binary()}.
+-type optional_field() :: {optional, field()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
@@ -66,9 +63,7 @@
 -spec new_helper(name(), args(), user_ctx(), Insecure :: boolean(),
     storage_path_type()) -> {ok, helpers:helper()}.
 new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
-    Fields = expected_helper_args(HelperName),
     AdminCtx = maps:merge(default_admin_ctx(HelperName), AdminCtx),
-    ok = validate_fields(Fields, Args),
     ok = validate_user_ctx(HelperName, AdminCtx),
     {ok, #helper{
         name = HelperName,
@@ -80,47 +75,50 @@ new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
     }}.
 
 
-%% @private
--spec extended_direct_io(name()) -> boolean().
-extended_direct_io(?POSIX_HELPER_NAME) -> false;
-extended_direct_io(_) -> true.
-
-
-%% @private
--spec allow_insecure(name()) -> boolean().
-allow_insecure(?POSIX_HELPER_NAME) -> false;
-allow_insecure(_) -> true.
-
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes unknown keys from helper arguments map.
+%% Injects user context into helper parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_args(name(), #{binary() => term()}) -> #{binary() => term()}.
-filter_args(HelperName, Args) ->
-    Fields = expected_helper_args(HelperName),
-    filter_params(Fields, Args).
+-spec set_user_ctx(helpers:helper(), user_ctx()) ->
+    {ok, helpers:helper()} | {error, Reason :: term()}.
+set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
+    case validate_user_ctx(Helper, UserCtx) of
+        ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
+        {error, Reason} -> {error, Reason}
+    end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes unkown keys from helper user ctx parameters.
-%% @end
-%%--------------------------------------------------------------------
--spec filter_user_ctx(name(), #{binary() => term()}) -> #{binary() => term()}.
-filter_user_ctx(HelperName, Params) ->
-    AllowedFields = expected_user_ctx_params(HelperName),
-    filter_params(AllowedFields, Params).
+-spec update_args(helpers:helper(), args()) ->
+    {ok, helpers:helper()} | {error, Reason :: term()}.
+update_args(#helper{args = Args} = Helper, Changes) ->
+    NewArgs = maps:merge(Args, Changes),
+    case validate_args(Helper#helper.name, NewArgs) of
+        ok -> {ok, Helper#helper{args = NewArgs}};
+        Error -> Error
+    end.
 
 
-%% @private
--spec filter_params(AllowedFields, Params) -> Params when
-    AllowedFields :: [field() | optional_field()],
-    Params :: args() | ctx().
-filter_params(AllowedFields, Params) ->
-    Fields = strip_modifiers(AllowedFields),
-    maps:with(Fields, Params).
+-spec update_admin_ctx(helpers:helper(), user_ctx()) ->
+    {ok, helpers:helper()} | {error, Reason :: term()}.
+update_admin_ctx(#helper{admin_ctx = OldCtx} = Helper, Changes) ->
+    NewCtx = maps:merge(OldCtx, Changes),
+    case validate_user_ctx(Helper#helper.name, NewCtx) of
+        ok -> {ok, Helper#helper{admin_ctx = NewCtx}};
+        Error -> Error
+    end.
+
+
+-spec update_insecure(helpers:helper(), NewInsecure :: boolean()) ->
+    {ok, helpers:helper()} | {error, Reason :: term()}.
+update_insecure(#helper{name = Name} = Helper, NewInsecure) ->
+    case {allow_insecure(Name), NewInsecure} of
+        {false, true} ->
+            {error, {invalid_field_value, <<"insecure">>, NewInsecure}};
+        {_, _} ->
+            {ok, Helper#helper{insecure = NewInsecure}}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -188,12 +186,45 @@ extract_scheme(URL) ->
     {ok, Scheme, str_utils:format_bin("~s:~B", [S3Host, S3Port])}.
 
 
--spec strip_modifiers(Fields :: [field() | optional_field()]) -> [field()].
-strip_modifiers(Fields) ->
+-spec strip_optional_modifier(Fields :: [field() | optional_field()]) -> [field()].
+strip_optional_modifier(Fields) ->
     lists:map(fun
         ({optional, Field}) -> Field;
         (Field) -> Field
     end, Fields).
+
+
+
+%%%===================================================================
+%%% Validators
+%%%===================================================================
+
+%% @private
+-spec extended_direct_io(name()) -> boolean().
+extended_direct_io(?POSIX_HELPER_NAME) -> false;
+extended_direct_io(_) -> true.
+
+
+%% @private
+-spec allow_insecure(name()) -> boolean().
+allow_insecure(?POSIX_HELPER_NAME) -> false;
+allow_insecure(_) -> true.
+
+
+-spec validate_args(name(), args()) ->
+    ok | {error, Reason :: term()}.
+validate_args(HelperName, Args) ->
+    Fields = expected_helper_args(HelperName),
+    validate_fields(Fields, Args).
+
+
+%% @private
+-spec filter_params(AllowedFields, Params) -> Params when
+    AllowedFields :: [field() | optional_field()],
+    Params :: args() | ctx().
+filter_params(AllowedFields, Params) ->
+    Fields = strip_optional_modifier(AllowedFields),
+    maps:with(Fields, Params).
 
 
 %% @private
@@ -301,19 +332,6 @@ validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
     ok;
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
     {error, {group_ctx_not_supported, HelperName}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Injects user context into helper parameters.
-%% @end
-%%--------------------------------------------------------------------
--spec set_user_ctx(helpers:helper(), user_ctx()) ->
-    {ok, helpers:helper()} | {error, Reason :: term()}.
-set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
-    case validate_user_ctx(Helper, UserCtx) of
-        ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
-        {error, Reason} -> {error, Reason}
-    end.
 
 
 %%%===================================================================
