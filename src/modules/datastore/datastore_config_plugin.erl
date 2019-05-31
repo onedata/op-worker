@@ -70,7 +70,7 @@ get_models() -> [
     index,
     autocleaning_run,
     file_popularity_config,
-    harvesting,
+    harvesting_state,
     idp_access_token
 ].
 

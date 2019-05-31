@@ -15,12 +15,12 @@
 -behaviour(supervisor).
 
 -include("modules/harvesting/harvesting.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([start_link/0,
     start_main_stream/1, terminate_main_stream/1,
-    start_aux_stream_async/4, terminate_aux_stream/3
-]).
+    start_aux_stream_async/4, terminate_aux_stream/3, terminate_aux_stream/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -47,7 +47,8 @@ start_main_stream(SpaceId) ->
             supervisor:delete_child(?HARVESTING_STREAM_SUP, ?MAIN_HARVESTING_STREAM(SpaceId)),
             start_main_stream(SpaceId);
         {error, {already_started, _}} -> ok;
-        {error, {{already_started, _}, _}} -> ok
+        {error, {{already_started, _}, _}} -> ok;
+        {error, {normal, _}} -> ok
     end.
 
 start_aux_stream_async(SpaceId, HarvesterId, IndexId, Until) ->
@@ -58,6 +59,10 @@ terminate_main_stream(SpaceId) ->
     MainStream = ?MAIN_HARVESTING_STREAM(SpaceId),
     ok = supervisor:terminate_child(?HARVESTING_STREAM_SUP, MainStream),
     ok = supervisor:delete_child(?HARVESTING_STREAM_SUP, MainStream).
+
+-spec terminate_aux_stream(harvesting_stream:name()) -> ok | {error, term()}.
+terminate_aux_stream(?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId)) ->
+    terminate_aux_stream(SpaceId, HarvesterId, IndexId).
 
 -spec terminate_aux_stream(od_space:id(), od_harvester:id(), od_harvester:index()) ->
     ok | {error, term()}.

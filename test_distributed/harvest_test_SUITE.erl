@@ -643,7 +643,7 @@ mock_space_quota_checks(Node) ->
 cleanup_harvesting_model(Nodes) ->
     lists:foreach(fun(Node) ->
         lists:foreach(fun(SpaceId) ->
-            rpc:call(Node, harvesting, delete, [SpaceId])
+            rpc:call(Node, harvesting_state, delete, [SpaceId])
         end, ?SPACE_IDS)
     end, Nodes).
 

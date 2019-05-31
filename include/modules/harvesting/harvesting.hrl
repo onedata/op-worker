@@ -26,8 +26,7 @@
     {aux_harvesting_stream, {SpaceId, HarvesterId, IndexId}}).
 
 % harvesting_stream messages
--define(TAKEOVER_PROPOSAL(HSI, Name, Seq),
-    {takeover_proposal, HSI, Name, Seq}).
+-define(TAKEOVER_PROPOSAL(Name, Seq), {takeover_proposal, Name, Seq}).
 -define(TAKEOVER_ACCEPTED, takeover_accepted).
 -define(TAKEOVER_REJECTED(NewUntil), {takeover_rejected, NewUntil}).
 -define(SPACE_REMOVED, space_removed).
@@ -39,19 +38,12 @@
 
 % Records
 
-% harvesting model identifier
--record(hid, {
-    id :: od_space:id(),
-    label :: main | {od_harvester:id(), od_harvester:index()}
-}).
-
 % state of harvesting_stream gen_server
 -record(hs_state, {
     % common fields
     name :: harvesting_stream:name(),
-    hi :: harvesting:hid(),
     callback_module :: module(),
-    destination :: #{od_harvester:id() => [od_harvester:index()]},
+    destination = harvesting_destination:init() :: harvesting_destination:destination(),
     space_id :: od_space:id(),
     provider_id :: undefined | od_provider:id(),
 
@@ -62,19 +54,23 @@
     stream_pid :: undefined | pid(),
 
     mode = streaming :: harvesting_stream:mode(),
-    backoff :: term(),
+    backoff :: backoff:backoff(),
+    error_log = <<"">> :: binary(),
+    log_level = error :: warning | error | debug,
 
-    batch = harvesting_batch:init() :: harvesting_batch:batch(),
-    % we can ignore all the docs, until first not deleted
-    % #custom_metadata doc arrives
+    batch = harvesting_batch:new_accumulator() :: harvesting_batch:accumulator() | harvesting_batch:batch(),
+    % Couchbase aggregates all deleted docs in the beginning of a stream,
+    % so these changes can be safely ignored. The flag is set to false when
+    % meaningful changes have been reached (first non-deleted #custom_metadata{} doc).
     ignoring_deleted = true :: boolean(),
 
     until :: couchbase_changes:until(),
 
-    last_harvest_timestamp = 0 :: non_neg_integer(),
+    last_harvest_timestamp = time_utils:system_time_seconds() :: non_neg_integer(),
 
     % fields used by main_harvesting_stream
-    aux_destination = #{} :: #{od_harvester:id() => [od_harvester:index()]}
+    % destination with all indices, for which aux_harvesting_streams have been started
+    aux_destination = harvesting_destination:init() :: harvesting_destination:destination()
 }).
 
 -endif.

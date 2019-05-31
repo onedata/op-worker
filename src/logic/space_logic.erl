@@ -37,10 +37,6 @@
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
 
--type harvesting_result() :: {ok, harvesting_result:failure_map()} | gs_protocol:error().
-
--export_type([harvesting_result/0]).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -241,7 +237,7 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 %%--------------------------------------------------------------------
 -spec harvest_metadata(od_space:id(), harvesting_destination:destination(),
     harvesting_batch:prepared_batch(), couchbase_changes:seq(),
-    couchbase_changes:seq()) -> harvesting_result().
+    couchbase_changes:seq()) -> {ok, harvesting_result:failure_map()} | gs_protocol:error().
 harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -256,13 +252,15 @@ harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
         }
     }).
 
--spec get_harvesters(od_space:doc() | od_space:id()) -> {ok, [od_harvester:id()]}.
+-spec get_harvesters(od_space:doc() | od_space:id()) ->
+    {ok, [od_harvester:id()]} | gs_protocol:error().
 get_harvesters(#document{value = #od_space{harvesters = Harvesters}}) ->
     {ok, Harvesters};
 get_harvesters(SpaceId) ->
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
         {ok, Doc} ->
             get_harvesters(Doc);
-        Error ->
+        {error, _} = Error ->
+            ?error("space_logic:get_harvesters(~p) failed due to ~p", [SpaceId, Error]),
             Error
     end.

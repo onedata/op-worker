@@ -1,6 +1,8 @@
 -module(couchbase_changes_stream_mock_registry).
 -author("").
 
+-include_lib("ctool/include/logging.hrl").
+
 -behaviour(gen_server).
 
 %% API

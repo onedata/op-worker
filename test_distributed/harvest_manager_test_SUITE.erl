@@ -46,51 +46,69 @@
     start_stop_streams_mixed_test/1,
     main_stream_should_persist_last_successfully_processed_seq/1,
     adding_index_should_start_aux_stream_to_catch_up_with_main_stream/1,
+    aux_stream_should_be_started_test/1,
+    aux_stream_should_not_be_started_test/1,
     adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream/1,
     aux_stream_should_eventually_catch_up_with_main_stream/1,
     aux_stream_should_be_started_on_index_level_error/1,
     aux_stream_should_be_started_on_harvester_level_error/1,
-    error_mix_test/1, error_mix_test2/1, aux_stream_should_be_started_test/1, aux_stream_should_not_be_started_test/1]).
+    error_mix_test/1,
+    error_mix_test2/1
+]).
 
 all() -> ?ALL([
-%%    stream_sup_should_be_started,
-%%    stream_supervisor_should_be_restarted,
-%%    main_harvesting_stream_should_not_be_started_if_space_is_not_supported,
-%%    main_harvesting_stream_should_not_be_started_if_space_does_not_have_any_harvesters,
-%%    main_harvesting_stream_should_not_be_started_if_space_does_not_have_any_indices,
-%%    only_one_main_harvesting_stream_should_be_started_for_supported_space,
-%%    only_one_main_harvesting_stream_should_be_started_for_supported_space_one_harvester_many_indices,
-%%    only_one_main_harvesting_stream_should_be_started_for_supported_space_many_harvesters_many_indices,
-%%    main_harvesting_stream_should_be_started_for_each_supported_space_with_a_harvester,
-%%    adding_space_to_harvester_should_start_new_main_harvesting_stream,
-%%    main_harvesting_stream_should_be_stopped_when_harvester_is_deleted,
-%%    main_harvesting_stream_should_be_stopped_when_there_are_no_indices_in_the_harvester,
-%%    main_harvesting_stream_should_be_stopped_when_space_is_deleted_from_harvester,
-%%    start_stop_streams_mixed_test,
-%%    main_stream_should_persist_last_successfully_processed_seq,
-%%    adding_index_should_start_aux_stream_to_catch_up_with_main_stream,
-%%    aux_stream_should_eventually_catch_up_with_main_stream,
-%%    adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream,
-    aux_stream_should_be_started_on_index_level_error,
-    aux_stream_should_be_started_on_harvester_level_error
-%%    ,
+    stream_sup_should_be_started,
+    stream_supervisor_should_be_restarted,
+    main_harvesting_stream_should_not_be_started_if_space_is_not_supported,
+    main_harvesting_stream_should_not_be_started_if_space_does_not_have_any_harvesters,
+    main_harvesting_stream_should_not_be_started_if_space_does_not_have_any_indices,
+    only_one_main_harvesting_stream_should_be_started_for_supported_space,
+    only_one_main_harvesting_stream_should_be_started_for_supported_space_one_harvester_many_indices,
+    only_one_main_harvesting_stream_should_be_started_for_supported_space_many_harvesters_many_indices,
+    main_harvesting_stream_should_be_started_for_each_supported_space_with_a_harvester,
+    adding_space_to_harvester_should_start_new_main_harvesting_stream,
+    main_harvesting_stream_should_be_stopped_when_harvester_is_deleted,
+    main_harvesting_stream_should_be_stopped_when_there_are_no_indices_in_the_harvester,
+    main_harvesting_stream_should_be_stopped_when_space_is_deleted_from_harvester,
+    start_stop_streams_mixed_test,
+    main_stream_should_persist_last_successfully_processed_seq,
+    adding_index_should_start_aux_stream_to_catch_up_with_main_stream,
+    aux_stream_should_be_started_test,
+    aux_stream_should_not_be_started_test,
+    aux_stream_should_eventually_catch_up_with_main_stream,
+    adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream,
+    aux_stream_should_be_started_on_index_level_error
+%%    aux_stream_should_be_started_on_harvester_level_error,
 %%    error_mix_test,
 %%    error_mix_test2
 ]).
+
+
+% todo tests of batching, aux streams etc.
+% todo test when space is deleted
+% todo test w którym wszystkie sfailują i main_stream zostanie zastopowany
+% TODo czy wszystko potem wróci normalnie do pracy????
+
 
 -define(OD_SPACE_POSTHOOK_EXECUTED(SpaceId),
     {od_space_posthook_executed, SpaceId}).
 -define(HARVEST_METADATA_CALLED(SpaceId, Destination, FirstSeq, LastSeq, StreamPid),
     {harvest_metadata_called, SpaceId, Destination, FirstSeq, LastSeq, StreamPid}
 ).
+-define(HARVEST_METADATA_CALLED2(SpaceId, Destination, LastSeq),
+    {harvest_metadata_called, SpaceId, Destination, LastSeq}
+).
+-define(HARVEST_METADATA_CALLED3(SpaceId, Destination, Batch, HarvestingStreamPid),
+    {harvest_metadata_called, SpaceId, Destination, Batch, HarvestingStreamPid}
+).
 
 -define(SPACE_ID(N), ?ID(<<"space_">>, N)).
 -define(INDEX_ID(N), ?ID(<<"index_">>, N)).
 -define(HARVESTER_ID(N), ?ID(<<"harvester_">>, N)).
 -define(ID(Prefix, N), <<Prefix/binary, (integer_to_binary(N))/binary>>).
+-define(PROVIDER_ID(__Node), rpc:call(__Node, oneprovider, get_id, [])).
 
-
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 30).
 -define(assertHarvestMetadataCalled(SpaceId, Destination, FirstSeq, LastSeq, StreamPid),
     ?assertHarvestMetadataCalled(SpaceId, Destination, FirstSeq, LastSeq, StreamPid, Timeout)).
 
@@ -100,6 +118,44 @@ all() -> ?ALL([
         timer:seconds(?ATTEMPTS)
     )
 ).
+
+-define(assertHarvestMetadataCalled3(ExpSpaceId, ExpDestination, ExpSeqs,
+    ExpHarvestingStreamPid
+), ?assertHarvestMetadataCalled3(ExpSpaceId, ExpDestination, ExpSeqs,
+    ExpHarvestingStreamPid, ?ATTEMPTS)
+).
+
+-define(assertHarvestMetadataCalled3(ExpSpaceId, ExpDestination, ExpSeqs,
+    ExpHarvestingStreamPid, Timeout
+), (
+    (fun
+        AssertFun (__SpaceId, __Destination, [], __HarvestingStreamPid, __Timeout) ->
+            % all expected changes has been received
+            ok;
+        AssertFun (__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
+            __TimeoutInMillis = timer:seconds(__Timeout),
+            receive
+                ?HARVEST_METADATA_CALLED3(
+                    __SpaceId,
+                    __Destination,
+                    __ReceivedChanges,
+                    __HarvestingStreamPid
+                ) ->
+                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                AssertFun(__SpaceId, __Destination, __Seqs -- __ReceivedSeqs,
+                    __HarvestingStreamPid, __Timeout)
+            after
+                __TimeoutInMillis ->
+                    __Args = [{module, ?MODULE},
+                    {line, ?LINE},
+                    {expected, {__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout}},
+                    {value, timeout}],
+                    ct:print("assertHarvestMetadata_failed: ~p~n", [__Args]),
+                    erlang:error({assertHarvestMetadata_failed, __Args})
+            end
+    end)(ExpSpaceId, ExpDestination, ExpSeqs, ExpHarvestingStreamPid, Timeout)
+)).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -116,7 +172,7 @@ stream_supervisor_should_be_restarted(Config) ->
 
 main_harvesting_stream_should_not_be_started_if_space_is_not_supported(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = random_element(Nodes),
+    Node = utils:random_element(Nodes),
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
         ?HARVESTER_ID(1) => #{indices => 1, spaces => 1}
     }),
@@ -158,7 +214,7 @@ only_one_main_harvesting_stream_should_be_started_for_supported_space_many_harve
 
 main_harvesting_stream_should_be_started_for_each_supported_space_with_a_harvester(Config) ->
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
-        ?HARVESTER_ID(1) => #{indices => 1, spaces => 100}
+        ?HARVESTER_ID(1) => #{indices => 1, spaces => 1}
     }),
     main_stream_test_base(Config, HarvestersConfig, SpacesConfig).
 
@@ -235,14 +291,14 @@ start_stop_streams_mixed_test(Config) ->
     DeletedSpaces = maps:keys(SpacesConfig2) -- maps:keys(SpacesConfig3),
 
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(random_element(Nodes), SpaceId)
+        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
     end, DeletedSpaces),
 
     ?assertMatch(5, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     update_harvesters_structure(Config, #{}, #{}),
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(random_element(Nodes), SpaceId)
+        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
     end, maps:keys(SpacesConfig3)),
     ?assertMatch(0, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS).
 
@@ -259,17 +315,13 @@ main_stream_should_persist_last_successfully_processed_seq(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 100, 64, 0.3, 0.5),
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 100, 64, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantSeqs = relevant_seqs(Changes, true),
     Max = get_max_seq(Changes),
-
-    % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
+        RelevantSeqs, MainStreamPid),
 
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, MainStreamPid
-    ),
     % check whether maximal Seq from Changes list was persisted as processed by harvesting stream
     ?assertMatch({ok, Max}, harvesting_get_main_seen_seq(N, SpaceId), ?ATTEMPTS).
 
@@ -282,20 +334,19 @@ adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
     mock_harvest_metadata_success(Nodes),
     update_harvesters_structure(Config, HarvestersConfig, SpacesConfig),
 
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 61, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 79, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantSeqs = relevant_seqs(Changes, true),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
+
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 61, 0.3, 0.5),
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
-
     % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
-
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, MainStreamPid
-    ),
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
+        RelevantSeqs, MainStreamPid),
 
     % add index to harvester
     {HarvestersConfig2, SpacesConfig2} = harvesters_and_spaces_config(#{
@@ -308,36 +359,28 @@ adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
 
     AuxStreamPid = get_aux_stream_pid(N, SpaceId, ?HARVESTER_ID(1), ?INDEX_ID(2)),
     AuxChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
-
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
-    ok = couchbase_changes_stream_mock:stop(AuxChangesStreamPid),
-
     % assert that aux_stream has harvested missing metadata
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FirstSeq, LastSeq, AuxStreamPid
+        RelevantSeqs, AuxStreamPid
     ),
     % main_stream should takeover responsibility of harvesting to index2, aux_stream should be stopped
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 79, 0.3, 0.5),
-    {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
-
     %Changes2 should be streamed to both indices
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)]},
-        FirstSeq2, LastSeq2, MainStreamPid
+        RelevantSeqs2, MainStreamPid
     ).
 
 aux_stream_should_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = random_element(Nodes),
-    MainIdentifier = rpc:call(Node, harvesting, main_identifier, [?SPACE_ID(1)]),
-    {ok, _} = rpc:call(Node, harvesting, ensure_created, [?SPACE_ID(1)]),
+    Node = utils:random_element(Nodes),
+    ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), ?INDEX_ID(1)),
-    ok = rpc:call(Node, harvesting, set_seen_seq, [MainIdentifier, Dest, 1000000]),
+    ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
 
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
         ?HARVESTER_ID(1) => #{indices => 2, spaces => 1}
@@ -348,11 +391,10 @@ aux_stream_should_be_started_test(Config) ->
 
 aux_stream_should_not_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = random_element(Nodes),
-    MainIdentifier = rpc:call(Node, harvesting, main_identifier, [?SPACE_ID(1)]),
-    {ok, _} = rpc:call(Node, harvesting, ensure_created, [?SPACE_ID(1)]),
+    Node = utils:random_element(Nodes),
+    ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), [?INDEX_ID(1), ?INDEX_ID(2)]),
-    ok = rpc:call(Node, harvesting, set_seen_seq, [MainIdentifier, Dest, 1000000]),
+    ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
 
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
         ?HARVESTER_ID(1) => #{indices => 1, spaces => 1}
@@ -375,19 +417,17 @@ aux_stream_should_eventually_catch_up_with_main_stream(Config) ->
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
     % generate changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5),
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5),
-    {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5),
-    {FirstSeq3, LastSeq3} = get_custom_metadata_batch_seq_range(Changes3, false),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 67, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantSeqs = relevant_seqs(Changes, true),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
+    RelevantSeqs3 = relevant_seqs(Changes3, false),
 
     % stream Changes1 from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, MainStreamPid
-    ),
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
+        RelevantSeqs, MainStreamPid),
 
     % add index to harvester
     {HarvestersConfig2, SpacesConfig2} = harvesters_and_spaces_config(#{
@@ -403,35 +443,31 @@ aux_stream_should_eventually_catch_up_with_main_stream(Config) ->
 
     % stream next changes to main stream, so that aux stream won't catch up with previously set Until
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, MainStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
+        RelevantSeqs2, MainStreamPid
     ),
 
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FirstSeq, LastSeq, AuxStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
+        RelevantSeqs, AuxStreamPid
     ),
-%%    ok = couchbase_changes_stream_mock:stop(AuxChangesStreamPid),
 
     % aux_stream should not be stopped as it hasn't caught up with main_stream
     ?assertMatch(2, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     AuxChangesStreamPid2 = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid2, Changes2),
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FirstSeq2, LastSeq2, AuxStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
+        RelevantSeqs2, AuxStreamPid
     ),
 
     % main_stream should takeover responsibility of harvesting to index2, aux_stream should be stopped
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)]},
-        FirstSeq3, LastSeq3, MainStreamPid
+        RelevantSeqs3, MainStreamPid
     ).
 
 adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
@@ -447,15 +483,16 @@ adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 61, 0.3, 0.5),
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantSeqs = relevant_seqs(Changes, true),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
 
     % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
 
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, MainStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
+        RelevantSeqs, MainStreamPid
     ),
 
     % add harvester to space
@@ -472,26 +509,23 @@ adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
     AuxChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
 
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
-    ok = couchbase_changes_stream_mock:stop(AuxChangesStreamPid),
 
     % assert that aux_stream has harvested missing metadata
-    ?assertHarvestMetadataCalled(SpaceId,
+
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, AuxStreamPid
+        RelevantSeqs, AuxStreamPid
     ),
     % main_stream should takeover responsibility of harvesting to index2, aux_stream should be stopped
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 79, 0.3, 0.5),
-    {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
 
     %Changes2 should be streamed to both indices
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq2, LastSeq2, MainStreamPid).
+    }, RelevantSeqs2, MainStreamPid).
 
 
 aux_stream_should_be_started_on_index_level_error(Config) ->
@@ -501,9 +535,18 @@ aux_stream_should_be_started_on_index_level_error(Config) ->
         ?HARVESTER_ID(1) => #{indices => 2, spaces => 1}
     }),
 
-    % generate 1st batch of changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5),
+    % generate changes
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantChanges1 = relevant_changes(Changes, true),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
+    RelevantSeqs3 = relevant_seqs(Changes3, false),
+
+    % choose random seq on which harvesting will fail
     FailedSeq = random_custom_metadata_seq(Changes),
+    RetriedChanges = strip_after(RelevantChanges1, FailedSeq),
+
     mock_harvest_metadata(Nodes, fun(_SpaceId, Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
         Indices = harvesting_destination:get(?HARVESTER_ID(1), Destination),
         case lists:member(?INDEX_ID(2), Indices) of
@@ -518,19 +561,10 @@ aux_stream_should_be_started_on_index_level_error(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    % generate changes
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5),
-    {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5),
-    {FirstSeq3, LastSeq3} = get_custom_metadata_batch_seq_range(Changes3, false),
-
     % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
-
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)]},
-        FirstSeq, LastSeq, MainStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)]},
+        get_seqs(RelevantChanges1), MainStreamPid
     ),
 
     % aux_stream_should be started to catch up with main stream
@@ -538,47 +572,33 @@ aux_stream_should_be_started_on_index_level_error(Config) ->
 
     % stream next changes to main stream, so that aux stream won't catch up with previously set Until
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, MainStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
+        RelevantSeqs2, MainStreamPid
     ),
 
     AuxStreamPid = get_aux_stream_pid(N, SpaceId, ?HARVESTER_ID(1), ?INDEX_ID(2)),
     AuxChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
 
-    mock_harvest_metadata_success(Nodes),   %"fix" Index2
+    mock_harvest_metadata_success(Nodes), %"fix" Index2
 
-%%
-%%    ct:pal("AuxStreamPid: ~p", [AuxStreamPid]),
-%%    ct:pal("FailedSeq: ~p", [FailedSeq]),
-%%    ct:pal("LastSeq: ~p", [LastSeq]),
-%%
-%%    receive ANY = ?HARVEST_METADATA_CALLED(_, _, _, _, _) -> ct:pal("ANY: ~p", [ANY]) end,
-
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FailedSeq, LastSeq, AuxStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
+        get_seqs(RetriedChanges), AuxStreamPid
     ),
 
     % aux_stream should not be stopped as it hasn't caught up with main_stream
     ?assertMatch(2, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
-    AuxChangesStreamPid2 = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
-    couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid2, Changes2),
-
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FirstSeq2, LastSeq2, AuxStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
+        RelevantSeqs2, AuxStreamPid
     ),
 
     % main_stream should takeover responsibility of harvesting to index2, aux_stream should be stopped
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
-    ?assertHarvestMetadataCalled(SpaceId,
-        #{?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)]},
-        FirstSeq3, LastSeq3, MainStreamPid
+    ?assertHarvestMetadataCalled3(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)]},
+        RelevantSeqs3, MainStreamPid
     ).
 
 aux_stream_should_be_started_on_harvester_level_error(Config) ->
@@ -603,40 +623,40 @@ aux_stream_should_be_started_on_harvester_level_error(Config) ->
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
     % generate changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5),
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5),
-    {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5),
-    {FirstSeq3, LastSeq3} = get_custom_metadata_batch_seq_range(Changes3, false),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 67, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantSeqs = relevant_seqs(Changes, true),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
+    RelevantSeqs3 = relevant_seqs(Changes3, false),
 
     % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
 
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq, LastSeq, MainStreamPid),
+    }, RelevantSeqs, MainStreamPid),
 
     % aux_stream_should be started to catch up with main stream
     ?assertMatch(2, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     % stream next changes to main stream, so that aux stream won't catch up with previously set Until
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, MainStreamPid
+       RelevantSeqs2, MainStreamPid
     ),
 
     AuxStreamPid = get_aux_stream_pid(N, SpaceId, ?HARVESTER_ID(2), ?INDEX_ID(1)),
     AuxChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
 
-    mock_harvest_metadata_success(Nodes),   %"fix" Index2
+    mock_harvest_metadata_success(Nodes), %"fix" Index2
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, AuxStreamPid
+        RelevantSeqs, AuxStreamPid
     ),
 
     % aux_stream should not be stopped as it hasn't caught up with main_stream
@@ -645,19 +665,19 @@ aux_stream_should_be_started_on_harvester_level_error(Config) ->
     AuxChangesStreamPid2 = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid2, Changes2),
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, AuxStreamPid
+        RelevantSeqs2, AuxStreamPid
     ),
 
     % main_stream should takeover responsibility of harvesting to index2, aux_stream should be stopped
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq3, LastSeq3, MainStreamPid).
+    }, RelevantSeqs3, MainStreamPid).
 
 error_mix_test(Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
@@ -667,9 +687,20 @@ error_mix_test(Config) ->
         ?HARVESTER_ID(2) => #{indices => 1, spaces => 1}
     }),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5),
+
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantChanges1 = relevant_changes(Changes, true),
+    RelevantSeqs1 = get_seqs(Changes),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
+    RelevantSeqs3 = relevant_seqs(Changes3, false),
+
+    % choose random seq on which harvesting will fail
     FailedSeq = random_custom_metadata_seq(Changes),
-    mock_harvest_metadata(Nodes, fun(_SpaceId, _Destination, _Batch,  _MaxStreamSeq, _MaxSeq) ->
+    RetriedChanges = strip_after(RelevantChanges1, FailedSeq),
+
+    mock_harvest_metadata(Nodes, fun(_SpaceId, _Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
         {ok, #{
             ?HARVESTER_ID(1) => #{?INDEX_ID(2) => FailedSeq},
             ?HARVESTER_ID(2) => {error, test_error}
@@ -682,29 +713,22 @@ error_mix_test(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    % generate changes
-    {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5),
-    {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5),
-    {FirstSeq3, LastSeq3} = get_custom_metadata_batch_seq_range(Changes3, false),
-
     % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
 
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq, LastSeq, MainStreamPid),
+    }, RelevantSeqs1, MainStreamPid),
 
     % aux_streams_should be started to catch up with main stream
     ?assertMatch(3, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     % stream next changes to main stream, so that aux stream won't catch up with previously set Until
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, MainStreamPid
+        RelevantSeqs2, MainStreamPid
     ),
 
     AuxStreamPid = get_aux_stream_pid(N, SpaceId, ?HARVESTER_ID(1), ?INDEX_ID(2)),
@@ -716,22 +740,15 @@ error_mix_test(Config) ->
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid2, Changes),
 
-    mock_harvest_metadata_success(Nodes),   %"fix" aux_streams
+    mock_harvest_metadata_success(Nodes), %"fix" aux_streams
 
-    %%    ct:pal("FirstSeq: ~p", [FirstSeq]),
-    %%    ct:pal("FailedSeq: ~p", [FailedSeq]),
-    %%    ct:pal("LastSeq: ~p", [LastSeq]),
-    %%    ct:pal("LastSeq: ~p", [LastSeq]),
-    %%
-    %%    receive ?SPACE_HARVESTERS(_, _, _, _, _) = ANY -> ct:pal("ANY: ~p", [ANY]) end,
-    %%
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FailedSeq, LastSeq, AuxStreamPid
+        get_seqs(RetriedChanges), AuxStreamPid
     ),
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        FirstSeq, LastSeq, AuxStreamPid2
+        RelevantSeqs1, AuxStreamPid2
     ),
 
     % aux_stream should not be stopped as it hasn't caught up with main_stream
@@ -743,23 +760,23 @@ error_mix_test(Config) ->
     AuxChangesStreamPid22 = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid2),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid22, Changes2),
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(2)]},
-        FirstSeq2, LastSeq2, AuxStreamPid
+        RelevantSeqs2, AuxStreamPid
     ),
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, AuxStreamPid2
+        RelevantSeqs2, AuxStreamPid2
     ),
 
     % main_stream should takeover responsibility of harvesting to index2, aux_stream should be stopped
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1), ?INDEX_ID(2)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq3, LastSeq3, MainStreamPid).
+    }, RelevantSeqs3, MainStreamPid).
 
 error_mix_test2(Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
@@ -769,9 +786,19 @@ error_mix_test2(Config) ->
         ?HARVESTER_ID(2) => #{indices => 1, spaces => 1}
     }),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, ?PROVIDER_ID(N)),
+    RelevantChanges1 = relevant_changes(Changes, true),
+    RelevantSeqs1 = get_seqs(Changes),
+    RelevantSeqs2 = relevant_seqs(Changes2, false),
+    RelevantSeqs3 = relevant_seqs(Changes3, false),
+
+    % choose random seq on which harvesting will fail
     FailedSeq = random_custom_metadata_seq(Changes),
-    mock_harvest_metadata(Nodes, fun(_SpaceId, _Destination, _Batch,  _MaxStreamSeq, _MaxSeq) ->
+    RetriedChanges = strip_after(RelevantChanges1, FailedSeq),
+
+    mock_harvest_metadata(Nodes, fun(_SpaceId, _Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
         {ok, #{
             ?HARVESTER_ID(1) => #{?INDEX_ID(1) => FailedSeq},
             ?HARVESTER_ID(2) => {error, test_error}
@@ -786,24 +813,24 @@ error_mix_test2(Config) ->
 
     % generate changes
     {FirstSeq, LastSeq} = get_custom_metadata_batch_seq_range(Changes),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, ?PROVIDER_ID(N)),
     {FirstSeq2, LastSeq2} = get_custom_metadata_batch_seq_range(Changes2, false),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, ?PROVIDER_ID(N)),
     {FirstSeq3, LastSeq3} = get_custom_metadata_batch_seq_range(Changes3, false),
 
     % stream changes from mocked changes_stream to harvesting_stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
 
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq, LastSeq, MainStreamPid),
+    }, RelevantSeqs1, MainStreamPid),
 
     % aux_stream_should be started to catch up with main stream
     % main_stream will retry starting from FailedSeq
     ?assertMatch(2, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
-    mock_harvest_metadata(Nodes, fun(_SpaceId, _Destination, _Batch,  _MaxStreamSeq, _MaxSeq) ->
+    mock_harvest_metadata(Nodes, fun(_SpaceId, _Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
         case self() =:= MainStreamPid of
             true -> {ok, #{}};
             false ->
@@ -811,9 +838,9 @@ error_mix_test2(Config) ->
         end
     end),
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FailedSeq, LastSeq, MainStreamPid
+        get_seqs(RetriedChanges), MainStreamPid
     ),
 
     MainChangesStreamPid2 = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
@@ -821,19 +848,19 @@ error_mix_test2(Config) ->
     % stream next changes to main stream, so that aux stream won't catch up with previously set Until
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid2, Changes2),
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-        FirstSeq2, LastSeq2, MainStreamPid
+        RelevantSeqs2, MainStreamPid
     ),
 
     AuxStreamPid = get_aux_stream_pid(N, SpaceId, ?HARVESTER_ID(2), ?INDEX_ID(1)),
     AuxChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid, Changes),
 
-    mock_harvest_metadata_success(Nodes),   %"fix" aux_streams
+    mock_harvest_metadata_success(Nodes), %"fix" aux_streams
     LastSeqBeforeFailed = get_custom_metadata_predecessor_seq(Changes, FailedSeq),
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
         FirstSeq, LastSeqBeforeFailed, AuxStreamPid
     ),
@@ -844,7 +871,7 @@ error_mix_test2(Config) ->
     AuxChangesStreamPid2 = couchbase_changes_stream_mock_registry_get(N, AuxStreamPid),
     couchbase_changes_stream_mock:stream_changes(AuxChangesStreamPid2, Changes2),
 
-    ?assertHarvestMetadataCalled(SpaceId,
+    ?assertHarvestMetadataCalled3(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
         FirstSeq2, LastSeq2, AuxStreamPid
     ),
@@ -853,10 +880,10 @@ error_mix_test2(Config) ->
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid2, Changes3),
-    ?assertHarvestMetadataCalled(SpaceId, #{
+    ?assertHarvestMetadataCalled3(SpaceId, #{
         ?HARVESTER_ID(1) => [?INDEX_ID(1)],
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
-    }, FirstSeq3, LastSeq3, MainStreamPid).
+    }, RelevantSeqs3, MainStreamPid).
 
 %%%===================================================================
 %%% Test bases functions
@@ -900,8 +927,6 @@ init_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
     couchbase_changes_stream_mock_registry_start_link(N),
-    %%    ok = test_utils:mock_new(Nodes, harvester_logic),
-
     ok = mock_harvesting_stream_changes_stream_start_link(Nodes),
     ok = mock_changes_stream(Nodes),
     add_mocked_od_space_synchronization_posthook(Nodes),
@@ -911,13 +936,16 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
-    %%    ok = test_utils:mock_unload(Nodes, harvester_logic),
-    ok = test_utils:mock_unload(Nodes, harvesting_stream),
-    ok = test_utils:mock_unload(Nodes, couchbase_changes_stream),
+    ok = test_utils:mock_unload(Nodes, harvester_logic),
+    ok = test_utils:mock_unload(Nodes, space_logic),
     lists:foreach(fun(Node) ->
-        true = rpc:call(Node, erlang, exit, [whereis(Node, harvesting_stream_sup), kill])
+
+    ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
+        {ok, _} = rpc:call(Node, supervisor, restart_child, [harvesting_worker_sup, harvesting_stream_sup])
     end, Nodes),
     ?assertMatch(0, catch count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
+    ok = test_utils:mock_unload(Nodes, harvesting_stream),
+    ok = test_utils:mock_unload(Nodes, couchbase_changes_stream),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     couchbase_changes_stream_mock_registry_stop(N),
     delete_harvesting_docs(N),
@@ -933,7 +961,7 @@ end_per_suite(_Config) ->
 
 update_harvesters_structure(Config, HarvestersConfig, SpacesConfig) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = random_element(Nodes),
+    Node = utils:random_element(Nodes),
     Spaces = maps:keys(SpacesConfig),
     mock_harvester_logic_get(Nodes, HarvestersConfig),
     mock_space_logic_get_harvesters(Nodes, SpacesConfig),
@@ -991,8 +1019,9 @@ mock_harvesting_stream_changes_stream_start_link(Nodes) ->
     ok = test_utils:mock_new(Nodes, harvesting_stream),
     ok = test_utils:mock_expect(Nodes, harvesting_stream, changes_stream_start_link,
         fun(_SpaceId, Callback, Since, Until) ->
-            couchbase_changes_stream_mock:mocked_start_link(Callback, Since, Until)
-        end).
+            {ok, _} = couchbase_changes_stream_mock:mocked_start_link(Callback, Since, Until)
+        end
+    ).
 
 mock_changes_stream(Nodes) ->
     ok = test_utils:mock_new(Nodes, couchbase_changes_stream),
@@ -1021,7 +1050,12 @@ mock_harvester_logic_get(Nodes, HarvestersConfig) ->
 mock_space_logic_get_harvesters(Nodes, SpacesConfig) ->
     ok = test_utils:mock_expect(Nodes, space_logic, get_harvesters, fun(SpaceId) ->
         %%        od_harvester:save_to_cache(maps:get(SpaceId, SpacesConfig)),
-        {ok, maps:get(SpaceId, SpacesConfig, ?ERROR_NOT_FOUND)}
+        case maps:get(SpaceId, SpacesConfig, undefined) of
+            undefined ->
+                ?ERROR_NOT_FOUND;
+            Harvesters when is_list(Harvesters) ->
+                {ok, Harvesters}
+        end
     end).
 
 mock_harvest_metadata_success(Nodes) ->
@@ -1029,18 +1063,14 @@ mock_harvest_metadata_success(Nodes) ->
         {ok, #{}}
     end).
 
-notify_harvest_metadata_called(SpaceId, Destination, [], Self) ->
-    Self ! ?HARVEST_METADATA_CALLED(SpaceId, sort_destination(Destination), undefined, undefined, self());
-notify_harvest_metadata_called(SpaceId, Destination, Batch, Self) ->
-    #{<<"seq">> := FirstSeq} = hd(Batch),
-    #{<<"seq">> := LastSeq} = lists:last(Batch),
-    Self ! ?HARVEST_METADATA_CALLED(SpaceId, sort_destination(Destination), FirstSeq, LastSeq, self()).
+notify_harvest_metadata_called(SpaceId, Destination, Batch, TestMasterPid) ->
+    TestMasterPid ! ?HARVEST_METADATA_CALLED3(SpaceId, sort_destination(Destination), Batch, self()).
 
 mock_harvest_metadata(Nodes, Expected) ->
-    Self = self(),
+    TestMasterPid = self(),
     test_utils:mock_expect(Nodes, space_logic, harvest_metadata, fun(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq) ->
         Result = Expected(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq),
-        notify_harvest_metadata_called(SpaceId, Destination, Batch, Self),
+        notify_harvest_metadata_called(SpaceId, Destination, Batch, TestMasterPid),
         Result
     end).
 
@@ -1052,9 +1082,6 @@ count_active_children(Nodes, Ref) ->
 
 whereis(Node, Name) ->
     rpc:call(Node, erlang, whereis, [Name]).
-
-random_element(List) ->
-    lists:nth(rand:uniform(length(List)), List).
 
 get_harvester_doc(Node, HarvesterId) ->
     rpc:call(Node, harvester_logic, get, [HarvesterId]).
@@ -1092,11 +1119,8 @@ get_main_stream_pid(Node, SpaceId) ->
 get_aux_stream_pid(Node, SpaceId, HarvesterId, IndexId) ->
     rpc:call(Node, global, whereis_name, [?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId)]).
 
-harvesting_main_identifier(Node, SpaceId) ->
-    rpc:call(Node, harvesting, main_identifier, [SpaceId]).
-
 harvesting_get_main_seen_seq(Node, SpaceId) ->
-    rpc:call(Node, harvesting, get_main_seen_seq, [SpaceId]).
+    rpc:call(Node, harvesting_state, get_main_seen_seq, [SpaceId]).
 
 couchbase_changes_stream_mock_registry_start_link(Node) ->
     {ok, _} = rpc:call(Node, couchbase_changes_stream_mock_registry, start_link, []).
@@ -1110,7 +1134,8 @@ couchbase_changes_stream_mock_registry_get(Node, StreamPid) ->
 couchbase_changes_stream_mock_registry_get(Node, StreamPid, 0) ->
     case rpc:call(Node, couchbase_changes_stream_mock_registry, get, [StreamPid]) of
         Pid when is_pid(Pid) -> Pid;
-        Other -> ct:fail("couchbase_changes_stream_mock_registry:get returned ~p", [Other])
+        Other ->
+            ct:fail("couchbase_changes_stream_mock_registry:get returned ~p", [Other])
     end;
 couchbase_changes_stream_mock_registry_get(Node, StreamPid, Attempts) ->
     case rpc:call(Node, couchbase_changes_stream_mock_registry, get, [StreamPid]) of
@@ -1122,15 +1147,7 @@ couchbase_changes_stream_mock_registry_get(Node, StreamPid, Attempts) ->
     end.
 
 random_custom_metadata_seq(Changes) ->
-    {_, CustomMetadataChangesAfterFirstNotDeleted} = lists:foldl(fun
-        (Change = #document{deleted = false, value = #custom_metadata{}}, {true, ChangesAcc}) ->
-            {false, [Change | ChangesAcc]};
-        (Change = #document{value = #custom_metadata{}}, {false, ChangesAcc}) ->
-            {false, [Change | ChangesAcc]};
-        (_Change, AccIn) ->
-            AccIn
-    end, {true, []}, Changes),
-    #document{seq = Seq} = random_element(CustomMetadataChangesAfterFirstNotDeleted),
+    #document{seq = Seq} = utils:random_element(relevant_changes(Changes, true)),
     Seq.
 
 get_custom_metadata_batch_seq_range(Changes) ->
@@ -1182,7 +1199,7 @@ pretend_space_deletion(Nodes, SpaceId) ->
 
 delete_harvesting_docs(Nodes) ->
     lists:foreach(fun(I) ->
-        case rpc:call(Nodes, harvesting, delete, [?SPACE_ID(I)]) of
+        case rpc:call(Nodes, harvesting_state, delete, [?SPACE_ID(I)]) of
             ok -> ok;
             {error, not_found} -> ok
         end
@@ -1192,3 +1209,42 @@ sort_destination(Destination) ->
     harvesting_destination:fold(fun(HarvesterId, Indices, AccIn) ->
         AccIn#{HarvesterId => lists:sort(Indices)}
     end, #{}, Destination).
+
+strip_before(Changes, StripBeforeSeq) ->
+    lists:filter(fun(#document{seq = Seq}) ->
+        Seq >= StripBeforeSeq
+    end, Changes).
+
+strip_after(Changes, StripAfterSeq) ->
+    lists:filter(fun(#document{seq = Seq}) ->
+        Seq >= StripAfterSeq
+    end, Changes).
+
+relevant_seqs(Changes, IgnoreDeleted) ->
+    get_seqs(relevant_changes(Changes, IgnoreDeleted)).
+
+relevant_changes(Changes, __IgnoreDeleted = false) ->
+    filter_custom_metadata_changes(Changes);
+relevant_changes(Changes, __IgnoreDeleted = true) ->
+    CustomMetadataChanges = filter_custom_metadata_changes(Changes),
+    filter_deleted_changes_before_first_not_deleted(CustomMetadataChanges).
+
+get_seqs(Changes) ->
+    [Seq || #document{seq = Seq} <- Changes].
+
+filter_custom_metadata_changes(Changes) ->
+    lists:filter(fun
+        (#document{value = #custom_metadata{}}) -> true;
+        (_) -> false
+    end, Changes).
+
+filter_deleted_changes_before_first_not_deleted(Changes) ->
+    {_, ChangesAfterFirstNotDeleted} = lists:foldl(fun
+        (Change = #document{deleted = false}, {true, ChangesAcc}) ->
+            {false, [Change | ChangesAcc]};
+        (Change, {false, ChangesAcc}) ->
+            {false, [Change | ChangesAcc]};
+        (_Change, AccIn) ->
+            AccIn
+    end, {true, []}, Changes),
+    ChangesAfterFirstNotDeleted.

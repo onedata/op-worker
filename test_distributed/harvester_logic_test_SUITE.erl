@@ -149,7 +149,3 @@ end_per_testcase(_, Config) ->
 end_per_suite(Config) ->
     logic_tests_common:unmock_gs_client(Config),
     ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

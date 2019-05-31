@@ -60,7 +60,7 @@
 %% space_logic:harvest_metadata function.
 %% @end
 %%--------------------------------------------------------------------
--spec process(space_logic:harvesting_result(), harvesting_destination:destination(),
+-spec process({ok, failure_map()} | gs_protocol:error(), harvesting_destination:destination(),
     harvesting_batch:batch()) -> result().
 process(Error = {error, _}, _, Batch) ->
     Result = init_result(Batch),

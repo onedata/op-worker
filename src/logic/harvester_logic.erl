@@ -61,14 +61,15 @@ get_spaces(#document{value = #od_harvester{spaces = Spaces}}) ->
 
 -spec get_indices(od_harvester:doc() |od_harvester:record() | od_harvester:id()) ->
     {ok, [od_harvester:index()]} | gs_protocol:error().
-get_indices(#document{value = OH}) ->
-    get_indices(OH);
+get_indices(#document{value = HarvesterRecord}) ->
+    get_indices(HarvesterRecord);
 get_indices(#od_harvester{indices = Indices}) ->
     {ok, Indices};
 get_indices(HarvesterId) ->
     case harvester_logic:get(HarvesterId) of
         {ok, Doc} ->
             get_indices(Doc);
-        Error ->
+        {error, _} = Error ->
+            ?error("harvester_logic:get_indices(~p) failed due to ~p", [HarvesterId, Error]),
             Error
     end.

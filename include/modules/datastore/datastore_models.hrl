@@ -525,7 +525,7 @@
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
     file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
-    value = #{} :: maps:map()
+    value = #{} :: json_utils:json_term()
 }).
 
 %% Model that holds database views
@@ -694,12 +694,12 @@
     providers = [] :: all | [od_provider:id()]
 }).
 
-%% Model that holds information about harvesting for given space
--record(harvesting, {
+%% Model that holds information about state of harvesting for given space
+-record(harvesting_state, {
     % holds maximal seen sequence for current main_harvesting_stream
     main_seen_seq :: couchbase_changes:seq(),
-    % structure that holds history of seen sequences for {Harvester, Index} pairs
-    history :: harvesting_history:history()
+    % structure that holds progress of harvesting for {Harvester, Index} pairs
+    progress :: harvesting_progress:progress()
 }).
 
 -endif.

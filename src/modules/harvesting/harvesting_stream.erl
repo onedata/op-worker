@@ -6,15 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO GEN STREAM< WRAPPER ON GEN_SERVER
-%%% This module starts couchbase_changes_stream and processes changes received
-%%% from it. It pushes changes of custom_metadata document
-%%% to Onezone. One instance is started per triple
-%%% {HarvesterId, SpaceId, IndexId}. Streams started for the same
-%%% HarvesterId and SpaceId differ only in progress of processing changes
-%%% from the scope.
-%%% Operation of harvesting_stream process is presented on the below
-%%% state machine diagram.
+%%% This module defines behaviour of `harvesting_stream`.
+%%% harvesting_stream process starts couchbase_changes_stream and
+%%% harvests changes received from it.
+%%% It accumulates changes of custom_metadata documents in
+%%% harvesting_batch:accumulator() structure.
+%%% Accumulated changes are pushed to Onezone when one of 2 cases occurs:
+%%%     * size of accumulated batch exceeds ?BATCH_SIZE
+%%%     * elapsed time from last harvesting timestamp exceeds ?FLUSH_TIMEOUT
 %%%
 %%% HARVESTING_STREAM STATE MACHINE:
 %%%
@@ -26,19 +25,40 @@
 %%%           +------------on-success-------------+
 %%%
 %%% Modes:
-%%%  - streaming - in this mode, harvesting_stream processes changes received
-%%%                from couchbase_changes_stream. If the change is processed
-%%%                successfully, the process remains in the "streaming" state.
-%%%                Otherwise, it stops couchbase_changes_stream and moves to the
-%%%                "retrying" state.
-%%%  - retrying -  in this mode, harvesting_stream retries processing of
-%%%                given change/changes using backoff algorithm.
+%%%  - streaming - in this mode, harvesting_stream accumulates changes received
+%%%                from couchbase_changes_stream. If number of accumulated
+%%%                changes exceeds ?BATCH_SIZE or ?FLUSH_TIMEOUT is exceeded
+%%%                Batch of changes is pushed (harvested) to Onezone.
+%%%                If harvesting succeeds the process remains in the "streaming"
+%%%                state. Otherwise, it stops couchbase_changes_stream and
+%%%                moves to the "retrying" state.
+%%%  - retrying -  in this mode, harvesting_stream retries harvesting of
+%%%                given batch of changes using backoff algorithm.
 %%%                Before starting the retries, the process ensures that
-%%%                couchbase_changes_stream is stopped so that no new messages
-%%%                will arrive when performing retries.
-%%%                When all changes are successfully processed, harvesting_stream
+%%%                couchbase_changes_stream is stopped so that new messages
+%%%                will not arrive when performing retries.
+%%%                When all changes are successfully pushed, harvesting_stream
 %%%                moves to the `streaming` mode.
 %%%
+%%%
+%%% COUCHBASE CHANGES STREAM THROTTLING
+%%% It was very important to avoid situation in which harvesting_stream
+%%% is flooded by changes from couchbase_changes_stream.
+%%% Therefore, callback called by couchbase_changes_stream is
+%%% gen_server:call instead of gen_server:cast.
+%%% When handling request from couchbase_changes_stream, harvesting_stream
+%%% first replies with gen_server:reply(From, ok) and next processes the
+%%% request.
+%%% This trick ("simulating" gen_server:cast with gen_server:call)
+%%% has following advantages:
+%%%     * couchbase_changes_stream is not blocked when harvesting_stream is
+%%%       processing current change (like in gen_server:cast). It can
+%%%       prepare next change that will be processed by harvesting_stream
+%%%       immediately after it finishes processing current change.
+%%%     * couchbase_changes_stream blocks on sending next change to
+%%%       harvesting_stream as it cannot reply because it is processing
+%%%       current change right now. This mechanism ensures that
+%%%       harvesting_stream won't be flooded.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_stream).
@@ -58,27 +78,25 @@
 -export([start_link/2, enter_streaming_mode/1, enter_retrying_mode/1]).
 
 %% util functions
--export([log_state/1, throw_harvesting_not_found_exception/1]).
+-export([log_state/2, throw_harvesting_not_found_exception/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 %% exported for mocking in tests
--export([changes_stream_start_link/4]).
+-export([changes_stream_start_link/4, schedule_flush/0]).
 
 -type state() :: #hs_state{}.
 -type mode() :: streaming | retrying.
 -type stream_type() :: main_harvesting_stream | aux_harvesting_stream.
 -type name() :: {stream_type(), term()}.
 -type handling_result() :: {noreply, harvesting_stream:state()} |
-                           {stop, Reason :: term(), harvesting_stream:state()}.
+{stop, Reason :: term(), harvesting_stream:state()}.
 
 
 -export_type([state/0, mode/0, name/0, handling_result/0]).
 
-
-% todo define messages here
 -define(FLUSH, flush).
 -define(RETRY, retry).
 
@@ -93,19 +111,9 @@
 -define(MIN_BACKOFF_INTERVAL, timer:seconds(5)).
 -define(MAX_BACKOFF_INTERVAL, timer:hours(1)).
 
--define(BATCH_SIZE,
-    application:get_env(?APP_NAME, harvesting_batch_size, 1000)).  %todo potestować i sprawdzic rozmiar
--define(FLUSH_TIMEOUT_SECONDS,
-    application:get_env(?APP_NAME, harvesting_flush_timeout, 10)).
--define(FLUSH_TIMEOUT,
-    application:get_env(?APP_NAME, harvesting_flush_timeout, timer:seconds(?FLUSH_TIMEOUT_SECONDS))).
-
-% todo tests of batching, aux streams etc.
-% todo uporzadkowac wiadomosci, makra itd, itp
-% todo test when space is deleted
-% todo test w którym wszystkie sfailują i main_stream zostanie zastopowany
-% TODo czy wszystko potem wróci normalnie do pracy????
-% TODO MOZE HARVESTING_STREAM UTILS???
+-define(BATCH_SIZE, application:get_env(?APP_NAME, harvesting_batch_size, 1000)).
+-define(FLUSH_TIMEOUT_SECONDS, application:get_env(?APP_NAME, harvesting_flush_timeout_seconds, 10)).
+-define(FLUSH_TIMEOUT, timer:seconds(?FLUSH_TIMEOUT_SECONDS)).
 
 -define(EXEC_AND_HANDLE_HARVESTING_DOC_NOT_FOUND(Fun),
     try
@@ -126,7 +134,7 @@
 %% initialisation of harvesting_stream.
 %% @end
 %%-------------------------------------------------------------------
--callback init([term()]) -> {ok, state()}.
+-callback init([term()]) -> {ok, state()} | {stop, term()}.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -197,10 +205,9 @@ start_link(CallbackModule, Args) ->
 %%%===================================================================
 
 % todo delete this function after debug
-log_state(State) ->
-    ?alert("
+log_state(Description, State) ->
+    ?alert("~s
     Name = ~p
-    Hi = ~p
     CallbackModule = ~p
     Destination = ~p
     SpaceId = ~p
@@ -215,8 +222,8 @@ log_state(State) ->
     LastHarvestTimestamp = ~p
     AuxDestination = ~p,
     Batch = ~p", [
+        Description,
         State#hs_state.name,
-        State#hs_state.hi,
         State#hs_state.callback_module,
         State#hs_state.destination,
         State#hs_state.space_id,
@@ -275,10 +282,10 @@ handle_call({change, {ok, end_of_stream}}, From, State = #hs_state{
     ?EXEC_AND_HANDLE_HARVESTING_DOC_NOT_FOUND(fun() ->
         gen_server2:reply(From, ok),
         case harvesting_batch:is_empty(Batch) of
-            false ->
+            true ->
                 Mod:on_end_of_stream(State2),
                 {noreply, State2};
-            true ->
+            false ->
                 harvest_and_handle_errors(State2)
         end
     end);
@@ -337,17 +344,17 @@ handle_info({timeout, _TimerRef, ?RETRY}, State = #hs_state{
     ?EXEC_AND_HANDLE_HARVESTING_DOC_NOT_FOUND(fun() ->
         harvest_and_handle_errors(State)
     end);
-handle_info(?FLUSH, State = #hs_state{mode = streaming})->
+handle_info(?FLUSH, State = #hs_state{mode = streaming}) ->
     ?EXEC_AND_HANDLE_HARVESTING_DOC_NOT_FOUND(fun() ->
         case should_flush(State) of
-        true ->
-            Return = harvest_and_handle_errors(State),
-            schedule_flush(),
-            Return;
-        false ->
-            State2 = maybe_persist_last_seen_seq(State),
-            schedule_flush(),
-            {noreply, State2}
+            true ->
+                Return = harvest_and_handle_errors(State),
+                harvesting_stream:schedule_flush(),
+                Return;
+            false ->
+                State2 = maybe_persist_last_seen_seq(State),
+                harvesting_stream:schedule_flush(),
+                {noreply, State2}
         end
     end);
 handle_info(?FLUSH, State) ->
@@ -368,7 +375,7 @@ handle_info(Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, State = #hs_state{name = Name}) ->
-    ?debug("Stopping harvesting_stream ~p due to reason: ", [Name, Reason]),
+    ?debug("Stopping harvesting_stream ~p due to reason: ~p", [Name, Reason]),
     ?log_terminate(Reason, State).
 
 %%--------------------------------------------------------------------
@@ -386,28 +393,31 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec init_internal(module(), [term()]) -> {ok, state()} | {stop, normal}.
+-spec init_internal(module(), [term()]) -> {ok, state()} | {stop, term()}.
 init_internal(CallbackModule, Args) ->
-    {ok, State = #hs_state{
-        hi = HI,
-        destination = Destination,
-        name = Name
-    }} = CallbackModule:init(Args),
-    {ok, LastSeenSeq} = harvesting:get_seen_seq(HI),
-    State2 = State#hs_state{
-        provider_id = oneprovider:get_id(),
-        last_seen_seq = LastSeenSeq,
-        last_persisted_seq = LastSeenSeq,
-        callback_module = CallbackModule,
-        ignoring_deleted = (LastSeenSeq =:= ?DEFAULT_HARVESTING_SEQ)
-    },
-    log_state(State2),
-    case harvesting_destination:is_empty(Destination) of
-        true ->
-            ?debug("Not starting harvesting stream ~p due to empty destination", [Name]),
-            {stop, normal};
-        false ->
-            {ok, enter_streaming_mode(State2)}
+    case CallbackModule:init(Args) of
+        {ok, State = #hs_state{
+            destination = Destination,
+            name = Name
+        }} ->
+            {ok, LastSeenSeq} = harvesting_state:get_seen_seq(Name),
+            ?debug("Starting harvesting stream ~p", [Name]),
+            State2 = State#hs_state{
+                provider_id = oneprovider:get_id(),
+                last_seen_seq = LastSeenSeq,
+                last_persisted_seq = LastSeenSeq,
+                callback_module = CallbackModule,
+                ignoring_deleted = (LastSeenSeq =:= ?DEFAULT_HARVESTING_SEQ)
+            },
+            case harvesting_destination:is_empty(Destination) of
+                true ->
+                    ?debug("Not starting harvesting stream ~p due to empty destination", [Name]),
+                    {stop, normal};
+                false ->
+                    {ok, enter_streaming_mode(State2)}
+            end;
+        Other ->
+            Other
     end.
 
 -spec start_changes_stream(od_space:id(), couchbase_changes:since(),
@@ -463,13 +473,13 @@ maybe_add_doc_to_batch(State = #hs_state{
     provider_id = ProviderId
 }, Doc = #document{seq = Seq, value = #custom_metadata{}, mutators = [ProviderId | _]}
 ) ->
-    Batch2 = harvesting_batch:add_object(Doc, Batch),
+    Batch2 = harvesting_batch:accumulate(Doc, Batch),
     State#hs_state{batch = Batch2, last_seen_seq = Seq};
 maybe_add_doc_to_batch(State, #document{seq = Seq}) ->
     State#hs_state{last_seen_seq = Seq}.
 
 maybe_persist_last_seen_seq(State = #hs_state{
-    hi = HI,
+    name = Name,
     last_seen_seq = LastSeenSeq,
     last_persisted_seq = LastPersistedSeq,
     destination = Destination
@@ -478,7 +488,7 @@ maybe_persist_last_seen_seq(State = #hs_state{
     % If the gap between #state.last_seen_seq and
     % #state.last_persisted_seq is greater than the defined constant
     % (?IGNORED_SEQ_REPORTING_FREQUENCY), the last_seen_seq is persisted.
-    case harvesting:set_seen_seq(HI, Destination, LastSeenSeq) of
+    case harvesting_state:set_seen_seq(Name, Destination, LastSeenSeq) of
         ok ->
             State#hs_state{last_persisted_seq = LastSeenSeq};
         ?ERROR_NOT_FOUND ->
@@ -507,19 +517,22 @@ harvest_and_handle_errors(State = #hs_state{
     last_seen_seq = LastSeenSeq
 }) ->
     MaxSpaceSeq = get_max_seq(SpaceId),
-    PreparedBatch = harvesting_batch:sort_and_encode(Batch),
-    SortedBatch = harvesting_batch:get_sorted_batch(PreparedBatch),
+    PreparedBatch = harvesting_batch:prepare(Batch),
+    BatchEntries = harvesting_batch:get_batch_entries(PreparedBatch),
     State2 = State#hs_state{batch = PreparedBatch},
-    Result = space_logic:harvest_metadata(SpaceId, Destination, SortedBatch, LastSeenSeq, MaxSpaceSeq),
+    Result = space_logic:harvest_metadata(SpaceId, Destination, BatchEntries, LastSeenSeq, MaxSpaceSeq),
     ProcessedResult = harvesting_result:process(Result, Destination, PreparedBatch),
     LastBatchSeq = harvesting_batch:get_last_seq(PreparedBatch),
     case harvesting_result:get_summary(ProcessedResult) of
         ?ERROR_NOT_FOUND ->
             ?debug("Space ~p was deleted. Stopping harvesting_stream ~p", [SpaceId, Name]),
             {stop, normal, State2};
-        Error = {error, _}->
-            ?debug("Unexpected error occurred in harvesting_stream ~p: ~p", [Name, Error]),
-            {noreply, enter_retrying_mode(State2)};
+        Error = {error, _} ->
+            ErrorLog = str_utils:format_bin("Unexpected error ~p occurred.", [Error]),
+            {noreply, enter_retrying_mode(State2#hs_state{
+                log_level = error,
+                error_log = ErrorLog
+            })};
         Summary ->
             case maps:keys(Summary) of
                 [LastBatchSeq] ->
@@ -533,14 +546,14 @@ harvest_and_handle_errors(State = #hs_state{
 
 -spec on_successful_result(state()) -> handling_result().
 on_successful_result(State = #hs_state{
-    hi = HI,
+    name = Name,
     last_seen_seq = LastSeenSeq,
     destination = Destination
 }) ->
-    case harvesting:set_seen_seq(HI, Destination, LastSeenSeq) of
+    case harvesting_state:set_seen_seq(Name, Destination, LastSeenSeq) of
         ok ->
             State2 = State#hs_state{
-                batch = harvesting_batch:init(),
+                batch = harvesting_batch:new_accumulator(),
                 last_harvest_timestamp = time_utils:system_time_seconds(),
                 last_persisted_seq = LastSeenSeq,
                 last_sent_max_stream_seq = LastSeenSeq
@@ -565,14 +578,15 @@ enter_streaming_mode(State = #hs_state{
 }) when Until /= infinity andalso LastSeenSeq >= (Until - 1) ->
     State2 = stop_changes_stream(State),
     case State2#hs_state.stream_pid of
-        undefined -> Mod:on_end_of_stream(State2);
+        undefined ->
+            Mod:on_end_of_stream(State2);
         _ -> ok
     end,
     State2;
 enter_streaming_mode(State = #hs_state{mode = streaming, stream_pid = StreamPid})
     when StreamPid /= undefined ->
-    schedule_flush(),
-    State#hs_state{batch = harvesting_batch:init()};
+    harvesting_stream:schedule_flush(),
+    State#hs_state{batch = harvesting_batch:new_accumulator()};
 enter_streaming_mode(State = #hs_state{
     space_id = SpaceId,
     until = Until,
@@ -585,13 +599,13 @@ enter_streaming_mode(State = #hs_state{
             Mod:on_end_of_stream(State),
             State;
         false ->
-            schedule_flush(),
+            harvesting_stream:schedule_flush(),
             {ok, StreamPid} = start_changes_stream(SpaceId, Since, Until),
             State#hs_state{
                 mode = streaming,
                 stream_pid = StreamPid,
                 backoff = undefined,
-                batch = harvesting_batch:init()
+                batch = harvesting_batch:new_accumulator()
             }
     end.
 
@@ -620,18 +634,41 @@ schedule_backoff_if_destination_is_not_empty(State = #hs_state{destination = Des
     end.
 
 -spec schedule_backoff(state()) -> state().
-schedule_backoff(State = #hs_state{backoff = undefined}) ->
+schedule_backoff(State = #hs_state{
+    backoff = undefined,
+    error_log = ErrorLog,
+    log_level = LogLevel,
+    name = Name
+}) ->
     B0 = backoff:init(?MIN_BACKOFF_INTERVAL, ?MAX_BACKOFF_INTERVAL, self(), ?RETRY),
     B1 = backoff:type(B0, jitter),
-    ?error("Next harvesting retry after: ~p seconds", [?MIN_BACKOFF_INTERVAL /1000]),
+    backoff_log(Name, ErrorLog, ?MIN_BACKOFF_INTERVAL/1000, LogLevel),
     backoff:fire(B1),
     State#hs_state{backoff = B1};
-schedule_backoff(State = #hs_state{backoff = B0}) ->
+schedule_backoff(State = #hs_state{
+    backoff = B0,
+    error_log = ErrorLog,
+    log_level = LogLevel,
+    name = Name
+}) ->
     {Value, B1} = backoff:fail(B0),
-    ?error("Next harvesting retry after: ~p seconds", [Value /1000]),
+    backoff_log(Name, ErrorLog, Value/1000, LogLevel),
     backoff:fire(B1),
     State#hs_state{backoff = B1}.
 
+-spec backoff_log(name(), binary(), float(), atom()) -> ok.
+backoff_log(StreamName, ErrorLog, NexRetry, error) ->
+    ?error(backoff_log_format(), [StreamName, ErrorLog, NexRetry]);
+backoff_log(StreamName, ErrorLog, NexRetry, warning) ->
+    ?warning(backoff_log_format(), [StreamName, ErrorLog, NexRetry]);
+backoff_log(StreamName, ErrorLog, NexRetry, _) ->
+    ?debug(backoff_log_format(), [StreamName, ErrorLog, NexRetry]).
+
+-spec backoff_log_format() -> string().
+backoff_log_format() ->
+    "Error in harvesting_stream ~p:~n"
+    "~s~n"
+    "Next harvesting retry after: ~p seconds.".
 
 -spec get_max_seq(od_space:id()) -> couchbase_changes:seq().
 get_max_seq(SpaceId) ->
@@ -653,11 +690,11 @@ should_flush(#hs_state{
     CurrentTimestamp = time_utils:system_time_seconds(),
     ((CurrentTimestamp - Timestamp) > ?FLUSH_TIMEOUT_SECONDS)
         andalso
-    ((not harvesting_batch:is_empty(Batch)) orelse LastSeenSeq =/= LastSentMaxStreamSeq).
+        ((not harvesting_batch:is_empty(Batch)) orelse LastSeenSeq =/= LastSentMaxStreamSeq).
 
 -spec stream_limit_exceeded(couchbase_changes:since(),
     couchbase_changes:until()) -> boolean().
 stream_limit_exceeded(_Since, infinity) ->
     false;
 stream_limit_exceeded(Since, Until) ->
-    Since >= Until - 1.
+    Since >= Until.

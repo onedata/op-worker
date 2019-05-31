@@ -58,11 +58,9 @@ space_unsupported(Name) ->
 %%--------------------------------------------------------------------
 -spec init([term()]) -> {ok, harvesting_stream:state()}.
 init([SpaceId, HarvesterId, IndexId, Until]) ->
-    ?debug("Starting aux_harvesting_stream: ~p", [{SpaceId, HarvesterId, IndexId}]),
     {ok, #hs_state{
         name = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
         space_id = SpaceId,
-        hi = harvesting:aux_identifier(SpaceId, HarvesterId, IndexId),
         destination = harvesting_destination:init(HarvesterId, IndexId),
         until = Until + 1   % until is exclusive in couchbase_changes_stream
     }}.
@@ -103,7 +101,7 @@ handle_cast(?SPACE_REMOVED, State) ->
 handle_cast(?SPACE_UNSUPPORTED, State) ->
     {stop, normal, State};
 handle_cast(dbg, State) ->
-    harvesting_stream:log_state(State),
+    harvesting_stream:log_state("AUX", State),
     {noreply, State};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -118,29 +116,44 @@ handle_cast(Request, State) ->
     harvesting_stream:handling_result().
 custom_error_handling(State = #hs_state{
     name = Name,
-    hi = HI,
     destination = Destination
 }, Result) ->
     % for aux_stream we are sure that there is only one key and one value
     case hd(maps:keys(harvesting_result:get_summary(Result))) of
         ?ERROR_NOT_FOUND ->
-            % harvester was deleted
+            % harvester was deleted, stream should be stopped
             {stop, normal, State};
         ?ERROR_FORBIDDEN ->
-            % harvester was deleted from space
+            % harvester was deleted from space, stream should be stopped
             {stop, normal, State};
+        ?ERROR_TEMPORARY_FAILURE ->
+            [HarvesterId] = harvesting_destination:get_harvesters(Destination),
+            ErrorLog =  str_utils:format_bin("Harvester ~p is temporarily unavailable.", [HarvesterId]),
+            {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
+                error_log = ErrorLog,
+                log_level = warning
+            })};
         Error = {error, _} ->
-            ?error("Unexpected error occurred in aux_harvesting_stream ~p: ~p", [Name, Error]),
-            {noreply, harvesting_stream:enter_retrying_mode(State)};
-        FailedSeq ->
+            [HarvesterId] = harvesting_destination:get_harvesters(Destination),
+            ErrorLog =  str_utils:format_bin(
+                "Unexpected error ~p  occurred for harvester ~p", [Error, HarvesterId]
+            ),
+            {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
+                error_log = ErrorLog,
+                log_level = error
+            })};
+        LastSuccessfulSeq ->
             % there might be only one index here
-            LastSuccessfulSeq = FailedSeq - 1,
-            ?error("Unexpected error occurred in aux_harvesting_stream ~p. "
-            "Applying changes batch failed on seq: ~p", [Name, FailedSeq]),
-            case harvesting:set_seen_seq(HI, Destination, LastSuccessfulSeq) of
+            case harvesting_state:set_seen_seq(Name, Destination, LastSuccessfulSeq) of
                 ok ->
+                    ErrorLog =  str_utils:format_bin(
+                        "Unexpected error occurred when applying batch of changes."
+                        "Last successful sequence number was: ~p",
+                        [LastSuccessfulSeq]
+                    ),
                     {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
-                        last_seen_seq = LastSuccessfulSeq,
+                        error_log = ErrorLog,
+                        log_level = error,
                         last_persisted_seq = LastSuccessfulSeq
                     })};
                 ?ERROR_NOT_FOUND ->
@@ -154,8 +167,8 @@ custom_error_handling(State = #hs_state{
 %% @end
 %%--------------------------------------------------------------------
 -spec on_end_of_stream(harvesting_stream:state()) -> ok.
-on_end_of_stream(#hs_state{hi = HI, name = Name, until = Until}) ->
-    main_harvesting_stream:propose_takeover(HI, Name, Until - 1).
+on_end_of_stream(#hs_state{name = Name, until = Until}) ->
+    main_harvesting_stream:propose_takeover(Name, Until - 1).
 
 %%--------------------------------------------------------------------
 %% @doc
