@@ -30,7 +30,7 @@
 -export([translate_name/1, translate_arg_name/1]).
 -export([webdav_fill_admin_id/1]).
 
--export([transform_helper_args/2]).
+-export([prepare_helper_args/2]).
 
 %% Test utils
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
@@ -63,6 +63,7 @@
     storage_path_type()) -> {ok, helpers:helper()}.
 new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
     Fields = expected_helper_args(HelperName),
+    AdminCtx = maps:merge(default_admin_ctx(HelperName), AdminCtx),
     ok = validate_fields(Fields, Args, false),
     ok = validate_user_ctx(HelperName, AdminCtx),
     {ok, #helper{
@@ -94,22 +95,41 @@ allow_insecure(_) -> true.
 %%--------------------------------------------------------------------
 -spec filter_args(name(), #{binary() => term()}) -> #{binary() => term()}.
 filter_args(HelperName, Args) ->
-    {Required, Optional} = expected_helper_args(HelperName),
-    maps:with(Required ++ Optional, Args).
+    Fields = expected_helper_args(HelperName),
+    filter_params(Fields, Args).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Translates storage params as specified by a user
-%% into correct helper args.
+%% Removes unkown keys from helper user ctx parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec transform_helper_args(name(), #{binary() := binary()}) -> args().
-transform_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
-    {Required, Optional} = expected_helper_args(HelperName),
-    Expected = Required ++ Optional,
+-spec filter_user_ctx(name(), #{binary() => term()}) -> #{binary() => term()}.
+filter_user_ctx(HelperName, Params) ->
+    AllowedFields = expected_user_ctx_params(HelperName),
+    filter_params(AllowedFields, Params).
 
-    Transformed = map_flatmap(fun
+
+%% @private
+-spec filter_params(AllowedFields, Params) -> Params when
+    AllowedFields :: [field() | optional_field()],
+    Params :: args() | ctx().
+filter_params(AllowedFields, Params) ->
+    Fields = strip_modifiers(AllowedFields),
+    maps:with(Fields, Params).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates storage params as specified by a user into correct
+%% helper args.
+%% The result will not contain any excessive fields,
+%% but may not contain all required fields.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_helper_args(name(), #{binary() := binary()}) -> args().
+prepare_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
+    Transformed = maps_flatmap(fun
         (<<"hostname">>, URL) ->
             {ok, HttpOrHttps, Host} = extract_scheme(URL),
             #{
@@ -118,18 +138,26 @@ transform_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
             };
         (Key, Value) -> #{Key => Value}
     end, Params),
-    filter_args(Expected, Transformed);
+    filter_params(expected_helper_args(HelperName), Transformed);
 
-transform_helper_args(HelperName, Params) ->
-    filter_args(HelperName, Params).
+prepare_helper_args(HelperName, Params) ->
+    filter_params(expected_helper_args(HelperName), Params).
 
 
--spec filter_params(AllowedFields, Params) -> Params when
-    AllowedFields :: [field() | optional_field()],
-    Params :: args() | ctx().
-filter_params(AllowedFields, Params) ->
-    Fields = strip_modifiers(AllowedFields),
-    maps:with(Fields, Params).
+prepare_user_ctx_params(HelperName, Params) ->
+    filter_params(expected_user_ctx_params(HelperName), Params).
+
+
+-spec default_admin_ctx(name()) -> user_ctx().
+default_admin_ctx(HelperName) when
+    HelperName == ?POSIX_HELPER_NAME;
+    HelperName == ?NULL_DEVICE_HELPER_NAME;
+    HelperName == ?GLUSTERFS_HELPER_NAME ->
+    #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>};
+
+default_admin_ctx(_) ->
+    #{}.
+
 
 
 %% @private
@@ -190,44 +218,31 @@ expected_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes unkown keys from helper user ctx parameters.
-%% @end
-%%--------------------------------------------------------------------
--spec filter_user_ctx(name(), #{binary() => term()}) -> #{binary() => term()}.
-filter_user_ctx(HelperName, Params) ->
-    AllowedFields = expected_user_ctx_params(HelperName, Params),
-    filter_params(AllowedFields, Params).
-
-
-%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Returns required fields for the user ctx of given storage type.
 %% @end
 %%--------------------------------------------------------------------
--spec expected_user_ctx_params(name(), Params :: #{binary() => term()}) -> [binary()].
-expected_user_ctx_params(?CEPH_HELPER_NAME, _) ->
+-spec expected_user_ctx_params(name()) -> [field() | optional_field()].
+expected_user_ctx_params(?CEPH_HELPER_NAME) ->
     [<<"username">>, <<"key">>];
-expected_user_ctx_params(?CEPHRADOS_HELPER_NAME, _) ->
+expected_user_ctx_params(?CEPHRADOS_HELPER_NAME) ->
     [<<"username">>, <<"key">>];
-expected_user_ctx_params(?POSIX_HELPER_NAME, _) ->
+expected_user_ctx_params(?POSIX_HELPER_NAME) ->
     [<<"uid">>, <<"gid">>];
-expected_user_ctx_params(?S3_HELPER_NAME, _) ->
+expected_user_ctx_params(?S3_HELPER_NAME) ->
     [<<"accessKey">>, <<"secretKey">>];
-expected_user_ctx_params(?SWIFT_HELPER_NAME, _) ->
+expected_user_ctx_params(?SWIFT_HELPER_NAME) ->
     [<<"username">>, <<"password">>];
-expected_user_ctx_params(?GLUSTERFS_HELPER_NAME, _) ->
+expected_user_ctx_params(?GLUSTERFS_HELPER_NAME) ->
     [<<"uid">>, <<"gid">>];
-expected_user_ctx_params(?WEBDAV_HELPER_NAME, #{<<"credentialsType">> := <<"none">>}) ->
-    [<<"credentialsType">>];
-expected_user_ctx_params(?WEBDAV_HELPER_NAME, _) ->
-    [<<"credentialsType">>, <<"credentials">>,
+expected_user_ctx_params(?WEBDAV_HELPER_NAME) ->
+    [<<"credentialsType">>,
         {optional, <<"credentials">>}, {optional, <<"adminId">>},
         {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
         {optional, <<"accessTokenTTL">>}
     ];
-expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME, _) ->
+expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
     [<<"uid">>, <<"gid">>].
 
 
@@ -242,8 +257,15 @@ validate_user_ctx(#helper{name = StorageType}, UserCtx) ->
     validate_user_ctx(StorageType, UserCtx);
 
 validate_user_ctx(StorageType, UserCtx) ->
-    Fields = expected_user_ctx_params(StorageType, UserCtx),
-    validate_fields(Fields, UserCtx, true).
+    Fields = expected_user_ctx_params(StorageType),
+    Fields2 = case {StorageType, UserCtx} of
+        {?WEBDAV_HELPER_NAME, #{<<"credentialsType">> := Type}} when
+            Type /= <<"none">> ->
+            [{<<"credentials">>} | Fields -- [{optional, <<"credentials">>}]];
+        _ ->
+            Fields
+    end,
+    validate_fields(Fields2, UserCtx, true).
 
 
 %%--------------------------------------------------------------------
@@ -644,9 +666,9 @@ validate_field(Field, Params, AllowIntegers) ->
 %% The Fun must return a map, all of which are merged to create the result.
 %% @end
 %%--------------------------------------------------------------------
--spec map_flatmap(Fun, #{K1 => V1}) -> #{K2 => V2} when
+-spec maps_flatmap(Fun, #{K1 => V1}) -> #{K2 => V2} when
     Fun :: fun((K1, V1) -> #{K2 => V2}).
-map_flatmap(Fun, Map) ->
+maps_flatmap(Fun, Map) ->
     maps:fold(fun(K, V, Acc) ->
         maps:merge(Acc, Fun(K, V))
     end, #{}, Map).

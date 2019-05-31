@@ -112,6 +112,8 @@ end).
 
 -define(S3_STORAGE_ID, <<"s3StorageId">>).
 
+% @fixme either provider "scheme" here, or ensure the params
+% are passed through translater_helper_args
 -define(S3_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
     #{<<"hostname">> => <<"hostname">>, <<"bucketname">> => <<"bucketname">>},
     ?S3_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH)
