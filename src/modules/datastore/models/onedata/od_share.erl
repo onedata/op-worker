@@ -28,10 +28,10 @@
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
 % Apart from FileUuid and SpaceId, it contains also ShareId.
--type share_guid() :: fslogic_worker:file_guid().
+-type root_file_guid() :: fslogic_worker:file_guid().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, share_guid/0]).
+-export_type([name/0, root_file_guid/0]).
 
 -define(CTX, #{
     model => ?MODULE,
