@@ -63,12 +63,12 @@
 -spec new_helper(name(), args(), user_ctx(), Insecure :: boolean(),
     storage_path_type()) -> {ok, helpers:helper()}.
 new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
-    AdminCtx = maps:merge(default_admin_ctx(HelperName), AdminCtx),
-    ok = validate_user_ctx(HelperName, AdminCtx),
+    FullAdminCtx = maps:merge(default_admin_ctx(HelperName), AdminCtx),
+    ok = validate_user_ctx(HelperName, FullAdminCtx),
     {ok, #helper{
         name = HelperName,
         args = Args,
-        admin_ctx = AdminCtx,
+        admin_ctx = FullAdminCtx,
         insecure = Insecure andalso allow_insecure(HelperName),
         extended_direct_io = extended_direct_io(HelperName),
         storage_path_type = StoragePathType
