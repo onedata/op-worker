@@ -125,7 +125,7 @@ get_posix_user_ctx(SessionId, UserId, SpaceId) ->
             maybe_generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
-    {ensure_integer(Uid), ensure_integer(Gid)}.
+    {binary_to_integer(Uid), binary_to_integer(Gid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -144,7 +144,7 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
             maybe_generate_user_ctx(UserId, GroupId, SpaceId, ?POSIX_HELPER_NAME)
     end,
     #{<<"uid">> := Uid, <<"gid">> := Gid} = UserCtx,
-    {ensure_integer(Uid), ensure_integer(Gid)}.
+    {binary_to_integer(Uid), binary_to_integer(Gid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -514,13 +514,3 @@ select_posix_compatible_storage(SpaceId) ->
         [] -> {error, not_found};
         [{StorageDoc, Helper} | _] -> {ok, StorageDoc, helper:get_name(Helper)}
     end.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures that returned value is integer.
-%% @end
-%%-------------------------------------------------------------------
--spec ensure_integer(integer() | binary()) -> integer().
-ensure_integer(V) when is_integer(V) -> V;
-ensure_integer(V) when is_binary(V) -> binary_to_integer(V).

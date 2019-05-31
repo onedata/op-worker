@@ -29,6 +29,7 @@
 -export([set_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
+%% Onepanel RPC
 -export([prepare_helper_args/2, prepare_user_ctx_params/2]).
 
 %% Test utils
@@ -43,11 +44,13 @@
 -type name() :: binary().
 -type args() :: #{field() => binary()}.
 -type params() :: #helper_params{}.
--type user_ctx() :: #{field() => binary() | integer()}.
--type group_ctx() :: #{field() => binary() | integer()}.
+
+-type user_ctx() :: #{field() => binary()}.
+-type group_ctx() :: #{field() => binary()}.
 -type ctx() :: user_ctx() | group_ctx().
+
 -type field() :: binary().
--type optional_field() :: {optional, field()}.
+-type optional_field() :: {optional, binary()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
@@ -65,7 +68,7 @@
 new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
     Fields = expected_helper_args(HelperName),
     AdminCtx = maps:merge(default_admin_ctx(HelperName), AdminCtx),
-    ok = validate_fields(Fields, Args, false),
+    ok = validate_fields(Fields, Args),
     ok = validate_user_ctx(HelperName, AdminCtx),
     {ok, #helper{
         name = HelperName,
@@ -148,7 +151,7 @@ prepare_helper_args(HelperName, Params) ->
 -spec prepare_user_ctx_params(name(), ctx()) -> ctx().
 prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
     Transformed = maps_flatmap(fun
-        (Key = <<"onedataAccess>Token">>, Token) when byte_size(Token) > 0 ->
+        (Key = <<"onedataAccessToken">>, Token) when byte_size(Token) > 0 ->
             {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
             #{
                 <<"adminId">> => AdminId,
@@ -278,7 +281,7 @@ validate_user_ctx(StorageType, UserCtx) ->
         _ ->
             Fields
     end,
-    validate_fields(Fields2, UserCtx, true).
+    validate_fields(Fields2, UserCtx).
 
 
 %%--------------------------------------------------------------------
@@ -289,11 +292,11 @@ validate_user_ctx(StorageType, UserCtx) ->
 -spec validate_group_ctx(storage:helper(), group_ctx()) ->
     ok | {error, Reason :: term()}.
 validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
-    validate_fields([<<"gid">>], GroupCtx, true);
+    validate_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
-    validate_fields([<<"gid">>], GroupCtx, true);
+    validate_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
-    validate_fields([<<"gid">>], GroupCtx, true);
+    validate_fields([<<"gid">>], GroupCtx);
 validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
     ok;
 validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
@@ -307,7 +310,6 @@ validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
 -spec set_user_ctx(helpers:helper(), user_ctx()) ->
     {ok, helpers:helper()} | {error, Reason :: term()}.
 set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
-    % @fixme look here
     case validate_user_ctx(Helper, UserCtx) of
         ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
         {error, Reason} -> {error, Reason}
@@ -616,41 +618,36 @@ new_nulldevice_user_ctx(Uid, Gid) ->
 %% have valid type.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_fields([field() | optional_field()], Params :: map(),
-    AllowIntegers :: boolean()) ->
+-spec validate_fields([field() | optional_field()], Params :: map()) ->
     ok | {error, Reason :: term()}.
-validate_fields([], Params, _) when Params == #{} ->
+validate_fields([], Params) when Params == #{} ->
     ok;
-validate_fields([], Params, _) ->
+validate_fields([], Params) ->
     {error, {invalid_additional_fields, Params}};
-validate_fields([Field | Fields], Params, AllowIntegers) ->
-    case validate_field(Field, Params, AllowIntegers) of
+validate_fields([Field | Fields], Params) ->
+    case validate_field(Field, Params) of
         {ok, ParamsRemainder} ->
-            validate_fields(Fields, ParamsRemainder, AllowIntegers);
+            validate_fields(Fields, ParamsRemainder);
         Error ->
             Error
     end.
 
 
 %% @private
--spec validate_field(Key, Params, AllowIntegers :: boolean()) ->
+-spec validate_field(Key, Params) ->
     {ok, ParamsRemainder :: user_ctx() | group_ctx()} |
     {error, Reason :: term()} when
     Key :: field() | optional_field(),
     Params :: #{binary() := term()}.
-validate_field({optional, Field}, Params, AllowIntegers) ->
-    case validate_field(Field, Params, AllowIntegers) of
+validate_field({optional, Field}, Params) ->
+    case validate_field(Field, Params) of
         {error, {missing_field, _}} -> {ok, Params};
         Result -> Result
     end;
 
-validate_field(Field, Params, AllowIntegers) ->
+validate_field(Field, Params) ->
     case Params of
-        #{Field := <<"null">>} ->
-            {error, {invalid_field_value, Field, <<"null">>}};
-        #{Field := Value} when
-            is_binary(Value);
-            is_integer(Value) andalso AllowIntegers ->
+        #{Field := <<Value/binary>>} when Value /= <<"null">> ->
             {ok, maps:remove(Field, Params)};
         #{Field := Value} ->
             {error, {invalid_field_value, Field, Value}};
