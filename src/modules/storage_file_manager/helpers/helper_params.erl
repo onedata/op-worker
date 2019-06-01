@@ -192,9 +192,11 @@ expected_helper_args(?GLUSTERFS_HELPER_NAME) -> [
     {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
 expected_helper_args(?WEBDAV_HELPER_NAME) -> [
     <<"endpoint">>,
+    {optional, <<"oauth2IdP">>},
     {optional, <<"timeout">>}, {optional, <<"verifyServerCertificate">>},
     {optional, <<"authorizationHeader">>}, {optional, <<"rangeWriteSupport">>},
-    {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>}];
+    {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>},
+    {optional, <<"fileMode">>}, {optional, <<"dirMode">>}];
 expected_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
     {optional, <<"timeout">>}, {optional, <<"latencyMin">>},
     {optional, <<"latencyMax">>}, {optional, <<"timeoutProbability">>},
