@@ -44,8 +44,9 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
-            case helper_params:validate_user_ctx(Helper, UserCtx) of
-                ok -> {ok, ensure_binary_values(UserCtx)};
+            UserCtxBinaries = ensure_binary_values(UserCtx),
+            case helper_params:validate_user_ctx(Helper, UserCtxBinaries) of
+                ok -> {ok, UserCtxBinaries};
                 {error, Reason} -> {error, Reason}
             end;
         {ok, Code, _RespHeaders, RespBody} ->
@@ -79,9 +80,10 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
-            case helper_params:validate_group_ctx(Helper, GroupCtx) of
+            GroupCtxBinaries = ensure_binary_values(GroupCtx),
+            case helper_params:validate_group_ctx(Helper, GroupCtxBinaries) of
                 ok ->
-                    {ok, ensure_binary_values(GroupCtx)};
+                    {ok, GroupCtxBinaries};
                 Error = {error, Reason} ->
                     ?error_stacktrace("Invalid group ctx returned from map_group request: ~p", [Reason]),
                     Error
