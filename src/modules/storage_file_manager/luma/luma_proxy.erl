@@ -44,7 +44,7 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
-            case helper:validate_user_ctx(Helper, UserCtx) of
+            case helper_params:validate_user_ctx(Helper, UserCtx) of
                 ok -> {ok, ensure_binary_values(UserCtx)};
                 {error, Reason} -> {error, Reason}
             end;
@@ -79,7 +79,7 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
-            case helper:validate_group_ctx(Helper, GroupCtx) of
+            case helper_params:validate_group_ctx(Helper, GroupCtx) of
                 ok ->
                     {ok, ensure_binary_values(GroupCtx)};
                 Error = {error, Reason} ->
