@@ -44,7 +44,7 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
-            UserCtxBinaries = ensure_binary_values(UserCtx),
+            UserCtxBinaries = integers_to_binary(UserCtx),
             case helper_params:validate_user_ctx(Helper, UserCtxBinaries) of
                 ok -> {ok, UserCtxBinaries};
                 {error, Reason} -> {error, Reason}
@@ -80,7 +80,7 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
-            GroupCtxBinaries = ensure_binary_values(GroupCtx),
+            GroupCtxBinaries = integers_to_binary(GroupCtx),
             case helper_params:validate_group_ctx(Helper, GroupCtxBinaries) of
                 ok ->
                     {ok, GroupCtxBinaries};
@@ -212,9 +212,12 @@ get_user_details(SessionId, UserId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Ensures that all values in map are binaries
+%% Converts all integer values in a map to binary.
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_binary_values(map()) -> #{term() => binary()}.
-ensure_binary_values(Map) ->
-    maps:map(fun(_, Value) -> str_utils:to_binary(Value) end, Map).
+-spec integers_to_binary(map()) -> map().
+integers_to_binary(Map) ->
+    maps:map(fun
+        (_, Value) when is_integer(Value) -> integer_to_binary(Value);
+        (_, Value) -> Value
+    end, Map).
