@@ -66,7 +66,7 @@
 %%--------------------------------------------------------------------
 -spec get_helper_handle(helper(), helper:user_ctx()) -> helper_handle().
 get_helper_handle(Helper, UserCtx) ->
-    {ok, #helper{name = Name, args = Args}} = helper:set_user_ctx(Helper, UserCtx),
+    {ok, #helper{name = Name, args = Args}} = helper:insert_user_ctx(Helper, UserCtx),
     {ok, Handle} = helpers_nif:get_handle(Name, Args),
     #helper_handle{
         handle = Handle,

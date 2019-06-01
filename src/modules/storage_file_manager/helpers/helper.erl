@@ -81,10 +81,10 @@ new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
 %% Injects user context into helper parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec set_user_ctx(helpers:helper(), user_ctx()) ->
+-spec insert_user_ctx(helpers:helper(), user_ctx()) ->
     {ok, helpers:helper()} | {error, Reason :: term()}.
-set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
-    case validate_user_ctx(Helper, UserCtx) of
+insert_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
+    case helper_params:validate_user_ctx(Helper, UserCtx) of
         ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
         {error, Reason} -> {error, Reason}
     end.
@@ -396,7 +396,7 @@ get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
 -spec get_params(helpers:helper(), user_ctx()) -> params().
 get_params(Helper, UserCtx) ->
     {ok, #helper{name = Name, args = Args, extended_direct_io = DS}} =
-        set_user_ctx(Helper, UserCtx),
+        insert_user_ctx(Helper, UserCtx),
     #helper_params{
         helper_name = Name,
         helper_args = maps:fold(fun(Key, Value, Acc) ->
