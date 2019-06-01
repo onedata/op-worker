@@ -42,15 +42,16 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Translates storage params as specified by a user into correct
-%% helper args.
-%% The result will not contain any excessive fields,
-%% but may not contain all required fields.
+%% Translates storage params as specified by the user
+%% (i.e. via Onepanel API when creating the storage)
+%% into correct helper args.
+%% The result will not contain any unknown fields
+%% but is not verified to contain all required fields.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_helper_args(name(), args()) -> args().
 prepare_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
-    Transformed = maps_flatmap(fun
+    Args = maps_flatmap(fun
         (<<"hostname">>, URL) ->
             {ok, HttpOrHttps, Host} = parse_url(URL),
             #{
@@ -59,12 +60,21 @@ prepare_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
             };
         (Key, Value) -> #{Key => Value}
     end, Params),
-    filter_fields(expected_helper_args(HelperName), Transformed);
+    filter_fields(expected_helper_args(HelperName), Args);
 
 prepare_helper_args(HelperName, Params) ->
     filter_fields(expected_helper_args(HelperName), Params).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates storage params as specified by the user
+%% (i.e. via Onepanel API when creating the storage)
+%% into correct user ctx.
+%% The result will not contain any unknown fields
+%% but is not verified to contain all required fields.
+%% @end
+%%--------------------------------------------------------------------
 -spec prepare_user_ctx_params(name(), ctx()) -> ctx().
 prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
     Transformed = maps_flatmap(fun
@@ -83,6 +93,15 @@ prepare_user_ctx_params(HelperName, Params) ->
 
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates storage params as specified by the user
+%% (i.e. via Onepanel API when creating the storage)
+%% into correct user ctx.
+%% The result will not contain any unknown fields
+%% but is not verified to contain all required fields.
+%% @end
+%%--------------------------------------------------------------------
 -spec validate_args(name(), args()) ->
     ok | {error, Reason :: term()}.
 validate_args(HelperName, Args) ->
@@ -105,7 +124,9 @@ validate_user_ctx(StorageType, UserCtx) ->
     Fields2 = case {StorageType, UserCtx} of
         {?WEBDAV_HELPER_NAME, #{<<"credentialsType">> := Type}} when
             Type /= <<"none">> ->
-            [{<<"credentials">>} | Fields -- [{optional, <<"credentials">>}]];
+            % todo VFS-5304 verify parameters
+            % todo i. e. when type == oauth2 and insecure == true token cannot be empty
+            [<<"credentials">> | Fields -- [{optional, <<"credentials">>}]];
         _ ->
             Fields
     end,
@@ -281,29 +302,26 @@ validate_fields([], Params) ->
     {error, {invalid_additional_fields, Params}};
 validate_fields([Field | FieldsTail], Params) ->
     case validate_field(Field, Params) of
-        ok ->
-            ParamsTail = maps:remove(Field, Params),
-            validate_fields(FieldsTail, ParamsTail);
-        Error ->
-            Error
+        {ok, ParamsTail} -> validate_fields(FieldsTail, ParamsTail);
+        Error -> Error
     end.
 
 
 %% @private
--spec validate_field(Key, Params) ->
-    ok | {error, Reason :: term()} when
-    Key :: field() | optional_field(),
+-spec validate_field(Field, Params) ->
+    {ok, ParamsTail :: Params} | {error, Reason :: term()} when
+    Field :: field() | optional_field(),
     Params :: #{binary() := term()}.
 validate_field({optional, Field}, Params) ->
     case validate_field(Field, Params) of
-        {error, {missing_field, _}} -> ok;
+        {error, {missing_field, _}} -> {ok, Params};
         Result -> Result
     end;
 
 validate_field(Field, Params) ->
     case Params of
         #{Field := <<Value/binary>>} when Value /= <<"null">> ->
-            ok;
+            {ok, maps:remove(Field, Params)};
         #{Field := Value} ->
             {error, {invalid_field_value, Field, Value}};
         #{} ->

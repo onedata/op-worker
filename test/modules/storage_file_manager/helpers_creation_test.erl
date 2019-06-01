@@ -20,12 +20,12 @@
 -define(USER_CTXS, [
     {?CEPH_HELPER_NAME, [<<"username">>, <<"key">>]},
     {?CEPHRADOS_HELPER_NAME, [<<"username">>, <<"key">>]},
-    {?POSIX_HELPER_NAME, [<<"uid">>, <<"gid">>]},
+    {?POSIX_HELPER_NAME, []},
     {?S3_HELPER_NAME, [<<"accessKey">>, <<"secretKey">>]},
     {?SWIFT_HELPER_NAME, [<<"username">>, <<"password">>]},
-    {?GLUSTERFS_HELPER_NAME, [<<"uid">>, <<"gid">>]},
+    {?GLUSTERFS_HELPER_NAME, []},
     {?WEBDAV_HELPER_NAME, [<<"credentialsType">>, <<"credentials">>]},
-    {?NULL_DEVICE_HELPER_NAME, [<<"uid">>, <<"gid">>]}
+    {?NULL_DEVICE_HELPER_NAME, []}
 ]).
 
 -define(HELPER_ARGS, [
@@ -92,7 +92,7 @@ args_test_name(HelperName, Key) ->
 %%% Internal functions
 %%%===================================================================
 
--spec keys_to_map([Key :: term()]) -> #{Key => Key}.
+-spec keys_to_map([Key]) -> #{Key => Key}.
 keys_to_map(Keys) ->
     maps:from_list(lists:zip(Keys, Keys)).
 
