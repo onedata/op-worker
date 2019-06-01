@@ -52,17 +52,17 @@
 prepare_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
     Transformed = maps_flatmap(fun
         (<<"hostname">>, URL) ->
-            {ok, HttpOrHttps, Host} = extract_scheme(URL),
+            {ok, HttpOrHttps, Host} = parse_url(URL),
             #{
                 <<"scheme">> => atom_to_binary(HttpOrHttps, utf8),
                 <<"hostname">> => Host
             };
         (Key, Value) -> #{Key => Value}
     end, Params),
-    filter_params(expected_helper_args(HelperName), Transformed);
+    filter_fields(expected_helper_args(HelperName), Transformed);
 
 prepare_helper_args(HelperName, Params) ->
-    filter_params(expected_helper_args(HelperName), Params).
+    filter_fields(expected_helper_args(HelperName), Params).
 
 
 -spec prepare_user_ctx_params(name(), ctx()) -> ctx().
@@ -76,10 +76,10 @@ prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
             };
         (Key, Value) -> #{Key => Value}
     end, Params),
-    filter_params(expected_user_ctx_params(HelperName), Transformed);
+    filter_fields(expected_user_ctx_params(HelperName), Transformed);
 
 prepare_user_ctx_params(HelperName, Params) ->
-    filter_params(expected_user_ctx_params(HelperName), Params).
+    filter_fields(expected_user_ctx_params(HelperName), Params).
 
 
 
@@ -144,8 +144,6 @@ default_admin_ctx(_) ->
 %%%===================================================================
 %%% Requirements
 %%%===================================================================
-
-
 
 %% @private
 -spec expected_helper_args(name()) ->
@@ -217,13 +215,27 @@ expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec filter_params(AllowedFields, Params) -> Params when
+%% @doc
+%% Removes unknown fields from args or ctx map.
+%% @end
+%%--------------------------------------------------------------------
+-spec filter_fields(AllowedFields, Params) -> Params when
     AllowedFields :: [field() | optional_field()],
     Params :: args() | ctx().
-filter_params(AllowedFields, Params) ->
+filter_fields(AllowedFields, Map) ->
     Fields = strip_optional_modifier(AllowedFields),
-    maps:with(Fields, Params).
+    maps:with(Fields, Map).
+
+
+%% @private
+-spec strip_optional_modifier(Fields :: [field() | optional_field()]) -> [field()].
+strip_optional_modifier(Fields) ->
+    lists:map(fun
+        ({optional, Field}) -> Field;
+        (Field) -> Field
+    end, Fields).
 
 
 %%--------------------------------------------------------------------
@@ -242,30 +254,23 @@ maps_flatmap(Fun, Map) ->
 
 
 %% @private
--spec extract_scheme(URL :: binary()) -> {ok, Scheme :: http | https, binary()}.
-extract_scheme(URL) ->
-    #hackney_url{scheme = S3Scheme, host = S3Host, port = S3Port} =
+-spec parse_url(URL :: binary()) ->
+    {ok, Scheme :: http | https, HostAndPort :: binary()}.
+parse_url(URL) ->
+    #hackney_url{scheme = UrlScheme, host = Host, port = Port} =
         hackney_url:parse_url(URL),
-    Scheme = case S3Scheme of
+    Scheme = case UrlScheme of
         https -> https;
         _ -> http
     end,
-    {ok, Scheme, str_utils:format_bin("~s:~B", [S3Host, S3Port])}.
-
-
--spec strip_optional_modifier(Fields :: [field() | optional_field()]) -> [field()].
-strip_optional_modifier(Fields) ->
-    lists:map(fun
-        ({optional, Field}) -> Field;
-        (Field) -> Field
-    end, Fields).
+    {ok, Scheme, str_utils:format_bin("~s:~B", [Host, Port])}.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether user/group context map contains only provided fields and they
-%% have valid type.
+%% Checks whether given args or ctx map contains all required fields,
+%% no unexpected fields and all their values are binaries.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate_fields([field() | optional_field()], Params :: map()) ->
@@ -274,10 +279,11 @@ validate_fields([], Params) when Params == #{} ->
     ok;
 validate_fields([], Params) ->
     {error, {invalid_additional_fields, Params}};
-validate_fields([Field | Fields], Params) ->
+validate_fields([Field | FieldsTail], Params) ->
     case validate_field(Field, Params) of
-        {ok, ParamsRemainder} ->
-            validate_fields(Fields, ParamsRemainder);
+        ok ->
+            ParamsTail = maps:remove(Field, Params),
+            validate_fields(FieldsTail, ParamsTail);
         Error ->
             Error
     end.
@@ -285,20 +291,19 @@ validate_fields([Field | Fields], Params) ->
 
 %% @private
 -spec validate_field(Key, Params) ->
-    {ok, ParamsRemainder :: user_ctx() | group_ctx()} |
-    {error, Reason :: term()} when
+    ok | {error, Reason :: term()} when
     Key :: field() | optional_field(),
     Params :: #{binary() := term()}.
 validate_field({optional, Field}, Params) ->
     case validate_field(Field, Params) of
-        {error, {missing_field, _}} -> {ok, Params};
+        {error, {missing_field, _}} -> ok;
         Result -> Result
     end;
 
 validate_field(Field, Params) ->
     case Params of
         #{Field := <<Value/binary>>} when Value /= <<"null">> ->
-            {ok, maps:remove(Field, Params)};
+            ok;
         #{Field := Value} ->
             {error, {invalid_field_value, Field, Value}};
         #{} ->
