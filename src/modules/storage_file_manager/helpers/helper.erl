@@ -40,11 +40,6 @@
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
-
-% @fixme support creating webdav ctx with adminId
-
-% @fixme move ctx managemetn to other module
-
 %%%===================================================================
 %%% API
 %%%===================================================================
