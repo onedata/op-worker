@@ -231,24 +231,10 @@ select_helper(Storage, HelperName) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Replaces storage with a new one of the same name.
-%% @end
-%%--------------------------------------------------------------------
--spec replace_helper(record(), helper:name(), NewHelper :: helpers:helper()) ->
-    record().
-replace_helper(#storage{helpers = OldHelpers} = Storage, HelperName, NewHelper) ->
-    NewHelpers = lists:keyreplace(HelperName, #helper.name, OldHelpers, NewHelper),
-    Storage#storage{helpers = NewHelpers}.
-
-
 -spec update_name(StorageId :: id(), NewName :: name()) -> ok.
 update_name(StorageId, NewName) ->
-    Result = update(StorageId, fun(#storage{} = Storage) ->
-        {ok, Storage#storage{name = NewName}}
-    end),
-    case Result of
+    UpdateFun = fun(Storage) -> {ok, Storage#storage{name = NewName}} end,
+    case update(StorageId, UpdateFun) of
         {ok, _} -> rtransfer_put_storage(StorageId);
         Error -> Error
     end.
@@ -262,8 +248,8 @@ update_name(StorageId, NewName) ->
 -spec update_helper_args(storage:id(), helper:name(), helper:args()) ->
     ok | {error, term()}.
 update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
-    Updater = fun(Helper) -> helper:update_args(Helper, Changes) end,
-    case update_helper(StorageId, HelperName, Updater) of
+    UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
+    case update_helper(StorageId, HelperName, UpdateFun) of
         ok -> rtransfer_put_storage(StorageId);
         Error -> Error
     end.
@@ -277,8 +263,8 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
 -spec update_admin_ctx(storage:id(), helper:name(), helper:user_ctx()) ->
     ok | {error, term()}.
 update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
-    Updater = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
-    update_helper(StorageId, HelperName, Updater).
+    UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
+    update_helper(StorageId, HelperName, UpdateFun).
 
 
 %%--------------------------------------------------------------------
@@ -610,6 +596,19 @@ update_helper(StorageId, HelperName, DiffFun) ->
             {error, _} = Error -> Error
         end
     end)).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Replaces storage with given name.
+%% @end
+%%--------------------------------------------------------------------
+-spec replace_helper(record(), helper:name(), NewHelper :: helpers:helper()) ->
+    record().
+replace_helper(#storage{helpers = OldHelpers} = Storage, HelperName, NewHelper) ->
+    NewHelpers = lists:keyreplace(HelperName, #helper.name, OldHelpers, NewHelper),
+    Storage#storage{helpers = NewHelpers}.
 
 
 %%--------------------------------------------------------------------
