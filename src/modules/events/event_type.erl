@@ -54,8 +54,8 @@ get_routing_key(#file_renamed_event{top_entry = Entry}) ->
     {ok, <<"file_renamed.", (Entry#file_renamed_entry.old_guid)/binary>>};
 get_routing_key(#quota_exceeded_event{}) ->
     {ok, <<"quota_exceeded">>};
-get_routing_key(#helper_params_changed_event{}) ->
-    {ok, <<"helper_params_changed">>};
+get_routing_key(#helper_params_changed_event{storage_id = StorageId}) ->
+    {ok, <<"helper_params_changed.", StorageId/binary>>};
 get_routing_key(_) ->
     {error, session_only}.
 

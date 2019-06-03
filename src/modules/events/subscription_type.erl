@@ -48,8 +48,8 @@ get_routing_key(#file_renamed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_renamed.", FileGuid/binary>>};
 get_routing_key(#quota_exceeded_subscription{}) ->
     {ok, <<"quota_exceeded">>};
-get_routing_key(#helper_params_changed_subscription{}) ->
-    {ok, <<"helper_params_changed">>};
+get_routing_key(#helper_params_changed_subscription{storage_id = StorageId}) ->
+    {ok, <<"helper_params_changed.", StorageId/binary>>};
 get_routing_key(_) ->
     {error, session_only}.
 
