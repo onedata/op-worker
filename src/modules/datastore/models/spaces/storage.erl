@@ -250,8 +250,11 @@ update_name(StorageId, NewName) ->
 update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
     case update_helper(StorageId, HelperName, UpdateFun) of
-        ok -> rtransfer_put_storage(StorageId);
-        Error -> Error
+        ok ->
+            rtransfer_put_storage(StorageId),
+            fslogic_event_emitter:emit_helper_params_changed(StorageId);
+        Error ->
+            Error
     end.
 
 
@@ -264,7 +267,10 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     ok | {error, term()}.
 update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
-    update_helper(StorageId, HelperName, UpdateFun).
+    case update_helper(StorageId, HelperName, UpdateFun) of
+        ok -> fslogic_event_emitter:emit_helper_params_changed(StorageId);
+        Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -310,9 +316,11 @@ set_luma_config(StorageId, LumaConfig) ->
 -spec set_insecure(storage:id(), helper:name(), Insecure :: boolean()) ->
     ok | {error, term()}.
 set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
-    update_helper(StorageId, HelperName, fun(Helper) ->
-        helper:update_insecure(Helper, Insecure)
-    end).
+    UpdateFun = fun(Helper) -> helper:update_insecure(Helper, Insecure) end,
+    case update_helper(StorageId, HelperName, UpdateFun) of
+        ok -> fslogic_event_emitter:emit_helper_params_changed(StorageId);
+        Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
