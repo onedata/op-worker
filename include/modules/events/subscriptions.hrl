@@ -89,6 +89,11 @@
 -record(quota_exceeded_subscription, {
 }).
 
+%% definition of a subscription for storage modification
+-record(helper_params_changed_subscription, {
+    storage_id :: storage:id()
+}).
+
 %% definition of a subscription for file renaming
 %% file_guid         - GUID of a file for which notifications should be sent
 -record(file_renamed_subscription, {

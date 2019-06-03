@@ -270,6 +270,7 @@ get_provider(#event{type = Type}, Manager)
     orelse is_record(Type, file_perm_changed_event)
     orelse is_record(Type, file_removed_event)
     orelse is_record(Type, file_renamed_event)
+    orelse is_record(Type, helper_params_changed_event)
     orelse is_record(Type, quota_exceeded_event) ->
     {ok, ProxyVia} = ets_state:get(session, Manager, proxy_via),
     ProxyVia;

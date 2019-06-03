@@ -48,6 +48,8 @@ get_routing_key(#file_renamed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_renamed.", FileGuid/binary>>};
 get_routing_key(#quota_exceeded_subscription{}) ->
     {ok, <<"quota_exceeded">>};
+get_routing_key(#helper_params_changed_subscription{}) ->
+    {ok, <<"helper_params_changed">>};
 get_routing_key(_) ->
     {error, session_only}.
 
@@ -68,6 +70,7 @@ get_stream_key(#file_perm_changed_subscription{}) -> file_perm_changed;
 get_stream_key(#file_removed_subscription{}) -> file_removed;
 get_stream_key(#file_renamed_subscription{}) -> file_renamed;
 get_stream_key(#quota_exceeded_subscription{}) -> quota_exceeded;
+get_stream_key(#helper_params_changed_subscription{}) -> helper_params_changed;
 get_stream_key(#monitoring_subscription{}) -> monitoring.
 
 %%--------------------------------------------------------------------

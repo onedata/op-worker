@@ -31,7 +31,8 @@
                 #file_read_subscription{} | #file_written_subscription{} |
                 #file_perm_changed_subscription{} |
                 #file_removed_subscription{} | #file_renamed_subscription{} |
-                #quota_exceeded_subscription{} | #monitoring_subscription{}.
+                #quota_exceeded_subscription{} | #monitoring_subscription{} |
+                #helper_params_changed_subscription{}.
 -type cancellation() :: #subscription_cancellation{}.
 -type doc() :: datastore_doc:doc(base()).
 

@@ -188,6 +188,8 @@ translate_from_protobuf(#'FileRenamedEvent'{
     };
 translate_from_protobuf(#'QuotaExceededEvent'{spaces = Spaces}) ->
     #quota_exceeded_event{spaces = Spaces};
+translate_from_protobuf(#'HelperParamsChangedEvent'{storage_id = StorageId}) ->
+    #helper_params_changed_event{storage_id = StorageId};
 
 
 %% SUBSCRIPTION
@@ -251,6 +253,12 @@ translate_from_protobuf(#'FileRenamedSubscription'{
     };
 translate_from_protobuf(#'QuotaExceededSubscription'{}) ->
     #quota_exceeded_subscription{};
+translate_from_protobuf(#'HelperParamsChangedSubscription'{
+    storage_id = StorageId
+}) ->
+    #helper_params_changed_subscription{
+        storage_id = StorageId
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = integer_to_binary(Id)};
 
@@ -1221,6 +1229,8 @@ translate_to_protobuf(#file_renamed_event{
     }};
 translate_to_protobuf(#quota_exceeded_event{spaces = Spaces}) ->
     {quota_exceeded, #'QuotaExceededEvent'{spaces = Spaces}};
+translate_to_protobuf(#helper_params_changed_event{storage_id = StorageId}) ->
+    {helper_params_changed, #'HelperParamsChangedEvent'{storage_id = StorageId}};
 
 
 %% SUBSCRIPTION
@@ -1284,6 +1294,12 @@ translate_to_protobuf(#file_renamed_subscription{
     }};
 translate_to_protobuf(#quota_exceeded_subscription{}) ->
     {quota_exceeded, #'QuotaExceededSubscription'{}};
+translate_to_protobuf(#helper_params_changed_subscription{
+    storage_id = StorageId
+}) ->
+    {helper_params_changed, #'HelperParamsChangedSubscription'{
+        storage_id = StorageId
+    }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{
         id = binary_to_integer(Id)}
