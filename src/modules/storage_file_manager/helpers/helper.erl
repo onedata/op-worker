@@ -124,6 +124,8 @@ extended_direct_io(_) -> true.
 %% @private
 -spec allow_insecure(name()) -> boolean().
 allow_insecure(?POSIX_HELPER_NAME) -> false;
+allow_insecure(?GLUSTERFS_HELPER_NAME) -> false;
+allow_insecure(?NULL_DEVICE_HELPER_NAME) -> false;
 allow_insecure(_) -> true.
 
 
