@@ -77,7 +77,7 @@ prepare_helper_args(HelperName, Params) ->
 %%--------------------------------------------------------------------
 -spec prepare_user_ctx_params(name(), ctx()) -> ctx().
 prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
-    Transformed = maps_flatmap(fun
+    Ctx = maps_flatmap(fun
         (Key = <<"onedataAccessToken">>, Token) when byte_size(Token) > 0 ->
             {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
             #{
@@ -86,7 +86,12 @@ prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
             };
         (Key, Value) -> #{Key => Value}
     end, Params),
-    filter_fields(expected_user_ctx_params(HelperName), Transformed);
+    Ctx2 = case Ctx of
+        #{<<"credentialsType">> := <<"none">>} ->
+            Ctx#{<<"credentials">> => <<>>};
+        _ -> Ctx
+    end,
+    filter_fields(expected_user_ctx_params(HelperName), Ctx2);
 
 prepare_user_ctx_params(HelperName, Params) ->
     filter_fields(expected_user_ctx_params(HelperName), Params).
@@ -119,18 +124,24 @@ validate_args(HelperName, Args) ->
 validate_user_ctx(#helper{name = StorageType}, UserCtx) ->
     validate_user_ctx(StorageType, UserCtx);
 
+
+validate_user_ctx(StorageType = ?WEBDAV_HELPER_NAME, UserCtx) ->
+    FieldsBase = expected_user_ctx_params(StorageType),
+    Fields = case UserCtx of
+        #{<<"credentialsType">> := <<"none">>} ->
+            FieldsBase;
+        #{<<"credentialsType">> := _} ->
+            % make "credentials" required rather than optional
+            [<<"credentials">> | remove_field(<<"credentials">>, FieldsBase)];
+        _ ->
+            FieldsBase
+    end,
+    validate_fields(Fields, UserCtx);
+
 validate_user_ctx(StorageType, UserCtx) ->
     Fields = expected_user_ctx_params(StorageType),
-    Fields2 = case {StorageType, UserCtx} of
-        {?WEBDAV_HELPER_NAME, #{<<"credentialsType">> := Type}} when
-            Type /= <<"none">> ->
-            % todo VFS-5304 verify parameters
-            % todo i. e. when type == oauth2 and insecure == true token cannot be empty
-            [<<"credentials">> | Fields -- [{optional, <<"credentials">>}]];
-        _ ->
-            Fields
-    end,
-    validate_fields(Fields2, UserCtx).
+    validate_fields(Fields, UserCtx).
+
 
 
 %%--------------------------------------------------------------------
@@ -259,6 +270,17 @@ strip_optional_modifier(Fields) ->
         ({optional, Field}) -> Field;
         (Field) -> Field
     end, Fields).
+
+
+%% @private
+-spec remove_field(ToRemove :: field(), Fields :: [field() | optional_field()]) ->
+    [field() | optional_field()].
+remove_field(ToRemove, Fields) ->
+    lists:filter(fun(Field) -> case Field of
+        ToRemove -> false;
+        {optional, ToRemove} -> false;
+        _ -> true
+    end end, Fields).
 
 
 %%--------------------------------------------------------------------
