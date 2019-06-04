@@ -252,7 +252,7 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     case update_helper(StorageId, HelperName, UpdateFun) of
         ok ->
             rtransfer_put_storage(StorageId),
-            fslogic_event_emitter:emit_helper_params_changed(StorageId);
+            on_helper_changed(StorageId);
         Error ->
             Error
     end.
@@ -268,7 +268,7 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
 update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
     case update_helper(StorageId, HelperName, UpdateFun) of
-        ok -> fslogic_event_emitter:emit_helper_params_changed(StorageId);
+        ok -> on_helper_changed(StorageId);
         Error -> Error
     end.
 
@@ -318,7 +318,7 @@ set_luma_config(StorageId, LumaConfig) ->
 set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
     UpdateFun = fun(Helper) -> helper:update_insecure(Helper, Insecure) end,
     case update_helper(StorageId, HelperName, UpdateFun) of
-        ok -> fslogic_event_emitter:emit_helper_params_changed(StorageId);
+        ok -> on_helper_changed(StorageId);
         Error -> Error
     end.
 
@@ -604,6 +604,9 @@ update_helper(StorageId, HelperName, DiffFun) ->
     end)).
 
 
+-spec on_helper_changed(StorageId :: storage:id()) -> ok.
+on_helper_changed(StorageId) ->
+    fslogic_event_emitter:emit_helper_params_changed(StorageId).
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
