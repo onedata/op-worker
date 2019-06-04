@@ -17,7 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([get_helper/3, delete_helpers/1]).
+-export([get_helper/3, delete_helpers/1, get_handles/1]).
 %% Exported for execution delegation to other nodes
 -export([delete_helpers_on_node/1]).
 
@@ -50,6 +50,16 @@ delete_helpers(SessId) ->
     lists:foreach(fun(Node) ->
         spawn(Node, ?MODULE, delete_helpers_on_node, [SessId])
     end, Nodes).
+
+
+-spec get_handles(SessId :: session:id()) ->
+    {ok, [helper_handle:id()]} | {error, term()}.
+get_handles(SessId) ->
+    FoldFun = fun(#link{target = HandleId}, Acc) ->
+        {ok, [HandleId | Acc]}
+    end,
+    session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID, FoldFun).
+
 
 %%%===================================================================
 %%% Exported for execution delegation to other nodes

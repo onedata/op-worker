@@ -607,6 +607,24 @@ update_helper(StorageId, HelperName, DiffFun) ->
 -spec on_helper_changed(StorageId :: storage:id()) -> ok.
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId).
+%%    refresh_helpers(StorageId).
+
+
+-spec refresh_helpers(StorageId :: storage:id()) -> ok.
+refresh_helpers(StorageId) ->
+    Sessions = session:list(),
+    {ok, Storage} = ?MODULE:get(StorageId),
+    lists:foreach(fun(SessId) ->
+        {ok, Handles} = session_helpers:get_handles(SessId),
+        lists:foreach(fun(HandleId) ->
+            {ok, Handle} = helper_handle:get(HandleId),
+            helpers_fallback:refresh_params(Handle, SessId, <<"@fixme">>, Storage)
+        end, Handles)
+    end, Sessions).
+
+
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
