@@ -123,6 +123,7 @@ get_batch_entries(#harvesting_batch{entries = Entries}) -> Entries.
 %%-------------------------------------------------------------------
 %% @doc
 %% Strips all batch entries preceding StripAfter sequence number.
+%% StripAfter argument is exclusive.
 %% @end
 %%-------------------------------------------------------------------
 -spec strip(batch(), seq()) -> batch().
@@ -130,7 +131,7 @@ strip(Batch = #harvesting_batch{entries = Entries}, StripAfter) when is_list(Ent
     {StrippedEntriesReversed, NewFirstSeqIn, NewSize} = lists:foldl(fun
         (Object, AccIn = {[], undefined, 0}) ->
             case get_seq(Object) of
-                Seq when Seq < StripAfter -> AccIn;
+                Seq when Seq =< StripAfter -> AccIn;
                 Seq -> {[Object], Seq, 1}
             end;
         (Object, {StrippedEntriesIn, NewFirstSeqIn, NewSizeIn}) ->

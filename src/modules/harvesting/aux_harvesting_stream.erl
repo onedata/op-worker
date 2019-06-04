@@ -100,9 +100,6 @@ handle_cast(?SPACE_REMOVED, State) ->
     {stop, normal, State};
 handle_cast(?SPACE_UNSUPPORTED, State) ->
     {stop, normal, State};
-handle_cast(dbg, State) ->
-    harvesting_stream:log_state("AUX", State),
-    {noreply, State};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.

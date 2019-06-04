@@ -31,6 +31,8 @@
 -define(TAKEOVER_REJECTED(NewUntil), {takeover_rejected, NewUntil}).
 -define(SPACE_REMOVED, space_removed).
 -define(SPACE_UNSUPPORTED, space_unsupported).
+-define(START_AUX_STREAMS(AuxDestination, Until),
+    {start_aux_streams, AuxDestination, Until}).
 
 % Exceptions and errors
 -define(HARVESTING_DOC_NOT_FOUND_EXCEPTION(State),

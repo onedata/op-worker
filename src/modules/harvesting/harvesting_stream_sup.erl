@@ -20,7 +20,7 @@
 %% API
 -export([start_link/0,
     start_main_stream/1, terminate_main_stream/1,
-    start_aux_stream_async/4, terminate_aux_stream/3, terminate_aux_stream/1]).
+    start_aux_stream/4, terminate_aux_stream/3, terminate_aux_stream/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -51,8 +51,19 @@ start_main_stream(SpaceId) ->
         {error, {normal, _}} -> ok
     end.
 
-start_aux_stream_async(SpaceId, HarvesterId, IndexId, Until) ->
-    spawn_link(fun() -> start_aux_stream(SpaceId, HarvesterId, IndexId, Until) end).
+
+-spec start_aux_stream(od_space:id(), od_harvester:id(), od_harvester:index(),
+    couchbase_changes:until()) -> ok.
+start_aux_stream(SpaceId, HarvesterId, IndexId, Until) ->
+    AuxStream = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
+    case supervisor:start_child(?HARVESTING_STREAM_SUP,
+        aux_stream_spec(SpaceId, HarvesterId, IndexId, Until)) of
+        {error, already_present} ->
+            ok = supervisor:delete_child(?HARVESTING_STREAM_SUP, AuxStream),
+            start_aux_stream(SpaceId, HarvesterId, IndexId, Until);
+        {ok, _} ->
+            ok
+    end.
 
 -spec terminate_main_stream(od_space:id()) -> ok | {error, term()}.
 terminate_main_stream(SpaceId) ->
@@ -112,17 +123,3 @@ aux_stream_spec(SpaceId, HarvesterId, IndexId, Until) ->
         shutdown => timer:seconds(5),
         type => worker
     }.
-
-
--spec start_aux_stream(od_space:id(), od_harvester:id(), od_harvester:index(),
-    [couchbase_changes:until()]) -> ok.
-start_aux_stream(SpaceId, HarvesterId, IndexId, Until) ->
-    AuxStream = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
-    case supervisor:start_child(?HARVESTING_STREAM_SUP,
-        aux_stream_spec(SpaceId, HarvesterId, IndexId, Until)) of
-        {error, already_present} ->
-            ok = supervisor:delete_child(?HARVESTING_STREAM_SUP, AuxStream),
-            start_aux_stream(SpaceId, HarvesterId, IndexId, Until);
-        {ok, _} ->
-            ok
-    end.

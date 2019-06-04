@@ -11,7 +11,7 @@
 -export([mocked_start_link/3, mocked_stop/1]).
 
 %% API
--export([stop/1, stream_changes/2, generate_changes/6]).
+-export([stream_changes/2, generate_changes/7, generate_changes/8]).
 
 %% RPC API
 -export([]).
@@ -60,16 +60,16 @@ mocked_stop(Pid) ->
 %%% API
 %%%===================================================================
 
-stop(Pid) ->
-    gen_server:call(Pid, ?STOP).
-
 stream_changes(Pid, Changes) ->
     gen_server:call(Pid, ?STREAM_CHANGES(Changes)).
 
-generate_changes(Since, Until, Count, CustomMetadataProb, DeletedProb, ProviderIds) when (Until - Since) >= Count ->
+generate_changes(Since, Until, Count, CustomMetadataProb, EmptyValueProb, DeletedProb, ProviderIds) ->
+    generate_changes(Since, Until, Count, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds, undefined).
+
+generate_changes(Since, Until, Count, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds, FileId) when (Until - Since) >= Count ->
     Seqs = generate_sequences(Since, Until, Count),
     ProviderIds2 = utils:ensure_list(ProviderIds),
-    [generate_change(Seq, CustomMetadataProb, DeletedProb, ProviderIds2) || Seq <- Seqs].
+    [generate_change(Seq, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds2, FileId) || Seq <- Seqs].
 
 %%%===================================================================
 %%% Internal API
@@ -97,9 +97,6 @@ init([Callback, Since, Until, StreamPid]) ->
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) -> {reply, Reply :: term(), NewState :: #state{}}.
-handle_call(?STOP, _From, State = #state{callback = Callback}) ->
-    Callback({ok, end_of_stream}),
-    {reply, ok, State#state{stopped = true}};
 handle_call(?STREAM_CHANGES(NewChanges), _From, State = #state{changes = Changes, stopped = Stopped}) ->
     case Stopped of
         true -> ok;
@@ -113,7 +110,7 @@ handle_cast(?STREAM_CHANGE, State = #state{changes = []}) ->
     {noreply, State};
 handle_cast(?STREAM_CHANGE, State = #state{stopped = true}) ->
     {noreply, State};
-handle_cast(?STREAM_CHANGE, State = #state{since = Since0, until = Until0,stopped = false}) ->
+handle_cast(?STREAM_CHANGE, State = #state{stopped = false}) ->
     State2 = #state{since = Since, until = Until} =
         stream_change_to_harvesting_stream(State),
     case Until =/= infinity andalso Since >= Until of
@@ -121,7 +118,7 @@ handle_cast(?STREAM_CHANGE, State = #state{since = Since0, until = Until0,stoppe
         false -> stream_next_change()
     end,
     {noreply, State2};
-handle_cast(?RESTART(CallbackFun, Since, Until, StreamPid), State = #state{changes = Changes}) ->
+handle_cast(?RESTART(CallbackFun, Since, Until, StreamPid), State = #state{}) ->
     stream_next_change(),
     {noreply, State#state{
         since = Since,
@@ -164,30 +161,32 @@ stream_change_to_harvesting_stream(State = #state{
         since = Since,
         until = Until,
         callback = Callback,
+        stream_pid = StreamPid,
         changes = [Doc = #document{seq = Seq} | Changes]
 }) when (Until =:= infinity)
     orelse (Until =/= infinity andalso Since < Until andalso Seq < Until) ->
     Callback({ok, Doc}),
     State#state{since = Seq, changes = Changes};
 stream_change_to_harvesting_stream(State = #state{
+    callback = Callback,
     since = Since,
     until = Until,
-    changes = [#document{seq = Seq} | Changes]
+    changes = Changes = [#document{seq = Seq} | _]
 }) when Since < Until andalso Until =< Seq ->
-    State#state{since = Seq, changes = Changes};
+    Callback({ok, end_of_stream}),
+    State#state{
+        since = Seq,
+        changes = Changes,
+        stopped = true
+    };
 stream_change_to_harvesting_stream(State) ->
     State.
 
 
-generate_change(Seq, CustomMetadataProb, DeletedProb, ProviderIds) ->
+generate_change(Seq, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds, FileId) ->
     #document{
         seq = Seq,
-        value = case rand:uniform() < CustomMetadataProb of
-            true -> #custom_metadata{
-                file_objectid = crypto:strong_rand_bytes(10)
-            };
-            false -> undefined
-        end,
+        value = doc_value(CustomMetadataProb, EmptyValueProb, FileId),
         deleted = rand:uniform() < DeletedProb,
         mutators = [utils:random_element(ProviderIds)]
     }.
@@ -201,3 +200,20 @@ throw_out_random_elements(Seqs, TargetLength) when length(Seqs) =:= TargetLength
 throw_out_random_elements(Seqs, TargetLength) ->
     Seqs2 = Seqs -- [utils:random_element(Seqs)],
     throw_out_random_elements(Seqs2, TargetLength).
+
+doc_value(CustomMetadataProb, EmptyValueProb, undefined) ->
+    doc_value(CustomMetadataProb, EmptyValueProb, crypto:strong_rand_bytes(10));
+doc_value(CustomMetadataProb, EmptyValueProb, FileId) ->
+    case rand:uniform() < CustomMetadataProb of
+        true -> #custom_metadata{
+            file_objectid = FileId,
+            value = metadata_value(EmptyValueProb)
+        };
+        false -> undefined
+    end.
+
+metadata_value(EmptyValueProb) ->
+    case rand:uniform() < EmptyValueProb of
+        true -> #{};
+        false -> #{<<"key">> => <<"value">>}
+    end.

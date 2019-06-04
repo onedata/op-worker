@@ -14,7 +14,7 @@
 -author("Jakub Kudzia").
 
 -behaviour(worker_plugin_behaviour).
-%%
+
 -include("modules/harvesting/harvesting.hrl").
 -include_lib("ctool/include/logging.hrl").
 

@@ -61,6 +61,7 @@ ensure_created(SpaceId) ->
 get(SpaceId) ->
     datastore_model:get(?CTX, SpaceId).
 
+-spec delete(od_space:id()) -> ok | {error, term()}.
 delete(SpaceId) ->
     datastore_model:delete(?CTX, SpaceId).
 
@@ -80,21 +81,11 @@ get_main_seen_seq(SpaceId) ->
 -spec get_seen_seq(harvesting_stream:name()) ->
     {ok, couchbase_changes:seq()} | {error, term()}.
 get_seen_seq(StreamName = ?MAIN_HARVESTING_STREAM(SpaceId)) ->
-    case harvesting_state:get(SpaceId) of
-        {ok, Doc} ->
-            get_seen_seq(Doc, StreamName);
-        {error, _} = Error ->
-            Error
-    end;
+    get_seen_seq(SpaceId, StreamName);
 get_seen_seq(StreamName = ?AUX_HARVESTING_STREAM(SpaceId, _, _)) ->
-    case harvesting_state:get(SpaceId) of
-        {ok, Doc} ->
-            get_seen_seq(Doc, StreamName);
-        {error, _} = Error ->
-            Error
-    end.
+    get_seen_seq(SpaceId, StreamName).
 
--spec get_seen_seq(doc() | record(), harvesting_stream:name()) ->
+-spec get_seen_seq(doc() | record() | id(), harvesting_stream:name()) ->
     {ok, couchbase_changes:seq()}.
 get_seen_seq(#document{value = HS}, StreamName) ->
     get_seen_seq(HS, StreamName);
@@ -103,7 +94,14 @@ get_seen_seq(#harvesting_state{main_seen_seq = Seq}, ?MAIN_HARVESTING_STREAM(_Sp
 get_seen_seq(HarvestingState = #harvesting_state{},
     ?AUX_HARVESTING_STREAM(_SpaceId, HarvesterId, IndexId)
 ) ->
-    get_seen_seq(HarvestingState, HarvesterId, IndexId).
+    get_seen_seq(HarvestingState, HarvesterId, IndexId);
+get_seen_seq(SpaceId, StreamName) ->
+    case harvesting_state:get(SpaceId) of
+        {ok, Doc} ->
+            get_seen_seq(Doc, StreamName);
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec get_seen_seq(doc() | record(), od_harvester:id(), od_harvester:index()) ->
     {ok, couchbase_changes:seq()}.
@@ -199,5 +197,5 @@ set_seen_seq_internal(SpaceId, Destination, NewSeq, BumpMaxSeq) ->
 get_record_struct(1) ->
     {record, [
         {main_seen_seq, integer},
-        {progress, #{term => integer}}  % key is a tuple {string, string}
+        {progress, #{string => integer}}
     ]}.

@@ -78,14 +78,14 @@
 -export([start_link/2, enter_streaming_mode/1, enter_retrying_mode/1]).
 
 %% util functions
--export([log_state/2, throw_harvesting_not_found_exception/1]).
+-export([throw_harvesting_not_found_exception/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 %% exported for mocking in tests
--export([changes_stream_start_link/4, schedule_flush/0]).
+-export([changes_stream_start_link/4]).
 
 -type state() :: #hs_state{}.
 -type mode() :: streaming | retrying.
@@ -203,42 +203,6 @@ start_link(CallbackModule, Args) ->
 %%%===================================================================
 %%% util functions
 %%%===================================================================
-
-% todo delete this function after debug
-log_state(Description, State) ->
-    ?alert("~s
-    Name = ~p
-    CallbackModule = ~p
-    Destination = ~p
-    SpaceId = ~p
-    ProviderId = ~p
-    LastSeenSeq = ~p
-    LastPersistedSeq = ~p
-    StreamPid =~p
-    Mode = ~p
-    Backoff = ~p
-    IgnoringDeleted = ~p
-    Until = ~p
-    LastHarvestTimestamp = ~p
-    AuxDestination = ~p,
-    Batch = ~p", [
-        Description,
-        State#hs_state.name,
-        State#hs_state.callback_module,
-        State#hs_state.destination,
-        State#hs_state.space_id,
-        State#hs_state.provider_id,
-        State#hs_state.last_seen_seq,
-        State#hs_state.last_persisted_seq,
-        State#hs_state.stream_pid,
-        State#hs_state.mode,
-        State#hs_state.backoff,
-        State#hs_state.ignoring_deleted,
-        State#hs_state.until,
-        State#hs_state.last_harvest_timestamp,
-        State#hs_state.aux_destination,
-        State#hs_state.batch
-    ]).
 
 -spec throw_harvesting_not_found_exception(state()) -> no_return().
 throw_harvesting_not_found_exception(State) ->
@@ -463,16 +427,22 @@ maybe_add_docs_to_batch(State, [Doc | Docs]) ->
 
 
 -spec maybe_add_doc_to_batch(state(), datastore:doc()) -> state().
-maybe_add_doc_to_batch(State = #hs_state{ignoring_deleted = true},
-    Doc = #document{deleted = false, value = #custom_metadata{}}
-) ->
+maybe_add_doc_to_batch(State = #hs_state{
+    ignoring_deleted = true
+}, Doc = #document{
+    deleted = false,
+    value = #custom_metadata{}
+}) ->
     maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, Doc);
 maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = false,
     batch = Batch,
     provider_id = ProviderId
-}, Doc = #document{seq = Seq, value = #custom_metadata{}, mutators = [ProviderId | _]}
-) ->
+}, Doc = #document{
+    seq = Seq,
+    value = #custom_metadata{},
+    mutators = [ProviderId | _]
+}) ->
     Batch2 = harvesting_batch:accumulate(Doc, Batch),
     State#hs_state{batch = Batch2, last_seen_seq = Seq};
 maybe_add_doc_to_batch(State, #document{seq = Seq}) ->
@@ -578,8 +548,7 @@ enter_streaming_mode(State = #hs_state{
 }) when Until /= infinity andalso LastSeenSeq >= (Until - 1) ->
     State2 = stop_changes_stream(State),
     case State2#hs_state.stream_pid of
-        undefined ->
-            Mod:on_end_of_stream(State2);
+        undefined -> Mod:on_end_of_stream(State2);
         _ -> ok
     end,
     State2;
@@ -642,7 +611,7 @@ schedule_backoff(State = #hs_state{
 }) ->
     B0 = backoff:init(?MIN_BACKOFF_INTERVAL, ?MAX_BACKOFF_INTERVAL, self(), ?RETRY),
     B1 = backoff:type(B0, jitter),
-    backoff_log(Name, ErrorLog, ?MIN_BACKOFF_INTERVAL/1000, LogLevel),
+    backoff_log(Name, ErrorLog, ?MIN_BACKOFF_INTERVAL / 1000, LogLevel),
     backoff:fire(B1),
     State#hs_state{backoff = B1};
 schedule_backoff(State = #hs_state{
@@ -652,7 +621,7 @@ schedule_backoff(State = #hs_state{
     name = Name
 }) ->
     {Value, B1} = backoff:fail(B0),
-    backoff_log(Name, ErrorLog, Value/1000, LogLevel),
+    backoff_log(Name, ErrorLog, Value / 1000, LogLevel),
     backoff:fire(B1),
     State#hs_state{backoff = B1}.
 
@@ -688,7 +657,7 @@ should_flush(#hs_state{
     last_sent_max_stream_seq = LastSentMaxStreamSeq
 }) ->
     CurrentTimestamp = time_utils:system_time_seconds(),
-    ((CurrentTimestamp - Timestamp) > ?FLUSH_TIMEOUT_SECONDS)
+    ((CurrentTimestamp - Timestamp) >= ?FLUSH_TIMEOUT_SECONDS)
         andalso
         ((not harvesting_batch:is_empty(Batch)) orelse LastSeenSeq =/= LastSentMaxStreamSeq).
 

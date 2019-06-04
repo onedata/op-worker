@@ -24,7 +24,9 @@
 %% API
 -export([init/0, get/3, set/4, delete/3]).
 
--define(KEY(HarvesterId, IndexId), {HarvesterId, IndexId}).
+-define(KEY_SEPARATOR, "##").
+-define(KEY(HarvesterId, IndexId),
+    <<HarvesterId/binary, ?KEY_SEPARATOR, IndexId/binary>>).
 
 %%%===================================================================
 %%% API functions

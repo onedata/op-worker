@@ -12,7 +12,10 @@
 %%% If new harvesters or indices are added to Destination, main_harvesting_stream
 %%% starts aux_harvesting_streams. Each of them is responsible for catching up
 %%% harvesting for a pair {HarvesterId, IndexId} with main_harvesting_stream.
-% todo write abouyt management revising etc
+%%% main_harvesting_stream updates its destination and starts
+%%% aux_harvesting_streams when handling
+%%% ?REVISE_HARVESTER and ?REVISE_SPACE_HARVESTERS messages.
+%%% These messages are sent from od_space and od_harvesters posthooks.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(main_harvesting_stream).
@@ -38,8 +41,19 @@
 %% RPC
 -export([call_internal/2, space_removed_internal/1, space_unsupported_internal/1]).
 
+% Revising a harvester means comparing current list of its indices with
+% previous list. Indices that are missing in the current list are
+% removed from stream destination and aux_harvesting_streams are stopped.
+% For indices that are new on the current list, aux_harvesting_streams are
+% started.
 -define(REVISE_HARVESTER(HarvesterId, Indices),
     {revise_harvester, HarvesterId, Indices}).
+
+% Revising space harvesters means comparing current list of space's harvesters
+% with previous list. Harvesters that are missing in the current list are
+% removed from stream destination and aux_harvesting_streams are stopped.
+% For harvesters that are new on the current list, ?REVISE_HARVESTER is
+% scheduled.
 -define(REVISE_SPACE_HARVESTERS(Harvesters),
     {revise_space_harvesters, Harvesters}).
 
@@ -67,7 +81,7 @@ space_removed(SpaceId) ->
 -spec space_unsupported(od_space:id()) -> ok.
 space_unsupported(SpaceId) ->
     Node = consistent_hashing:get_node(SpaceId),
-    rpc:call(Node, ?MODULE, space_removed_internal, [SpaceId]).
+    rpc:call(Node, ?MODULE, space_unsupported_internal, [SpaceId]).
 
 %%%===================================================================
 %%% harvesting_stream callbacks
@@ -90,16 +104,17 @@ init([SpaceId]) ->
                     {stop, normal};
                 false ->
                     MainSeq = lists:max(maps:keys(DestinationsPerSeqs)),
-                    {MainDestination, AuxDestinationsPerSeqs} = maps:take(MainSeq, DestinationsPerSeqs),
-                    AuxDestination = harvesting_destination:merge(maps:values(AuxDestinationsPerSeqs)),
+                    {MainDestination, AuxDestinationsPerSeqs} =
+                        maps:take(MainSeq, DestinationsPerSeqs),
+                    AuxDestination =
+                        harvesting_destination:merge(maps:values(AuxDestinationsPerSeqs)),
                     ok = harvesting_state:set_main_seq(SpaceId, MainSeq),
-                    start_aux_streams(SpaceId, AuxDestination, MainSeq),
+                    schedule_start_aux_streams(AuxDestination, MainSeq),
                     {ok, #hs_state{
                         name = ?MAIN_HARVESTING_STREAM(SpaceId),
                         space_id = SpaceId,
                         until = infinity,
-                        destination = MainDestination,
-                        aux_destination = AuxDestination
+                        destination = MainDestination
                     }}
             end;
         _ ->
@@ -113,7 +128,7 @@ init([SpaceId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec name([term()]) -> harvesting_stream:name().
-name([SpaceId]) ->
+name([SpaceId | _]) ->
     ?MAIN_HARVESTING_STREAM(SpaceId).
 
 %%--------------------------------------------------------------------
@@ -161,9 +176,11 @@ handle_cast(?SPACE_REMOVED, State = #hs_state{space_id = SpaceId}) ->
 handle_cast(?SPACE_UNSUPPORTED, State) ->
     broadcast_space_unsupported_message(State),
     {stop, normal, State};
-handle_cast(dbg, State) ->
-    harvesting_stream:log_state("MAIN", State),
-    {noreply, State};
+handle_cast(?START_AUX_STREAMS(AuxDestination, Until), State = #hs_state{space_id = SpaceId}) ->
+    start_aux_streams(SpaceId, AuxDestination, Until),
+    {noreply, State#hs_state{
+        aux_destination = AuxDestination
+    }};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -176,71 +193,19 @@ handle_cast(Request, State) ->
 -spec custom_error_handling(harversting_stream:state(), harvesting_result:result()) ->
     harvesting_stream:handling_result().
 custom_error_handling(State = #hs_state{
-    space_id = SpaceId,
     name = Name,
     batch = Batch,
-    last_seen_seq = LastSeenSeq,
-    aux_destination = AuxDestination
+    last_seen_seq = LastSeenSeq
 }, Result) ->
     MaxSuccessfulSeq = harvesting_result:get_max_successful_seq(Result),
     FirstBatchSeq = harvesting_batch:get_first_seq(Batch),
     LastBatchSeq = harvesting_batch:get_last_seq(Batch),
-    Summary = harvesting_result:get_summary(Result),
-    {MainDestination2, AuxDestination2} = maps:fold(fun
-        (?ERROR_NOT_FOUND, _ErrorDest, AccIn) ->
-            % Harvesters in _ErrorDest were deleted
-            % we can ignore this error
-            AccIn;
-        (?ERROR_FORBIDDEN, _ErrorDest, AccIn) ->
-            % Harvesters in _ErrorDest were deleted from space
-            % we can ignore this error
-            AccIn;
-
-        (?ERROR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
-            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
-                ?warning("Harvester ~p is temporarily unavailable."
-                    "Starting aux_harvesting_streams", [HarvesterId]),
-                lists:foreach(fun(IndexId) ->
-                    harvesting_stream_sup:start_aux_stream_async(SpaceId,
-                        HarvesterId, IndexId, MaxSuccessfulSeq)
-                end, Indices)
-            end, ErrorDest),
-            {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
-
-        (Error = {error, _}, ErrorDest, {DestIn, AuxDestIn}) ->
-            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
-                ?error("Unexpected error ~p occurred for harvester ~p"
-                "Starting aux_harvesting_streams", [Error, HarvesterId]),
-                lists:foreach(fun(IndexId) ->
-                    harvesting_stream_sup:start_aux_stream_async(SpaceId,
-                        HarvesterId, IndexId, MaxSuccessfulSeq)
-                end, Indices)
-            end, ErrorDest),
-            {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
-
-        (Seq, Dest, {_DestIn, AuxDestIn}) when Seq =:= MaxSuccessfulSeq ->
-            {Dest, AuxDestIn};
-
-        (Seq, Dest, {DestIn, AuxDestIn}) ->
-            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
-                case harvesting_state:set_aux_seen_seq(SpaceId, HarvesterId, Indices, Seq) of
-                    ok ->
-                        lists:foreach(fun(IndexId) ->
-                            harvesting_stream_sup:start_aux_stream_async(SpaceId,
-                                HarvesterId, IndexId, MaxSuccessfulSeq)
-                        end, Indices);
-                    ?ERROR_NOT_FOUND ->
-                        harvesting_stream:throw_harvesting_not_found_exception(State)
-                end
-            end, Dest),
-            {DestIn, harvesting_destination:merge(AuxDestIn, Dest)}
-
-    end, {#{}, AuxDestination}, Summary),
 
     case {LastBatchSeq =:= MaxSuccessfulSeq, FirstBatchSeq =< MaxSuccessfulSeq} of
         {true, _} ->
             % harvesting of whole batch succeeded for at least one index
             MaxSeenSeq = max(LastSeenSeq, MaxSuccessfulSeq),
+            {MainDestination2, AuxDestination2} = start_aux_streams_according_to_summary(State, Result),
             case harvesting_state:set_seen_seq(Name, MainDestination2, MaxSeenSeq) of
                 ok ->
                     {noreply, harvesting_stream:enter_streaming_mode(State#hs_state{
@@ -249,7 +214,7 @@ custom_error_handling(State = #hs_state{
                         last_seen_seq = MaxSeenSeq,
                         last_persisted_seq = MaxSeenSeq,
                         last_harvest_timestamp = time_utils:system_time_seconds()
-                        })};
+                    })};
                 ?ERROR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end;
@@ -257,10 +222,11 @@ custom_error_handling(State = #hs_state{
             % harvesting of whole batch didn't succeed for any of the indices
             % but it succeeded partially for at least one index
             % we should increase seen_seq
+            {MainDestination2, AuxDestination2} = start_aux_streams_according_to_summary(State, Result),
             case harvesting_state:set_seen_seq(Name, MainDestination2, MaxSuccessfulSeq) of
                 ok ->
                     ErrorLog = str_utils:format_bin(
-                        "Unexpected errors occurred when applying batch of changes."
+                        "Unexpected errors occurred when applying batch of changes. "
                         "Last successful sequence number was: ~p", [MaxSuccessfulSeq]
                     ),
                     {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
@@ -277,15 +243,72 @@ custom_error_handling(State = #hs_state{
         {false, false} ->
             % none of the changes in the batch where successfully
             % applied for any of the indices
-            ErrorLog = <<"Unexpected errors occurred when applying batch of changes."
+            ErrorLog = <<"Unexpected errors occurred when applying batch of changes. "
             "None of sequences were successfully applied.">>,
             {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
                 error_log = ErrorLog,
-                log_level = error,
-                destination = MainDestination2,
-                aux_destination = AuxDestination2
+                log_level = error
             })}
     end.
+
+-spec start_aux_streams_according_to_summary(harvesting_stream:state(), harvesting_result:result()) ->
+    {harvesting_destination:destination(), harvesting_destination:destination()}.
+start_aux_streams_according_to_summary(State = #hs_state{
+    space_id = SpaceId,
+    aux_destination = AuxDestination
+}, Result) ->
+    MaxSuccessfulSeq = harvesting_result:get_max_successful_seq(Result),
+    Summary = harvesting_result:get_summary(Result),
+    maps:fold(fun
+        (?ERROR_NOT_FOUND, _ErrorDest, AccIn) ->
+            % Harvesters in _ErrorDest were deleted
+            % we can ignore this error
+            AccIn;
+        (?ERROR_FORBIDDEN, _ErrorDest, AccIn) ->
+            % Harvesters in _ErrorDest were deleted from space
+            % we can ignore this error
+            AccIn;
+
+        (?ERROR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
+            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
+                ?warning("Harvester ~p is temporarily unavailable."
+                "Starting aux_harvesting_streams", [HarvesterId]),
+                lists:foreach(fun(IndexId) ->
+                    harvesting_stream_sup:start_aux_stream(SpaceId,
+                        HarvesterId, IndexId, MaxSuccessfulSeq)
+                end, Indices)
+            end, ErrorDest),
+            {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
+
+        (Error = {error, _}, ErrorDest, {DestIn, AuxDestIn}) ->
+            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
+                ?error("Unexpected error ~p occurred for harvester ~p. "
+                "Starting aux_harvesting_stream", [Error, HarvesterId]),
+                lists:foreach(fun(IndexId) ->
+                    harvesting_stream_sup:start_aux_stream(SpaceId,
+                        HarvesterId, IndexId, MaxSuccessfulSeq)
+                end, Indices)
+            end, ErrorDest),
+            {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
+
+        (Seq, Dest, {_DestIn, AuxDestIn}) when Seq =:= MaxSuccessfulSeq ->
+            {Dest, AuxDestIn};
+
+        (Seq, Dest, {DestIn, AuxDestIn}) ->
+            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
+                case harvesting_state:set_aux_seen_seq(SpaceId, HarvesterId, Indices, Seq) of
+                    ok ->
+                        lists:foreach(fun(IndexId) ->
+                            harvesting_stream_sup:start_aux_stream(SpaceId,
+                                HarvesterId, IndexId, MaxSuccessfulSeq)
+                        end, Indices);
+                    ?ERROR_NOT_FOUND ->
+                        harvesting_stream:throw_harvesting_not_found_exception(State)
+                end
+            end, Dest),
+            {DestIn, harvesting_destination:merge(AuxDestIn, Dest)}
+
+    end, {harvesting_destination:init(), AuxDestination}, Summary).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -308,7 +331,7 @@ on_harvesting_doc_not_found(State) ->
     {stop, normal, State}.
 
 %%%===================================================================
-%%% RPC
+%%% Internal API
 %%%===================================================================
 
 -spec call_internal(od_space:id(), term()) -> term().
@@ -335,6 +358,11 @@ space_removed_internal(SpaceId) ->
 -spec space_unsupported_internal(od_space:id()) -> ok.
 space_unsupported_internal(SpaceId) ->
     gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?SPACE_UNSUPPORTED).
+
+-spec schedule_start_aux_streams(harvesting_destination:destination(),
+    couchbase_changes:seq()) -> ok.
+schedule_start_aux_streams(AuxDestination, Until) ->
+    gen_server2:cast(self(), ?START_AUX_STREAMS(AuxDestination, Until)).
 
 %%%===================================================================
 %%% Internal functions
@@ -373,7 +401,7 @@ build_destinations_per_seqs(HarvesterId, HDoc, DestinationsPerSeqsIn) ->
     couchbase_changes:until()) -> ok.
 start_aux_streams(SpaceId, AuxDestination, Until) ->
     harvesting_destination:foreach_index(fun(HarvesterId, IndexId) ->
-        harvesting_stream_sup:start_aux_stream_async(SpaceId, HarvesterId, IndexId, Until)
+        harvesting_stream_sup:start_aux_stream(SpaceId, HarvesterId, IndexId, Until)
     end, AuxDestination).
 
 -spec broadcast_space_removed_message(harvesting_stream:state()) -> ok.
@@ -392,8 +420,10 @@ broadcast_message(#hs_state{
     harvesting_destination:foreach_index(fun(HarvesterId, IndexId) ->
         AuxStreamName = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
         case Message of
-            ?SPACE_REMOVED -> aux_harvesting_stream:space_removed(AuxStreamName);
-            ?SPACE_UNSUPPORTED -> aux_harvesting_stream:space_unsupported(AuxStreamName)
+            ?SPACE_REMOVED ->
+                aux_harvesting_stream:space_removed(AuxStreamName);
+            ?SPACE_UNSUPPORTED ->
+                aux_harvesting_stream:space_unsupported(AuxStreamName)
         end
     end, AuxDestination).
 
@@ -419,7 +449,7 @@ revise_harvester_internal(HarvesterId, CurrentIndices, State = #hs_state{
             {ok, IndexSeq} = harvesting_state:get_seen_seq(HDoc, HarvesterId, IndexId),
             case IndexSeq < MainSeq of
                 true ->
-                    harvesting_stream_sup:start_aux_stream_async(SpaceId,
+                    harvesting_stream_sup:start_aux_stream(SpaceId,
                         HarvesterId, IndexId, MainSeq),
                     {AccMainIndices, [IndexId | AccAuxIndices]};
                 false ->
