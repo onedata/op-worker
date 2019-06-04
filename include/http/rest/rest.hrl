@@ -1,4 +1,5 @@
 %%%-------------------------------------------------------------------
+%%% @author Łukasz Opioła
 %%% @author Bartosz Walkowicz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
