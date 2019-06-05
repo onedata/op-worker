@@ -53,8 +53,7 @@ refresh_handle_params(Handle, SessionId, SpaceId, StorageDoc) ->
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined,
         SpaceId, StorageDoc, HelperName),
-    {ok, Helper2} = helper:insert_user_ctx(Helper, UserCtx),
-    ArgsWithUserCtx = helper:get_args(Helper2),
+    {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
     helpers:refresh_params(Handle, ArgsWithUserCtx).
 
 
