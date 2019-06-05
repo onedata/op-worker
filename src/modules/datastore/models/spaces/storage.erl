@@ -579,7 +579,6 @@ update_helper(StorageId, HelperName, DiffFun) ->
     UpdateFun = fun(Storage) ->
         case select_helper(Storage, HelperName) of
             {ok, Helper} ->
-                HelperName = helper:get_name(Helper),
                 case DiffFun(Helper) of
                     {ok, NewHelper} ->
                         {ok, replace_helper(Storage, HelperName, NewHelper)};
