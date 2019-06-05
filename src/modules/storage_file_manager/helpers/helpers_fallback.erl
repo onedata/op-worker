@@ -28,15 +28,17 @@
 %%% API functions
 %%%===================================================================
 
--spec apply_and_maybe_handle_ekeyexpired(storage_file_manager:handle(),
-    fun(() -> ok | {ok, term()} | {error, term()}),
-    helpers:helper_handle() | helpers:file_handle()) ->
-    ok | {ok, term()} | {error, term()}.
+-spec apply_and_maybe_handle_ekeyexpired
+    (SfmHandle, Operation, HelperOrFileHandle) -> Result when
+    SfmHandle :: storage_file_manager:handle(),
+    Operation :: fun(() -> Result),
+    HelperOrFileHandle :: helpers:helper_handle() | helpers:file_handle(),
+    Result :: ok | {ok, term()} | {error, term()}.
 apply_and_maybe_handle_ekeyexpired(#sfm_handle{
     session_id = SessionId,
     space_id = SpaceId,
     storage = Storage
-    },Operation, HelperOrFileHandle) ->
+}, Operation, HelperOrFileHandle) ->
     case Operation() of
         Result = {error, ?EKEYEXPIRED} ->
             {ok, Helper} = fslogic_storage:select_helper(Storage),
@@ -47,7 +49,7 @@ apply_and_maybe_handle_ekeyexpired(#sfm_handle{
                         SpaceId, Storage),
                     Operation();
                 _ ->
-                 Result
+                    Result
             end;
         OtherResult ->
             OtherResult
