@@ -61,10 +61,10 @@ update_version_info(Release, Build, GuiHash) ->
 -spec upload_op_worker_gui(file:filename_all()) -> ok | {error, gui_upload_failed}.
 upload_op_worker_gui(PackagePath) ->
     ClusterId = oneprovider:get_id(),
-    ServiceShortname = onedata:service_shortname(?OP_WORKER),
+    GuiPrefix = onedata:gui_prefix(?OP_WORKER_GUI),
     Result = oz_endpoint:request(
         provider,
-        str_utils:format("/~s/~s/gui-upload", [ServiceShortname, ClusterId]),
+        str_utils:format("/~s/~s/gui-upload", [GuiPrefix, ClusterId]),
         post,
         {multipart, [{file, str_utils:to_binary(PackagePath)}]},
         [{endpoint, gui}]
