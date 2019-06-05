@@ -1379,7 +1379,6 @@ mock_harvester_logic_get(Nodes, HarvestersConfig) ->
 
 mock_space_logic_get_harvesters(Nodes, SpacesConfig) ->
     ok = test_utils:mock_expect(Nodes, space_logic, get_harvesters, fun(SpaceId) ->
-        %%        od_harvester:save_to_cache(maps:get(SpaceId, SpacesConfig)),
         case maps:get(SpaceId, SpacesConfig, undefined) of
             undefined ->
                 ?ERROR_NOT_FOUND;

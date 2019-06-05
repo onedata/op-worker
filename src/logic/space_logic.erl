@@ -236,7 +236,7 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec harvest_metadata(od_space:id(), harvesting_destination:destination(),
-    harvesting_batch:prepared_batch(), couchbase_changes:seq(),
+    harvesting_batch:batch_entries(), couchbase_changes:seq(),
     couchbase_changes:seq()) -> {ok, harvesting_result:failure_map()} | gs_protocol:error().
 harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{

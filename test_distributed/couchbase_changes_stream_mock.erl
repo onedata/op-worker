@@ -161,7 +161,6 @@ stream_change_to_harvesting_stream(State = #state{
         since = Since,
         until = Until,
         callback = Callback,
-        stream_pid = StreamPid,
         changes = [Doc = #document{seq = Seq} | Changes]
 }) when (Until =:= infinity)
     orelse (Until =/= infinity andalso Since < Until andalso Seq < Until) ->

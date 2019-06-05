@@ -36,52 +36,52 @@
 
 %% tests
 -export([
-    set_json_metadata_test/1,
-    modify_json_metadata_test/1,
-    delete_json_metadata_test/1,
-    delete_file_with_json_metadata_test/1,
+    set_json_metadata/1,
+    modify_json_metadata/1,
+    delete_json_metadata/1,
+    delete_file_with_json_metadata/1,
     modify_json_many_times/1,
-    set_rdf_metadata_test/1,
-    modify_rdf_metadata_test/1,
-    delete_rdf_metadata_test/1,
-    delete_file_with_rdf_metadata_test/1,
+    set_rdf_metadata/1,
+    modify_rdf_metadata/1,
+    delete_rdf_metadata/1,
+    delete_file_with_rdf_metadata/1,
     modify_rdf_many_times/1,
-    set_xattr_metadata_test/1,
-    modify_xattr_metadata_test/1,
-    delete_xattr_metadata_test/1,
-    delete_file_with_xattr_metadata_test/1,
+    set_xattr_metadata/1,
+    modify_xattr_metadata/1,
+    delete_xattr_metadata/1,
+    delete_file_with_xattr_metadata/1,
     modify_xattr_many_times/1,
     changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_space/1,
     changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester/1,
     each_provider_should_submit_only_local_changes_to_the_harvester/1,
-    each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test/1,
-    submit_entry_failure_test/1,
-    delete_entry_failure_test/1]
-).
+    each_provider_should_submit_only_local_changes_to_the_harvester2/1,
+    submit_entry_failure/1,
+    delete_entry_failure/1
+]).
 
 all() ->
     ?ALL([
-        set_json_metadata_test,
-        modify_json_metadata_test,
-        delete_json_metadata_test,
-        delete_file_with_json_metadata_test,
+        set_json_metadata,
+        modify_json_metadata,
+        delete_json_metadata,
+        delete_file_with_json_metadata,
         modify_json_many_times,
-        set_rdf_metadata_test,
-        modify_rdf_metadata_test,
-        delete_rdf_metadata_test,
-        delete_file_with_rdf_metadata_test,
+        set_rdf_metadata,
+        modify_rdf_metadata,
+        delete_rdf_metadata,
+        delete_file_with_rdf_metadata,
         modify_rdf_many_times,
-        set_xattr_metadata_test,
-        modify_xattr_metadata_test,
-        delete_xattr_metadata_test,
-        delete_file_with_xattr_metadata_test,
+        set_xattr_metadata,
+        modify_xattr_metadata,
+        delete_xattr_metadata,
+        delete_file_with_xattr_metadata,
         modify_xattr_many_times,
         changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_space,
         changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester,
         each_provider_should_submit_only_local_changes_to_the_harvester,
-        each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test,
-        submit_entry_failure_test,
-        delete_entry_failure_test
+        each_provider_should_submit_only_local_changes_to_the_harvester2,
+        submit_entry_failure,
+        delete_entry_failure
     ]).
 
 -define(SPACE_ID1, <<"space_id1">>).
@@ -156,12 +156,12 @@ all() ->
 -define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId),
     ?assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?TIMEOUT)).
 -define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
-    ?assertReceivedEqual(?HARVEST_METADATA(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId), Timeout)).
+    ?assertReceivedMatch(?HARVEST_METADATA(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId), Timeout)).
 
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId),
     ?assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?TIMEOUT)).
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
-    ?assertNotReceivedEqual(?HARVEST_METADATA(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId), Timeout)).
+    ?assertNotReceivedMatch(?HARVEST_METADATA(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId), Timeout)).
 
 -define(INDEX(N), <<"index", (integer_to_binary(N))/binary>>).
 -define(INDEX11, <<"index11">>).
@@ -169,17 +169,6 @@ all() ->
 -define(INDEX22, <<"index22">>).
 -define(INDEX23, <<"index23">>).
 -define(INDEX31, <<"index31">>).
-
--define(DESTINATION1, #{
-    ?HARVESTER1 => [?INDEX11]
-}).
--define(DESTINATION2, #{
-    ?HARVESTER1 => [?INDEX11],
-    ?HARVESTER2 => [?INDEX21, ?INDEX22, ?INDEX23]
-}).
--define(DESTINATION3, #{
-    ?HARVESTER3 => [?INDEX31]
-}).
 
 -define(DUMMY_RDF, <<"dummy rdf">>).
 -define(DUMMY_RDF(Content),
@@ -191,7 +180,7 @@ all() ->
 %%% Test function
 %%%====================================================================
 
-set_json_metadata_test(Config) ->
+set_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -201,28 +190,28 @@ set_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON = json_utils:encode(JSON),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId),
 
     % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId).
 
-modify_json_metadata_test(Config) ->
+modify_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -233,15 +222,15 @@ modify_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON = json_utils:encode(JSON),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId),
 
@@ -250,14 +239,14 @@ modify_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }], ProviderId).
 
-delete_json_metadata_test(Config) ->
+delete_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -268,26 +257,26 @@ delete_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON = json_utils:encode(JSON),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId),
 
     ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
-delete_file_with_json_metadata_test(Config) ->
+delete_file_with_json_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -298,22 +287,22 @@ delete_file_with_json_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON = json_utils:encode(JSON),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId),
 
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
 modify_json_many_times(Config) ->
@@ -332,19 +321,19 @@ modify_json_many_times(Config) ->
         JSON
     end, undefined, lists:seq(1, Modifications)),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON = json_utils:encode(ExpectedFinalJSON),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId).
 
-set_rdf_metadata_test(Config) ->
+set_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -354,28 +343,28 @@ set_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedRDF = json_utils:encode(RDF),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"rdf">> => EncodedRDF
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"rdf">> := EncodedRDF
         }
     }], ProviderId),
 
     % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedRDF
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedRDF
         }
     }], ProviderId).
 
-modify_rdf_metadata_test(Config) ->
+modify_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -385,15 +374,15 @@ modify_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedRDF = json_utils:encode(RDF),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"rdf">> => EncodedRDF
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"rdf">> := EncodedRDF
         }
     }], ProviderId),
 
@@ -402,14 +391,14 @@ modify_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, RDF2, []),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedRDF2
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedRDF2
         }
     }], ProviderId).
 
-delete_rdf_metadata_test(Config) ->
+delete_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -420,26 +409,26 @@ delete_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedRDF = json_utils:encode(RDF),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"rdf">> => EncodedRDF
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"rdf">> := EncodedRDF
         }
     }], ProviderId),
 
     ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
-delete_file_with_rdf_metadata_test(Config) ->
+delete_file_with_rdf_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -450,22 +439,22 @@ delete_file_with_rdf_metadata_test(Config) ->
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedRDF = json_utils:encode(RDF),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"rdf">> => EncodedRDF
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"rdf">> := EncodedRDF
         }
     }], ProviderId),
 
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
 modify_rdf_many_times(Config) ->
@@ -482,19 +471,19 @@ modify_rdf_many_times(Config) ->
         RDF
     end, undefined, lists:seq(1, Modifications)),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedRDF = json_utils:encode(ExpectedFinalRDF),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"rdf">> => EncodedRDF
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"rdf">> := EncodedRDF
         }
     }], ProviderId).
 
-set_xattr_metadata_test(Config) ->
+set_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -506,31 +495,31 @@ set_xattr_metadata_test(Config) ->
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => #{
-                XattrName => XattrValue
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := #{
+                XattrName := XattrValue
             }
         }
     }], ProviderId),
 
     % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => #{
-                XattrName => XattrValue
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := #{
+                XattrName := XattrValue
             }
         }
     }], ProviderId).
 
-modify_xattr_metadata_test(Config) ->
+modify_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -542,37 +531,37 @@ modify_xattr_metadata_test(Config) ->
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => #{
-                XattrName => XattrValue
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := #{
+                XattrName := XattrValue
             }
         }
     }], ProviderId),
 
     XattrName2 = <<"name2">>,
     XattrValue2 = <<"value2">>,
-    Xattr2 = #xattr{name = XattrName, value = XattrValue},
+    Xattr2 = #xattr{name = XattrName2, value = XattrValue2},
 
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => #{
-                XattrName => XattrValue,
-                XattrName2 => XattrValue2
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := #{
+                XattrName := XattrValue,
+                XattrName2 := XattrValue2
             }
         }
     }], ProviderId).
 
-delete_xattr_metadata_test(Config) ->
+delete_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -584,15 +573,15 @@ delete_xattr_metadata_test(Config) ->
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => #{
-                XattrName => XattrValue
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := #{
+                XattrName := XattrValue
             }
         }
     }], ProviderId),
@@ -600,11 +589,11 @@ delete_xattr_metadata_test(Config) ->
     ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, XattrName),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
-delete_file_with_xattr_metadata_test(Config) ->
+delete_file_with_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
@@ -616,23 +605,23 @@ delete_file_with_xattr_metadata_test(Config) ->
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => #{
-                XattrName => XattrValue
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := #{
+                XattrName := XattrValue
             }
         }
     }], ProviderId),
 
     ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
 modify_xattr_many_times(Config) ->
@@ -651,14 +640,14 @@ modify_xattr_many_times(Config) ->
         XattrsIn#{XattrName => XattrValue}
     end, #{}, lists:seq(1, Modifications)),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"xattrs">> => ExpectedFinalXattrs
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"xattrs">> := ExpectedFinalXattrs
         }
     }], ProviderId).
 
@@ -674,15 +663,18 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
-    Destination = ?DESTINATION2,
+    Destination = #{
+        ?HARVESTER1 => [?INDEX11],
+        ?HARVESTER2 => [?INDEX21, ?INDEX22, ?INDEX23]
+    },
     EncodedJSON = json_utils:encode(JSON1),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID2, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON
         }
     }], ProviderId).
 
@@ -705,24 +697,24 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON2, []),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON1 = json_utils:encode(JSON1),
     EncodedJSON2 = json_utils:encode(JSON2),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID3, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID4, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }], ProviderId).
 
@@ -748,7 +740,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
-    Destination = ?DESTINATION3,
+    Destination = #{?HARVESTER3 => [?INDEX31]},
     EncodedJSON1 = json_utils:encode(JSON1),
     EncodedJSON2 = json_utils:encode(JSON2),
 
@@ -756,38 +748,38 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, {guid, Guid}), ?ATTEMPTS),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId1),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }], ProviderId2),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }], ProviderId1),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId2).
 
-each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Config) ->
+each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
     % ?HARVESTER3 is subscribed for ?SPACE_ID5 which is supported by both providers
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(WorkerP1),
@@ -809,7 +801,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
-    Destination = ?DESTINATION3,
+    Destination = #{?HARVESTER3 => [?INDEX31]},
     EncodedJSON1 = json_utils:encode(JSON1),
     EncodedJSON2 = json_utils:encode(JSON2),
 
@@ -817,34 +809,34 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, {guid, Guid}), ?ATTEMPTS),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId1),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }], ProviderId2),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }], ProviderId1),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId2),
 
@@ -852,26 +844,26 @@ each_provider_should_submit_only_local_changes_to_the_harvester_deletion_test(Co
     ok = lfm_proxy:unlink(WorkerP2, SessId2, {guid, Guid}),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"delete">>
     }], ProviderId1),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId2),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId1),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"delete">>
     }], ProviderId2).
 
-submit_entry_failure_test(Config) ->
+submit_entry_failure(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -885,15 +877,15 @@ submit_entry_failure_test(Config) ->
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON1 = json_utils:encode(JSON1),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId),
 
@@ -912,16 +904,16 @@ submit_entry_failure_test(Config) ->
 
     % changes should not be submitted as connection to onezone failed
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }, #{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON3
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON3
         }
     }], ProviderId),
 
@@ -932,29 +924,29 @@ submit_entry_failure_test(Config) ->
 
     % previously sent change should not be submitted
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId),
 
     % missing changes should be submitted
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON2
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON2
         }
     }, #{
-        <<"fileId">> => FileId2,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON3
+        <<"fileId">> := FileId2,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON3
         }
     }], ProviderId).
 
-delete_entry_failure_test(Config) ->
+delete_entry_failure(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
 
@@ -967,15 +959,15 @@ delete_entry_failure_test(Config) ->
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
-    Destination = ?DESTINATION1,
+    Destination = #{?HARVESTER1 => [?INDEX11]},
     EncodedJSON1 = json_utils:encode(JSON1),
     ProviderId = ?PROVIDER_ID(Worker),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId),
 
@@ -985,8 +977,8 @@ delete_entry_failure_test(Config) ->
 
     % change should not be submitted as connection to onezone failed
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId),
 
     set_mock_harvest_metadata_failure(Worker, false),
@@ -996,17 +988,17 @@ delete_entry_failure_test(Config) ->
 
     % previously sent change should not be submitted
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"submit">>,
-        <<"payload">> => #{
-            <<"json">> => EncodedJSON1
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"submit">>,
+        <<"payload">> := #{
+            <<"json">> := EncodedJSON1
         }
     }], ProviderId),
 
     % missing changes should be submitted
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
-        <<"operation">> => <<"delete">>
+        <<"fileId">> := FileId,
+        <<"operation">> := <<"delete">>
     }], ProviderId).
 
 %%%===================================================================
