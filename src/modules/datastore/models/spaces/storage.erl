@@ -23,6 +23,9 @@
 -export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
 -export([supports_any_space/1]).
 
+%% Exports for RPC from this module
+-export([local_refresh_helpers/1]).
+
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
@@ -606,23 +609,28 @@ update_helper(StorageId, HelperName, DiffFun) ->
 
 -spec on_helper_changed(StorageId :: storage:id()) -> ok.
 on_helper_changed(StorageId) ->
-    fslogic_event_emitter:emit_helper_params_changed(StorageId).
-%%    refresh_helpers(StorageId).
+    fslogic_event_emitter:emit_helper_params_changed(StorageId),
+    refresh_helpers(StorageId).
 
 
 -spec refresh_helpers(StorageId :: storage:id()) -> ok.
 refresh_helpers(StorageId) ->
-    Sessions = session:list(),
+    {ok, Nodes} = node_manager:get_cluster_nodes(),
+    {_, []} = rpc:multicall(Nodes, ?MODULE, local_refresh_helpers, [StorageId]),
+    ok.
+
+
+-spec local_refresh_helpers(StorageId :: storage:id()) -> ok.
+local_refresh_helpers(StorageId) ->
+    {ok, Sessions} = session:list(),
     {ok, Storage} = ?MODULE:get(StorageId),
-    lists:foreach(fun(SessId) ->
-        {ok, Handles} = session_helpers:get_handles(SessId),
-        lists:foreach(fun(HandleId) ->
-            {ok, Handle} = helper_handle:get(HandleId),
-            helpers_fallback:refresh_params(Handle, SessId, <<"@fixme">>, Storage)
-        end, Handles)
+    lists:foreach(fun(#document{key = SessId}) ->
+        {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
+        lists:foreach(fun({HandleId, SpaceId}) ->
+            {ok, #document{value = Handle}} = helper_handle:get(HandleId),
+            helpers:refresh_params(Handle, SessId, SpaceId, Storage)
+        end, HandlesSpaces)
     end, Sessions).
-
-
 
 
 %%--------------------------------------------------------------------

@@ -77,7 +77,7 @@ all() -> [
 ).
 
 -define(assertRefreshParamsCalls(W, Args, ExpNumCalls),
-    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, Args, ExpNumCalls)).
+    test_utils:mock_assert_num_calls(W, helpers, refresh_params, Args, ExpNumCalls)).
 
 -define(assertSetxattrCalls(W, Args, ExpNumCalls),
     test_utils:mock_assert_num_calls(W, helpers, setxattr, Args, ExpNumCalls)).
@@ -211,7 +211,7 @@ init_per_testcase(Case, Config) when
     Case =:= user_operation_fails_with_expired_token_on_insecure_storage;
     Case =:= root_operation_fails_with_expired_token_on_insecure_storage;
     Case =:= user_operation_succeeds_with_refreshed_token_on_insecure_storage;
-    Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage 
+    Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_insecure_storage(W, ?STORAGE_ID(W)),

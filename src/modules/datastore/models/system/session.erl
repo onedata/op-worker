@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, update/2, delete/1]).
+-export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1]).
 %% API - link functions
 -export([add_links/4, get_link/3, fold_links/3, delete_links/3]).
 -export([add_local_links/4, get_local_link/3, fold_local_links/3,
@@ -109,6 +109,15 @@ get(SessId) ->
 exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the list of all sessions.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [doc()]} | {error, term()}.
+list() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%--------------------------------------------------------------------
 %% @doc

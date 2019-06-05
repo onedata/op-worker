@@ -17,7 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([get_helper/3, delete_helpers/1, get_handles/1]).
+-export([get_helper/3, delete_helpers/1, get_local_handles_by_storage/2]).
 %% Exported for execution delegation to other nodes
 -export([delete_helpers_on_node/1]).
 
@@ -52,11 +52,23 @@ delete_helpers(SessId) ->
     end, Nodes).
 
 
--spec get_handles(SessId :: session:id()) ->
-    {ok, [helper_handle:id()]} | {error, term()}.
-get_handles(SessId) ->
-    FoldFun = fun(#link{target = HandleId}, Acc) ->
-        {ok, [HandleId | Acc]}
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists HandleId-SpaceId pairs for given session and storage ids
+%% on the local node.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_handles_by_storage(session:id(), storage:id()) -> Result when
+    HandleAndSpaceIds :: {helper_handle:id(), od_space:id()},
+    Result :: {ok, [HandleAndSpaceIds]} | {error, term()}.
+get_local_handles_by_storage(SessId, StorageId) ->
+    FoldFun = fun(#link{name = Name, target = HandleId}, Acc) ->
+        case decode_link_key(Name) of
+            {StorageId, SpaceId} ->
+                {ok, [{HandleId, SpaceId} | Acc]};
+            _ ->
+                {ok, Acc}
+        end
     end,
     session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID, FoldFun).
 
@@ -171,7 +183,18 @@ add_missing_helper(SessId, SpaceId, StorageDoc) ->
 %% link targets.
 %% @end
 %%--------------------------------------------------------------------
--spec link_key(StorageId :: storage:id(), SpaceUuid :: file_meta:uuid()) ->
-    binary().
-link_key(StorageId, SpaceUuid) ->
-    <<StorageId/binary, ":", SpaceUuid/binary>>.
+-spec link_key(StorageId :: storage:id(), SpaceId :: od_space:id()) ->
+    datastore:link_name().
+link_key(StorageId, SpaceId) ->
+    <<StorageId/binary, ":", SpaceId/binary>>.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Decodes link name created by {@link link_key/2}.
+%% @end
+%%--------------------------------------------------------------------
+-spec decode_link_key(datastore:link_name()) -> {storage:id(), od_space:id()}.
+decode_link_key(LinkKey) ->
+    [StorageId, SpaceId] = binary:split(LinkKey, <<":">>),
+    {StorageId, SpaceId}.
