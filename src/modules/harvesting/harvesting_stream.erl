@@ -411,10 +411,10 @@ changes_stream_start_link(SpaceId, Callback, Since, Until) ->
 stop_changes_stream(State = #hs_state{stream_pid = undefined}) ->
     State;
 stop_changes_stream(State = #hs_state{stream_pid = StreamPid}) ->
-    case process_info(StreamPid) of
-        undefined ->
+    case is_process_alive(StreamPid) of
+        false ->
             State#hs_state{stream_pid = undefined};
-        _ ->
+        true ->
             couchbase_changes_stream:stop_async(StreamPid),
             State
     end.
@@ -498,7 +498,7 @@ harvest_and_handle_errors(State = #hs_state{
             ?debug("Space ~p was deleted. Stopping harvesting_stream ~p", [SpaceId, Name]),
             {stop, normal, State2};
         Error = {error, _} ->
-            ErrorLog = str_utils:format_bin("Unexpected error ~p occurred.", [Error]),
+            ErrorLog = str_utils:format_bin("Unexpected error ~w occurred.", [Error]),
             {noreply, enter_retrying_mode(State2#hs_state{
                 log_level = error,
                 error_log = ErrorLog
@@ -604,6 +604,7 @@ schedule_backoff_if_destination_is_not_empty(State = #hs_state{destination = Des
 
 -spec schedule_backoff(state()) -> state().
 schedule_backoff(State = #hs_state{
+    space_id = SpaceId,
     backoff = undefined,
     error_log = ErrorLog,
     log_level = LogLevel,
@@ -611,31 +612,32 @@ schedule_backoff(State = #hs_state{
 }) ->
     B0 = backoff:init(?MIN_BACKOFF_INTERVAL, ?MAX_BACKOFF_INTERVAL, self(), ?RETRY),
     B1 = backoff:type(B0, jitter),
-    backoff_log(Name, ErrorLog, ?MIN_BACKOFF_INTERVAL / 1000, LogLevel),
+    backoff_log(Name, SpaceId, ErrorLog, ?MIN_BACKOFF_INTERVAL / 1000, LogLevel),
     backoff:fire(B1),
     State#hs_state{backoff = B1};
 schedule_backoff(State = #hs_state{
+    space_id = SpaceId,
     backoff = B0,
     error_log = ErrorLog,
     log_level = LogLevel,
     name = Name
 }) ->
     {Value, B1} = backoff:fail(B0),
-    backoff_log(Name, ErrorLog, Value / 1000, LogLevel),
+    backoff_log(Name, SpaceId, ErrorLog, Value / 1000, LogLevel),
     backoff:fire(B1),
     State#hs_state{backoff = B1}.
 
--spec backoff_log(name(), binary(), float(), atom()) -> ok.
-backoff_log(StreamName, ErrorLog, NexRetry, error) ->
-    ?error(backoff_log_format(), [StreamName, ErrorLog, NexRetry]);
-backoff_log(StreamName, ErrorLog, NexRetry, warning) ->
-    ?warning(backoff_log_format(), [StreamName, ErrorLog, NexRetry]);
-backoff_log(StreamName, ErrorLog, NexRetry, _) ->
-    ?debug(backoff_log_format(), [StreamName, ErrorLog, NexRetry]).
+-spec backoff_log(name(), od_space:id(), binary(), float(), atom()) -> ok.
+backoff_log(StreamName, SpaceId, ErrorLog, NexRetry, error) ->
+    ?error(backoff_log_format(), [StreamName, SpaceId, ErrorLog, NexRetry]);
+backoff_log(StreamName, SpaceId, ErrorLog, NexRetry, warning) ->
+    ?warning(backoff_log_format(), [StreamName, SpaceId, ErrorLog, NexRetry]);
+backoff_log(StreamName, SpaceId, ErrorLog, NexRetry, _) ->
+    ?debug(backoff_log_format(), [StreamName, SpaceId, ErrorLog, NexRetry]).
 
 -spec backoff_log_format() -> string().
 backoff_log_format() ->
-    "Error in harvesting_stream ~p:~n"
+    "Error in harvesting_stream: ~p when harvesting space: ~p.~n"
     "~s~n"
     "Next harvesting retry after: ~p seconds.".
 

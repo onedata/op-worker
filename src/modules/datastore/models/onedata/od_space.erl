@@ -177,7 +177,7 @@ get_record_struct(3) ->
 
         {providers, #{string => integer}},
         {shares, [string]},
-        {harvesters, [string]},
+        {harvesters, [string]}, % new field
 
         {cache_state, #{atom => term}}
     ]}.

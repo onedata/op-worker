@@ -133,7 +133,7 @@ custom_error_handling(State = #hs_state{
         Error = {error, _} ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
             ErrorLog =  str_utils:format_bin(
-                "Unexpected error ~p  occurred for harvester ~p", [Error, HarvesterId]
+                "Unexpected error ~w occurred for harvester ~p", [Error, HarvesterId]
             ),
             {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
                 error_log = ErrorLog,

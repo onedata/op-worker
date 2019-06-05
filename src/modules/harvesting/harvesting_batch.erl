@@ -9,9 +9,12 @@
 %%% Helper module used by modules associated with harvesting metadata.
 %%% It implements a simple data structure that is used for storing
 %%% metadata changes.
-%%% By default, elements in the batch are stored in the map, where
-%%% metadata doc is associated with file_id:objectid().
-%%% The batch can later be sorted and encoded for sending it to Onezone.
+%%% Batch element should be collected in accumulator(). It is a map, where
+%%% metadata doc is associated with file_id:objectid(). Thanks to that
+%%% only one and the newest change is associated with given
+%%% file_id:objectid().
+%%% accumulator() can be converted to batch() by calling
+%%% ?MODULE:prepare/1 function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_batch).
@@ -88,9 +91,13 @@ accumulate(Doc = #document{
 %%-------------------------------------------------------------------
 %% @doc
 %% Prepares harvesting_batch for sending to Onezone.
-%% Objects stored in batch_map() are encoded, sorted by sequence number
-%% and stored in a batch_map().
-%% If batch is already prepared, the function does nothing.
+%% accumulator() is unprepared, which means that:
+%%     * batch elements are not sorted (they are stored in a map)
+%%     * batch elements are not encoded
+%% Call prepare(Accumulator) returns batch() which contains:
+%%     * sorted list of encoded batch elements, ready to send to Onezone
+%%     * batch elements are sorted by sequence numbers
+%% If batch is already prepared, this function does nothing.
 %% @end
 %%-------------------------------------------------------------------
 -spec prepare(accumulator() | batch()) -> batch().

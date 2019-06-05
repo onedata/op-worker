@@ -140,7 +140,7 @@ name([SpaceId | _]) ->
     harvesting_stream:state()) -> harvesting_stream:handling_result().
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
-    handle_cast(Request, State).
+    handle_call_async(Request, State).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -149,26 +149,6 @@ handle_call(Request, From, State) ->
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: harvesting_stream:state()) ->
     harvesting_stream:handling_result().
-handle_cast(?TAKEOVER_PROPOSAL(Name, Seq), State = #hs_state{
-    last_seen_seq = SeenSeq,
-    destination = Destination,
-    aux_destination = AuxDestination
-}) when Seq =:= SeenSeq ->
-    ?AUX_HARVESTING_STREAM(_SpaceId, HarvesterId, IndexId) = Name,
-    harvesting_stream_sup:terminate_aux_stream(Name),
-    {noreply, harvesting_stream:enter_streaming_mode(State#hs_state{
-        destination = harvesting_destination:add(HarvesterId, IndexId, Destination),
-        aux_destination = harvesting_destination:delete(HarvesterId, IndexId, AuxDestination)
-    })};
-handle_cast(?TAKEOVER_PROPOSAL(Name, _Seq), State = #hs_state{last_seen_seq = SeenSeq}) ->
-    aux_harvesting_stream:reject_takeover(Name, SeenSeq),
-    {noreply, State};
-handle_cast(?REVISE_HARVESTER(HarvesterId, Indices), State) ->
-    State2 = revise_harvester_internal(HarvesterId, Indices, State, true),
-    stop_on_empty_destination(State2);
-handle_cast(?REVISE_SPACE_HARVESTERS(Harvesters), State) ->
-    State2 = revise_space_harvesters_internal(Harvesters, State),
-    stop_on_empty_destination(State2);
 handle_cast(?SPACE_REMOVED, State = #hs_state{space_id = SpaceId}) ->
     broadcast_space_removed_message(State),
     harvesting_state:delete(SpaceId),
@@ -334,6 +314,12 @@ on_harvesting_doc_not_found(State) ->
 %%% Internal API
 %%%===================================================================
 
+-spec multicall_internal(od_space:id(), term()) -> ok.
+multicall_internal(SpaceId, Request) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, call_internal, [SpaceId, Request]),
+    ok.
+
 -spec call_internal(od_space:id(), term()) -> term().
 call_internal(SpaceId, Request) ->
     case consistent_hashing:get_node(SpaceId) =:= node() of
@@ -368,11 +354,29 @@ schedule_start_aux_streams(AuxDestination, Until) ->
 %%% Internal functions
 %%%===================================================================
 
--spec multicall_internal(od_space:id(), term()) -> ok.
-multicall_internal(SpaceId, Request) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, call_internal, [SpaceId, Request]),
-    ok.
+-spec handle_call_async(Request :: term(), State :: harvesting_stream:state()) ->
+    harvesting_stream:handling_result().
+handle_call_async(?TAKEOVER_PROPOSAL(Name, Seq), State = #hs_state{
+    last_seen_seq = SeenSeq,
+    destination = Destination,
+    aux_destination = AuxDestination
+}) when Seq =:= SeenSeq ->
+    ?AUX_HARVESTING_STREAM(_SpaceId, HarvesterId, IndexId) = Name,
+    harvesting_stream_sup:terminate_aux_stream(Name),
+    {noreply, harvesting_stream:enter_streaming_mode(State#hs_state{
+        destination = harvesting_destination:add(HarvesterId, IndexId, Destination),
+        aux_destination = harvesting_destination:delete(HarvesterId, IndexId, AuxDestination)
+    })};
+handle_call_async(?TAKEOVER_PROPOSAL(Name, _Seq), State = #hs_state{last_seen_seq = SeenSeq}) ->
+    aux_harvesting_stream:reject_takeover(Name, SeenSeq),
+    {noreply, State};
+handle_call_async(?REVISE_HARVESTER(HarvesterId, Indices), State) ->
+    State2 = revise_harvester_internal(HarvesterId, Indices, State, true),
+    stop_on_empty_destination(State2);
+handle_call_async(?REVISE_SPACE_HARVESTERS(Harvesters), State) ->
+    State2 = revise_space_harvesters_internal(Harvesters, State),
+    stop_on_empty_destination(State2).
+
 
 -spec build_destinations_per_seqs([od_harvester:id()], harvesting_state:doc()) ->
     #{couchbase_changes:seq() => harvesting_state:destination()}.
@@ -517,10 +521,15 @@ revise_space_harvesters_internal(CurrentHarvesters, State = #hs_state{
     harvesting_stream:state().
 remove_harvester(HarvesterId, State) ->
     CleanupSeenSeqs = case harvester_logic:get(HarvesterId) of
-        {ok, _} -> false; % harvester doesn't have space handled by this stream
+        {ok, _} ->
+            % harvester doesn't have space handled by this stream
+            false;
         ?ERROR_FORBIDDEN ->
-            false; % harvester doesn't have spaces supported by this provider
-        ?ERROR_NOT_FOUND -> true % harvester was permanently deleted in onezone
+            % harvester doesn't have spaces supported by this provider
+            false;
+        ?ERROR_NOT_FOUND ->
+            % harvester was permanently deleted in onezone
+            true
     end,
     revise_harvester_internal(HarvesterId, [], State, CleanupSeenSeqs).
 
