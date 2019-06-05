@@ -28,32 +28,32 @@
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
     %% List files and folders
-    {<<"/files/:path">>, rest_handler, #rest_req{
+    {<<"/files/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = list}
     }},
     %% Get file attributes
-    {<<"/attributes/:path">>, rest_handler, #rest_req{
+    {<<"/attributes/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = attributes}
     }},
     %% Set file attribute
-    {<<"/attributes/:path">>, rest_handler, #rest_req{
+    {<<"/attributes/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = attributes}
     }},
     %% Get file metadata
-    {<<"/metadata/:path">>, rest_handler, #rest_req{
+    {<<"/metadata/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>, <<"application/rdf+xml">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = metadata}
     }},
     %% Set file metadata
-    {<<"/metadata/:path">>, rest_handler, #rest_req{
+    {<<"/metadata/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/json">>, <<"application/rdf+xml">>],

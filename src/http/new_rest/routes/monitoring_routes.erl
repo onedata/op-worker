@@ -31,13 +31,13 @@ routes() -> [
     {<<"/metrics/space/:sid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>, <<"application/xml">>],
-        b_gri = #b_gri{type = op_metric, id = ?BINDING(sid), aspect = metrics}
+        b_gri = #b_gri{type = op_metrics, id = ?BINDING(sid), aspect = space}
     }},
     %% Get space user metrics
     {<<"/metrics/space/:sid/user/:uid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>, <<"application/xml">>],
-        b_gri = #b_gri{type = op_metric, id = ?BINDING(sid), aspect = {user_metrics, ?BINDING(uid)}}
+        b_gri = #b_gri{type = op_metrics, id = ?BINDING(sid), aspect = {user, ?BINDING(uid)}}
     }},
     %% Subscribe to file events
     {<<"/changes/metadata/:sid">>, changes_stream_handler, #rest_req{

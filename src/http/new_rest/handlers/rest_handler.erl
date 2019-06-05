@@ -206,20 +206,18 @@ rest_routes() ->
         file_routes:routes(),
         monitoring_routes:routes(),
         oneprovider_routes:routes(),
-        replication_routes:routes(),
+        replica_routes:routes(),
         share_routes:routes(),
         space_routes:routes(),
         transfer_routes:routes()
     ]),
     % Aggregate routes that share the same path
-    AggregatedRoutes = lists:foldl(
-        fun({Path, Handler, #rest_req{method = Method} = RestReq}, AccProps) ->
-            RoutesForPath = proplists:get_value(Path, AccProps, #{}),
-            lists:keystore(
-                Path, 1, AccProps,
-                {Path, Handler, RoutesForPath#{Method => RestReq}}
-            )
-        end, [], AllRoutes),
+    AggregatedRoutes = lists:foldr(fun
+        ({Path, Handler, #rest_req{method = Method} = RestReq}, [{Path, _, RoutesForPath} | Acc]) ->
+            [{Path, Handler, RoutesForPath#{Method => RestReq}} | Acc];
+        ({Path, Handler, #rest_req{method = Method} = RestReq}, Acc) ->
+            [{Path, Handler, #{Method => RestReq}} | Acc]
+    end, [], AllRoutes),
     % Convert all routes to cowboy-compliant routes
     % - prepend REST prefix to every route
     % - rest handler module must be added as second element to the tuples
@@ -253,7 +251,7 @@ process_request(Req, State) ->
             b_gri = GriWithBindings
         }} = State,
         Operation = method_to_operation(Method),
-        GRI = resolve_gri_bindings(GriWithBindings, Req),
+        GRI = resolve_gri_bindings(SessionId, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody),
         ElReq = #el_req{
             operation = Operation,
@@ -327,11 +325,12 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
 %% that was sent with the request.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_gri_bindings(bound_gri(), cowboy_req:req()) -> entity_logic:gri().
-resolve_gri_bindings(#b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
-    IdBinding = resolve_bindings(Id, Req),
+-spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
+    entity_logic:gri().
+resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
+    IdBinding = resolve_bindings(SessionId, Id, Req),
     AspectBinding = case As of
-        {Atom, Asp} -> {Atom, resolve_bindings(Asp, Req)};
+        {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
     #gri{type = Tp, id = IdBinding, aspect = AspectBinding, scope = Sc}.
@@ -344,22 +343,28 @@ resolve_gri_bindings(#b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) -
 %% sent with the request.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_bindings(binding() | {atom(), binding()} | term(), cowboy_req:req()) ->
-    binary() | {atom(), binary()}.
-resolve_bindings(?BINDING(Key), Req) ->
+-spec resolve_bindings(session:id(), binding() | {atom(), binding()} | term(),
+    cowboy_req:req()) -> binary() | {atom(), binary()}.
+resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
-resolve_bindings(?OBJECTID_BINDING(Key), Req) ->
+resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
     case catch file_id:objectid_to_guid(cowboy_req:binding(Key, Req)) of
         {ok, Guid} ->
-            {guid, Guid};
+            Guid;
         _Error ->
             throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
     end;
-resolve_bindings(?PATH_BINDING, Req) ->
-    {path, cowboy_req:path_info(Req)};
-resolve_bindings({Atom, PossibleBinding}, Req) when is_atom(Atom) ->
-    {Atom, resolve_bindings(PossibleBinding, Req)};
-resolve_bindings(Other, _Req) ->
+resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
+    Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
+    case guid_utils:ensure_guid(SessionId, {path, Path}) of
+        {guid, Guid} ->
+            Guid;
+        _Error ->
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"file_path">>))
+    end;
+resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
+    {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};
+resolve_bindings(_SessionId, Other, _Req) ->
     Other.
 
 

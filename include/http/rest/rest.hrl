@@ -28,7 +28,7 @@
     method = get :: rest_handler:method(),
     parse_body = ignore :: rest_handler:parse_body(),
     consumes = ['*'] :: ['*'] | [binary()],
-    produces = ['*'] :: ['*'] | [binary()],
+    produces = [<<"application/json">>] :: [binary()],
     b_gri :: rest_handler:bound_gri()
 }).
 

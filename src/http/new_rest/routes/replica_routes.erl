@@ -7,10 +7,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module contains definitions of replication REST methods.
+%%% @doc This module contains definitions of replica REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replication_routes).
+-module(replica_routes).
 
 -include("http/rest/rest.hrl").
 
@@ -22,42 +22,42 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of replication REST paths.
+%% Definitions of replica REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
     %% Evict existing replica by file path
-    {<<"/replicas/:path">>, rest_handler, #rest_req{
+    {<<"/replicas/[...]">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?PATH_BINDING, aspect = eviction}
+        b_gri = #b_gri{type = op_replica, id = ?PATH_BINDING, aspect = instance}
     }},
     %% Get replicas by path
-    {<<"/replicas/:path">>, rest_handler, #rest_req{
+    {<<"/replicas/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?PATH_BINDING, aspect = replicas}
+        b_gri = #b_gri{type = op_replica, id = ?PATH_BINDING, aspect = distribution}
     }},
     %% Replicate file or folder by path
-    {<<"/replicas/:path">>, rest_handler, #rest_req{
+    {<<"/replicas/[...]">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?PATH_BINDING, aspect = replication}
+        b_gri = #b_gri{type = op_replica, id = ?PATH_BINDING, aspect = instance}
     }},
     %% Evict existing replica by file Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?OBJECTID_BINDING(fid), aspect = eviction}
+        b_gri = #b_gri{type = op_replica, id = ?OBJECTID_BINDING(fid), aspect = instance}
     }},
     %% Get replicas by Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?OBJECTID_BINDING(fid), aspect = replicas}
+        b_gri = #b_gri{type = op_replica, id = ?OBJECTID_BINDING(fid), aspect = distribution}
     }},
     %% Replicate file or folder by Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
@@ -65,13 +65,13 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?OBJECTID_BINDING(fid), aspect = replication}
+        b_gri = #b_gri{type = op_replica, id = ?OBJECTID_BINDING(fid), aspect = instance}
     }},
     %% Evict existing replicas by index
     {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?BINDING(index_name), aspect = eviction_by_index}
+        b_gri = #b_gri{type = op_replication, id = ?BINDING(index_name), aspect = evict_by_index}
     }},
     %% Replicate files by index
     {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
@@ -79,6 +79,6 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replication, id = ?BINDING(index_name), aspect = replication_by_index}
+        b_gri = #b_gri{type = op_replication, id = ?BINDING(index_name), aspect = replicate_by_index}
     }}
 ].

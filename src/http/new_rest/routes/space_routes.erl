@@ -43,7 +43,7 @@ routes() -> [
     {<<"/spaces/:sid/indexes">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = indexes}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = indices}
     }},
     %% Create index
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
@@ -86,7 +86,7 @@ routes() -> [
     {<<"/spaces/:sid/indexes/:index_name/query">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index_query, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {query_index, ?BINDING(index_name)}}
     }},
     %% Get all transfers
     {<<"/spaces/:sid/transfers">>, rest_handler, #rest_req{
