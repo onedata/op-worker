@@ -313,11 +313,11 @@ handle_info(?FLUSH, State = #hs_state{mode = streaming}) ->
         case should_flush(State) of
             true ->
                 Return = harvest_and_handle_errors(State),
-                harvesting_stream:schedule_flush(),
+                schedule_flush(),
                 Return;
             false ->
                 State2 = maybe_persist_last_seen_seq(State),
-                harvesting_stream:schedule_flush(),
+                schedule_flush(),
                 {noreply, State2}
         end
     end);
@@ -554,7 +554,7 @@ enter_streaming_mode(State = #hs_state{
     State2;
 enter_streaming_mode(State = #hs_state{mode = streaming, stream_pid = StreamPid})
     when StreamPid /= undefined ->
-    harvesting_stream:schedule_flush(),
+    schedule_flush(),
     State#hs_state{batch = harvesting_batch:new_accumulator()};
 enter_streaming_mode(State = #hs_state{
     space_id = SpaceId,
@@ -568,7 +568,7 @@ enter_streaming_mode(State = #hs_state{
             Mod:on_end_of_stream(State),
             State;
         false ->
-            harvesting_stream:schedule_flush(),
+            schedule_flush(),
             {ok, StreamPid} = start_changes_stream(SpaceId, Since, Until),
             State#hs_state{
                 mode = streaming,
