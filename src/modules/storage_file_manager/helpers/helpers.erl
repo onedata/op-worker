@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_helper_handle/2, refresh_params/4]).
+-export([get_helper_handle/2]).
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
@@ -72,19 +72,6 @@ get_helper_handle(Helper, UserCtx) ->
         handle = Handle,
         timeout = helper:get_timeout(Helper)
     }.
-
-
--spec refresh_params(helpers:helper_handle() | helpers:file_handle(),
-    session:id(), od_space:id(), storage:doc()) -> ok.
-refresh_params(Handle, SessionId, SpaceId, StorageDoc) ->
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined,
-        SpaceId, StorageDoc, HelperName),
-    {ok, Helper2} = helper:insert_user_ctx(Helper, UserCtx),
-    ArgsWithUserCtx = helper:get_args(Helper2),
-    ?MODULE:refresh_params(Handle, ArgsWithUserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc

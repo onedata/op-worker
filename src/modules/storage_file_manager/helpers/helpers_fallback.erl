@@ -42,8 +42,8 @@ apply_and_maybe_handle_ekeyexpired(#sfm_handle{
             case helper:get_name(Helper) of
                 ?WEBDAV_HELPER_NAME ->
                     % called by module for CT tests
-                    helpers:refresh_params(HelperOrFileHandle, SessionId,
-                        SpaceId, Storage),
+                    helpers_reload:refresh_handle_params(HelperOrFileHandle,
+                        SessionId, SpaceId, Storage),
                     Operation();
                 _ ->
                     Result

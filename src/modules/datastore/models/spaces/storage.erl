@@ -23,9 +23,6 @@
 -export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
 -export([supports_any_space/1]).
 
-%% Exports for RPC from this module
--export([local_refresh_helpers/1]).
-
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
@@ -252,13 +249,7 @@ update_name(StorageId, NewName) ->
     ok | {error, term()}.
 update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
-    case update_helper(StorageId, HelperName, UpdateFun) of
-        ok ->
-            rtransfer_put_storage(StorageId),
-            on_helper_changed(StorageId);
-        Error ->
-            Error
-    end.
+    update_helper(StorageId, HelperName, UpdateFun).
 
 
 %%--------------------------------------------------------------------
@@ -270,10 +261,7 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     ok | {error, term()}.
 update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
-    case update_helper(StorageId, HelperName, UpdateFun) of
-        ok -> on_helper_changed(StorageId);
-        Error -> Error
-    end.
+    update_helper(StorageId, HelperName, UpdateFun).
 
 
 %%--------------------------------------------------------------------
@@ -320,10 +308,7 @@ set_luma_config(StorageId, LumaConfig) ->
     ok | {error, term()}.
 set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
     UpdateFun = fun(Helper) -> helper:update_insecure(Helper, Insecure) end,
-    case update_helper(StorageId, HelperName, UpdateFun) of
-        ok -> on_helper_changed(StorageId);
-        Error -> Error
-    end.
+    update_helper(StorageId, HelperName, UpdateFun).
 
 
 %%--------------------------------------------------------------------
@@ -591,7 +576,7 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
     ok | {error, term()} when
     DiffFun :: fun((helper()) -> {ok, helper()} | {error, term()}).
 update_helper(StorageId, HelperName, DiffFun) ->
-    ?extract_ok(update(StorageId, fun(Storage) ->
+    UpdateFun = fun(Storage) ->
         case select_helper(Storage, HelperName) of
             {ok, Helper} ->
                 HelperName = helper:get_name(Helper),
@@ -604,33 +589,25 @@ update_helper(StorageId, HelperName, DiffFun) ->
             {error, _} = Error ->
                 Error
         end
-    end)).
+    end,
+    case update(StorageId, UpdateFun) of
+        {ok, _} -> on_helper_changed(StorageId);
+        Error -> Error
+    end.
 
 
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles actions necessary after helper params have been changed.
+%% @end
+%%--------------------------------------------------------------------
 -spec on_helper_changed(StorageId :: storage:id()) -> ok.
 on_helper_changed(StorageId) ->
+    rtransfer_put_storage(StorageId),
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    refresh_helpers(StorageId).
-
-
--spec refresh_helpers(StorageId :: storage:id()) -> ok.
-refresh_helpers(StorageId) ->
-    {ok, Nodes} = node_manager:get_cluster_nodes(),
-    {_, []} = rpc:multicall(Nodes, ?MODULE, local_refresh_helpers, [StorageId]),
-    ok.
-
-
--spec local_refresh_helpers(StorageId :: storage:id()) -> ok.
-local_refresh_helpers(StorageId) ->
-    {ok, Sessions} = session:list(),
-    {ok, Storage} = ?MODULE:get(StorageId),
-    lists:foreach(fun(#document{key = SessId}) ->
-        {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
-        lists:foreach(fun({HandleId, SpaceId}) ->
-            {ok, #document{value = Handle}} = helper_handle:get(HandleId),
-            helpers:refresh_params(Handle, SessId, SpaceId, Storage)
-        end, HandlesSpaces)
-    end, Sessions).
+    helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
 %%--------------------------------------------------------------------
