@@ -521,8 +521,6 @@ revise_space_harvesters_internal(CurrentHarvesters, State = #hs_state{
         HarvestersInAuxStreamsSet),
     HarvestersToStopSet = sets:subtract(HarvestersInAllStreamsSet,
         CurrentHarvestersSet),
-    HarvestersToStartSet = sets:subtract(CurrentHarvestersSet,
-        HarvestersInAllStreamsSet),
 
     State2 = lists:foldl(fun(HarvesterId, StateIn) ->
         remove_harvester(HarvesterId, StateIn)
@@ -535,7 +533,7 @@ revise_space_harvesters_internal(CurrentHarvesters, State = #hs_state{
             _ ->
                 StateIn
         end
-    end, State2, sets:to_list(HarvestersToStartSet)).
+    end, State2, CurrentHarvesters).
 
 -spec remove_harvester(od_harvester:id(), harvesting_stream:state()) ->
     harvesting_stream:state().

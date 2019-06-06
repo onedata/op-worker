@@ -297,7 +297,7 @@ restart_oz_connection() ->
 on_connect_to_oz() ->
     set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
-    main_harvesting_stream:revise_all_spaces().
+    ok = main_harvesting_stream:revise_all_spaces().
 
 
 %%--------------------------------------------------------------------
