@@ -277,7 +277,7 @@ process_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Calls entity_logic and translates obtained response into REST response
+%% Calls op_logic and translates obtained response into REST response
 %% using TranslatorModule.
 %% @end
 %%--------------------------------------------------------------------
@@ -326,7 +326,7 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
-    entity_logic:gri().
+    op_logic:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
     AspectBinding = case As of
@@ -379,7 +379,7 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data(cowboy_req:req(), ParseBody :: parse_body()) ->
-    {Data :: entity_logic:data(), cowboy_req:req()}.
+    {Data :: op_logic:data(), cowboy_req:req()}.
 get_data(Req, ignore) ->
     {#{parameters => parse_query_string(Req)}, Req};
 get_data(Req, as_json_params) ->
@@ -479,7 +479,7 @@ method_to_binary('DELETE') -> <<"DELETE">>.
 %% that should be called to handle it.
 %% @end
 %%--------------------------------------------------------------------
--spec method_to_operation(method()) -> entity_logic:operation().
+-spec method_to_operation(method()) -> op_logic:operation().
 method_to_operation('POST') -> create;
 method_to_operation('PUT') -> create;
 method_to_operation('GET') -> get;

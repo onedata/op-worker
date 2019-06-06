@@ -26,11 +26,11 @@
 
 % Record expressing entity logic request
 -record(el_req, {
-    client = #client{} :: entity_logic:client(),
-    gri :: entity_logic:gri(),
-    operation = create :: entity_logic:operation(),
-    data = #{} :: entity_logic:data(),
-    auth_hint = undefined :: undefined | entity_logic:auth_hint()
+    client = #client{} :: op_logic:client(),
+    gri :: op_logic:gri(),
+    operation = create :: op_logic:operation(),
+    data = #{} :: op_logic:data(),
+    auth_hint = undefined :: undefined | op_logic:auth_hint()
 }).
 
 % Convenience macros for concise code
@@ -40,5 +40,13 @@
 -define(PROVIDER(__Id), #client{type = provider, id = __Id}).
 -define(NOBODY, #client{type = nobody}).
 -define(ROOT, #client{type = root}).
+
+% Regexp to validate names. Name must be 2-50 characters long and composed of
+% UTF-8 letters, digits, brackets and underscores.
+% Dashes, spaces and dots are allowed (but not at the beginning or the end).
+-define(NAME_FIRST_CHARS_ALLOWED, <<")(\\w_">>).
+-define(NAME_MIDDLE_CHARS_ALLOWED, <<">>)(\\w_ .-">>).
+-define(NAME_LAST_CHARS_ALLOWED, ?NAME_FIRST_CHARS_ALLOWED).
+-define(NAME_MAXIMUM_LENGTH, 50).
 
 -endif.
