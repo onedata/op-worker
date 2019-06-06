@@ -23,7 +23,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare/1,
+-export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare_to_send/1,
     get_first_seq/1, get_last_seq/1, get_batch_entries/1, strip/2]).
 
 -record(harvesting_batch, {
@@ -94,16 +94,16 @@ accumulate(Doc = #document{
 %% accumulator() is unprepared, which means that:
 %%     * batch elements are not sorted (they are stored in a map)
 %%     * batch elements are not encoded
-%% Call prepare(Accumulator) returns batch() which contains:
+%% Call prepare_to_send(Accumulator) returns batch() which contains:
 %%     * sorted list of encoded batch elements, ready to send to Onezone
 %%     * batch elements are sorted by sequence numbers
 %% If batch is already prepared, this function does nothing.
 %% @end
 %%-------------------------------------------------------------------
--spec prepare(accumulator() | batch()) -> batch().
-prepare(Batch = #harvesting_batch{}) -> Batch;
-prepare(Accumulator) when map_size(Accumulator) =:= 0 -> #harvesting_batch{};
-prepare(Accumulator) when is_map(Accumulator) ->
+-spec prepare_to_send(accumulator() | batch()) -> batch().
+prepare_to_send(Batch = #harvesting_batch{}) -> Batch;
+prepare_to_send(Accumulator) when map_size(Accumulator) =:= 0 -> #harvesting_batch{};
+prepare_to_send(Accumulator) when is_map(Accumulator) ->
     {EncodedBatch, MaxSeq} = maps:fold(fun
         (_FileId, Object, {AccIn, MaxSeqIn}) ->
             {[encode_entry(Object) | AccIn], max(get_seq(Object), MaxSeqIn)}

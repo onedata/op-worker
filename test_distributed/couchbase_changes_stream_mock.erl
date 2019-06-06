@@ -1,5 +1,17 @@
+%%%-------------------------------------------------------------------
+%%% @author Jakub Kudzia
+%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Mock of couchbase_changes_stream used in tests of harvesting. It
+%%% allows to simulate behaviour of couchbase_changes_stream.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(couchbase_changes_stream_mock).
--author("").
+-author("Jakub Kudzia").
 
 -behaviour(gen_server).
 

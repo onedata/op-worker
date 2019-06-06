@@ -39,7 +39,7 @@
 start_link() ->
     supervisor:start_link({local, ?HARVESTING_STREAM_SUP}, ?MODULE, []).
 
--spec start_main_stream(od_space:id()) -> ok.
+-spec start_main_stream(od_space:id()) -> ok | {error, term()}.
 start_main_stream(SpaceId) ->
     case supervisor:start_child(?HARVESTING_STREAM_SUP, main_stream_spec(SpaceId)) of
         {ok, _} -> ok;
@@ -48,7 +48,7 @@ start_main_stream(SpaceId) ->
             start_main_stream(SpaceId);
         {error, {already_started, _}} -> ok;
         {error, {{already_started, _}, _}} -> ok;
-        {error, {normal, _}} -> ok
+        Other -> Other
     end.
 
 
@@ -61,6 +61,8 @@ start_aux_stream(SpaceId, HarvesterId, IndexId, Until) ->
         {error, already_present} ->
             ok = supervisor:delete_child(?HARVESTING_STREAM_SUP, AuxStream),
             start_aux_stream(SpaceId, HarvesterId, IndexId, Until);
+        {error, {already_started, _}} ->
+            ok;
         {ok, _} ->
             ok
     end.

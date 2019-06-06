@@ -487,7 +487,7 @@ harvest_and_handle_errors(State = #hs_state{
     last_seen_seq = LastSeenSeq
 }) ->
     MaxSpaceSeq = get_max_seq(SpaceId),
-    PreparedBatch = harvesting_batch:prepare(Batch),
+    PreparedBatch = harvesting_batch:prepare_to_send(Batch),
     BatchEntries = harvesting_batch:get_batch_entries(PreparedBatch),
     State2 = State#hs_state{batch = PreparedBatch},
     Result = space_logic:harvest_metadata(SpaceId, Destination, BatchEntries, LastSeenSeq, MaxSpaceSeq),

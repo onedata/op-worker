@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module used by modules associated with harvesting.
-%%% It implements a simple data structure that stores Destination which
-%%% is a structure of Harvesters and Indices associated with them.
+%%% harvesting_destination is a simple data structure that represents
+%%% structure of Harvesters and Indices associated with them.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_destination).

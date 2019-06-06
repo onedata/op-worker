@@ -322,19 +322,23 @@ multicall_internal(SpaceId, Request) ->
 
 -spec call_internal(od_space:id(), term()) -> term().
 call_internal(SpaceId, Request) ->
-    case consistent_hashing:get_node(SpaceId) =:= node() of
-        true ->
-            Name = ?MAIN_HARVESTING_STREAM(SpaceId),
-            try
-                gen_server2:call({global, Name}, Request, infinity)
-            catch
-                _:{noproc, _} ->
+    Name = ?MAIN_HARVESTING_STREAM(SpaceId),
+    try
+        gen_server2:call({global, Name}, Request, infinity)
+    catch
+        _:{noproc, _} ->
+            case consistent_hashing:get_node(SpaceId) =:= node() of
+                true ->
                     ?debug("Stream ~p noproc, retrying with a new one", [Name]),
-                    ok = harvesting_stream_sup:start_main_stream(SpaceId),
-                    call_internal(SpaceId, Request)
-            end;
-        false ->
-            ok
+                    case harvesting_stream_sup:start_main_stream(SpaceId) of
+                        ok ->
+                            call_internal(SpaceId, Request);
+                        {error, normal} ->
+                            ok
+                    end;
+                false ->
+                    ok
+            end
     end.
 
 -spec space_removed_internal(od_space:id()) -> ok.

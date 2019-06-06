@@ -1,5 +1,19 @@
+%%%-------------------------------------------------------------------
+%%% @author Jakub Kudzia
+%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Registry for couchbase_changes_stream_mocks used in tests of
+%%% harvesting. Mocks register in this server during intialization.
+%%% It is possible to get mock's pid associated with given
+%%% harvesting_steam pid.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(couchbase_changes_stream_mock_registry).
--author("").
+-author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
 
