@@ -31,8 +31,7 @@
 ]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, task_finished/1, save_job/3, update_job/4, get_job/1,
-    list_ongoing_jobs/0, get_sync_info/0]).
+-export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
@@ -247,20 +246,25 @@ external_traverse_test(Config) ->
     [_, _, Worker] = ?config(op_worker_nodes, Config),
     traverse_test_base(Config, Worker, <<"external_traverse_test">>).
 
-traverse_test_base(Config, StartTaskWorker, TaskID) ->
+traverse_test_base(Config, StartTaskWorker, DirName) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
     {SessId, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(StartTaskWorker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
-    Dir1 = <<"/", SpaceName/binary, "/", TaskID/binary>>,
+    Dir1 = <<"/", SpaceName/binary, "/", DirName/binary>>,
     {ok, Guid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
     build_traverse_tree(Worker, SessId, Dir1, 1),
     ?assertMatch({ok, _}, lfm_proxy:resolve_guid(StartTaskWorker, SessId2, Dir1), 30),
 
     ExecutorID = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
-    ?assertEqual(ok, rpc:call(StartTaskWorker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid1),
-        TaskID, <<"gr">>, false, 1, self(), ExecutorID])),
+    RunOptions = #{
+        target_provider_id => ExecutorID,
+        batch_size => 1,
+        traverse_info => self()
+    },
+    {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
+        [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
 
     Expected = [2,3,4,
         11,12,13,16,17,18,
@@ -276,17 +280,17 @@ traverse_test_base(Config, StartTaskWorker, TaskID) ->
     MJobsNum = SJobsNum * 4 div 3 - 1,
     Description = #{
         slave_jobs_delegated => SJobsNum,
-        master_jobs_delegated => MJobsNum,
         slave_jobs_done => SJobsNum,
-        master_jobs_done => MJobsNum,
-        master_jobs_failed => 0
+        slave_jobs_failed => 0,
+        master_jobs_delegated => MJobsNum,
+        master_jobs_done => MJobsNum
     },
-
+ct:print("aaaaa ~p", [Description]),
     ?assertEqual(Expected, lists:sort(Ans)),
     ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
-        rpc:call(Worker, traverse_task, get, [TaskID])),
+        rpc:call(Worker, tree_traverse, get_task, [?MODULE, TaskID])),
     ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
-        rpc:call(Worker2, traverse_task, get, [TaskID]), 30),
+        rpc:call(Worker2, tree_traverse, get_task, [?MODULE, TaskID]), 30),
     ok.
 
 %%%===================================================================
@@ -315,7 +319,7 @@ end_per_testcase(Case, Config) when
     Case =:= traverse_test ; Case =:= external_traverse_test ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-        ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [?MODULE]))
+        ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [atom_to_binary(?MODULE, utf8)]))
     end, Workers),
     lfm_proxy:teardown(Config);
 end_per_testcase(rtransfer_blocking_test, Config) ->
@@ -373,20 +377,11 @@ do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}) ->
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 
-task_finished(_) ->
-    ok.
+update_job_progress(ID, Job, Pool, TaskID, Status) ->
+    tree_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
 
-save_job(Job, TaskID, Status) ->
-    tree_traverse:save_job(Job, TaskID, Status).
+get_job(DocOrID) ->
+    tree_traverse:get_job(DocOrID).
 
-update_job(ID, Job, TaskID, Status) ->
-    tree_traverse:update_job(ID, Job, TaskID, Status).
-
-get_job(ID) ->
-    tree_traverse:get_job(ID).
-
-list_ongoing_jobs() ->
-    {ok, []}.
-
-get_sync_info() ->
-    tree_traverse:get_sync_info().
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).

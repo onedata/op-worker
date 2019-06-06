@@ -27,7 +27,7 @@
     many_files_creation_tree_test_base/1]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, task_finished/1, save_job/3, update_job/4, list_ongoing_jobs/0]).
+-export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
 
 -define(STRESS_CASES, []).
 -define(STRESS_NO_CLEARING_CASES, [
@@ -142,8 +142,9 @@ do_master_job(Job) ->
                 0 ->
                     tree_traverse:do_master_job(Job);
                 _ ->
-                    {ok, L1, L2} = tree_traverse:do_master_job(Job),
-                    {ok, L1, L2, #{dirs_evaluation => CalculationInfo}}
+                    {ok, Info} = tree_traverse:do_master_job(Job),
+                    Info2 = Info#{description => #{dirs_evaluation => CalculationInfo}},
+                    {ok, Info2}
             end;
         _ ->
             tree_traverse:do_master_job(Job)
@@ -157,17 +158,14 @@ do_slave_job({Doc, _TraverseInfo}) ->
         _ -> {ok, #{dirs_evaluation => CalculationInfo}}
     end.
 
-task_finished(_) ->
-    ok.
+update_job_progress(ID, Job, Pool, TaskID, Status) ->
+    tree_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
 
-save_job(_, _, _) ->
-    {ok, <<"id">>}.
+get_job(DocOrID) ->
+    tree_traverse:get_job(DocOrID).
 
-update_job(_, _, _, _) ->
-    ok.
-
-list_ongoing_jobs() ->
-    {ok, []}.
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).
 
 %%%===================================================================
 %%% Internal functions
@@ -201,15 +199,16 @@ start_traverse(Config, TraverseCache, ID) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     {ok, Guid} = ?assertMatch({ok, _},
         lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, run, [?MODULE,
-        file_ctx:new_by_guid(Guid), ID, 100, TraverseCache])).
+    RunOpts = #{task_id => ID, traverse_cache => TraverseCache},
+    ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE,
+        file_ctx:new_by_guid(Guid), RunOpts])).
 
 process_traverse_info(Config, Type, ID) ->
     timer:sleep(timer:seconds(30)),
     [Worker | _] = ?config(op_worker_nodes, Config),
     DirLevel = ?config(dir_level, Config),
     {ok, #document{value = #traverse_task{description = Description}}} =
-        ?assertMatch({ok, _}, rpc:call(Worker, traverse_task, get, [ID])),
+        ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, get_task, [?MODULE, ID])),
 
     DirsDone = maps:get(master_jobs_done, Description, 0),
     Failed = maps:get(master_jobs_failed, Description, 0),

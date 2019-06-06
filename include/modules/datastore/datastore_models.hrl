@@ -696,14 +696,17 @@
     providers = [] :: all | [od_provider:id()]
 }).
 
+% TODO - zapisac callback module
 -record(tree_travserse_job, {
+    pool :: traverse:pool(),
+    callback_module :: traverse:callback_module(),
     task_id :: traverse_task:key(),
     doc_id :: file_meta:uuid(),
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
-    execute_slave_on_dir :: boolean(),
-    batch_size :: non_neg_integer(),
-    traverse_info :: term()
+    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    batch_size :: tree_traverse:batch_size(),
+    traverse_info :: binary()
 }).
 
 -endif.

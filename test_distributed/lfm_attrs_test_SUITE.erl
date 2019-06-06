@@ -48,7 +48,7 @@
     traverse_test/1]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, task_finished/1, save_job/3, update_job/4, list_ongoing_jobs/0]).
+-export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
 
 all() ->
     ?ALL([
@@ -88,8 +88,11 @@ traverse_test(Config) ->
     {ok, Guid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
     build_traverse_tree(Worker, SessId, Dir1, 1),
 
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid1),
-        <<"1">>, 1, self()])),
+    RunOptions = #{
+        batch_size => 1,
+        traverse_info => self()
+    },
+    {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
 
     Expected = [2,3,4,
         11,12,13,16,17,18,
@@ -105,15 +108,15 @@ traverse_test(Config) ->
     MJobsNum = SJobsNum * 4 div 3 - 1,
     Description = #{
         slave_jobs_delegated => SJobsNum,
-        master_jobs_delegated => MJobsNum,
         slave_jobs_done => SJobsNum,
-        master_jobs_done => MJobsNum,
-        master_jobs_failed => 0
+        slave_jobs_failed => 0,
+        master_jobs_delegated => MJobsNum,
+        master_jobs_done => MJobsNum
     },
 
     ?assertEqual(Expected, lists:sort(Ans)),
     ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
-        rpc:call(Worker, traverse_task, get, [<<"1">>])),
+        rpc:call(Worker, tree_traverse, get_task, [?MODULE, ID])),
     ok.
 
 effective_value_test(Config) ->
@@ -665,14 +668,11 @@ do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}) ->
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 
-task_finished(_) ->
-    ok.
+update_job_progress(ID, Job, Pool, TaskID, Status) ->
+    tree_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
 
-save_job(_, _, _) ->
-    {ok, <<"id">>}.
+get_job(DocOrID) ->
+    tree_traverse:get_job(DocOrID).
 
-update_job(_, _, _, _) ->
-    ok.
-
-list_ongoing_jobs() ->
-    {ok, []}.
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).
