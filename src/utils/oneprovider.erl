@@ -319,7 +319,9 @@ on_deregister() ->
 %% @doc
 %% Sets up Oneprovider worker service in Onezone - updates version info
 %% (release, build and GUI versions). If given GUI version is not present in
-%% Onezone, the GUI package is uploaded first.
+%% Onezone, the GUI package is uploaded first. If any errors occur during
+%% upload, the Oneprovider continues to operate, but its GUI might not be
+%% functional.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_up_service_in_onezone() -> ok.
@@ -334,12 +336,19 @@ set_up_service_in_onezone() ->
             ?info("Skipping GUI upload as it is already present in Onezone");
         ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
             ?info("Uploading GUI to Onezone (~s)", [GuiHash]),
-            ok = cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH),
-            ?info("GUI uploaded succesfully"),
-            ok = cluster_logic:update_version_info(Release, Build, GuiHash)
-    end,
-
-    ?info("Oneprovider worker service successfully set up in Onezone").
+            case cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH) of
+                ok ->
+                    ?info("GUI uploaded succesfully"),
+                    ok = cluster_logic:update_version_info(Release, Build, GuiHash),
+                    ?info("Oneprovider worker service successfully set up in Onezone");
+                {error, _} = Error ->
+                    ?alert(
+                        "Oneprovider worker service could not be successfully set "
+                        "up in Onezone due to an error during GUI upload: ~p",
+                        [Error]
+                    )
+            end
+    end.
 
 
 %%--------------------------------------------------------------------

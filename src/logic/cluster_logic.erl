@@ -73,6 +73,10 @@ upload_op_worker_gui(PackagePath) ->
         {ok, 200, _, _} ->
             ok;
         Other ->
-            ?error("Uploading GUI package to Onezone failed with result: ~p", [Other]),
-            {error, upload_failed}
+            try
+                {ok, 400, _, Body} = Other,
+                gs_protocol_errors:json_to_error(1, json_utils:decode(Body))
+            catch _:_ ->
+                {error, {unexpected_gui_upload_result, Other}}
+            end
     end.
