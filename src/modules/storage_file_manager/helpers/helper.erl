@@ -82,7 +82,7 @@ allow_insecure(_) -> true.
 -spec get_args_with_user_ctx(helpers:helper(), user_ctx()) ->
     {ok, args()} | {error, Reason :: term()}.
 get_args_with_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
-    case helper_params:validate_user_ctx(Helper, UserCtx) of
+    case helper_params:validate_user_ctx(Helper#helper.name, UserCtx) of
         ok -> {ok, maps:merge(Args, UserCtx)};
         Error -> Error
     end.
