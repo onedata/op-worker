@@ -392,8 +392,7 @@ start_changes_stream(SpaceId, Since, Until) ->
         try
             gen_server2:call(Self, {change, Change}, infinity)
         catch
-            exit:{noproc, _} ->
-                ok
+            _:_ -> ok
         end
     end,
     harvesting_stream:changes_stream_start_link(SpaceId, Callback, Since, Until).
@@ -404,7 +403,7 @@ start_changes_stream(SpaceId, Since, Until) ->
 changes_stream_start_link(SpaceId, Callback, Since, Until) ->
     couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, Since}, {until, Until}], []
+        [{since, Since}, {until, Until}], [self()]
     ).
 
 -spec stop_changes_stream(state()) -> state().
