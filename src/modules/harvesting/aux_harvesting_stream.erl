@@ -144,7 +144,7 @@ custom_error_handling(State = #hs_state{
             case harvesting_state:set_seen_seq(Name, Destination, LastSuccessfulSeq) of
                 ok ->
                     ErrorLog =  str_utils:format_bin(
-                        "Unexpected error occurred when applying batch of changes."
+                        "Unexpected error occurred when applying batch of changes. "
                         "Last successful sequence number was: ~p",
                         [LastSuccessfulSeq]
                     ),

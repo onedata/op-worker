@@ -32,7 +32,7 @@
 
 %% API
 -export([propose_takeover/2, revise_harvester/3,
-    revise_space_harvesters/2, space_removed/1, space_unsupported/1]).
+    revise_space_harvesters/2, space_removed/1, space_unsupported/1, revise_all_spaces/0]).
 
 %% harvesting_stream callbacks
 -export([init/1, name/1, handle_call/3, handle_cast/2, custom_error_handling/2,
@@ -82,6 +82,22 @@ space_removed(SpaceId) ->
 space_unsupported(SpaceId) ->
     Node = consistent_hashing:get_node(SpaceId),
     rpc:call(Node, ?MODULE, space_unsupported_internal, [SpaceId]).
+
+-spec revise_all_spaces() -> ok.
+revise_all_spaces() ->
+    case provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                case space_logic:get_harvesters(SpaceId) of
+                    {ok, HarvesterIds} ->
+                        revise_space_harvesters(SpaceId, HarvesterIds);
+                    Error ->
+                        ?error("Couldn't fetch list of space ~p harvesters due to ~w", [SpaceId, Error])
+                end
+            end, SpaceIds);
+        Error2 ->
+            ?error("Couldn't fetch list of provider spaces due to ~w", [Error2])
+    end.
 
 %%%===================================================================
 %%% harvesting_stream callbacks

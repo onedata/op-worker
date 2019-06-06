@@ -108,8 +108,10 @@
 % document. In such case, the seq is always persisted.
 -define(IGNORED_SEQ_REPORTING_FREQUENCY, 1000).
 
--define(MIN_BACKOFF_INTERVAL, timer:seconds(5)).
--define(MAX_BACKOFF_INTERVAL, timer:hours(1)).
+-define(MIN_BACKOFF_INTERVAL, application:get_env(
+    ?APP_NAME, harvesting_stream_min_backoff_interval, timer:seconds(5))).
+-define(MAX_BACKOFF_INTERVAL, application:get_env(
+    ?APP_NAME, harvesting_stream_max_backoff_interval, timer:minutes(5))).
 
 -define(BATCH_SIZE, application:get_env(?APP_NAME, harvesting_batch_size, 1000)).
 -define(FLUSH_TIMEOUT_SECONDS, application:get_env(?APP_NAME, harvesting_flush_timeout_seconds, 10)).
@@ -636,7 +638,7 @@ backoff_log(StreamName, SpaceId, ErrorLog, NexRetry, _) ->
 
 -spec backoff_log_format() -> string().
 backoff_log_format() ->
-    "Error in harvesting_stream: ~p when harvesting space: ~p.~n"
+    "Error in harvesting_stream: ~w when harvesting space: ~p.~n"
     "~s~n"
     "Next harvesting retry after: ~p seconds.".
 
