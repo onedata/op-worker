@@ -202,15 +202,16 @@ handle_unsafe(State = #state{req = #el_req{operation = get}}) ->
         ensure_authorized(
             ensure_exists(
                 fetch_entity(
-                    ensure_operation_supported(
-                        State)))));
+                    ensure_valid(
+                        ensure_operation_supported(
+                            State))))));
 
 handle_unsafe(State = #state{req = #el_req{operation = update}}) ->
     call_update(
-        ensure_valid(
-            ensure_authorized(
-                ensure_exists(
-                    fetch_entity(
+        ensure_authorized(
+            ensure_exists(
+                fetch_entity(
+                    ensure_valid(
                         ensure_operation_supported(
                             State))))));
 
@@ -219,8 +220,9 @@ handle_unsafe(State = #state{req = Req = #el_req{operation = delete}}) ->
         ensure_authorized(
             ensure_exists(
                 fetch_entity(
-                    ensure_operation_supported(
-                        State))))),
+                    ensure_valid(
+                        ensure_operation_supported(
+                            State)))))),
     case {Result, Req} of
         {ok, #el_req{gri = #gri{type = Type, id = Id, aspect = instance}, client = Cl}} ->
             % If an entity instance is deleted, log an information about it
