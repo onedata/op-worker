@@ -204,7 +204,7 @@ update_share_name_internal(Req, State) ->
         {error, forbidden} ->
             throw(?ERROR_PERMISSION_DENIED);
         {error, not_found} ->
-            throw(?ERROR_NOT_FOUND);
+            throw(?ERROR_NOT_FOUND_REST);
         {error, Error} ->
             error({error, Error});
         ok ->
@@ -281,7 +281,7 @@ get_share_id(State = #{auth := SessionId}) ->
     {ok, Attrs} = logical_file_manager:stat(SessionId, {guid, get_file_guid(State)}),
     case Attrs#file_attr.shares of
         [ShareId] -> ShareId;
-        _ -> throw(?ERROR_NOT_FOUND)
+        _ -> throw(?ERROR_NOT_FOUND_REST)
     end.
 
 -spec ensure_is_directory(onedata_auth_api:auth(), fslogic_worker:file_guid_or_path()) ->
@@ -321,7 +321,7 @@ get_share_space_id(SessionId, ShareId) ->
         {ok, #document{value = #od_share{space = SpaceId}}} ->
             SpaceId;
         {error, not_found} ->
-            throw(?ERROR_NOT_FOUND);
+            throw(?ERROR_NOT_FOUND_REST);
         Error ->
             error({error, Error})
     end.

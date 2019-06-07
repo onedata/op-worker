@@ -383,5 +383,5 @@ try_authenticate(Req) ->
         {ok, Auth} ->
             Auth;
         _ ->
-            throw(?ERROR_UNAUTHORIZED)
+            throw(?ERROR_UNAUTHORIZED_REST)
     end.

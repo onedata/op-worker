@@ -127,7 +127,7 @@ get_metric(Req, State) ->
             Response = json_utils:encode(Json),
             {Response, Req3, State3};
         {error, not_found} ->
-            throw(?ERROR_NOT_FOUND)
+            throw(?ERROR_NOT_FOUND_REST)
     end.
 
 %%--------------------------------------------------------------------

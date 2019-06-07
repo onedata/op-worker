@@ -12,6 +12,7 @@
 -module(rest_test_utils).
 -author("Jakub Kudzia").
 
+-include("http/rest/rest.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -48,6 +49,9 @@ user_token_header(Config, User)  ->
         3 -> {<<"Authorization">>, <<"Bearer ", Macaroon/binary>>}
     end.
 
+assert_request_error(ExpectedError = {error, _}, RequestParams) ->
+    #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(ExpectedError),
+    assert_request_error({ExpCode, ExpBody}, RequestParams);
 assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
     _RequestParams = {Node, URL, Method, Headers, Body}) ->
     assert_request_error({ExpectedCode, ExpectedBody}, {Node, URL, Method, Headers, Body, []});

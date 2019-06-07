@@ -70,7 +70,7 @@ malformed_request(Req, State) ->
 parse_path(Req, State) ->
     case cowboy_req:path_info(Req) of
         undefined ->
-            throw(?ERROR_NOT_FOUND);
+            throw(?ERROR_NOT_FOUND_REST);
         Path ->
             {State#{path => filename:join([<<"/">> | Path])}, Req}
     end.

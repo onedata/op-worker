@@ -14,6 +14,8 @@
 -ifndef(REST_ERRORS_HRL).
 -define(REST_ERRORS_HRL, 1).
 
+-define(ERROR_BAD_VALUE_DIRECTORY(__Key), {error, {bad_directory, __Key}}).
+
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,
     <<"error_description">> => ErrorDescription
@@ -290,7 +292,7 @@
 ).
 
 %% HTTP 401 errors
--define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(
+-define(ERROR_UNAUTHORIZED_REST, ?ERROR_REPLY(
     ?HTTP_401_NOT_AUTHORIZED,
     <<"unauthorized">>,
     <<"Error unauthorized.">>)
@@ -302,14 +304,14 @@
     <<"permission_denied">>,
     <<"Permission denied.">>)
 ).
--define(ERROR_FORBIDDEN, ?ERROR_REPLY(
+-define(ERROR_FORBIDDEN_REST, ?ERROR_REPLY(
     ?HTTP_403_FORBIDDEN,
     <<"forbidden">>,
     <<"Operation not permitted.">>)
 ).
 
 %% HTTP 404 errors
--define(ERROR_NOT_FOUND, ?ERROR_REPLY(
+-define(ERROR_NOT_FOUND_REST, ?ERROR_REPLY(
     ?HTTP_404_NOT_FOUND,
     <<"not_found">>,
     <<"The resource could not be found.">>)
