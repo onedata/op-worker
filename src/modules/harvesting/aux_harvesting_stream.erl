@@ -58,11 +58,13 @@ space_unsupported(Name) ->
 %%--------------------------------------------------------------------
 -spec init([term()]) -> {ok, harvesting_stream:state()}.
 init([SpaceId, HarvesterId, IndexId, Until]) ->
+    {ok, LastSeenSeq} = harvesting_state:get_seen_seq(SpaceId, HarvesterId, IndexId),
     {ok, #hs_state{
         name = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
         space_id = SpaceId,
+        until = Until + 1,   % until is exclusive in couchbase_changes_stream
         destination = harvesting_destination:init(HarvesterId, IndexId),
-        until = Until + 1   % until is exclusive in couchbase_changes_stream
+        last_seen_seq = LastSeenSeq
     }}.
 
 %%--------------------------------------------------------------------
@@ -112,7 +114,7 @@ handle_cast(Request, State) ->
 -spec custom_error_handling(harversting_stream:state(), harvesting_result:result()) ->
     harvesting_stream:handling_result().
 custom_error_handling(State = #hs_state{
-    name = Name,
+    space_id = SpaceId,
     destination = Destination
 }, Result) ->
     % for aux_stream we are sure that there is only one key and one value
@@ -141,7 +143,7 @@ custom_error_handling(State = #hs_state{
             })};
         LastSuccessfulSeq ->
             % there might be only one index here
-            case harvesting_state:set_seen_seq(Name, Destination, LastSuccessfulSeq) of
+            case harvesting_state:set_seen_seq(SpaceId, Destination, LastSuccessfulSeq) of
                 ok ->
                     ErrorLog =  str_utils:format_bin(
                         "Unexpected error occurred when applying batch of changes. "

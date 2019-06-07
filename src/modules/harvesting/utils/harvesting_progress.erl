@@ -6,9 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module that implements simple structure for storing
-%%% the progress of harvesting for pair
-%%% {od_harvester:id(), od_harvester:index()}.
+%%% Helper module for harvesting_state model.
+%%% It defines a simple structure for storing the highest seen
+%%% sequence number for pair {od_harvester:id(), od_harvester:index()}.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_progress).

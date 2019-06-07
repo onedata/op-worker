@@ -696,8 +696,6 @@
 
 %% Model that holds information about state of harvesting for given space
 -record(harvesting_state, {
-    % holds maximal seen sequence for current main_harvesting_stream
-    main_seen_seq :: couchbase_changes:seq(),
     % structure that holds progress of harvesting for {Harvester, Index} pairs
     progress :: harvesting_progress:progress()
 }).

@@ -8,6 +8,8 @@
 %%% @doc
 %%% worker_plugin used for adding harvesting supervision tree to the
 %%% main tree.
+%%% For more details on harvesting please read the docs
+%%% in {@link harvesting_stream} module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_worker).

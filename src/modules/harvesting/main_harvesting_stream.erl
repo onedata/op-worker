@@ -124,13 +124,13 @@ init([SpaceId]) ->
                         maps:take(MainSeq, DestinationsPerSeqs),
                     AuxDestination =
                         harvesting_destination:merge(maps:values(AuxDestinationsPerSeqs)),
-                    ok = harvesting_state:set_main_seq(SpaceId, MainSeq),
                     schedule_start_aux_streams(AuxDestination, MainSeq),
                     {ok, #hs_state{
                         name = ?MAIN_HARVESTING_STREAM(SpaceId),
                         space_id = SpaceId,
                         until = infinity,
-                        destination = MainDestination
+                        destination = MainDestination,
+                        last_seen_seq = MainSeq
                     }}
             end;
         _ ->
@@ -189,7 +189,7 @@ handle_cast(Request, State) ->
 -spec custom_error_handling(harversting_stream:state(), harvesting_result:result()) ->
     harvesting_stream:handling_result().
 custom_error_handling(State = #hs_state{
-    name = Name,
+    space_id = SpaceId,
     batch = Batch,
     last_seen_seq = LastSeenSeq
 }, Result) ->
@@ -202,7 +202,7 @@ custom_error_handling(State = #hs_state{
             % harvesting of whole batch succeeded for at least one index
             MaxSeenSeq = max(LastSeenSeq, MaxSuccessfulSeq),
             {MainDestination2, AuxDestination2} = start_aux_streams_according_to_summary(State, Result),
-            case harvesting_state:set_seen_seq(Name, MainDestination2, MaxSeenSeq) of
+            case harvesting_state:set_seen_seq(SpaceId, MainDestination2, MaxSeenSeq) of
                 ok ->
                     {noreply, harvesting_stream:enter_streaming_mode(State#hs_state{
                         destination = MainDestination2,
@@ -219,7 +219,7 @@ custom_error_handling(State = #hs_state{
             % but it succeeded partially for at least one index
             % we should increase seen_seq
             {MainDestination2, AuxDestination2} = start_aux_streams_according_to_summary(State, Result),
-            case harvesting_state:set_seen_seq(Name, MainDestination2, MaxSuccessfulSeq) of
+            case harvesting_state:set_seen_seq(SpaceId, MainDestination2, MaxSuccessfulSeq) of
                 ok ->
                     ErrorLog = str_utils:format_bin(
                         "Unexpected errors occurred when applying batch of changes. "

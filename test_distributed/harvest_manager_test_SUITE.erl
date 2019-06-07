@@ -343,7 +343,7 @@ main_stream_should_persist_last_successfully_processed_seq(Config) ->
         RelevantSeqs, MainStreamPid),
 
     % check whether maximal Seq from Changes list was persisted as processed by harvesting stream
-    ?assertMatch({ok, Max}, harvesting_get_main_seen_seq(N, SpaceId), ?ATTEMPTS).
+    ?assertMatch({ok, Max}, harvesting_state_get_seen_seq(N, SpaceId, ?HARVESTER_ID(1), ?INDEX_ID(1)), ?ATTEMPTS).
 
 adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
@@ -1445,8 +1445,8 @@ get_main_stream_pid(Node, SpaceId) ->
 get_aux_stream_pid(Node, SpaceId, HarvesterId, IndexId) ->
     rpc:call(Node, global, whereis_name, [?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId)]).
 
-harvesting_get_main_seen_seq(Node, SpaceId) ->
-    rpc:call(Node, harvesting_state, get_main_seen_seq, [SpaceId]).
+harvesting_state_get_seen_seq(Node, SpaceId, HarvesterId, IndexId) ->
+    rpc:call(Node, harvesting_state, get_seen_seq, [SpaceId, HarvesterId, IndexId]).
 
 couchbase_changes_stream_mock_registry_start_link(Node) ->
     {ok, _} = rpc:call(Node, couchbase_changes_stream_mock_registry, start_link, []).

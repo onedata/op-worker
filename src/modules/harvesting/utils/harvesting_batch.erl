@@ -7,14 +7,39 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module used by modules associated with harvesting metadata.
-%%% It implements a simple data structure that is used for storing
+%%% It defines a simple data structure that is used for storing
 %%% metadata changes.
-%%% Batch element should be collected in accumulator(). It is a map, where
-%%% metadata doc is associated with file_id:objectid(). Thanks to that
-%%% only one and the newest change is associated with given
-%%% file_id:objectid().
-%%% accumulator() can be converted to batch() by calling
-%%% ?MODULE:prepare/1 function.
+%%%
+%%% BATCH ENTRY
+%%% Every #custom_metadata{} document is converted to BatchEntry :: batch_entry().
+%%% BatchEntry has the following format:
+%%% #{
+%%%      <<"fileId">> => file_id:objectid(),
+%%%      <<"operation">> => ?SUBMIT | ?DELETE,
+%%%      <<"seq">> => couchbase_changes:seq(),
+%%%      <<"payload">> => #{    % optional, makes sense only for ?SUBMIT operation
+%%%          <<"json">> => EncodedJSON,
+%%%          <<"rdf">> => EncodedRDF,
+%%%          <<"xattrs">> => #{binary() => binary()}
+%%%      }
+%%% }
+%%%
+%%% ACCUMULATOR
+%%% Batch entries should be collected in accumulator() structure. It is a map,
+%%% where batch entry is associated with file_id:objectid(), which ensures that
+%%% only one and the newest change is associated with given file_id:objectid().
+%%%
+%%% BATCH
+%%% Before sending to Onezone accumulator() must be converted to Batch :: batch()
+%%% by calling ?MODULE:prepare_to_send/1 function.
+%%% Next, it is necessary to extract BatchEntries :: batch_entries() list
+%%% from Batch structure.
+%%% BatchEntries has format accepted by graph-sync and can be directly
+%%% passed to space_logic:harvest_metadata/5 function.
+%%%
+%%% NOTE!!!
+%%% If you introduce any changes in this module, please ensure that
+%%% docs in {@link harvesting_stream} module are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_batch).
@@ -92,11 +117,11 @@ accumulate(Doc = #document{
 %% @doc
 %% Prepares harvesting_batch for sending to Onezone.
 %% accumulator() is unprepared, which means that:
-%%     * batch elements are not sorted (they are stored in a map)
-%%     * batch elements are not encoded
+%%     * batch entries are not sorted (they are stored in a map)
+%%     * batch entries are not encoded
 %% Call prepare_to_send(Accumulator) returns batch() which contains:
-%%     * sorted list of encoded batch elements, ready to send to Onezone
-%%     * batch elements are sorted by sequence numbers
+%%     * sorted list of encoded batch entries, ready to send to Onezone
+%%     * batch entries are sorted by sequence numbers
 %% If batch is already prepared, this function does nothing.
 %% @end
 %%-------------------------------------------------------------------

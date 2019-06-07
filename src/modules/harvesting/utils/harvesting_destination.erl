@@ -7,8 +7,17 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module used by modules associated with harvesting.
-%%% harvesting_destination is a simple data structure that represents
-%%% structure of Harvesters and Indices associated with them.
+%%% Destination is a map:
+%%% #{Harvester :: od_harvester:id() => Indices :: [od_harvester:index()]}
+%%% where:
+%%%     * Harvester - an external service that is responsible for
+%%%       performing data discovery on submitted data, i.e. ElasticSearch.
+%%%     * Indices - list of entities which accept user-defined metadata
+%%%       schema.
+%%%
+%%% NOTE!!!
+%%% If you introduce any changes in this module, please ensure that
+%%% docs in {@link harvesting_stream} module are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(harvesting_destination).

@@ -233,6 +233,10 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 %%        failed for given index.
 %%        If harvesting succeeds for whole Destination, the map is empty.
 %%     * {error, _} :: gs_protocol:error()
+%%
+%% NOTE!!!
+%% If you introduce any changes in this function, please ensure that
+%% docs in {@link harvesting_stream} module are up to date.
 %% @end
 %%--------------------------------------------------------------------
 -spec harvest_metadata(od_space:id(), harvesting_destination:destination(),

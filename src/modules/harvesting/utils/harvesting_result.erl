@@ -57,7 +57,7 @@
 %% Processes harvesting result.
 %% This function returns #result{} structure that is more convenient for
 %% interpreting the results than raw result returned from
-%% space_logic:harvest_metadata function.
+%% space_logic:harvest_metadata/5 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec process({ok, failure_map()} | gs_protocol:error(), harvesting_destination:destination(),

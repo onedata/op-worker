@@ -6,17 +6,94 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module defines behaviour of `harvesting_stream`.
-%%% harvesting_stream process starts couchbase_changes_stream and
-%%% harvests changes received from it.
-%%% It accumulates changes of custom_metadata documents in
-%%% harvesting_batch:accumulator() structure.
-%%% Accumulated changes are pushed to Onezone when one of 2 cases occurs:
-%%%     * size of accumulated batch exceeds ?BATCH_SIZE
-%%%     * elapsed time from last harvesting timestamp exceeds ?FLUSH_TIMEOUT
+%%% This module defines generic behaviour of `harvesting_stream`.
+%%% It also implements most of required generic functionality for such stream.
+%%% harvesting_stream is responsible for collecting #custom_metadata{} changes
+%%% from couchbase_changes_stream and sending them to Onezone which pushes them
+%%% to suitable destination.
 %%%
-%%% HARVESTING_STREAM STATE MACHINE:
+%%% Sending changes to Onezone is performed by call to
+%%% space_logic:harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)
+%%% where:
+%%%     * SpaceId      - id of space in which harvesting is performed
+%%%     * Destination  - structure which tells Onezone where harvested
+%%%                      metadata should be pushed.
+%%%                      Please read DESTINATION section below for more details.
+%%%     * Batch        - list of objects, where each object is associated
+%%%                      with exactly one #custom_metadata{} document.
+%%%                      Please read BATCH section below for more details.
+%%%     * MaxStreamSeq - maximum sequence number processed by given
+%%%                      harvesting_stream. Compared to MaxSeq, it allows to
+%%%                      evaluate progress of harvesting in given space.
+%%%     * MaxSeq       - max sequence number in given scope (SpaceId).
 %%%
+%%% Return value from space_logic:harvest_metadata/5 is processed by
+%%% harvesting_result:process/2 function which converts it to format
+%%% more convenient to handle by harvesting_stream.
+%%% Please read the docs in {@link harvesting_result} module for more details.
+%%%
+%%% DESTINATION
+%%% Destination is a simple data structure that represents structure of
+%%% Harvesters and Indices associated with them.
+%%% Destination for given harvesting_stream is stored in its state.
+%%% {@link harvesting_destination} is a helper module which defines functions
+%%% for performing operations on this structure.
+%%% Please read the docs in {@link harvesting_destination} module for more
+%%% details.
+%%%
+%%% BATCH
+%%% Changes of #custom_metadata{} documents are accumulated in
+%%% Accumulator :: harvesting_batch:accumulator() structure. It is ensured that
+%%% there is maximum one object associated with one file in one batch.
+%%% Before sending changes to Onezone, harvesting_batch:prepare_to_send/1
+%%% function must be called on Accumulator to convert it to format
+%%% accepted by space_logic:harvest_metadata/5 function.
+%%% It ensures that batch is sorted by sequence numbers and that stored
+%%% metadata are encoded.
+%%%
+%%% Accumulated changes are pushed to Onezone when one of 3 cases occurs:
+%%%   * size of accumulated batch exceeds ?BATCH_SIZE,
+%%%   * elapsed time from last harvesting timestamp exceeds ?FLUSH_TIMEOUT
+%%%     and Batch is not empty,
+%%%   * elapsed time from last harvesting timestamp exceeds ?FLUSH_TIMEOUT
+%%%     and Batch is empty and last seen sequence by the harvesting_stream is
+%%%     higher than last sent MaxStreamSeq. This case allows to notify Onezone
+%%%     that stream is processing changes but there hasn't been any #custom_metadata{}
+%%%     changes since last call to space_logic:harvest_metadata/5.
+%%%
+%%% IMPLEMENTING MODULES
+%%% There are 2 modules, that implement this behaviour:
+%%%   * main_harvesting_stream - responsible for harvesting metadata changes
+%%%                              in given space. It is always the stream that
+%%%                              hast the highest processed sequence number in
+%%%                              the space, out of all streams harvesting given
+%%%                              space. It also reacts on changes in the harvesters'
+%%%                              structure by updating its own Destination and by
+%%%                              starting aux_harvesting_streams. Another
+%%%                              responsibility of main_harvesting_stream is
+%%%                              taking over harvesting for given pair
+%%%                              {HarvesterId, IndexId} when aux_harvesting_stream
+%%%                              catches up with tha main stream.
+%%%   * aux_harvesting_stream  - responsible for catching-up with
+%%%                              main_harvesting_stream for given pair
+%%%                              {HarvesterId, IndexId}. It is started with
+%%%                              Until :: couchbase_changes:seq(). After reaching
+%%%                              this sequence it tries to relay its
+%%%                              {HarvesterId, IndexId} to the main stream.
+%%%
+%%% Please read the docs in {@link main_harvesting_stream} and
+%%% {@link aux_harvesting_stream} modules for more details.
+%%%
+%%% HARVESTING STATE
+%%% State of harvesting in given space is persisted in {@link harvesting_state}
+%%% model. For each harvested space, it stores a document in which
+%%% the highest seen sequence for given pair
+%%% {od_harvester:id(), od_harvester:index()} is persisted.
+%%% This model allows to track progress of harvesting and to restart
+%%% harvesting from the given point after restart of provider,
+%%% re-support of space or re-subscription of space by harvester.
+%%%
+%%% HARVESTING_STREAM STATE MACHINE
 %%%  +---------------+                     +--------------+
 %%%  |   streaming   |-----on-failure----->|   retrying   |
 %%%  +---------------+                     +--------------+
@@ -364,14 +441,14 @@ init_internal(CallbackModule, Args) ->
     case CallbackModule:init(Args) of
         {ok, State = #hs_state{
             destination = Destination,
-            name = Name
+            name = Name,
+            last_seen_seq = LastSeenSeq
         }} ->
-            {ok, LastSeenSeq} = harvesting_state:get_seen_seq(Name),
             ?debug("Starting harvesting stream ~p", [Name]),
             State2 = State#hs_state{
                 provider_id = oneprovider:get_id(),
-                last_seen_seq = LastSeenSeq,
                 last_persisted_seq = LastSeenSeq,
+                last_sent_max_stream_seq = LastSeenSeq,
                 callback_module = CallbackModule,
                 ignoring_deleted = (LastSeenSeq =:= ?DEFAULT_HARVESTING_SEQ)
             },
@@ -449,8 +526,9 @@ maybe_add_doc_to_batch(State = #hs_state{
 maybe_add_doc_to_batch(State, #document{seq = Seq}) ->
     State#hs_state{last_seen_seq = Seq}.
 
+-spec maybe_persist_last_seen_seq(state()) -> state().
 maybe_persist_last_seen_seq(State = #hs_state{
-    name = Name,
+    space_id = SpaceId,
     last_seen_seq = LastSeenSeq,
     last_persisted_seq = LastPersistedSeq,
     destination = Destination
@@ -459,7 +537,7 @@ maybe_persist_last_seen_seq(State = #hs_state{
     % If the gap between #state.last_seen_seq and
     % #state.last_persisted_seq is greater than the defined constant
     % (?IGNORED_SEQ_REPORTING_FREQUENCY), the last_seen_seq is persisted.
-    case harvesting_state:set_seen_seq(Name, Destination, LastSeenSeq) of
+    case harvesting_state:set_seen_seq(SpaceId, Destination, LastSeenSeq) of
         ok ->
             State#hs_state{last_persisted_seq = LastSeenSeq};
         ?ERROR_NOT_FOUND ->
@@ -517,11 +595,11 @@ harvest_and_handle_errors(State = #hs_state{
 
 -spec on_successful_result(state()) -> handling_result().
 on_successful_result(State = #hs_state{
-    name = Name,
+    space_id = SpaceId,
     last_seen_seq = LastSeenSeq,
     destination = Destination
 }) ->
-    case harvesting_state:set_seen_seq(Name, Destination, LastSeenSeq) of
+    case harvesting_state:set_seen_seq(SpaceId, Destination, LastSeenSeq) of
         ok ->
             State2 = State#hs_state{
                 batch = harvesting_batch:new_accumulator(),
