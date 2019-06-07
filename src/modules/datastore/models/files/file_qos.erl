@@ -82,8 +82,8 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create_or_update(doc(), diff()) ->
     {ok, key()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    datastore_model:update(?CTX, Key, Diff, Default).
+create_or_update(#document{key = Key} = Doc, Diff) ->
+    datastore_model:update(?CTX, Key, Diff, Doc).
 
 %%--------------------------------------------------------------------
 %% @doc

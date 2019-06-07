@@ -15,6 +15,7 @@
 -include("modules/datastore/qos.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2]).

@@ -169,8 +169,8 @@ eval_rpn(Operand, Stack, AvailableStorage) ->
 filter_storage(Key, Val, StorageSet) ->
     sets:filter(fun (StorageId) ->
         StorageQos = providers_qos:get_storage_qos(StorageId, StorageSet),
-        case maps:get(Key, StorageQos) of
-            Val ->
+        case maps:find(Key, StorageQos) of
+            {ok, Val} ->
                 true;
             _ ->
                 false

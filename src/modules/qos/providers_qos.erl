@@ -17,6 +17,9 @@
 %% API
 -export([get_storage_qos/2]).
 
+%% for tests
+-export([get_provider_qos/1]).
+
 -define(P1_QOS, #{
     <<"country">> => <<"PL">>,
     <<"type">> => <<"disk">>,
@@ -30,21 +33,24 @@
 }).
 
 -define(P3_QOS, #{
-    <<"country">> => <<"PR">>,
+    <<"country">> => <<"PT">>,
     <<"type">> => <<"disk">>,
     <<"tier">> => <<"t2">>
 }).
 
 -define(ALL_QOS, #{
-    <<"dev-oneprovider-krakow">> => ?P1_QOS,
-    <<"dev-oneprovider-paris">> =>?P2_QOS,
-    <<"dev-oneprovider-lisbon">> => ?P3_QOS}).
+    <<"krakow">> => ?P1_QOS,
+    <<"paris">> =>?P2_QOS,
+    <<"lisbon">> => ?P3_QOS}).
 
 
 get_storage_qos(StorageId, StorageSet) ->
-    get_provider_qos(StorageId).
+    ?MODULE:get_provider_qos(StorageId).
 
 
+get_provider_qos(undefined) ->
+    #{};
 get_provider_qos(ProviderId) ->
     {ok, ProvName} = provider_logic:get_name(ProviderId),
-    maps:get(ProvName, ?ALL_QOS).
+    A = lists:last(binary:split(ProvName, <<"-">>, [global])),
+    maps:get(A, ?ALL_QOS, #{}).

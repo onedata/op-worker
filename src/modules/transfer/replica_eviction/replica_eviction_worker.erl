@@ -18,6 +18,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -117,15 +118,61 @@ enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
 %% @doc
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
 %%
-%% Schedules safe file_replica_deletion via replica_deletion mechanism.
-%% If SupportingProviderId is undefined, it will bo chosen from
-%% providers who have given file replicated.
+%% Checks whether file replica is protected by QoS and schedules eviction appropriately.
 %% @end
 %%--------------------------------------------------------------------
 -spec transfer_regular_file(file_ctx:ctx(), transfer_params()) -> ok | {error, term()}.
-transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = undefined}) ->
+transfer_regular_file(FileCtx, #transfer_params{
+    transfer_id = TransferId,
+    supporting_provider = SupportingProvider
+}) ->
+    Uuid = file_ctx:get_uuid_const(FileCtx),
+    ProviderId = oneprovider:get_id_or_undefined(),
+    QosStorages = case file_qos:get(Uuid) of
+        undefined -> #{};
+        #file_qos{target_storages = TS} -> TS
+    end,
+
+    EquivalentStorages =
+        providers_qos:get_provider_qos(ProviderId)
+            ==
+        providers_qos:get_provider_qos(SupportingProvider),
+
+    case {maps:is_key(ProviderId, QosStorages), EquivalentStorages andalso
+        not maps:is_key(SupportingProvider, QosStorages)} of
+        {true, true} ->
+            file_qos:update(Uuid,
+                fun(#file_qos{target_storages = TS}) ->
+                    QosList = maps:get(ProviderId, TS, []),
+                    NewQosList = maps:get(SupportingProvider, TS, []),
+                    {ok, #file_qos{target_storages = (maps:remove(ProviderId, TS))#{
+                        SupportingProvider => NewQosList ++ QosList}
+                    }}
+                end
+            ),
+            schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider);
+        {true, false} ->
+            transfer:increment_files_processed_counter(TransferId),
+            ok;
+        _ ->
+            schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider)
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Schedules safe file_replica_deletion via replica_deletion mechanism.
+%% If SupportingProviderId is undefined, it will be chosen from
+%% providers who have given file replicated.
+%% @end
+%%-------------------------------------------------------------------
+-spec schedule_regular_file_eviction(file_ctx:ctx(), transfer:id(), od_provider:id() | undefined) -> ok.
+schedule_regular_file_eviction(FileCtx, TransferId, undefined) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    TransferId = Params#transfer_params.transfer_id,
     case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
         undefined ->
             transfer:increment_files_processed_counter(TransferId);
@@ -133,26 +180,17 @@ transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = u
             schedule_replica_deletion_task(
                 FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId
             )
-    end,
-    ok;
-transfer_regular_file(FileCtx, #transfer_params{
-    transfer_id = TransferId,
-    supporting_provider = SupportingProvider
-}) ->
+    end;
+schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider) ->
     {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {Size, FileCtx} = file_ctx:get_file_size(FileCtx2),
+    {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
     schedule_replica_deletion_task(
         FileUuid, SupportingProvider, Blocks, VV, TransferId, SpaceId
-    ),
-    ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+    ).
 
 %%-------------------------------------------------------------------
 %% @private

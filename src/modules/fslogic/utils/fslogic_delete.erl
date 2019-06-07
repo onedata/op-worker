@@ -157,6 +157,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
             _ -> ok
         end,
 
+        file_qos:delete(file_ctx:get_uuid_const(FileCtx4)),
         case {DeleteFileMeta, RemoveStorageFile} of
             {true, _} ->
                 ok = file_meta:delete(FileDoc);
