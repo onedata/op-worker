@@ -30,13 +30,12 @@
 -export([translate_name/1, translate_arg_name/1]).
 
 -type name() :: binary().
--type field() :: binary().
 
--type args() :: #{field() => binary()}.
+-type args() :: #{binary() => binary()}.
+-type user_ctx() :: #{binary() => binary()}.
+-type group_ctx() :: #{binary() => binary()}.
+
 -type params() :: #helper_params{}.
-
--type user_ctx() :: #{field() => binary()}.
--type group_ctx() :: #{field() => binary()}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
 
@@ -59,6 +58,20 @@ new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
         extended_direct_io = extended_direct_io(HelperName),
         storage_path_type = StoragePathType
     }}.
+
+
+%% @private
+-spec extended_direct_io(name()) -> boolean().
+extended_direct_io(?POSIX_HELPER_NAME) -> false;
+extended_direct_io(_) -> true.
+
+
+%% @private
+-spec allow_insecure(name()) -> boolean().
+allow_insecure(?POSIX_HELPER_NAME) -> false;
+allow_insecure(?GLUSTERFS_HELPER_NAME) -> false;
+allow_insecure(?NULL_DEVICE_HELPER_NAME) -> false;
+allow_insecure(_) -> true.
 
 
 %%--------------------------------------------------------------------
@@ -104,24 +117,6 @@ update_insecure(#helper{name = Name} = Helper, NewInsecure) ->
         {_, _} ->
             {ok, Helper#helper{insecure = NewInsecure}}
     end.
-
-
-%%%===================================================================
-%%% Validators
-%%%===================================================================
-
-%% @private
--spec extended_direct_io(name()) -> boolean().
-extended_direct_io(?POSIX_HELPER_NAME) -> false;
-extended_direct_io(_) -> true.
-
-
-%% @private
--spec allow_insecure(name()) -> boolean().
-allow_insecure(?POSIX_HELPER_NAME) -> false;
-allow_insecure(?GLUSTERFS_HELPER_NAME) -> false;
-allow_insecure(?NULL_DEVICE_HELPER_NAME) -> false;
-allow_insecure(_) -> true.
 
 
 %%%===================================================================

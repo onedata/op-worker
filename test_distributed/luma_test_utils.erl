@@ -10,7 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_test_utils).
--author("Michal Stanisz").
+-author("Wojciech Geisler").
 
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 

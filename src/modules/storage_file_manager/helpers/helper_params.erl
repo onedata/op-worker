@@ -50,20 +50,24 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_helper_args(name(), args()) -> args().
-prepare_helper_args(HelperName = ?S3_HELPER_NAME, Params) ->
-    Args = maps_flatmap(fun
-        (<<"hostname">>, URL) ->
-            {ok, HttpOrHttps, Host} = parse_url(URL),
-            #{
-                <<"scheme">> => atom_to_binary(HttpOrHttps, utf8),
-                <<"hostname">> => Host
-            };
-        (Key, Value) -> #{Key => Value}
-    end, Params),
+prepare_helper_args(?S3_HELPER_NAME = HelperName, Params) ->
+    Args = derive_scheme_from_url(Params),
     filter_fields(expected_helper_args(HelperName), Args);
 
 prepare_helper_args(HelperName, Params) ->
     filter_fields(expected_helper_args(HelperName), Params).
+
+
+%% @private
+-spec derive_scheme_from_url(args()) -> args().
+derive_scheme_from_url(#{<<"hostname">> := URL} = Params) ->
+    {ok, UrlScheme, Host} = parse_url(URL),
+    Scheme = case UrlScheme of
+        <<"https">> -> <<"https">>;
+        _ -> <<"http">>
+    end,
+    Params#{<<"scheme">> => Scheme, <<"hostname">> => Host};
+derive_scheme_from_url(Params) -> Params.
 
 
 %%--------------------------------------------------------------------
@@ -76,26 +80,29 @@ prepare_helper_args(HelperName, Params) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_user_ctx_params(name(), ctx()) -> ctx().
-prepare_user_ctx_params(HelperName = ?WEBDAV_HELPER_NAME, Params) ->
-    Ctx = maps_flatmap(fun
-        (Key = <<"onedataAccessToken">>, Token) when byte_size(Token) > 0 ->
-            {ok, AdminId} = user_identity:get_or_fetch_user_id(Token),
-            #{
-                <<"adminId">> => AdminId,
-                Key => Token
-            };
-        (Key, Value) -> #{Key => Value}
-    end, Params),
-    Ctx2 = case Ctx of
-        #{<<"credentialsType">> := <<"none">>} ->
-            Ctx#{<<"credentials">> => <<>>};
-        _ -> Ctx
-    end,
+prepare_user_ctx_params(?WEBDAV_HELPER_NAME = HelperName, Params) ->
+    Ctx1 = clear_unused_webdav_credentials(Params),
+    Ctx2 = resolve_user_by_token(Ctx1),
     filter_fields(expected_user_ctx_params(HelperName), Ctx2);
 
 prepare_user_ctx_params(HelperName, Params) ->
     filter_fields(expected_user_ctx_params(HelperName), Params).
 
+
+%% @private
+-spec clear_unused_webdav_credentials(user_ctx()) -> user_ctx().
+clear_unused_webdav_credentials(#{<<"credentialsType">> := <<"none">>} = Params) ->
+    Params#{<<"credentials">> => <<>>};
+clear_unused_webdav_credentials(Params) -> Params.
+
+
+%% @private
+-spec resolve_user_by_token(user_ctx()) -> user_ctx().
+resolve_user_by_token(#{<<"onedataAccessToken">> := Token} = Params) when
+    byte_size(Token) > 0 ->
+    {ok, UserId} = user_identity:get_or_fetch_user_id(Token),
+    Params#{<<"adminId">> => UserId};
+resolve_user_by_token(Params) -> Params.
 
 
 %%--------------------------------------------------------------------
@@ -273,8 +280,8 @@ strip_optional_modifier(Fields) ->
 
 
 %% @private
--spec remove_field(ToRemove :: field(), Fields :: [field() | optional_field()]) ->
-    [field() | optional_field()].
+-spec remove_field(ToRemove :: field(), FieldsList) -> FieldsList when
+    FieldsList :: [field() | optional_field()].
 remove_field(ToRemove, Fields) ->
     lists:filter(fun(Field) -> case Field of
         ToRemove -> false;
@@ -283,32 +290,13 @@ remove_field(ToRemove, Fields) ->
     end end, Fields).
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Invokes Fun for each key-value pair in the map.
-%% The Fun must return a map, all of which are merged to create the result.
-%% @end
-%%--------------------------------------------------------------------
--spec maps_flatmap(Fun, #{K1 => V1}) -> #{K2 => V2} when
-    Fun :: fun((K1, V1) -> #{K2 => V2}).
-maps_flatmap(Fun, Map) ->
-    maps:fold(fun(K, V, Acc) ->
-        maps:merge(Acc, Fun(K, V))
-    end, #{}, Map).
-
-
 %% @private
 -spec parse_url(URL :: binary()) ->
-    {ok, Scheme :: http | https, HostAndPort :: binary()}.
+    {ok, Scheme :: binary(), HostAndPort :: binary()}.
 parse_url(URL) ->
     #hackney_url{scheme = UrlScheme, host = Host, port = Port} =
         hackney_url:parse_url(URL),
-    Scheme = case UrlScheme of
-        https -> https;
-        _ -> http
-    end,
-    {ok, Scheme, str_utils:format_bin("~s:~B", [Host, Port])}.
+    {ok, UrlScheme, str_utils:format_bin("~s:~B", [Host, Port])}.
 
 
 %%--------------------------------------------------------------------
