@@ -99,6 +99,8 @@
 
     shares = [] :: [od_share:id()],
 
+    harvesters = [] :: [od_harvester:id()],
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -132,7 +134,6 @@
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
-    eff_harvesters = [] :: [od_harvester:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -524,7 +525,7 @@
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
     file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
-    value = #{} :: maps:map()
+    value = #{} :: json_utils:json_term()
 }).
 
 %% Model that holds database views
@@ -693,12 +694,10 @@
     providers = [] :: all | [od_provider:id()]
 }).
 
-%% Model that holds information about harvesting for given pair (HarvesterId, SpaceId)
--record(harvest_stream_state, {
-    % max processed sequence associated with custom_metadata document
-    max_relevant_seq = 0 :: couchbase_changes:seq(),
-    % maps that holds max seen sequence numbers for each harvesting index
-    seen_seqs = #{} :: maps:map(od_harvester:index(), couchbase_changes:seq())
+%% Model that holds information about state of harvesting for given space
+-record(harvesting_state, {
+    % structure that holds progress of harvesting for {Harvester, Index} pairs
+    progress :: harvesting_progress:progress()
 }).
 
 -endif.

@@ -69,6 +69,7 @@ delete(Key) ->
     file_popularity_api:disable(Key),
     file_popularity_api:delete_config(Key),
     space_strategies:delete(Key),
+    main_harvesting_stream:space_unsupported(Key),
     datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
