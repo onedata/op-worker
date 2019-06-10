@@ -117,8 +117,8 @@
     acl_write_acl_user_test/1,
     acl_write_acl_group_test/1,
     permission_cache_test/1,
-    check_perms_test/1
-
+    check_perms_test/1,
+    expired_session_test/1
 ]).
 
 all() ->
@@ -165,7 +165,8 @@ all() ->
         acl_write_acl_user_test,
         acl_write_acl_group_test,
         permission_cache_test,
-        check_perms_test
+        check_perms_test,
+        expired_session_test
     ]).
 
 %%%===================================================================
@@ -1120,6 +1121,17 @@ check_perms_test(Config) ->
     ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, read)),
     ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, write)),
     ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, rdwr)).
+
+expired_session_test(Config) ->
+    % Setup
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/es_file">>, 8#770)),
+
+    ok = rpc:call(W, session, delete, [SessId1]),
+
+    % Verification
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

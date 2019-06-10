@@ -503,7 +503,9 @@ mock_share_logic(Config) ->
         {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
-            root_file = ShareFileGuid
+            root_file = ShareFileGuid,
+            public_url = <<ShareId/binary, "_public_url">>,
+            handle = <<ShareId/binary, "_handle_id">>
         }}),
         {ok, ShareId}
     end),
@@ -512,6 +514,12 @@ mock_share_logic(Config) ->
     end),
     test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
         ok = od_share:invalidate_cache(ShareId)
+    end),
+    test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
+        {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
+        ok = od_share:invalidate_cache(ShareId),
+        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = Share#od_share{name = NewName}}),
+        ok
     end).
 
 -spec unmock_share_logic(proplists:proplist()) -> ok.

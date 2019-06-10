@@ -115,10 +115,10 @@ all() -> ?ALL([
     ExpHarvestingStreamPid, Timeout
 ), (
     (fun
-        AssertFun (__SpaceId, __Destination, [], __HarvestingStreamPid, __Timeout) ->
+        AssertFun(__SpaceId, __Destination, [], __HarvestingStreamPid, __Timeout) ->
             % all expected changes has been received
             ok;
-        AssertFun (__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
+        AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
             __TimeoutInMillis = timer:seconds(__Timeout),
             receive
                 ?HARVEST_METADATA_CALLED(
@@ -127,15 +127,15 @@ all() -> ?ALL([
                     __ReceivedChanges,
                     __HarvestingStreamPid
                 ) ->
-                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
-                AssertFun(__SpaceId, __Destination, sequential_subtract(__Seqs, __ReceivedSeqs),
-                    __HarvestingStreamPid, __Timeout)
+                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                    AssertFun(__SpaceId, __Destination, sequential_subtract(__Seqs, __ReceivedSeqs),
+                        __HarvestingStreamPid, __Timeout)
             after
                 __TimeoutInMillis ->
                     __Args = [{module, ?MODULE},
-                    {line, ?LINE},
-                    {expected, {__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout}},
-                    {value, timeout}],
+                        {line, ?LINE},
+                        {expected, {__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout}},
+                        {value, timeout}],
                     ct:print("assertHarvestMetadataCalled_failed: ~lp~n", [__Args]),
                     erlang:error({assertHarvestMetadataCalled_failed, __Args})
             end
@@ -665,7 +665,7 @@ aux_stream_should_be_started_on_harvester_level_error(Config) ->
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
     ?assertHarvestMetadataCalled(SpaceId,
         #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
-       RelevantSeqs2, MainStreamPid
+        RelevantSeqs2, MainStreamPid
     ),
 
     AuxStreamPid = get_aux_stream_pid(N, SpaceId, ?HARVESTER_ID(2), ?INDEX_ID(1)),
@@ -1269,7 +1269,7 @@ end_per_testcase(_, Config) ->
     ok = test_utils:mock_unload(Nodes, space_logic),
     lists:foreach(fun(Node) ->
 
-    ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
+        ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
         {ok, _} = rpc:call(Node, supervisor, restart_child, [harvesting_worker_sup, harvesting_stream_sup])
     end, Nodes),
     ?assertMatch(0, catch count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
@@ -1552,7 +1552,7 @@ in_destination(HarvesterId, Destination) ->
     lists:member(HarvesterId, Harvesters).
 
 in_destination(HarvesterId, IndexId, Destination) ->
-     Harvesters = harvesting_destination:get_harvesters(Destination),
+    Harvesters = harvesting_destination:get_harvesters(Destination),
     case lists:member(HarvesterId, Harvesters) of
         true ->
             Indices = harvesting_destination:get(HarvesterId, Destination),

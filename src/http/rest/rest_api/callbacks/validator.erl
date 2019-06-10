@@ -33,7 +33,7 @@
 -export([malformed_request/2, parse_path/2,
     parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_migration_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
-    parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
+    parse_share_id/2, parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
     parse_transfer_state/2, parse_page_token/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
@@ -109,6 +109,16 @@ parse_objectid(Req, State) ->
     {parse_result(), cowboy_req:req()}.
 parse_user_id(Req, State) ->
     {State#{user_id => cowboy_req:binding(uid, Req)}, Req}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's share_id and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_share_id(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_share_id(Req, State) ->
+    {State#{share_id => cowboy_req:binding(shid, Req)}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc
