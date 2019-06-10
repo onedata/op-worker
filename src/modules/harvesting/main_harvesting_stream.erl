@@ -342,7 +342,7 @@ call_internal(SpaceId, Request) ->
         true ->
             Name = ?MAIN_HARVESTING_STREAM(SpaceId),
             try
-                gen_server2:call({global, Name}, Request, infinity)
+                ok = gen_server2:call({global, Name}, Request, infinity)
             catch
                 _:{noproc, _} ->
                     ?debug("Stream ~p noproc, retrying with a new one", [Name]),
@@ -351,7 +351,11 @@ call_internal(SpaceId, Request) ->
                             call_internal(SpaceId, Request);
                         {error, normal} ->
                             ok
-                    end
+                    end;
+                Error:Reason ->
+                    ?error_stacktrace("
+                    Unexpected error in main_harvesting_stream:call_internal: ~p",
+                        [{Error, Reason}])
             end;
         false ->
             ok

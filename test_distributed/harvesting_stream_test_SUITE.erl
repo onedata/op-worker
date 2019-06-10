@@ -9,8 +9,7 @@
 %%% This module tests harvesting_worker supervision tree.
 %%% @end
 %%%--------------------------------------------------------------------
--module(harvest_manager_test_SUITE).
-% TODO RENAME TO harvesting_stream_test_SUITE, REMEMBER TO RENAME JOB ON BAMBOO!!!
+-module(harvesting_stream_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("logic_tests_common.hrl").

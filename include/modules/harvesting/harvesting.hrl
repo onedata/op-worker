@@ -40,7 +40,10 @@
 
 % Records
 
-% state of harvesting_stream gen_server
+% State of harvesting_stream gen_server.
+% Record is defined in header file because it is used in generic
+% harvesting_worker module and 2 modules that implements this behaviour:
+% main_harvesting_stream and aux_harvesting_stream.
 -record(hs_state, {
     % common fields
     name :: harvesting_stream:name(),
