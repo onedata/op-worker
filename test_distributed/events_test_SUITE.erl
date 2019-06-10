@@ -26,7 +26,8 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2,
+    end_per_testcase/2, end_per_suite/1]).
 
 %% tests
 -export([
@@ -38,6 +39,7 @@
     emit_file_written_event_should_execute_handler/1,
     emit_file_attr_changed_event_should_execute_handler/1,
     emit_file_location_changed_event_should_execute_handler/1,
+    emit_helper_params_changed_event_should_execute_handler/1,
     flush_should_notify_awaiting_process/1
 ]).
 
@@ -51,6 +53,7 @@ all() ->
         emit_file_written_event_should_execute_handler,
         emit_file_attr_changed_event_should_execute_handler,
         emit_file_location_changed_event_should_execute_handler,
+        emit_helper_params_changed_event_should_execute_handler,
         flush_should_notify_awaiting_process
     ]).
 
@@ -59,6 +62,8 @@ all() ->
 -define(FILE_UUID, <<"file_uuid">>).
 -define(SPACE_ID, <<"spaceid">>).
 -define(FILE_GUID, file_id:pack_guid(?FILE_UUID, ?SPACE_ID)).
+-define(STORAGE_ID1, <<"storageid1">>).
+-define(STORAGE_ID2, <<"storageid2">>).
 
 %%%===================================================================
 %%% Test functions
@@ -117,6 +122,16 @@ emit_file_location_changed_event_should_execute_handler(Config) ->
     emit(Worker, ?config(session_id, Config), Evt),
     ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
+emit_helper_params_changed_event_should_execute_handler(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    % only ?STORAGE_ID1 has handler set up
+    Evt1 = helper_params_changed_event(?STORAGE_ID1),
+    Evt2 = helper_params_changed_event(?STORAGE_ID2),
+    emit(Worker, ?config(session_id, Config), Evt2),
+    emit(Worker, ?config(session_id, Config), Evt1),
+    ?assertNotReceivedMatch({event_handler, [Evt2]}, ?TIMEOUT),
+    ?assertReceivedMatch({event_handler, [Evt1]}, ?TIMEOUT).
+
 flush_should_notify_awaiting_process(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Evt = file_read_event(1, [{0, 1}]),
@@ -141,7 +156,8 @@ init_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
     Case =:= emit_file_written_event_should_execute_handler;
     Case =:= emit_file_attr_changed_event_should_execute_handler;
-    Case =:= emit_file_location_changed_event_should_execute_handler ->
+    Case =:= emit_file_location_changed_event_should_execute_handler;
+    Case =:= emit_helper_params_changed_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_subscription(Case, Worker),
     init_per_testcase(?DEFAULT_CASE(Case), [{subscription_id, SubId} | Config]);
@@ -194,7 +210,8 @@ end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
     Case =:= emit_file_written_event_should_execute_handler;
     Case =:= emit_file_attr_changed_event_should_execute_handler;
-    Case =:= emit_file_location_changed_event_should_execute_handler ->
+    Case =:= emit_file_location_changed_event_should_execute_handler;
+    Case =:= emit_helper_params_changed_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -224,6 +241,9 @@ end_per_testcase(_Case, Config) ->
     test_utils:mock_unload(Workers, space_logic),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
+
+end_per_suite(Config) ->
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -456,6 +476,11 @@ file_attr_changed_event() ->
 file_location_changed_event() ->
     #file_location_changed_event{file_location = #file_location{uuid = ?FILE_UUID, space_id = ?SPACE_ID}}.
 
+%% @private
+-spec helper_params_changed_event(storage:id()) -> #helper_params_changed_event{}.
+helper_params_changed_event(StorageId) ->
+    #helper_params_changed_event{storage_id = StorageId}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -475,6 +500,9 @@ subscription_type_for_testcase_name(emit_file_attr_changed_event_should_execute_
 
 subscription_type_for_testcase_name(emit_file_location_changed_event_should_execute_handler) ->
     #file_location_changed_subscription{file_guid = ?FILE_GUID};
+
+subscription_type_for_testcase_name(emit_helper_params_changed_event_should_execute_handler) ->
+    #helper_params_changed_subscription{storage_id = ?STORAGE_ID1};
 
 subscription_type_for_testcase_name(_) ->
     #file_read_subscription{}.
