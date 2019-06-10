@@ -16,7 +16,6 @@
 
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("hackney/include/hackney_lib.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -63,7 +62,7 @@ prepare_helper_args(HelperName, Params) ->
 derive_scheme_from_url(#{<<"hostname">> := URL} = Params) ->
     {ok, UrlScheme, Host} = parse_url(URL),
     Scheme = case UrlScheme of
-        <<"https">> -> <<"https">>;
+        https -> <<"https">>;
         _ -> <<"http">>
     end,
     Params#{<<"scheme">> => Scheme, <<"hostname">> => Host};
@@ -292,11 +291,10 @@ remove_field(ToRemove, Fields) ->
 
 %% @private
 -spec parse_url(URL :: binary()) ->
-    {ok, Scheme :: binary(), HostAndPort :: binary()}.
+    {ok, Scheme :: http | https, HostAndPort :: binary()}.
 parse_url(URL) ->
-    #hackney_url{scheme = UrlScheme, host = Host, port = Port} =
-        hackney_url:parse_url(URL),
-    {ok, UrlScheme, str_utils:format_bin("~s:~B", [Host, Port])}.
+    #{scheme := Scheme, host := Host, port := Port} = url_utils:parse(URL),
+    {ok, Scheme, str_utils:format_bin("~ts:~B", [Host, Port])}.
 
 
 %%--------------------------------------------------------------------
