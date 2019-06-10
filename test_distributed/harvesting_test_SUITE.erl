@@ -9,7 +9,7 @@
 %%% Empty test SUITE to be implemented in version 18.07.
 %%% @end
 %%%-------------------------------------------------------------------
--module(harvest_test_SUITE).
+-module(harvesting_test_SUITE).
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/test/performance.hrl").
