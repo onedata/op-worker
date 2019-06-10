@@ -333,7 +333,8 @@ set_up_service_in_onezone() ->
 
     case cluster_logic:update_version_info(Release, Build, GuiHash) of
         ok ->
-            ?info("Skipping GUI upload as it is already present in Onezone");
+            ?info("Skipping GUI upload as it is already present in Onezone"),
+            ?info("Oneprovider worker service successfully set up in Onezone");
         ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
             ?info("Uploading GUI to Onezone (~s)", [GuiHash]),
             case cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH) of
