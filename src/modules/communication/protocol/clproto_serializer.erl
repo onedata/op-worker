@@ -36,8 +36,7 @@
 %%--------------------------------------------------------------------
 -spec load_msg_defs() -> ok.
 load_msg_defs() ->
-    ok.
-%%    enif_protobuf:load_cache(messages:get_msg_defs()).
+    enif_protobuf:load_cache(messages:get_msg_defs()).
 
 
 -spec deserialize_client_message(binary(), undefined | session:id()) ->
@@ -49,9 +48,7 @@ deserialize_client_message(Message, SessionId) ->
         message_body = {_, MsgBody},
         proxy_session_id = EffSessionId,
         proxy_session_macaroon = PToken
-    } = messages:decode_msg(Message, 'ClientMessage'),
-    % TODO VFS-5405 - return to using enif_protobuf when tid_not_found error is fixed
-%%    } = enif_protobuf:decode(Message, 'ClientMessage'),
+    } = enif_protobuf:decode(Message, 'ClientMessage'),
 
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
 
@@ -82,9 +79,7 @@ deserialize_server_message(Message, SessionId) ->
         message_stream = MsgStm,
         message_body = {_, MsgBody},
         proxy_session_id = EffSessionId
-    } = messages:decode_msg(Message, 'ServerMessage'),
-    % TODO VFS-5405 - return to using enif_protobuf when tid_not_found error is fixed
-%%    } = enif_protobuf:decode(Message, 'ServerMessage'),
+    } = enif_protobuf:decode(Message, 'ServerMessage'),
 
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
     {ok, #server_message{
@@ -121,9 +116,7 @@ serialize_server_message(#server_message{
             ok
     end,
 
-    % TODO VFS-5405 - return to using enif_protobuf when tid_not_found error is fixed
-%%    case enif_protobuf:encode(ServerMessage) of
-    case messages:encode_msg(ServerMessage) of
+    case enif_protobuf:encode(ServerMessage) of
         {error, Reason} ->
             throw({serialization_failed, Reason});
         EncodedServerMessage ->
@@ -157,9 +150,7 @@ serialize_client_message(#client_message{
             ok
     end,
 
-    % TODO VFS-5405 - return to using enif_protobuf when tid_not_found error is fixed
-%%    case enif_protobuf:encode(ClientMessage) of
-    case messages:encode_msg(ClientMessage) of
+    case enif_protobuf:encode(ClientMessage) of
         {error, Reason} ->
             throw({serialization_failed, Reason});
         EncodedClientMessage ->

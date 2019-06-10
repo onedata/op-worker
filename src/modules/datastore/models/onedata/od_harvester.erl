@@ -69,13 +69,23 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(save, _, {ok, #document{
+run_after(save, _, Result = {ok, #document{
     key = HarvesterId,
     value = #od_harvester{
         spaces = Spaces,
         indices = Indices
 }}}) ->
-    harvest_manager:revise_streams_of_harvester(HarvesterId, Spaces, Indices);
+    lists:foreach(fun(SpaceId) ->
+        case provider_logic:supports_space(SpaceId) of
+            true ->
+                spawn(fun() ->
+                    main_harvesting_stream:revise_harvester(SpaceId, HarvesterId, Indices)
+                end);
+            false ->
+                ok
+        end
+    end, Spaces),
+    Result;
 run_after(_Function, _Args, Result) ->
     Result.
 

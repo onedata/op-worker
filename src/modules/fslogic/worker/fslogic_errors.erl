@@ -105,7 +105,7 @@ gen_status_message({ErrorCode, ErrorDescription}) when
         false -> #status{code = ?EAGAIN, description = ErrorDescription}
     end;
 gen_status_message(_Reason) ->
-    #status{code = ?EAGAIN, description = <<"An unknown error occured.">>}.
+    #status{code = ?EAGAIN, description = <<"An unknown error occurred.">>}.
 
 %%%===================================================================
 %%% Internal functions

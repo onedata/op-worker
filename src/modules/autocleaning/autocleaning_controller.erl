@@ -270,7 +270,7 @@ process_replica_deletion_result({error, precondition_not_satisfied},
     notify_processed_file(SpaceId,ReportId);
 process_replica_deletion_result(Error, SpaceId, FileUuid, ReportId) ->
     {ARId, _BatchNum} = unpack_batch_id(ReportId),
-    ?error("Error ~p occured during auto-cleanig of file ~p in run ~p",
+    ?error("Error ~p occurred during auto-cleanig of file ~p in run ~p",
         [Error, FileUuid, ARId]),
     notify_processed_file(SpaceId,ReportId).
 
