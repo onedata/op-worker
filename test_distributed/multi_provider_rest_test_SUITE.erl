@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -27,6 +27,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -83,20 +84,21 @@
 
 all() ->
     ?ALL([
-        get_simple_file_distribution,
-        transfers_should_be_ordered_by_timestamps,
-        posix_mode_get,
-        posix_mode_put,
-        attributes_list,
-        xattr_get,
-        xattr_put,
-        xattr_list,
-        metric_get,
-        list_file,
-        list_dir,
-        list_dir_range,
-        list_spaces,
-        get_space,
+%%        get_simple_file_distribution,
+%%        transfers_should_be_ordered_by_timestamps,
+%%        posix_mode_get,
+%%        posix_mode_put,
+%%        attributes_list,
+%%        xattr_get,
+%%        xattr_put,
+%%        xattr_list,
+%%        metric_get,
+%%        list_file,
+%%        list_dir,
+%%        list_dir_range,
+%%        list_spaces,
+%%        get_space,
+
         create_share,
         create_share_id,
         get_share,
@@ -107,18 +109,19 @@ all() ->
         delete_share_public_id,
         update_share_name,
         update_share_name_id,
-        update_share_name_public_id,
-        set_get_json_metadata,
-        set_get_json_metadata_id,
-        set_get_rdf_metadata,
-        set_get_rdf_metadata_id,
-        set_get_json_metadata_inherited,
-        set_get_xattr_inherited,
-        set_get_json_metadata_using_filter,
-        primitive_json_metadata_test,
-        empty_metadata_invalid_json_test,
-        list_transfers,
-        track_transferred_files
+        update_share_name_public_id
+
+%%        set_get_json_metadata,
+%%        set_get_json_metadata_id,
+%%        set_get_rdf_metadata,
+%%        set_get_rdf_metadata_id,
+%%        set_get_json_metadata_inherited,
+%%        set_get_xattr_inherited,
+%%        set_get_json_metadata_using_filter,
+%%        primitive_json_metadata_test,
+%%        empty_metadata_invalid_json_test,
+%%        list_transfers,
+%%        track_transferred_files
     ]).
 
 -define(ATTEMPTS, 100).
@@ -596,7 +599,7 @@ create_share_base(Config, RestPathType) ->
 
     % request without share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_INVALID_NAME,
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
         {SupportingProviderNode, SharedDirRestPath, post, Headers, <<"">>}
     )),
 
@@ -605,7 +608,7 @@ create_share_base(Config, RestPathType) ->
 
     % creating share for file should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_A_DIRECTORY,
+        ?ERROR_BAD_VALUE_DIRECTORY,
         {SupportingProviderNode, FileRestPath, post, Headers, Payload}
     )),
 
@@ -632,7 +635,7 @@ create_share_base(Config, RestPathType) ->
 
     % creating share for directory that has existing share should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SHARE_ALREADY_EXISTS,
+        ?ERROR_ALREADY_EXISTS,
         {SupportingProviderNode, SharedDirRestPath, post, Headers, Payload}
     )),
 
@@ -974,18 +977,18 @@ update_share_name_base(Config, RestPathType) ->
 
     % request without new share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_INVALID_NAME,
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
         {SupportingProviderNode, SharedDirRestPath, patch, Headers, <<"">>}
     )),
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
         ?ERROR_SPACE_NOT_SUPPORTED,
-        {OtherProviderNode, SharedDirRestPath, patch, Headers, <<>>}
+        {OtherProviderNode, SharedDirRestPath, patch, Headers, Payload}
     )),
 
     % updating share name should succeed
-    {ok, 200, _, _} = ?assertMatch({ok, 200, _, _},
+    {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, patch, Headers, Payload)),
 
     % check that share has been renamed
@@ -1028,18 +1031,18 @@ update_share_name_public_id(Config) ->
 
     % request without new share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_INVALID_NAME,
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
         {SupportingProviderNode, RestPath, patch, Headers, <<>>}
     )),
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
         ?ERROR_SPACE_NOT_SUPPORTED,
-        {OtherProviderNode, RestPath, patch, Headers, <<>>}
+        {OtherProviderNode, RestPath, patch, Headers, Payload}
     )),
 
     % updating share name should succeed
-    {ok, 200, _, _} = ?assertMatch({ok, 200, _, _},
+    {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(SupportingProviderNode, RestPath, patch, Headers, Payload)),
 
     % check that share has been renamed

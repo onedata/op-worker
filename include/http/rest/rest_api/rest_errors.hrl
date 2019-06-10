@@ -9,12 +9,14 @@
 %%% @end
 %%%--------------------------------------------------------------------
 
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 
 -ifndef(REST_ERRORS_HRL).
 -define(REST_ERRORS_HRL, 1).
 
--define(ERROR_BAD_VALUE_DIRECTORY(__Key), {error, {bad_directory, __Key}}).
+-define(ERROR_ALREADY_EXISTS, {error, already_exists}).
+-define(ERROR_BAD_VALUE_DIRECTORY, {error, bad_directory}).
+-define(ERROR_SPACE_NOT_SUPPORTED, {error, space_not_supported}).
 
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,
@@ -235,7 +237,7 @@
     <<"Index with given name already exists. You can modify the index using the PATCH request.">>)
 ).
 
--define(ERROR_SPACE_NOT_SUPPORTED, ?ERROR_REPLY(
+-define(ERROR_SPACE_NOT_SUPPORTED_REST, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"error_space_not_supported">>,
     <<"The space of requested file is not locally supported.">>)
@@ -293,7 +295,7 @@
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED_REST, ?ERROR_REPLY(
-    ?HTTP_401_NOT_AUTHORIZED,
+    ?HTTP_401_UNAUTHORIZED,
     <<"unauthorized">>,
     <<"Error unauthorized.">>)
 ).

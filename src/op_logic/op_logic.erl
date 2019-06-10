@@ -184,12 +184,12 @@ handle_unsafe(State = #state{req = Req = #el_req{operation = create}}) ->
         {{ok, resource, Resource}, #el_req{gri = #gri{aspect = instance}, client = Cl}} ->
             % If an entity instance is created, log an information about it
             % (it's a significant operation and this information might be useful).
-            {EntType, EntId} = case Resource of
+            {EntType, _EntId} = case Resource of
                 {#gri{type = Type, id = Id}, _} -> {Type, Id};
                 {#gri{type = Type, id = Id}, _, _} -> {Type, Id}
             end,
             ?debug("~s has been created by client: ~s", [
-                EntType:to_string(EntId),
+                EntType,
                 client_to_string(Cl)
             ]),
             Result;
@@ -224,11 +224,11 @@ handle_unsafe(State = #state{req = Req = #el_req{operation = delete}}) ->
                         ensure_operation_supported(
                             State)))))),
     case {Result, Req} of
-        {ok, #el_req{gri = #gri{type = Type, id = Id, aspect = instance}, client = Cl}} ->
+        {ok, #el_req{gri = #gri{type = Type, id = _Id, aspect = instance}, client = Cl}} ->
             % If an entity instance is deleted, log an information about it
             % (it's a significant operation and this information might be useful).
             ?debug("~s has been deleted by client: ~s", [
-                Type:to_string(Id),
+                Type,
                 client_to_string(Cl)
             ]),
             ok;
@@ -403,13 +403,11 @@ ensure_authorized(#state{req = ElReq, plugin = Plugin, entity = Entity} = State)
 %%--------------------------------------------------------------------
 -spec ensure_valid(state()) -> state().
 ensure_valid(#state{
-    req = #el_req{
-        gri = #gri{aspect = Aspect},
-        data = #{parameters := Params} = Data} = Req,
+    req = #el_req{gri = #gri{aspect = Aspect}, data = Data} = Req,
     plugin = Plugin
 } = State) ->
     ParamsSignature = Plugin:validate(Req),
-    ParamsWithAspect = Params#{aspect => Aspect},
+    ParamsWithAspect = Data#{aspect => Aspect},
     SanitizedParams = op_validator:validate_params(ParamsWithAspect, ParamsSignature),
 
     State#state{req = Req#el_req{data = Data#{

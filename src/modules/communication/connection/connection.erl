@@ -85,7 +85,7 @@
 
 -include("timeouts.hrl").
 -include("http/gui_paths.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").

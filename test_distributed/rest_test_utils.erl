@@ -71,14 +71,21 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
             false
     end,
 
-    DecodedBody = json_utils:decode(RespBody),
-    BodyMatched = case ExpectedBody == DecodedBody of
+    BodyMatched = case ExpectedBody of
+        {binary, ExpBin} ->
+            ExpBin == RespBody;
+        _ ->
+            DecodedBody = json_utils:decode(RespBody),
+            ExpectedBody == DecodedBody
+    end,
+
+    case BodyMatched of
         true ->
             true;
         false ->
             ct:pal("Wrong response body: ~n"
             "Expected: ~p~n"
-            "Got: ~p~n", [ExpectedBody, DecodedBody]),
+            "Got: ~p~n", [ExpectedBody, RespBody]),
             print_request(Node, URL, Method, Headers, Body),
             false
     end,

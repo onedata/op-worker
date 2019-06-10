@@ -381,7 +381,7 @@ resolve_bindings(_SessionId, Other, _Req) ->
 -spec get_data(cowboy_req:req(), ParseBody :: parse_body()) ->
     {Data :: op_logic:data(), cowboy_req:req()}.
 get_data(Req, ignore) ->
-    {#{parameters => parse_query_string(Req)}, Req};
+    {parse_query_string(Req), Req};
 get_data(Req, as_json_params) ->
     QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
@@ -394,8 +394,7 @@ get_data(Req, as_json_params) ->
         throw(?ERROR_MALFORMED_DATA)
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
-    Params = maps:merge(ParsedBody, QueryParams),
-    {#{parameters => Params}, Req2};
+    {maps:merge(ParsedBody, QueryParams), Req2};
 get_data(Req, as_is) ->
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = cowboy_req:header(<<"content-type">>, Req2),
@@ -407,11 +406,8 @@ get_data(Req, as_is) ->
     catch _:_ ->
         throw(?ERROR_MALFORMED_DATA)
     end,
-    Data = #{
-        parameters => parse_query_string(Req2),
-        ContentType => ParsedBody
-    },
-    {Data, Req2}.
+    Params = parse_query_string(Req2),
+    {Params#{ContentType => ParsedBody}, Req2}.
 
 
 %%--------------------------------------------------------------------

@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").

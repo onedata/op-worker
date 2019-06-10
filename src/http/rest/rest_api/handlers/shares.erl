@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -307,7 +307,7 @@ ensure_space_supported_locally(SpaceId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_SPACE_NOT_SUPPORTED)
+            throw(?ERROR_SPACE_NOT_SUPPORTED_REST)
     end.
 
 -spec ensure_valid_name(binary() | undefined) -> ok | no_return().

@@ -16,7 +16,7 @@
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
 

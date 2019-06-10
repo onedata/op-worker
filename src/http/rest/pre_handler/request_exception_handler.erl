@@ -21,7 +21,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/logging.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 

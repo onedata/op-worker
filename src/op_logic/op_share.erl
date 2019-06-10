@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -23,17 +24,21 @@
 -export([fetch_entity/1, operation_supported/3]).
 -export([create/1, get/2, update/1, delete/1]).
 -export([exists/2, authorize/2, validate/1]).
--export([entity_logic_plugin/0, to_string/1]).
+-export([entity_logic_plugin/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the entity logic plugin module that handles model logic.
+%% @end
+%%--------------------------------------------------------------------
 entity_logic_plugin() ->
     op_share.
 
-
-to_string(_) -> <<"">>.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,10 +81,15 @@ operation_supported(_, _, _) -> false.
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#el_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    Name = maps:get(<<"name">>, maps:get(parameters, Req#el_req.data)),
+    ensure_space_supported(Req),
+    Name = maps:get(<<"name">>, Req#el_req.data),
     case logical_file_manager:create_share(Cl#client.id, {guid, DirGuid}, Name) of
         {ok, {ShareId, _ShareGuid}} ->
             {ok, value, ShareId};
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_DIRECTORY;
+        {error, ?EEXIST} ->
+            ?ERROR_ALREADY_EXISTS;
         Error ->
             Error
     end.
@@ -103,6 +113,8 @@ get(#el_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = 
 get(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}, _) ->
     case share_logic:get(Cl#client.id, ShareId) of
         {ok, #document{value = Share}} ->
+            ensure_space_supported(Share#od_share.space),
+
             {ok, ObjectId} = file_id:guid_to_objectid(Share#od_share.root_file),
             HandleId = utils:ensure_defined(Share#od_share.handle, undefined, null),
 
@@ -125,15 +137,18 @@ get(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(#el_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req) ->
+update(#el_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
+    ensure_space_supported(Req),
     case get_share_id(Cl#client.id, DirGuid) of
         {ok, ShareId} ->
-            update(Req#el_req{gri = GRI#gri{id = ShareId, aspect = instance}});
+            NewName = maps:get(<<"name">>, Req#el_req.data),
+            share_logic:update_name(Cl#client.id, ShareId, NewName);
         Error ->
             Error
     end;
-update(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}, data = Data}) ->
-    NewName = maps:get(<<"name">>, maps:get(parameters, Data)),
+update(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}, data = Data} = Req) ->
+    ensure_space_supported(Req),
+    NewName = maps:get(<<"name">>, Data),
     share_logic:update_name(Cl#client.id, ShareId, NewName).
 
 
@@ -143,14 +158,16 @@ update(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}, data = 
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#el_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req) ->
+delete(#el_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
+    ensure_space_supported(Req),
     case get_share_id(Cl#client.id, DirGuid) of
         {ok, ShareId} ->
-            delete(Req#el_req{gri = GRI#gri{id = ShareId, aspect = instance}});
+            logical_file_manager:remove_share(Cl#client.id, ShareId);
         Error ->
             Error
     end;
-delete(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
+delete(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
+    ensure_space_supported(Req),
     logical_file_manager:remove_share(Cl#client.id, ShareId).
 
 
@@ -161,16 +178,8 @@ delete(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
-exists(#el_req{gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
-    provider_logic:supports_space(SpaceId);
-exists(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}, _) ->
-    case share_logic:get(Cl#client.id, ShareId) of
-        {ok, #document{value = #od_share{space = SpaceId}}} ->
-            provider_logic:supports_space(SpaceId);
-        _ ->
-            false
-    end.
+exists(_, _) ->
+    true.
 
 
 %%--------------------------------------------------------------------
@@ -206,6 +215,24 @@ validate(_) -> #{}.
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+-spec ensure_space_supported(od_space:id() | op_logic:req()) -> ok | no_return().
+ensure_space_supported(#el_req{gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    ensure_space_supported(SpaceId);
+ensure_space_supported(#el_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
+    case share_logic:get(Cl#client.id, ShareId) of
+        {ok, #document{value = #od_share{space = SpaceId}}} ->
+            ensure_space_supported(SpaceId);
+        _ ->
+            throw(?ERROR_NOT_FOUND)
+    end;
+ensure_space_supported(SpaceId) when is_binary(SpaceId) ->
+    case provider_logic:supports_space(SpaceId) of
+        true -> ok;
+        false -> throw(?ERROR_SPACE_NOT_SUPPORTED)
+    end.
 
 
 -spec get_share_id(session:id(), file_id:file_guid()) ->

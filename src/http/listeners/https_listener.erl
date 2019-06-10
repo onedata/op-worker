@@ -59,7 +59,8 @@ start() ->
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
-        rest_router:top_level_routing()
+        rest_handler:rest_routes()
+%%        rest_router:top_level_routing()
     ]),
 
     DynamicPageRoutes = [

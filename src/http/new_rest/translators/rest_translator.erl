@@ -15,6 +15,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 -include("http/rest/rest.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -162,6 +163,11 @@ translate_error(?ERROR_NOT_SUPPORTED) ->
         <<"This operation is not supported">>
     };
 
+translate_error(?ERROR_ALREADY_EXISTS) ->
+    {?HTTP_404_NOT_FOUND,
+        <<"Given resource already exists">>
+    };
+
 translate_error(?ERROR_NOT_FOUND) ->
     ?HTTP_404_NOT_FOUND;
 
@@ -259,6 +265,10 @@ translate_error(?ERROR_BAD_VALUE_LIST_OF_IPV4_ADDRESSES(Key)) ->
     {?HTTP_400_BAD_REQUEST,
         {<<"Bad value: provided \"~s\" is not a valid list of IPv4 addresses">>, [Key]}
     };
+translate_error(?ERROR_BAD_VALUE_DIRECTORY) ->
+    {?HTTP_400_BAD_REQUEST,
+        <<"Given path or id does not refer to a directory">>
+    };
 translate_error(?ERROR_BAD_VALUE_DOMAIN(Key)) ->
     {?HTTP_400_BAD_REQUEST,
         {<<"Bad value: provided \"~s\" is not a valid domain">>, [Key]}
@@ -355,6 +365,8 @@ translate_error(?ERROR_SUBDOMAIN_DELEGATION_DISABLED) ->
     {?HTTP_400_BAD_REQUEST, <<"Subdomain delegation is currently disabled.">>};
 translate_error(?ERROR_BAD_VALUE_EMAIL) ->
     {?HTTP_400_BAD_REQUEST, <<"Bad value: provided e-mail is not a valid e-mail.">>};
+translate_error(?ERROR_SPACE_NOT_SUPPORTED) ->
+    {?HTTP_400_BAD_REQUEST, <<"The space of requested resource is not locally supported.">>};
 
 % Wildcard match
 translate_error({error, Reason}) ->

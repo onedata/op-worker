@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -210,7 +210,7 @@ throw_if_non_local_space(SpaceId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_SPACE_NOT_SUPPORTED)
+            throw(?ERROR_SPACE_NOT_SUPPORTED_REST)
     end.
 
 %%--------------------------------------------------------------------
