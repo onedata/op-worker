@@ -96,8 +96,9 @@ all() ->
 %%        list_file,
 %%        list_dir,
 %%        list_dir_range,
-%%        list_spaces,
-%%        get_space,
+
+        list_spaces,
+        get_space,
 
         create_share,
         create_share_id,

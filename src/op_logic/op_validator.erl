@@ -297,6 +297,16 @@ check_type(binary, _Key, Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
 check_type(binary, Key, _) ->
     throw(?ERROR_BAD_VALUE_BINARY(Key));
+check_type(integer, Key, Bin) when is_binary(Bin) ->
+    try
+        binary_to_integer(Bin)
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_INTEGER(Key))
+    end;
+check_type(integer, _Key, Int) when is_integer(Int) ->
+    Int;
+check_type(integer, Key, _) ->
+    throw(?ERROR_BAD_VALUE_INTEGER(Key));
 check_type(TypeConstraint, Key, _) ->
     ?error("Unknown type constraint: ~p for key: ~p", [TypeConstraint, Key]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
@@ -310,10 +320,19 @@ check_type(TypeConstraint, Key, _) ->
 %%--------------------------------------------------------------------
 -spec check_value(type_constraint(), value_constraint(), Key :: binary(),
     Value :: term()) -> ok | no_return().
+check_value(_, any, _Key, _) ->
+    ok;
 check_value(binary, name, _Key, Value) ->
     case validate_name(Value) of
         true -> ok;
         false -> throw(?ERROR_BAD_VALUE_NAME)
+    end;
+check_value(_, {not_lower_than, Threshold}, Key, Value) ->
+    case Value >= Threshold of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_BAD_VALUE_TOO_LOW(Key, Threshold))
     end;
 check_value(TypeConstraint, ValueConstraint, Key, _) ->
     ?error("Unknown {type, value} constraint: {~p, ~p} for key: ~p", [

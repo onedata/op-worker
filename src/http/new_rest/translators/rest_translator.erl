@@ -375,4 +375,5 @@ translate_error({error, Reason}) ->
 
 
 -spec entity_type_to_translator(atom()) -> module().
-entity_type_to_translator(op_share) -> share_rest_translator.
+entity_type_to_translator(op_share) -> share_rest_translator;
+entity_type_to_translator(op_space) -> space_rest_translator.
