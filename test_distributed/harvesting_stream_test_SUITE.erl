@@ -9,7 +9,7 @@
 %%% This module tests harvest_worker supervision tree.
 %%% @end
 %%%--------------------------------------------------------------------
--module(harvest_manager_test_SUITE).
+-module(harvesting_stream_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("logic_tests_common.hrl").

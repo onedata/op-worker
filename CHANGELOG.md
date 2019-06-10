@@ -4,6 +4,57 @@
 CHANGELOG
 ---------
 
+### 18.02.2
+
+* VFS-5391 Reduced size of monitoring and throttling log files
+* do not call getxattr when synchronisation of nfs4acl is disabled
+* VFS-5289 Added default callback for providing resources. Added unit tests for selecting callback that provides resources.
+* VFS-5371 return einval error when client msg decoding fails
+* VFS-5329 Fix rmdir on s3 and ceph
+* VFS-5348 fix connection deadlock
+* VFS-5076 increase connection:send_msg timeout
+* VFS-5076 rm race between setting up session and connection
+* VFS-5316 Improve event manager performance
+* VFS-5251 reorganize code in storage_detector
+* VFS-5320 improve auto-cleaning  * additional precondition was added that allows to check whether replica still needs to be deleted  * improved tests
+* VFS-5316 Improve sequencer manager performance
+* VFS-5251 improve verification of newly added storage
+* update file-popularity after scheduled replication
+* VFS-5076 rm unused fields from session model
+* VFS-5076 fill proxy info before sending msg in communicator
+* VFS-5076 add retries to functions in communicator
+* VFS-5076 change directory tree in session
+* VFS-5232 Update acl usage by rules
+* VFS-5076 add retries to communicator's communicate
+* VFS-5232 Improve file deletion verification by request handlers
+* VFS-5232 Improve rules verification
+* VFS-5076 refactor communicator
+* VFS-5076 add keepalive timer to connection_manager
+* VFS-5076 remove obsolete modules
+* VFS-5232 Update location management
+* VFS-5076 add sending heartbeats to connection_manager
+* VFS-5232 Update ownership management
+* VFS-5250 Added documents printing
+* VFS-5076 add connection_manager to session document
+* VFS-5076 refactor router
+* VFS-5232 Fix permissions management during read/write via proxy
+* VFS-5232 Update storage_id generation
+* VFS-5076 implement msg send via connection_manager
+* VFS-5232 Refactor delete
+* VFS-5076 rm connections management from session_watcher
+* VFS-5076 add API call to close connection
+* VFS-5232 Refactor file opening
+* VFS-5232 Fix file handles management
+* VFS-5232 Fix sync/delete race
+* VFS-5232 Fix rename into opened file
+* VFS-5232 Fix some races in simple_scan
+* VFS-5232 Refactor create
+* VFS-5076 rm heartbeats from new connection
+* VFS-5232 Fix critical section in replica_deletion_req
+* VFS-5076 replace gpb with enif_protobuf, add socket mode option
+* VFS-5076 new connection implementation
+
+
 ### 18.02.1
 
 * VFS-5139 Handle remote events timeout

@@ -9,7 +9,7 @@
 %%% This module tests mechanism for harvesting metadata
 %%% @end
 %%%-------------------------------------------------------------------
--module(harvest_test_SUITE).
+-module(harvesting_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("proto/oneclient/fuse_messages.hrl").
