@@ -14,6 +14,7 @@
 -author("Wojciech Geisler").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([refresh_helpers_by_storage/1, refresh_handle_params/4]).
@@ -28,7 +29,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reloads all heleprs of given storage to ensure they use up-to-date
+%% Reloads all helpers of given storage to ensure they use up-to-date
 %% args and ctx.
 %% @end
 %%--------------------------------------------------------------------
@@ -63,12 +64,18 @@ refresh_handle_params(Handle, SessionId, SpaceId, StorageDoc) ->
 
 -spec local_refresh_helpers(StorageId :: storage:id()) -> ok.
 local_refresh_helpers(StorageId) ->
+    {ok, StorageDoc} = storage:get(StorageId),
     {ok, Sessions} = session:list(),
-    {ok, Storage} = storage:get(StorageId),
-    lists:foreach(fun(#document{key = SessId}) ->
-        {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
-        lists:foreach(fun({HandleId, SpaceId}) ->
-            {ok, #document{value = Handle}} = helper_handle:get(HandleId),
-            refresh_handle_params(Handle, SessId, SpaceId, Storage)
-        end, HandlesSpaces)
-    end, Sessions).
+    try
+        lists:foreach(fun(#document{key = SessId}) ->
+            {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
+            lists:foreach(fun({HandleId, SpaceId}) ->
+                {ok, #document{value = Handle}} = helper_handle:get(HandleId),
+                refresh_handle_params(Handle, SessId, SpaceId, StorageDoc)
+            end, HandlesSpaces)
+        end, Sessions)
+    catch Type:Error ->
+        #document{value = #storage{name = StorageName}} = StorageDoc,
+        ?error("Error updating active helper for storage ~tp with new args: ~p:~tp",
+            [StorageName, Type, Error])
+    end.
