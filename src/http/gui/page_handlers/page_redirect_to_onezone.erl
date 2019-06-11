@@ -50,6 +50,6 @@ redirect(Req, Path) ->
             }, <<"This Oneprovider instance is not yet configured.">>, Req);
         ProviderId ->
             cowboy_req:reply(307, #{<<"location">> => str_utils:format_bin("~s/~s/~s~s", [
-                OzUrl, onedata:service_shortname(?OP_WORKER), ProviderId, Path
+                OzUrl, onedata:gui_prefix(?OP_WORKER_GUI), ProviderId, Path
             ])}, Req)
     end.

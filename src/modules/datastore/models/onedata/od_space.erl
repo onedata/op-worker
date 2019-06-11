@@ -72,21 +72,28 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(create, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
+run_after(create, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
-run_after(update, [_, _, _, _], {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc),
+    Result;
+run_after(update, [_, _, _, _], Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
-run_after(save, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc),
+    Result;
+run_after(save, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc),
+    Result;
 run_after(update, _, {ok, SpaceDoc = #document{}}) ->
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc);
 run_after(_Function, _Args, Result) ->
     Result.
 
@@ -110,7 +117,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -157,6 +164,22 @@ get_record_struct(2) ->
         {shares, [string]},
 
         {cache_state, #{atom => term}}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {name, string},
+
+        {direct_users, #{string => [atom]}},
+        {eff_users, #{string => [atom]}},
+
+        {direct_groups, #{string => [atom]}},
+        {eff_groups, #{string => [atom]}},
+
+        {providers, #{string => integer}},
+        {shares, [string]},
+        {harvesters, [string]}, % new field
+
+        {cache_state, #{atom => term}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -182,19 +205,50 @@ upgrade_record(1, Space) ->
 
         _RevisionHistory
     } = Space,
-    {2, #od_space{
+    {2, {od_space,
+        Name,
+
+        #{},
+        #{},
+
+        #{},
+        #{},
+
+        #{},
+        [],
+
+        #{}
+    }};
+upgrade_record(2, Space) ->
+    {
+        od_space,
+        Name,
+
+        DirectUsers,
+        EffUsers,
+
+        DirectGroups,
+        EffGroups,
+
+        Providers,
+        Shares,
+
+        CacheState
+    } = Space,
+    {3, #od_space{
         name = Name,
 
-        direct_users = #{},
-        eff_users = #{},
+        direct_users = DirectUsers,
+        eff_users = EffUsers,
 
-        direct_groups = #{},
-        eff_groups = #{},
+        direct_groups = DirectGroups,
+        eff_groups = EffGroups,
 
-        providers = #{},
-        shares = [],
+        providers = Providers,
+        shares = Shares,
+        harvesters = [],
 
-        cache_state = #{}
+        cache_state = CacheState
     }}.
 
 %%%===================================================================
@@ -215,3 +269,16 @@ emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
     end,
     {ok, SpaceId}.
 
+-spec maybe_revise_space_harvesters(doc()) -> ok.
+maybe_revise_space_harvesters(#document{
+    key = SpaceId,
+    value = #od_space{harvesters = Harvesters}
+}) ->
+    case provider_logic:supports_space(SpaceId) of
+        true ->
+            spawn(fun() ->
+                main_harvesting_stream:revise_space_harvesters(SpaceId, Harvesters)
+            end);
+        false ->
+            ok
+    end.

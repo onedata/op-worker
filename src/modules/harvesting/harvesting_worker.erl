@@ -6,28 +6,25 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% worker_plugin used for adding harvest supervision tree to the
+%%% worker_plugin used for adding harvesting supervision tree to the
 %%% main tree.
+%%% For more details on harvesting please read the docs
+%%% in {@link harvesting_stream} module.
 %%% @end
 %%%-------------------------------------------------------------------
--module(harvest_worker).
+-module(harvesting_worker).
 -author("Jakub Kudzia").
 
 -behaviour(worker_plugin_behaviour).
 
--include("global_definitions.hrl").
--include("modules/harvest/harvest.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("modules/harvesting/harvesting.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
-
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
 -export([supervisor_flags/0, supervisor_children_spec/0]).
-
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -72,7 +69,7 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns supervisor flags for harvest_worker.
+%% Returns supervisor flags for harvesting_worker.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
@@ -81,31 +78,22 @@ supervisor_flags() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns supervisor flags for harvest_worker_sup.
+%% Returns supervisor flags for harvesting_worker_sup.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
-    [harvest_manager_spec(), harvest_stream_sup_spec()].
+    [harvesting_stream_sup_spec()].
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec harvest_stream_sup_spec() -> supervisor:child_spec().
-harvest_stream_sup_spec() -> #{
-    id => ?HARVEST_STREAM_SUP,
-    start => {harvest_stream_sup, start_link, []},
+-spec harvesting_stream_sup_spec() -> supervisor:child_spec().
+harvesting_stream_sup_spec() -> #{
+    id => ?HARVESTING_STREAM_SUP,
+    start => {harvesting_stream_sup, start_link, []},
     restart => transient,
     shutdown => infinity,
     type => supervisor
-}.
-
--spec harvest_manager_spec() -> supervisor:child_spec().
-harvest_manager_spec() -> #{
-    id => ?HARVEST_MANAGER,
-    start => {harvest_manager, start_link, []},
-    restart => transient,
-    shutdown => timer:seconds(10),
-    type => worker
 }.
