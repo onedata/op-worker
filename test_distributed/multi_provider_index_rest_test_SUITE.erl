@@ -27,6 +27,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 
 %% API
@@ -65,7 +66,9 @@ all() ->
         getting_index_of_not_supported_space_should_fail,
         list_indexes,
         query_index,
+
         quering_index_with_invalid_params_should_fail,
+
         create_geospatial_index,
         query_geospatial_index,
         query_file_popularity_index,
@@ -219,29 +222,30 @@ creating_index_with_invalid_params_should_fail(Config) ->
 
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        ?assertMatch(ExpError, create_index_via_rest(
+        ExpRestError = get_rest_error(ExpError),
+        ?assertMatch(ExpRestError, create_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName),
             maps:get(spatial, Options, false), maps:get(providers, Options, []),
             Options
         )),
         ?assertMatch([], list_indexes_via_rest(Config, Worker, ?SPACE_ID, 100))
     end, [
-        {#{update_min_changes => ok}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
-        {#{update_min_changes => -3}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
-        {#{update_min_changes => 15.2}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
-        {#{update_min_changes => 0}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
+        {#{update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
+        {#{update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
 
-        {#{replica_update_min_changes => ok}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
-        {#{replica_update_min_changes => -3}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
-        {#{replica_update_min_changes => 15.2}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
-        {#{replica_update_min_changes => 0}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
+        {#{replica_update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
+        {#{replica_update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
 
-        {#{spatial => 1}, ?ERROR_INVALID_SPATIAL_FLAG},
-        {#{spatial => -3}, ?ERROR_INVALID_SPATIAL_FLAG},
-        {#{spatial => ok}, ?ERROR_INVALID_SPATIAL_FLAG},
+        {#{spatial => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
 
-        {#{providers => [ok]}, ?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(<<"ok">>)},
-        {#{providers => [<<"ASD">>]}, ?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(<<"ASD">>)}
+        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ok">>)},
+        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ASD">>)}
     ]).
 
 updating_index_with_invalid_params_should_fail(Config) ->
@@ -270,29 +274,30 @@ updating_index_with_invalid_params_should_fail(Config) ->
 
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        ?assertMatch(ExpError, update_index_via_rest(
+        ExpRestError = get_rest_error(ExpError),
+        ?assertMatch(ExpRestError, update_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName, <<>>, Options
         )),
         ?assertMatch({ok, ExpIndex}, get_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName)
         )
     end, [
-        {#{update_min_changes => ok}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
-        {#{update_min_changes => -3}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
-        {#{update_min_changes => 15.2}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
-        {#{update_min_changes => 0}, ?ERROR_INVALID_UPDATE_MIN_CHANGES},
+        {#{update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
+        {#{update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
 
-        {#{replica_update_min_changes => ok}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
-        {#{replica_update_min_changes => -3}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
-        {#{replica_update_min_changes => 15.2}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
-        {#{replica_update_min_changes => 0}, ?ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES},
+        {#{replica_update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
+        {#{replica_update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
 
-        {#{spatial => 1}, ?ERROR_INVALID_SPATIAL_FLAG},
-        {#{spatial => -3}, ?ERROR_INVALID_SPATIAL_FLAG},
-        {#{spatial => ok}, ?ERROR_INVALID_SPATIAL_FLAG},
+        {#{spatial => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
 
-        {#{providers => [ok]}, ?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(<<"ok">>)},
-        {#{providers => [<<"ASD">>]}, ?ERROR_PROVIDER_NOT_SUPPORTING_SPACE(<<"ASD">>)}
+        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ok">>)},
+        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ASD">>)}
     ]).
 
 overwriting_index_should_fail(Config) ->
@@ -326,7 +331,8 @@ overwriting_index_should_fail(Config) ->
     end, Workers),
 
     % overwrite
-    ?assertMatch({?HTTP_409_CONFLICT, _}, create_index_via_rest(
+    ExpRestError = get_rest_error(?ERROR_ALREADY_EXISTS),
+    ?assertMatch(ExpRestError, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
         ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
     )),
@@ -418,10 +424,10 @@ create_get_delete_reduce_fun(Config) ->
 getting_nonexistent_index_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
-    ExpError = ?ERROR_INDEX_NOT_FOUND,
+    ExpRestError = get_rest_error(?ERROR_NOT_FOUND),
 
     lists:foreach(fun(Worker) ->
-        ?assertMatch(ExpError, get_index_via_rest(
+        ?assertMatch(ExpRestError, get_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName
         ))
     end, Workers).
@@ -446,8 +452,8 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         <<"spatial">> := false
     }}, get_index_via_rest(Config, WorkerP2, SpaceId, IndexName), ?ATTEMPTS),
 
-    ExpError = ?ERROR_INDEX_NOT_FOUND,
-    ?assertMatch(ExpError, get_index_via_rest(
+    ExpRestError = get_rest_error(?ERROR_NOT_FOUND),
+    ?assertMatch(ExpRestError, get_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName
     )).
 
@@ -482,7 +488,7 @@ query_index(Config) ->
     Query = query_filter(Config, SpaceId, IndexName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
-    ExpError = ?ERROR_INDEX_NOT_FOUND,
+    ExpError = get_rest_error(?ERROR_NOT_FOUND),
     ExpGuids = lists:sort(Guids),
 
     % support index only by one provider; other should return error on query
@@ -540,42 +546,43 @@ quering_index_with_invalid_params_should_fail(Config) ->
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
     lists:foreach(fun({Options, ExpError}) ->
+        ExpRestError = get_rest_error(ExpError),
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        ?assertMatch(ExpError, Query(Worker, Options))
+        ?assertMatch(ExpRestError, Query(Worker, Options))
     end, [
-        {#{bbox => ok}, ?ERROR_INVALID_BBOX},
-        {#{bbox => 1}, ?ERROR_INVALID_BBOX},
+%%        {#{bbox => ok}, ?ERROR_INVALID_BBOX},
+%%        {#{bbox => 1}, ?ERROR_INVALID_BBOX},
 
-        {#{descending => ok}, ?ERROR_INVALID_DESCENDING},
-        {#{descending => 1}, ?ERROR_INVALID_DESCENDING},
-        {#{descending => -15.6}, ?ERROR_INVALID_DESCENDING},
+        {#{descending => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
+        {#{descending => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
+        {#{descending => -15.6}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
 
-        {#{inclusive_end => ok}, ?ERROR_INVALID_INCLUSIVE_END},
-        {#{inclusive_end => 1}, ?ERROR_INVALID_INCLUSIVE_END},
-        {#{inclusive_end => -15.6}, ?ERROR_INVALID_INCLUSIVE_END},
+        {#{inclusive_end => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
+        {#{inclusive_end => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
+        {#{inclusive_end => -15.6}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
 
-        {#{keys => ok}, ?ERROR_INVALID_KEYS},
-        {#{keys => 1}, ?ERROR_INVALID_KEYS},
-        {#{keys => -15.6}, ?ERROR_INVALID_KEYS},
+%%        {#{keys => ok}, ?ERROR_INVALID_KEYS},
+%%        {#{keys => 1}, ?ERROR_INVALID_KEYS},
+%%        {#{keys => -15.6}, ?ERROR_INVALID_KEYS},
 
-        {#{limit => ok}, ?ERROR_INVALID_LIMIT},
-        {#{limit => -3}, ?ERROR_INVALID_LIMIT},
-        {#{limit => 15.2}, ?ERROR_INVALID_LIMIT},
-        {#{limit => 0}, ?ERROR_INVALID_LIMIT},
+        {#{limit => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
+        {#{limit => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+        {#{limit => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
+        {#{limit => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
 
-        {#{skip => ok}, ?ERROR_INVALID_SKIP},
-        {#{skip => -3}, ?ERROR_INVALID_SKIP},
-        {#{skip => 15.2}, ?ERROR_INVALID_SKIP},
-        {#{skip => 0}, ?ERROR_INVALID_SKIP},
+        {#{skip => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"skip">>)},
+        {#{skip => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"skip">>, 1)},
+        {#{skip => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"skip">>)},
+        {#{skip => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"skip">>, 1)},
 
-        {#{stale => da}, ?ERROR_INVALID_STALE},
-        {#{stale => -3}, ?ERROR_INVALID_STALE},
-        {#{stale => 15.2}, ?ERROR_INVALID_STALE},
-        {#{stale => 0}, ?ERROR_INVALID_STALE},
+        {#{stale => da}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => -3}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => 15.2}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => 0}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
 
-        {#{spatial => 1}, ?ERROR_INVALID_SPATIAL_FLAG},
-        {#{spatial => -3}, ?ERROR_INVALID_SPATIAL_FLAG},
-        {#{spatial => ok}, ?ERROR_INVALID_SPATIAL_FLAG}
+        {#{spatial => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)}
     ]).
 
 create_geospatial_index(Config) ->
@@ -657,7 +664,7 @@ spatial_flag_test(Config) ->
     )),
 
     ?assertMatch({404, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [])),
-    ?assertMatch({400, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
+    ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
     ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [{spatial, true}])).
 
 file_removal_test(Config) ->
@@ -724,8 +731,9 @@ create_duplicated_indexes_on_remote_providers(Config) ->
 
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpMapFun2 = index_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
-    ExpError = ?ERROR_INDEX_NOT_FOUND,
-    ExpError2 = ?ERROR_AMBIGUOUS_INDEX_NAME,
+
+    ExpError = get_rest_error(?ERROR_NOT_FOUND),
+    ExpError2 = get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>)),
 
     % get by simple name
     ?assertMatch({ok, #{
@@ -930,7 +938,7 @@ create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, 
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
-        {ok, 200, _, _} ->
+        {ok, 204, _, _} ->
             ok;
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
@@ -945,7 +953,7 @@ update_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Options) 
     ]),
 
     case rest_test_utils:request(Worker, Path, patch, Headers, MapFunction) of
-        {ok, 200, _, _} ->
+        {ok, 204, _, _} ->
             ok;
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
@@ -958,7 +966,7 @@ add_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName, ReduceFunction) ->
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, ReduceFunction) of
-        {ok, 200, _, _} ->
+        {ok, 204, _, _} ->
             ok;
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
@@ -1099,7 +1107,7 @@ objectids_to_guids(ObjectIds) ->
 query_filter(Config, SpaceId, IndexName) ->
     fun(Node, Options) ->
         case query_index_via_rest(Config, Node, SpaceId, IndexName, Options) of
-            {ok, Body} ->
+            {ok, Body} when is_list(Body) ->
                 ObjectIds = lists:map(fun(#{<<"value">> := ObjectId}) ->
                     ObjectId
                 end, Body),
@@ -1140,3 +1148,13 @@ remove_files(Node, SessionId, Guids) ->
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
+
+
+get_rest_error(Error) ->
+    #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
+    case ExpBody of
+        {binary, Bin} ->
+            {ExpCode, json_utils:decode(Bin)};
+        _ ->
+            {ExpCode, ExpBody}
+    end.

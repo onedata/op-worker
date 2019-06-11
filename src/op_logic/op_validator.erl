@@ -291,12 +291,27 @@ transform_and_check_value(TypeConstraint, ValueConstraint, Key, Value) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_type(type_constraint(), Key :: binary(), Value :: term()) -> term().
+check_type(any, _Key, Term) ->
+    Term;
+
 check_type(binary, _Key, Binary) when is_binary(Binary) ->
     Binary;
 check_type(binary, _Key, Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
 check_type(binary, Key, _) ->
     throw(?ERROR_BAD_VALUE_BINARY(Key));
+
+check_type(boolean, _Key, true) ->
+    true;
+check_type(boolean, _Key, <<"true">>) ->
+    true;
+check_type(boolean, _Key, false) ->
+    false;
+check_type(boolean, _Key, <<"false">>) ->
+    false;
+check_type(boolean, Key, _) ->
+    throw(?ERROR_BAD_VALUE_BOOLEAN(Key));
+
 check_type(integer, Key, Bin) when is_binary(Bin) ->
     try
         binary_to_integer(Bin)
@@ -307,6 +322,7 @@ check_type(integer, _Key, Int) when is_integer(Int) ->
     Int;
 check_type(integer, Key, _) ->
     throw(?ERROR_BAD_VALUE_INTEGER(Key));
+
 check_type(TypeConstraint, Key, _) ->
     ?error("Unknown type constraint: ~p for key: ~p", [TypeConstraint, Key]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
@@ -333,6 +349,20 @@ check_value(_, {not_lower_than, Threshold}, Key, Value) ->
             ok;
         false ->
             throw(?ERROR_BAD_VALUE_TOO_LOW(Key, Threshold))
+    end;
+check_value(_, {between, Low, High}, Key, Value) ->
+    case Value >= Low andalso Value =< High of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(Key, Low, High))
+    end;
+check_value(_, AllowedValues, Key, Val) when is_list(AllowedValues) ->
+    case lists:member(Val, AllowedValues) of
+        true ->
+            ok;
+        _ ->
+            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValues))
     end;
 check_value(TypeConstraint, ValueConstraint, Key, _) ->
     ?error("Unknown {type, value} constraint: {~p, ~p} for key: ~p", [

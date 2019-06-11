@@ -101,14 +101,8 @@ allowed_methods(Req, #state{allowed_methods = AllowedMethods} = State) ->
     SubType :: binary(),
     Params :: '*' | [{binary(), binary()}],
     AcceptResource :: atom().
-content_types_accepted(Req, State) ->
-    case cowboy_req:has_body(Req) of
-        true ->
-            #state{rest_req = #rest_req{consumes = Consumes}} = State,
-            {[{MediaType, accept_resource} || MediaType <- Consumes], Req, State};
-        false ->
-            {[{'*', accept_resource}], Req, State}
-    end.
+content_types_accepted(Req, #state{rest_req = #rest_req{consumes = Consumes}} = State) ->
+    {[{MediaType, accept_resource} || MediaType <- Consumes], Req, State}.
 
 
 %%--------------------------------------------------------------------

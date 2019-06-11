@@ -15,8 +15,13 @@
 -define(REST_ERRORS_HRL, 1).
 
 -define(ERROR_ALREADY_EXISTS, {error, already_exists}).
+
 -define(ERROR_BAD_VALUE_DIRECTORY, {error, bad_directory}).
+-define(ERROR_BAD_VALUE_AMBIGUOUS_ID(__Key), {error, {ambiguous_id, __Key}}).
+
 -define(ERROR_SPACE_NOT_SUPPORTED, {error, space_not_supported}).
+-define(ERROR_SPACE_NOT_SUPPORTED_BY(__ProviderId), {error, {space_not_supported_by, __ProviderId}}).
+
 
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,
@@ -130,26 +135,6 @@
     <<"space_not_provided">>,
     <<"Required space_id was not provided.">>)
 ).
--define(ERROR_INVALID_DESCENDING, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_descending">>,
-    <<"The descending parameter is invalid, it must be of boolean type.">>)
-).
--define(ERROR_INVALID_INCLUSIVE_END, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_inclusive_end">>,
-    <<"The inclusive_end parameter is invalid, it must be of boolean type.">>)
-).
--define(ERROR_INVALID_STALE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_stale">>,
-    <<"The stale parameter is invalid, it must be one of: 'ok', 'update_after', 'false'.">>)
-).
--define(ERROR_INVALID_SKIP, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_skip">>,
-    <<"The skip parameter is invalid, it must be of integer type.">>)
-).
 -define(ERROR_INVALID_FILTER_TYPE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_filter_type">>,
@@ -170,31 +155,6 @@
     <<"invalid_objectid">>,
     <<"Given id is invalid.">>)
 ).
--define(ERROR_INVALID_ENDKEY, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_endkey">>,
-    <<"The endkey parameter is invalid, it must be a valid json.">>)
-).
--define(ERROR_INVALID_STARTKEY, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_startkey">>,
-    <<"The startkey parameter is invalid, it must be a valid json.">>)
-).
--define(ERROR_INVALID_END_RANGE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_end_range">>,
-    <<"The end_range parameter is invalid, it must be a valid json.">>)
-).
--define(ERROR_INVALID_START_RANGE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_start_range">>,
-    <<"The start_range parameter is invalid, it must be a valid json.">>)
-).
--define(ERROR_INVALID_KEY, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_key">>,
-    <<"The key parameter is invalid, it must be a valid json.">>)
-).
 -define(ERROR_INVALID_KEYS, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_keys">>,
@@ -210,16 +170,6 @@
     <<"error_invalid_bbox">>,
     <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
 ).
--define(ERROR_INVALID_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_update_min_changes">>,
-    <<"Requested update min changes is invalid, it must be a positive integer.">>)
-).
--define(ERROR_INVALID_REPLICA_UPDATE_MIN_CHANGES, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_replica_update_min_changes">>,
-    <<"Requested replica update min changes is invalid, it must be a positive integer.">>)
-).
 -define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId, __IndexName, __SpaceId), ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"error_provider_not_supporting_index">>,
@@ -230,11 +180,6 @@
     <<"error_index_function">>,
     <<"Processing query result failed."
     "Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
-).
--define(ERROR_INDEX_ALREADY_EXISTS, ?ERROR_REPLY(
-    ?HTTP_409_CONFLICT,
-    <<"error_index_already_exists">>,
-    <<"Index with given name already exists. You can modify the index using the PATCH request.">>)
 ).
 
 -define(ERROR_SPACE_NOT_SUPPORTED_REST, ?ERROR_REPLY(

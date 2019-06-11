@@ -6,20 +6,18 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements entity logic plugin behaviour and handles
-%%% entity logic operations corresponding to od_space model.
+%%% This module handles op logic operations corresponding to od_space model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_space).
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/datastore/transfer.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/api_errors.hrl").
+%%-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 -export([fetch_entity/1, operation_supported/3]).
@@ -27,7 +25,21 @@
 -export([exists/2, authorize/2, validate/1]).
 -export([entity_logic_plugin/0]).
 
--define(DEFAULT_TRANSFERS_LIST_LIMIT, 100).
+-define(MAX_LIST_LIMIT, 1000).
+-define(DEFAULT_INDEX_LIST_LIMIT, 100).
+-define(DEFAULT_TRANSFER_LIST_LIMIT, 100).
+
+-define(index_check_exec(__Result),
+    case __Result of
+        ok ->
+            ok;
+        {ok, _} = __Ans ->
+            __Ans;
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        __Error ->
+            __Error
+    end).
 
 %%%===================================================================
 %%% API
@@ -87,8 +99,26 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#el_req{client = Cl, gri = #gri{}} = Req) ->
-    ok.
+create(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+    Spatial = maps:get(<<"spatial">>, Data, false),
+
+    MapFunction = maps:get(<<"application/javascript">>, Data),
+    IndexOptions = prepare_index_options(Data),
+
+    Providers = case maps:get(<<"providers[]">>, Data, undefined) of
+        undefined -> [oneprovider:get_id()];
+        ProviderId when is_binary(ProviderId) -> [ProviderId];
+        ProvidersList -> ProvidersList
+    end,
+    ensure_space_supported_by_providers(SpaceId, Providers),
+
+    index:save(
+        SpaceId, IndexName, MapFunction, undefined,
+        IndexOptions, Spatial, Providers
+    );
+create(#el_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}} = Req) ->
+    ReduceFunction = maps:get(<<"application/javascript">>, Req#el_req.data),
+    ?index_check_exec(index:update_reduce_function(SpaceId, IndexName, ReduceFunction)).
 
 
 %%--------------------------------------------------------------------
@@ -102,11 +132,11 @@ get(#el_req{client = Cl, gri = #gri{aspect = list}}, _) ->
     SessionId = Cl#client.id,
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, EffSpacesIds} = user_logic:get_eff_spaces(SessionId, UserId),
-    Spaces = lists:map(fun(SpaceId) ->
+    EffSpaces = lists:map(fun(SpaceId) ->
         {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
         #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
     end, EffSpacesIds),
-    {ok, Spaces};
+    {ok, EffSpaces};
 
 get(#el_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     SessionId = Cl#client.id,
@@ -128,12 +158,49 @@ get(#el_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
             Error
     end;
 
-get(#el_req{client = Cl, gri = #gri{id = SpaceId, aspect = transfers}} = Req, _) ->
-    space_membership:check_with_auth(Cl#client.id, SpaceId),
+get(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
+    PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_INDEX_LIST_LIMIT),
 
+    {StartId, Offset} = case PageToken of
+        <<"null">> ->
+            {undefined, 0};
+        _ ->
+            % Start after the page token (link key from last listing) if it is given
+            {PageToken, 1}
+    end,
+
+    {ok, Indexes} = index:list(SpaceId, StartId, Offset, Limit),
+
+    NextPageToken = case length(Indexes) of
+        Limit ->
+            #{<<"nextPageToken">> => lists:last(Indexes)};
+        _ ->
+            #{}
+    end,
+
+    {ok, maps:merge(#{<<"indexes">> => Indexes}, NextPageToken)};
+
+get(#el_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
+    ?index_check_exec(index:get_json(SpaceId, IndexName));
+
+get(#el_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, _) ->
+    Options = index_utils:sanitize_query_options(Req#el_req.data),
+    ?error("~n~nOPTIONS: ~p~n~n", [Options]),
+    case index:query(SpaceId, IndexName, Options) of
+        {ok, {Rows}} ->
+            QueryResult = lists:map(fun(Row) -> maps:from_list(Row) end, Rows),
+            {ok, QueryResult};
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        Error ->
+            Error
+    end;
+
+get(#el_req{gri = #gri{id = SpaceId, aspect = transfers}} = Req, _) ->
     PageToken = maps:get(<<"page_token">>, Req#el_req.data, <<"null">>),
     TransferState = maps:get(<<"status">>, Req#el_req.data, <<"ongoing">>),
-    Limit = maps:get(<<"limit">>, Req#el_req.data, ?DEFAULT_TRANSFERS_LIST_LIMIT),
+    Limit = maps:get(<<"limit">>, Req#el_req.data, ?DEFAULT_TRANSFER_LIST_LIMIT),
 
     {StartId, Offset} = case PageToken of
         <<"null">> ->
@@ -171,8 +238,24 @@ get(#el_req{client = Cl, gri = #gri{id = SpaceId, aspect = transfers}} = Req, _)
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(#el_req{client = Cl, gri = #gri{}} = Req) ->
-    ok.
+update(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+    Spatial = maps:get(<<"spatial">>, Data, undefined),
+
+    MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
+    MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
+    IndexOptions = prepare_index_options(Data),
+
+    Providers = case maps:get(<<"providers[]">>, Data, undefined) of
+        undefined -> undefined;
+        ProviderId when is_binary(ProviderId) -> [ProviderId];
+        ProvidersList -> ProvidersList
+    end,
+    ensure_space_supported_by_providers(SpaceId, Providers),
+
+    ?index_check_exec(index:update(
+        SpaceId, IndexName, MapFun,
+        IndexOptions, Spatial, Providers
+    )).
 
 
 %%--------------------------------------------------------------------
@@ -181,8 +264,10 @@ update(#el_req{client = Cl, gri = #gri{}} = Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#el_req{client = Cl, gri = #gri{}} = Req) ->
-    ok.
+delete(#el_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+    ?index_check_exec(index:delete(SpaceId, IndexName));
+delete(#el_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
+    ?index_check_exec(index:update_reduce_function(SpaceId, IndexName, undefined)).
 
 
 %%--------------------------------------------------------------------
@@ -203,8 +288,12 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(_, _) ->
-    true.
+authorize(#el_req{gri = #gri{id = undefined}}, _) ->
+    true;
+authorize(#el_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
+    SessionId = Cl#client.id,
+    {ok, UserId} = session:get_user_id(SessionId),
+    user_logic:has_eff_space(SessionId, UserId, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -217,13 +306,62 @@ authorize(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req()) -> op_validator:op_logic_params_signature().
-validate(#el_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+validate(#el_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
+    required => #{
+        <<"application/javascript">> => {binary, any}
+    },
     optional => #{
-        <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
-        <<"limit">> => {integer, {not_lower_than, 0}},
+        <<"spatial">> => {boolean, any},
+        <<"update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"providers[]">> => {any, any}
+    }
+};
+validate(#el_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
+    required => #{<<"application/javascript">> => {binary, any}}
+};
+
+validate(#el_req{operation = get, gri = #gri{aspect = indices}}) -> #{
+    optional => #{
+        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {binary, any}
     }
 };
+validate(#el_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
+    optional => #{
+        <<"descending">> => {boolean, any},
+        <<"limit">> => {integer, {not_lower_than, 1}},
+        <<"skip">> => {integer, {not_lower_than, 1}},
+        <<"stale">> => {binary, [<<"ok">>, <<"update_after">>, <<"false">>]},
+        <<"spatial">> => {boolean, any},
+        <<"inclusive_end">> => {boolean, any},
+        <<"start_range">> => {binary, any},
+        <<"end_range">> => {binary, any},
+        <<"startkey">> => {binary, any},
+        <<"endkey">> => {binary, any},
+        <<"key">> => {binary, any},
+        <<"keys">> => {binary, any},
+        <<"bbox">> => {binary, any}
+    }
+};
+validate(#el_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+    optional => #{
+        <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
+        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"page_token">> => {binary, any}
+    }
+};
+
+validate(#el_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
+    optional => #{
+        <<"application/javascript">> => {binary, any},
+        <<"spatial">> => {boolean, any},
+        <<"update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"providers[]">> => {any, any}
+    }
+};
+
 validate(_) -> #{}.
 
 
@@ -232,9 +370,33 @@ validate(_) -> #{}.
 %%%===================================================================
 
 
--spec ensure_space_supported(od_space:id()) -> ok | no_return().
-ensure_space_supported(SpaceId) when is_binary(SpaceId) ->
-    case provider_logic:supports_space(SpaceId) of
-        true -> ok;
-        false -> throw(?ERROR_SPACE_NOT_SUPPORTED)
+-spec ensure_space_supported_by_providers(od_space:id(), [od_provider:id()]) ->
+    ok | no_return().
+ensure_space_supported_by_providers(_SpaceId, undefined) ->
+    ok;
+ensure_space_supported_by_providers(SpaceId, Providers) ->
+    lists:foreach(fun(ProviderId) ->
+        case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+            true ->
+                ok;
+            false ->
+                throw(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId))
+        end
+    end, Providers).
+
+
+-spec prepare_index_options(maps:map()) -> list().
+prepare_index_options(Data) ->
+    Options = case maps:get(<<"replica_update_min_changes">>, Data, undefined) of
+        undefined ->
+            [];
+        ReplicaUpdateMinChanges ->
+            [{replica_update_min_changes, ReplicaUpdateMinChanges}]
+    end,
+
+    case maps:get(<<"update_min_changes">>, Data, undefined) of
+        undefined ->
+            Options;
+        UpdateMinChanges ->
+            [{update_min_changes, UpdateMinChanges} | Options]
     end.

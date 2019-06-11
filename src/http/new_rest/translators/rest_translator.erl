@@ -315,6 +315,10 @@ translate_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(Key)) ->
     {?HTTP_400_BAD_REQUEST,
         {<<"Bad value: provided ID (\"~s\") does not exist">>, [Key]}
     };
+translate_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(Key)) ->
+    {?HTTP_400_BAD_REQUEST,
+        {<<"Bad value: provided (\"~s\") is ambiguous and does not explicitly indicate the given resource.">>, [Key]}
+    };
 translate_error(?ERROR_BAD_VALUE_IDENTIFIER_OCCUPIED(Key)) ->
     {?HTTP_400_BAD_REQUEST,
         % until VFS-3817 has been resolved do not change this description
@@ -367,6 +371,10 @@ translate_error(?ERROR_BAD_VALUE_EMAIL) ->
     {?HTTP_400_BAD_REQUEST, <<"Bad value: provided e-mail is not a valid e-mail.">>};
 translate_error(?ERROR_SPACE_NOT_SUPPORTED) ->
     {?HTTP_400_BAD_REQUEST, <<"The space of requested resource is not locally supported.">>};
+translate_error(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId)) ->
+    {?HTTP_400_BAD_REQUEST, {
+        <<"The space of requested resource is not supported by ~s.">>, [ProviderId]
+    }};
 
 % Wildcard match
 translate_error({error, Reason}) ->

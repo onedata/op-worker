@@ -409,7 +409,4 @@ ensure_valid(#state{
     ParamsSignature = Plugin:validate(Req),
     ParamsWithAspect = Data#{aspect => Aspect},
     SanitizedParams = op_validator:validate_params(ParamsWithAspect, ParamsSignature),
-
-    State#state{req = Req#el_req{data = Data#{
-        parameters => maps:remove(aspect, SanitizedParams)}
-    }}.
+    State#state{req = Req#el_req{data = maps:remove(aspect, SanitizedParams)}}.
