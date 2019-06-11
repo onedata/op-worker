@@ -1230,8 +1230,8 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
         Doc = #document{
             key = HarvesterId,
             value = #od_harvester{
-                spaces = proplists:get_value(<<"spaces">>, Setup),
-                indices = proplists:get_value(<<"indices">>, Setup)
+                spaces = proplists:get_value(<<"spaces">>, Setup, []),
+                indices = proplists:get_value(<<"indices">>, Setup, [])
             }},
         od_harvester:save_to_cache(Doc),
         {ok, Doc}
