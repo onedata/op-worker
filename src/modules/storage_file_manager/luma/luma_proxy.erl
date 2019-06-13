@@ -138,7 +138,7 @@ get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
         <<"spaceId">> => SpaceId,
         <<"userDetails">> => get_user_details(SessionId, UserId)
     },
-    json_utils:encode(Body).
+    json_utils:encode(filter_null_and_undefined_values(Body)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -157,7 +157,7 @@ get_group_request_body(undefined, SpaceId, #document{
         <<"storageId">> => StorageId,
         <<"storageName">> => StorageName
     },
-    json_utils:encode(Body);
+    json_utils:encode(filter_null_and_undefined_values(Body));
 get_group_request_body(GroupId, SpaceId, #document{
     key = StorageId,
     value = #storage{name = StorageName}
@@ -168,7 +168,7 @@ get_group_request_body(GroupId, SpaceId, #document{
         <<"storageId">> => StorageId,
         <<"storageName">> => StorageName
     },
-    json_utils:encode(Body).
+    json_utils:encode(filter_null_and_undefined_values(Body)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -176,7 +176,7 @@ get_group_request_body(GroupId, SpaceId, #document{
 %% Constructs user details list.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_details(session:id(), od_user:id()) -> UserDetails :: maps:map().
+-spec get_user_details(session:id(), od_user:id()) -> UserDetails :: map().
 get_user_details(SessionId, UserId) ->
     case user_logic:get_protected_data(SessionId, UserId) of
         {ok, #document{value = User}} ->
@@ -207,13 +207,35 @@ get_user_details(SessionId, UserId) ->
             }
     end.
 
+-spec filter_null_and_undefined_values(map()) -> map().
+filter_null_and_undefined_values(Map) when is_map(Map) ->
+    maps:fold(fun
+        (_Key, undefined, AccIn) ->
+            AccIn;
+        (_Key, <<"undefined">>, AccIn) ->
+            AccIn;
+        (_Key, null, AccIn) ->
+            AccIn;
+        (_Key, <<"null">>, AccIn) ->
+            AccIn;
+        (Key, NestedMap, AccIn) when is_map(NestedMap) ->
+            FilteredNestedMap = filter_null_and_undefined_values(NestedMap),
+            case map_size(FilteredNestedMap) =:= 0 of
+                true -> AccIn;
+                false -> AccIn#{Key => FilteredNestedMap}
+            end;
+        (Key, Value, AccIn) ->
+            AccIn#{Key => Value}
+    end, #{}, Map).
+
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Ensures that all values in map are binaries
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_binary_values(maps:map()) -> maps:map().
+-spec ensure_binary_values(map()) -> map().
 ensure_binary_values(Map) ->
     maps:fold(fun(Key, Value, AccIn) ->
         AccIn#{Key => str_utils:to_binary(Value)}
