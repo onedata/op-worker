@@ -207,26 +207,49 @@ get_user_details(SessionId, UserId) ->
             }
     end.
 
--spec filter_null_and_undefined_values(map()) -> map().
+-spec filter_null_and_undefined_values(term()) -> term().
 filter_null_and_undefined_values(Map) when is_map(Map) ->
-    maps:fold(fun
-        (_Key, undefined, AccIn) ->
-            AccIn;
-        (_Key, <<"undefined">>, AccIn) ->
-            AccIn;
-        (_Key, null, AccIn) ->
-            AccIn;
-        (_Key, <<"null">>, AccIn) ->
-            AccIn;
-        (Key, NestedMap, AccIn) when is_map(NestedMap) ->
-            FilteredNestedMap = filter_null_and_undefined_values(NestedMap),
-            case map_size(FilteredNestedMap) =:= 0 of
-                true -> AccIn;
-                false -> AccIn#{Key => FilteredNestedMap}
-            end;
-        (Key, Value, AccIn) ->
-            AccIn#{Key => Value}
-    end, #{}, Map).
+    maps:fold(fun(Key, Value, AccIn) ->
+        case filter_null_and_undefined_values(Value) of
+            null ->
+                AccIn;
+            <<"null">> ->
+                AccIn;
+            undefined ->
+                AccIn;
+            <<"undefined">> ->
+                AccIn;
+            EmptyFilteredMap
+                when is_map(EmptyFilteredMap)
+                andalso map_size(EmptyFilteredMap) =:= 0
+            ->
+                AccIn;
+            OtherFilteredValue ->
+                AccIn#{Key => OtherFilteredValue}
+        end
+    end, #{}, Map);
+filter_null_and_undefined_values(List) when is_list(List) ->
+    lists:filtermap(fun(Element) ->
+        case filter_null_and_undefined_values(Element) of
+            null ->
+                false;
+            <<"null">> ->
+                false;
+            undefined ->
+                false;
+            <<"undefined">> ->
+                false;
+            EmptyFilteredMap
+                when is_map(EmptyFilteredMap)
+                andalso map_size(EmptyFilteredMap) =:= 0
+            ->
+                false;
+            (OtherFilteredValue) ->
+                {true, OtherFilteredValue}
+        end
+    end, List);
+filter_null_and_undefined_values(OtherValue) ->
+    OtherValue.
 
 
 %%-------------------------------------------------------------------
