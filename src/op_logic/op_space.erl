@@ -18,10 +18,10 @@
 -include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
+-export([op_logic_plugin/0]).
 -export([operation_supported/3]).
 -export([create/1, get/2, update/1, delete/1]).
 -export([exists/2, authorize/2, data_signature/1]).
--export([op_logic_plugin/0]).
 
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_INDEX_LIST_LIMIT, 100).
@@ -311,6 +311,7 @@ data_signature(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> 
         <<"providers[]">> => {any, any}
     }
 };
+
 data_signature(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
     required => #{<<"application/javascript">> => {binary, any}}
 };
@@ -321,6 +322,7 @@ data_signature(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
         <<"page_token">> => {binary, any}
     }
 };
+
 data_signature(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
     optional => #{
         <<"descending">> => {boolean, any},
@@ -338,6 +340,7 @@ data_signature(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) 
         <<"bbox">> => {binary, any}
     }
 };
+
 data_signature(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
     optional => #{
         <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},

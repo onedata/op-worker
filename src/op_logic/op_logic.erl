@@ -28,7 +28,7 @@
 % for better readability of logic modules.
 -type req() :: #op_req{}.
 -type client() :: #client{}.
--type el_plugin() :: module().
+-type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 
 % TODO fix types
@@ -58,7 +58,7 @@
 
 -export_type([
     client/0,
-    el_plugin/0,
+    op_plugin/0,
     operation/0,
     entity_id/0,
     entity_type/0,
@@ -80,7 +80,7 @@
 % Internal record containing the request data and state.
 -record(req_ctx, {
     req = #op_req{} :: req(),
-    plugin = undefined :: el_plugin(),
+    plugin = undefined :: op_plugin(),
     entity = undefined :: entity()
 }).
 -type req_ctx() :: #req_ctx{}.
