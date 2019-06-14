@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to od_space model.
+%%% This module handles op logic operations corresponding to op_space model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_space).
@@ -16,30 +16,17 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
--include_lib("ctool/include/logging.hrl").
-%%-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
--export([fetch_entity/1, operation_supported/3]).
+-export([operation_supported/3]).
 -export([create/1, get/2, update/1, delete/1]).
 -export([exists/2, authorize/2, validate/1]).
--export([entity_logic_plugin/0]).
+-export([op_logic_plugin/0]).
 
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_INDEX_LIST_LIMIT, 100).
 -define(DEFAULT_TRANSFER_LIST_LIMIT, 100).
 
--define(index_check_exec(__Result),
-    case __Result of
-        ok ->
-            ok;
-        {ok, _} = __Ans ->
-            __Ans;
-        {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
-        __Error ->
-            __Error
-    end).
 
 %%%===================================================================
 %%% API
@@ -48,23 +35,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the entity logic plugin module that handles model logic.
+%% Returns the op logic plugin module that handles model logic.
 %% @end
 %%--------------------------------------------------------------------
-entity_logic_plugin() ->
+op_logic_plugin() ->
     op_space.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves an entity from datastore based on its EntityId.
-%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_entity(entity_logic:entity_id()) ->
-    {ok, entity_logic:entity()} | op_logic:error().
-fetch_entity(_) ->
-    {ok, none}.
 
 
 %%--------------------------------------------------------------------
@@ -95,20 +70,19 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a resource (aspect of entity) based on entity logic request.
+%% Creates a resource (aspect of entity) based on op logic request.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
     Spatial = maps:get(<<"spatial">>, Data, false),
-
     MapFunction = maps:get(<<"application/javascript">>, Data),
     IndexOptions = prepare_index_options(Data),
 
     Providers = case maps:get(<<"providers[]">>, Data, undefined) of
         undefined -> [oneprovider:get_id()];
         ProviderId when is_binary(ProviderId) -> [ProviderId];
-        ProvidersList -> ProvidersList
+        ProvidersList when is_list(ProvidersList) -> ProvidersList
     end,
     ensure_space_supported_by_providers(SpaceId, Providers),
 
@@ -116,20 +90,25 @@ create(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
         SpaceId, IndexName, MapFunction, undefined,
         IndexOptions, Spatial, Providers
     );
-create(#el_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}} = Req) ->
-    ReduceFunction = maps:get(<<"application/javascript">>, Req#el_req.data),
-    ?index_check_exec(index:update_reduce_function(SpaceId, IndexName, ReduceFunction)).
+
+create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}} = Req) ->
+    ReduceFunction = maps:get(<<"application/javascript">>, Req#op_req.data),
+    case index:update_reduce_function(SpaceId, IndexName, ReduceFunction) of
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        Result ->
+            Result
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves a resource (aspect of entity) based on entity logic request and
+%% Retrieves a resource (aspect of entity) based on op logic request and
 %% prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), entity_logic:entity()) -> op_logic:get_result().
-get(#el_req{client = Cl, gri = #gri{aspect = list}}, _) ->
-    SessionId = Cl#client.id,
+-spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+get(#op_req{client = #client{id = SessionId}, gri = #gri{aspect = list}}, _) ->
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, EffSpacesIds} = user_logic:get_eff_spaces(SessionId, UserId),
     EffSpaces = lists:map(fun(SpaceId) ->
@@ -138,7 +117,7 @@ get(#el_req{client = Cl, gri = #gri{aspect = list}}, _) ->
     end, EffSpacesIds),
     {ok, EffSpaces};
 
-get(#el_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
+get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     SessionId = Cl#client.id,
     case space_logic:get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name, providers = ProvidersIds}}} ->
@@ -158,7 +137,7 @@ get(#el_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
             Error
     end;
 
-get(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
+get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_INDEX_LIST_LIMIT),
 
@@ -169,7 +148,6 @@ get(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
             % Start after the page token (link key from last listing) if it is given
             {PageToken, 1}
     end,
-
     {ok, Indexes} = index:list(SpaceId, StartId, Offset, Limit),
 
     NextPageToken = case length(Indexes) of
@@ -181,12 +159,16 @@ get(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
 
     {ok, maps:merge(#{<<"indexes">> => Indexes}, NextPageToken)};
 
-get(#el_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
-    ?index_check_exec(index:get_json(SpaceId, IndexName));
+get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
+    case index:get_json(SpaceId, IndexName) of
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        Result ->
+            Result
+    end;
 
-get(#el_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, _) ->
-    Options = index_utils:sanitize_query_options(Req#el_req.data),
-    ?error("~n~nOPTIONS: ~p~n~n", [Options]),
+get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, _) ->
+    Options = index_utils:sanitize_query_options(Req#op_req.data),
     case index:query(SpaceId, IndexName, Options) of
         {ok, {Rows}} ->
             QueryResult = lists:map(fun(Row) -> maps:from_list(Row) end, Rows),
@@ -197,10 +179,10 @@ get(#el_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, 
             Error
     end;
 
-get(#el_req{gri = #gri{id = SpaceId, aspect = transfers}} = Req, _) ->
-    PageToken = maps:get(<<"page_token">>, Req#el_req.data, <<"null">>),
-    TransferState = maps:get(<<"status">>, Req#el_req.data, <<"ongoing">>),
-    Limit = maps:get(<<"limit">>, Req#el_req.data, ?DEFAULT_TRANSFER_LIST_LIMIT),
+get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
+    PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
+    TransferState = maps:get(<<"status">>, Data, <<"ongoing">>),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_TRANSFER_LIST_LIMIT),
 
     {StartId, Offset} = case PageToken of
         <<"null">> ->
@@ -234,11 +216,11 @@ get(#el_req{gri = #gri{id = SpaceId, aspect = transfers}} = Req, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates a resource (aspect of entity) based on entity logic request.
+%% Updates a resource (aspect of entity) based on op logic request.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
     Spatial = maps:get(<<"spatial">>, Data, undefined),
 
     MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
@@ -248,31 +230,43 @@ update(#el_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
     Providers = case maps:get(<<"providers[]">>, Data, undefined) of
         undefined -> undefined;
         ProviderId when is_binary(ProviderId) -> [ProviderId];
-        ProvidersList -> ProvidersList
+        ProvidersList when is_list(ProvidersList) -> ProvidersList
     end,
     ensure_space_supported_by_providers(SpaceId, Providers),
 
-    ?index_check_exec(index:update(
-        SpaceId, IndexName, MapFun,
-        IndexOptions, Spatial, Providers
-    )).
+    case index:update(SpaceId, IndexName, MapFun,  IndexOptions, Spatial, Providers) of
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        Result ->
+            Result
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes a resource (aspect of entity) based on entity logic request.
+%% Deletes a resource (aspect of entity) based on op logic request.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#el_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
-    ?index_check_exec(index:delete(SpaceId, IndexName));
-delete(#el_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
-    ?index_check_exec(index:update_reduce_function(SpaceId, IndexName, undefined)).
+delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+    case index:delete(SpaceId, IndexName) of
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        Result ->
+            Result
+    end;
+delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
+    case index:update_reduce_function(SpaceId, IndexName, undefined) of
+        {error, ?EINVAL} ->
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+        Result ->
+            Result
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given resource (aspect of entity) exists, based on entity
+%% Determines if given resource (aspect of entity) exists, based on op
 %% logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
@@ -284,13 +278,13 @@ exists(_, _) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Determines if requesting client is authorized to perform given operation,
-%% based on entity logic request and prefetched entity.
+%% based on op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#el_req{gri = #gri{id = undefined}}, _) ->
+authorize(#op_req{gri = #gri{id = undefined}}, _) ->
     true;
-authorize(#el_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
+authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
     SessionId = Cl#client.id,
     {ok, UserId} = session:get_user_id(SessionId),
     user_logic:has_eff_space(SessionId, UserId, SpaceId).
@@ -306,7 +300,7 @@ authorize(#el_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req()) -> op_validator:op_logic_params_signature().
-validate(#el_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
+validate(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
     required => #{
         <<"application/javascript">> => {binary, any}
     },
@@ -317,17 +311,17 @@ validate(#el_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
         <<"providers[]">> => {any, any}
     }
 };
-validate(#el_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
+validate(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
     required => #{<<"application/javascript">> => {binary, any}}
 };
 
-validate(#el_req{operation = get, gri = #gri{aspect = indices}}) -> #{
+validate(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
     optional => #{
         <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {binary, any}
     }
 };
-validate(#el_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
+validate(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
     optional => #{
         <<"descending">> => {boolean, any},
         <<"limit">> => {integer, {not_lower_than, 1}},
@@ -344,7 +338,7 @@ validate(#el_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
         <<"bbox">> => {binary, any}
     }
 };
-validate(#el_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+validate(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
     optional => #{
         <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
         <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
@@ -352,7 +346,7 @@ validate(#el_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
     }
 };
 
-validate(#el_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
+validate(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
     optional => #{
         <<"application/javascript">> => {binary, any},
         <<"spatial">> => {boolean, any},
@@ -370,6 +364,7 @@ validate(_) -> #{}.
 %%%===================================================================
 
 
+%% @private
 -spec ensure_space_supported_by_providers(od_space:id(), [od_provider:id()]) ->
     ok | no_return().
 ensure_space_supported_by_providers(_SpaceId, undefined) ->
@@ -385,6 +380,7 @@ ensure_space_supported_by_providers(SpaceId, Providers) ->
     end, Providers).
 
 
+%% @private
 -spec prepare_index_options(maps:map()) -> list().
 prepare_index_options(Data) ->
     Options = case maps:get(<<"replica_update_min_changes">>, Data, undefined) of
