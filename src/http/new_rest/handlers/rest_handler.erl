@@ -247,7 +247,7 @@ process_request(Req, State) ->
         Operation = method_to_operation(Method),
         GRI = resolve_gri_bindings(SessionId, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody),
-        ElReq = #el_req{
+        ElReq = #op_req{
             operation = Operation,
             client = ?USER(SessionId),
             gri = GRI,
@@ -275,8 +275,8 @@ process_request(Req, State) ->
 %% using TranslatorModule.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request(#el_req{}) -> #rest_resp{}.
-handle_request(#el_req{operation = Operation, gri = GRI} = ElReq) ->
+-spec handle_request(#op_req{}) -> #rest_resp{}.
+handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
     Result = op_logic:handle(ElReq),
     try
         rest_translator:response(ElReq, Result)

@@ -26,7 +26,7 @@
 
 % Some of the types are just aliases for types from gs_protocol, this is
 % for better readability of logic modules.
--type req() :: #el_req{}.
+-type req() :: #op_req{}.
 -type client() :: #client{}.
 -type el_plugin() :: module().
 -type operation() :: gs_protocol:operation().
@@ -78,16 +78,15 @@
 ]).
 
 % Internal record containing the request data and state.
--record(state, {
-    req = #el_req{} :: req(),
+-record(req_ctx, {
+    req = #op_req{} :: req(),
     plugin = undefined :: el_plugin(),
     entity = undefined :: entity()
 }).
--type state() :: #state{}.
+-type req_ctx() :: #req_ctx{}.
 
 %% API
 -export([handle/1, handle/2]).
--export([is_authorized/2]).
 -export([client_to_string/1]).
 
 
@@ -97,56 +96,42 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an entity logic request expressed by a #el_req{} record.
+%% @equiv handle(OpReq, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req()) -> result().
-handle(ElReq) ->
-    handle(ElReq, undefined).
+handle(OpReq) ->
+    handle(OpReq, undefined).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an entity logic request expressed by a #el_req{} record. Entity can
-%% be provided if it was prefetched.
+%% Handles an entity logic request expressed by a #op_req{} record.
+%% Entity can be provided if it was prefetched.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(req(), Entity :: entity()) -> result().
-handle(#el_req{gri = #gri{type = EntityType}} = ElReq, Entity) ->
+-spec handle(req(), entity()) -> result().
+handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
     try
-        ElPlugin = EntityType:entity_logic_plugin(),
-        handle_unsafe(#state{req = ElReq, plugin = ElPlugin, entity = Entity})
+        ReqCtx0 = #req_ctx{
+            req = OpReq,
+            plugin = EntityType:op_logic_plugin(),
+            entity = Entity
+        },
+
+        ensure_operation_supported(ReqCtx0),
+        ReqCtx1 = validate_request(ReqCtx0),
+        ReqCtx2 = maybe_fetch_entity(ReqCtx1),
+
+        handle_unsafe(ReqCtx2)
     catch
         throw:Error ->
             Error;
-        Type:Message ->
-            ?error_stacktrace("Unexpected error in entity_logic - ~p:~p", [
-                Type, Message
+        Type:Reason ->
+            ?error_stacktrace("Unexpected error in op_logic - ~p:~p", [
+                Type, Reason
             ]),
             ?ERROR_INTERNAL_SERVER_ERROR
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Return if given client is authorized to perform given request, as specified
-%% in the #el_req{} record. Entity can be provided if it was prefetched.
-%% @end
-%%--------------------------------------------------------------------
--spec is_authorized(req(), entity()) -> boolean().
-is_authorized(#el_req{gri = #gri{type = EntityType}} = ElReq, Entity) ->
-    try
-        ElPlugin = EntityType:entity_logic_plugin(),
-        % Existence must be checked too, as sometimes authorization depends
-        % on that.
-        ensure_authorized(
-            ensure_exists(#state{
-                req = ElReq, plugin = ElPlugin, entity = Entity
-            })),
-        true
-    catch
-        _:_ ->
-            false
     end.
 
 
@@ -166,22 +151,90 @@ client_to_string(?PROVIDER(PId)) -> str_utils:format("provider:~s", [PId]).
 %%% Internal functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Ensures requested operation is supported by calling back
+%% proper op logic plugin, throws a proper error if not.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_operation_supported(req_ctx()) -> ok | no_return().
+ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
+    operation = Op,
+    gri = #gri{aspect = Asp, scope = Scp}
+}}) ->
+    Result = try
+        Plugin:operation_supported(Op, Asp, Scp)
+    catch _:_ ->
+        % No need for log here, 'operation_supported' may crash depending on
+        % what the request contains and this is expected.
+        false
+    end,
+    case Result of
+        true -> ok;
+        false -> throw(?ERROR_NOT_SUPPORTED)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Ensures data specified in request is valid, throws on error.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_request(req_ctx()) -> req_ctx().
+validate_request(#req_ctx{plugin = Plugin, req = #op_req{
+    gri = #gri{aspect = Aspect},
+    data = RawData
+} = Req} = ReqCtx) ->
+    DataSignature = Plugin:validate(Req),
+    DataWithAspect = RawData#{aspect => Aspect},
+    SanitizedData = op_validator:validate_params(DataWithAspect, DataSignature),
+    ReqCtx#req_ctx{req = Req#op_req{data = maps:remove(aspect, SanitizedData)}}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Retrieves the entity specified in request by calling back proper op
+%% logic plugin. Does nothing if the entity is prefetched, GRI of the
+%% request is not related to any entity or callback is not
+%% implemented by plugin.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_fetch_entity(req_ctx()) -> req_ctx().
+maybe_fetch_entity(#req_ctx{entity = Entity} = ReqCtx) when Entity /= undefined ->
+    ReqCtx;
+maybe_fetch_entity(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = ReqCtx) ->
+    ReqCtx;
+maybe_fetch_entity(#req_ctx{plugin = Plugin, req = #op_req{
+    gri = #gri{id = Id}
+}} = ReqCtx) ->
+    case erlang:function_exported(Plugin, fetch_entity, 1) of
+        true ->
+            case Plugin:fetch_entity(Id) of
+                {ok, Entity} ->
+                    ReqCtx#req_ctx{entity = Entity};
+                ?ERROR_NOT_FOUND ->
+                    throw(?ERROR_NOT_FOUND)
+            end;
+        false ->
+            ReqCtx
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles an entity logic request based on operation,
 %% should be wrapped in a try-catch.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_unsafe(state()) -> result().
-handle_unsafe(State = #state{req = Req = #el_req{operation = create}}) ->
-    Result = call_create(
-        ensure_authorized(
-            fetch_entity(
-                ensure_valid(
-                    ensure_operation_supported(
-                        State))))),
+-spec handle_unsafe(req_ctx()) -> result().
+handle_unsafe(State = #req_ctx{req = Req = #op_req{operation = create}}) ->
+    Result = call_create(ensure_authorized(State)),
     case {Result, Req} of
-        {{ok, resource, Resource}, #el_req{gri = #gri{aspect = instance}, client = Cl}} ->
+        {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, client = Cl}} ->
             % If an entity instance is created, log an information about it
             % (it's a significant operation and this information might be useful).
             {EntType, _EntId} = case Resource of
@@ -197,34 +250,16 @@ handle_unsafe(State = #state{req = Req = #el_req{operation = create}}) ->
             Result
     end;
 
-handle_unsafe(State = #state{req = #el_req{operation = get}}) ->
-    call_get(
-        ensure_authorized(
-            ensure_exists(
-                fetch_entity(
-                    ensure_valid(
-                        ensure_operation_supported(
-                            State))))));
+handle_unsafe(State = #req_ctx{req = #op_req{operation = get}}) ->
+    call_get(ensure_authorized(ensure_exists(State)));
 
-handle_unsafe(State = #state{req = #el_req{operation = update}}) ->
-    call_update(
-        ensure_authorized(
-            ensure_exists(
-                fetch_entity(
-                    ensure_valid(
-                        ensure_operation_supported(
-                            State))))));
+handle_unsafe(State = #req_ctx{req = #op_req{operation = update}}) ->
+    call_update(ensure_authorized(ensure_exists(State)));
 
-handle_unsafe(State = #state{req = Req = #el_req{operation = delete}}) ->
-    Result = call_delete(
-        ensure_authorized(
-            ensure_exists(
-                fetch_entity(
-                    ensure_valid(
-                        ensure_operation_supported(
-                            State)))))),
+handle_unsafe(State = #req_ctx{req = Req = #op_req{operation = delete}}) ->
+    Result = call_delete(ensure_authorized(ensure_exists(State))),
     case {Result, Req} of
-        {ok, #el_req{gri = #gri{type = Type, id = _Id, aspect = instance}, client = Cl}} ->
+        {ok, #op_req{gri = #gri{type = Type, id = _Id, aspect = instance}, client = Cl}} ->
             % If an entity instance is deleted, log an information about it
             % (it's a significant operation and this information might be useful).
             ?debug("~s has been deleted by client: ~s", [
@@ -240,34 +275,12 @@ handle_unsafe(State = #state{req = Req = #el_req{operation = delete}}) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Retrieves the entity specified in request by calling back proper entity
-%% logic plugin. Does nothing if the entity is prefetched, or GRI of the
-%% request is not related to any entity.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_entity(state()) -> state().
-fetch_entity(#state{entity = Entity} = State) when Entity /= undefined ->
-    State;
-fetch_entity(#state{req = #el_req{gri = #gri{id = undefined}}} = State) ->
-    State;
-fetch_entity(#state{plugin = Plugin, req = #el_req{gri = #gri{id = Id}}} = State) ->
-    case Plugin:fetch_entity(Id) of
-        {ok, Entity} ->
-            State#state{entity = Entity};
-        ?ERROR_NOT_FOUND ->
-            throw(?ERROR_NOT_FOUND)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Creates an aspect of entity specified in request by calling back
 %% proper entity logic plugin.
 %% @end
 %%--------------------------------------------------------------------
--spec call_create(state()) -> create_result().
-call_create(#state{req = ElReq, plugin = Plugin, entity = Entity}) ->
+-spec call_create(req_ctx()) -> create_result().
+call_create(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity}) ->
     case Plugin:create(ElReq) of
         Fun when is_function(Fun, 1) ->
             Fun(Entity);
@@ -283,8 +296,8 @@ call_create(#state{req = ElReq, plugin = Plugin, entity = Entity}) ->
 %% proper entity logic plugin.
 %% @end
 %%--------------------------------------------------------------------
--spec call_get(state()) -> get_result().
-call_get(#state{req = ElReq, plugin = Plugin, entity = Entity}) ->
+-spec call_get(req_ctx()) -> get_result().
+call_get(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity}) ->
     Plugin:get(ElReq, Entity).
 
 
@@ -295,8 +308,8 @@ call_get(#state{req = ElReq, plugin = Plugin, entity = Entity}) ->
 %% proper entity logic plugin.
 %% @end
 %%--------------------------------------------------------------------
--spec call_update(state()) -> update_result().
-call_update(#state{req = ElReq, plugin = Plugin}) ->
+-spec call_update(req_ctx()) -> update_result().
+call_update(#req_ctx{req = ElReq, plugin = Plugin}) ->
     Plugin:update(ElReq).
 
 
@@ -307,32 +320,9 @@ call_update(#state{req = ElReq, plugin = Plugin}) ->
 %% proper entity logic plugin.
 %% @end
 %%--------------------------------------------------------------------
--spec call_delete(state()) -> delete_result().
-call_delete(#state{req = ElReq, plugin = Plugin}) ->
+-spec call_delete(req_ctx()) -> delete_result().
+call_delete(#req_ctx{req = ElReq, plugin = Plugin}) ->
     Plugin:delete(ElReq).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures requested operation is supported by calling back
-%% proper entity logic plugin, throws a proper error of not.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_operation_supported(state()) -> state().
-ensure_operation_supported(#state{req = Req, plugin = Plugin} = State) ->
-    Result = try
-        #el_req{operation = Op, gri = #gri{aspect = Asp, scope = Scp}} = Req,
-        Plugin:operation_supported(Op, Asp, Scp)
-    catch _:_ ->
-        % No need for log here, 'operation_supported' may crash depending on
-        % what the request contains and this is expected.
-        false
-    end,
-    case Result of
-        true -> State;
-        false -> throw(?ERROR_NOT_SUPPORTED)
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -341,11 +331,11 @@ ensure_operation_supported(#state{req = Req, plugin = Plugin} = State) ->
 %% Ensures aspect of entity specified in request exists, throws on error.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_exists(state()) -> state().
-ensure_exists(#state{req = #el_req{gri = #gri{id = undefined}}} = State) ->
+-spec ensure_exists(req_ctx()) -> req_ctx().
+ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = State) ->
     % Aspects where entity id is undefined always exist.
     State;
-ensure_exists(#state{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
+ensure_exists(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
     Result = try
         Plugin:exists(ElReq, Entity)
     catch _:_ ->
@@ -366,12 +356,12 @@ ensure_exists(#state{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
 %% throws on error.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_authorized(state()) -> state().
-ensure_authorized(#state{req = #el_req{client = ?ROOT}} = State) ->
+-spec ensure_authorized(req_ctx()) -> req_ctx().
+ensure_authorized(#req_ctx{req = #op_req{client = ?ROOT}} = State) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     State;
-ensure_authorized(#state{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
+ensure_authorized(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
     Result = try
         Plugin:authorize(ElReq, Entity)
     catch _:_ ->
@@ -383,7 +373,7 @@ ensure_authorized(#state{req = ElReq, plugin = Plugin, entity = Entity} = State)
         true ->
             State;
         false ->
-            case ElReq#el_req.client of
+            case ElReq#op_req.client of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
@@ -393,20 +383,3 @@ ensure_authorized(#state{req = ElReq, plugin = Plugin, entity = Entity} = State)
                     throw(?ERROR_FORBIDDEN)
             end
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures data specified in request is valid, throws on error.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_valid(state()) -> state().
-ensure_valid(#state{
-    req = #el_req{gri = #gri{aspect = Aspect}, data = Data} = Req,
-    plugin = Plugin
-} = State) ->
-    ParamsSignature = Plugin:validate(Req),
-    ParamsWithAspect = Data#{aspect => Aspect},
-    SanitizedParams = op_validator:validate_params(ParamsWithAspect, ParamsSignature),
-    State#state{req = Req#el_req{data = maps:remove(aspect, SanitizedParams)}}.

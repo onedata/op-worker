@@ -41,20 +41,20 @@
 -spec response(_, term()) -> #rest_resp{}.
 response(_, {error, _} = Err) ->
     error_response(Err);
-response(#el_req{operation = create}, ok) ->
+response(#op_req{operation = create}, ok) ->
     % No need for translation, 'ok' means success with no response data
     rest_translator:ok_no_content_reply();
-response(#el_req{operation = create} = ElReq, {ok, DataFormat, Result}) ->
-    #el_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = ElReq,
+response(#op_req{operation = create} = ElReq, {ok, DataFormat, Result}) ->
+    #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = ElReq,
     Translator = entity_type_to_translator(Model),
     Translator:create_response(GRI, AuthHint, DataFormat, Result);
-response(#el_req{operation = get} = ElReq, {ok, Data}) ->
-    #el_req{gri = GRI = #gri{type = Model}} = ElReq,
+response(#op_req{operation = get} = ElReq, {ok, Data}) ->
+    #op_req{gri = GRI = #gri{type = Model}} = ElReq,
     Translator = entity_type_to_translator(Model),
     Translator:get_response(GRI, Data);
-response(#el_req{operation = update}, ok) ->
+response(#op_req{operation = update}, ok) ->
     updated_reply();
-response(#el_req{operation = delete}, ok) ->
+response(#op_req{operation = delete}, ok) ->
     deleted_reply().
 
 

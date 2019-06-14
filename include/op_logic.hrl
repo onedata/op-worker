@@ -25,7 +25,7 @@
 }).
 
 % Record expressing entity logic request
--record(el_req, {
+-record(op_req, {
     client = #client{} :: op_logic:client(),
     gri :: op_logic:gri(),
     operation = create :: op_logic:operation(),
