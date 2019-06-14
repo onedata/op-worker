@@ -22,7 +22,7 @@
 -export([op_logic_plugin/0]).
 -export([operation_supported/3]).
 -export([create/1, get/2, update/1, delete/1]).
--export([exists/2, authorize/2, validate/1]).
+-export([exists/2, authorize/2, data_signature/1]).
 
 %%%===================================================================
 %%% API
@@ -180,21 +180,21 @@ authorize(_, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns validity verificators for given request.
+%% Returns data signature for given request.
 %% Returns a map with 'required', 'optional' and 'at_least_one' keys.
 %% Under each of them, there is a map:
-%%      Key => {type_verificator, value_verificator}
+%%      Key => {type_constraint, value_constraint}
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req()) -> op_validator:op_logic_params_signature().
-validate(#op_req{operation = create}) -> #{
+-spec data_signature(op_logic:req()) -> op_validator:data_signature().
+data_signature(#op_req{operation = create}) -> #{
     required => #{<<"name">> => {binary, name}}
 };
-validate(#op_req{operation = update}) -> #{
+data_signature(#op_req{operation = update}) -> #{
     required => #{<<"name">> => {binary, name}}
 };
-validate(_) -> #{}.
+data_signature(_) -> #{}.
 
 
 %%%===================================================================

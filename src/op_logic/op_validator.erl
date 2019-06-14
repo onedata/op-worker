@@ -19,29 +19,23 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
--type type_constraint() ::
-    any | boolean | integer | float |
-    atom | list_of_atoms | binary | list_of_binaries |
-    json | token.
+-type type_constraint() :: any | boolean | integer | binary.
 
 -type value_constraint() ::
     any |
     name |
-    non_empty |
-    fun((term()) -> boolean()) |
     [term()] | % A list of accepted values
-    {exists, fun((term()) -> boolean())} |
-    {not_exists, fun((term()) -> boolean())} |
     {between, integer(), integer()} |
     {not_lower_than, integer()} | {not_greater_than, integer()}.
 
 -type param_signature() :: {type_constraint(), value_constraint()}.
-
--type params() :: maps:map().
 % The 'aspect' key word allows to validate the data provided in aspect identifier.
--type params_signature() :: #{Key :: binary() | {aspect, binary()} => param_signature()}.
+-type params_signature() :: #{
+    Key :: binary() | {aspect, binary()} => param_signature()
+}.
 
--type op_logic_params_signature() :: #{
+-type data() :: #{Key :: binary() | {aspect, binary()} => term()}.
+-type data_signature() :: #{
     required => params_signature(),
     at_least_one => params_signature(),
     optional => params_signature()
@@ -50,14 +44,14 @@
 -export_type([
     type_constraint/0, value_constraint/0,
     param_signature/0, params_signature/0,
-    op_logic_params_signature/0
+    data/0, data_signature/0
 ]).
 
 -define(DEFAULT_ENTITY_NAME, <<"Unnamed">>).
 
 %% API
 -export([
-    validate_params/2,
+    validate_data/2,
     validate_name/1, validate_name/5,
     normalize_name/1, normalize_name/9
 ]).
@@ -70,19 +64,19 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Ensures given params conform to specified signature.
-%% Throws errors if it is not possible to adjust them.
+%% Ensures given data conform to specified signature.
+%% Throws errors if it is not possible to sanitize them.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_params(params(), op_logic_params_signature()) -> params().
-validate_params(Params, Signature) ->
+-spec validate_data(data(), data_signature()) -> data().
+validate_data(Data0, Signature) ->
     RequiredParamsSignature = maps:get(required, Signature, #{}),
     OptionalParamsSignature = maps:get(optional, Signature, #{}),
     AtLeastOneParamsSignature = maps:get(at_least_one, Signature, #{}),
 
-    Params2 = validate_required_params(Params, RequiredParamsSignature),
-    Params3 = validate_optional_params(Params2, OptionalParamsSignature),
-    validate_at_least_one_params(Params3, AtLeastOneParamsSignature).
+    Data1 = validate_required_params(Data0, RequiredParamsSignature),
+    Data2 = validate_optional_params(Data1, OptionalParamsSignature),
+    validate_at_least_one_params(Data2, AtLeastOneParamsSignature).
 
 
 %%--------------------------------------------------------------------
@@ -177,21 +171,21 @@ normalize_name(Name, FirstRgx, FirstReplace, MiddleRgx, MiddleReplace, LastRgx, 
 
 
 %% @private
--spec validate_required_params(params(), params_signature()) -> params().
-validate_required_params(Params, RequiredParamsSig) ->
-    lists:foldl(fun(Key, ParamsAcc) ->
-        case transform_and_check_value(Key, ParamsAcc, RequiredParamsSig) of
+-spec validate_required_params(data(), params_signature()) -> data().
+validate_required_params(Data, RequiredParamsSig) ->
+    lists:foldl(fun(Key, DataAcc) ->
+        case transform_and_check_value(Key, DataAcc, RequiredParamsSig) of
             false ->
                 throw(?ERROR_MISSING_REQUIRED_VALUE(Key));
-            {true, NewParams} ->
-                NewParams
+            {true, NewData} ->
+                NewData
         end
-    end, Params, maps:keys(RequiredParamsSig)).
+    end, Data, maps:keys(RequiredParamsSig)).
 
 
 %% @private
--spec validate_optional_params(params(), params_signature()) -> params().
-validate_optional_params(Params, OptionalParamsSig) ->
+-spec validate_optional_params(data(), params_signature()) -> data().
+validate_optional_params(Data, OptionalParamsSig) ->
     lists:foldl(fun(Key, DataAcc) ->
         case transform_and_check_value(Key, DataAcc, OptionalParamsSig) of
             false ->
@@ -199,21 +193,21 @@ validate_optional_params(Params, OptionalParamsSig) ->
             {true, NewData} ->
                 NewData
         end
-    end, Params, maps:keys(OptionalParamsSig)).
+    end, Data, maps:keys(OptionalParamsSig)).
 
 
 %% @private
--spec validate_at_least_one_params(params(), params_signature()) -> params().
-validate_at_least_one_params(Params, AtLeastOneParamsSig) ->
+-spec validate_at_least_one_params(data(), params_signature()) -> data().
+validate_at_least_one_params(Data, AtLeastOneParamsSig) ->
     {Params2, HasAtLeastOne} = lists:foldl(
-        fun(Key, {ParamsAcc, HasAtLeastOneAcc}) ->
-            case transform_and_check_value(Key, ParamsAcc, AtLeastOneParamsSig) of
+        fun(Key, {DataAcc, HasAtLeastOneAcc}) ->
+            case transform_and_check_value(Key, DataAcc, AtLeastOneParamsSig) of
                 false ->
-                    {ParamsAcc, HasAtLeastOneAcc orelse false};
-                {true, NewParams} ->
-                    {NewParams, true}
+                    {DataAcc, HasAtLeastOneAcc orelse false};
+                {true, NewData} ->
+                    {NewData, true}
             end
-        end, {Params, false}, maps:keys(AtLeastOneParamsSig)),
+        end, {Data, false}, maps:keys(AtLeastOneParamsSig)),
     case {length(maps:keys(AtLeastOneParamsSig)), HasAtLeastOne} of
         {_, true} ->
             ok;
@@ -234,18 +228,18 @@ validate_at_least_one_params(Params, AtLeastOneParamsSig) ->
 %% Params map must include 'aspect' key, that holds the aspect.
 %% @end
 %%--------------------------------------------------------------------
--spec transform_and_check_value(Key :: binary(), params(), params_signature()) ->
-    {true, params()} | false.
-transform_and_check_value({aspect, Key}, Params, Signature) ->
+-spec transform_and_check_value(Key :: binary(), data(), params_signature()) ->
+    {true, data()} | false.
+transform_and_check_value({aspect, Key}, Data, Signature) ->
     {TypeConstraint, ValueConstraint} = maps:get({aspect, Key}, Signature),
     %% Aspect validator supports only aspects that are tuples
-    {_, Value} = maps:get(aspect, Params),
+    {_, Value} = maps:get(aspect, Data),
     % Ignore the returned value - the check will throw in case the value is
     % not valid
     transform_and_check_value(TypeConstraint, ValueConstraint, Key, Value),
-    {true, Params};
-transform_and_check_value(Key, Params, Signature) ->
-    case maps:get(Key, Params, undefined) of
+    {true, Data};
+transform_and_check_value(Key, Data, Signature) ->
+    case maps:get(Key, Data, undefined) of
         undefined ->
             false;
         Value ->
@@ -253,7 +247,7 @@ transform_and_check_value(Key, Params, Signature) ->
             NewValue = transform_and_check_value(
                 TypeConstraint, ValueConstraint, Key, Value
             ),
-            {true, Params#{Key => NewValue}}
+            {true, Data#{Key => NewValue}}
     end.
 
 

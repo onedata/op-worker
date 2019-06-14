@@ -20,7 +20,7 @@
 
 -export([operation_supported/3]).
 -export([create/1, get/2, update/1, delete/1]).
--export([exists/2, authorize/2, validate/1]).
+-export([exists/2, authorize/2, data_signature/1]).
 -export([op_logic_plugin/0]).
 
 -define(MAX_LIST_LIMIT, 1000).
@@ -292,15 +292,15 @@ authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns validity verificators for given request.
+%% Returns data signature for given request.
 %% Returns a map with 'required', 'optional' and 'at_least_one' keys.
 %% Under each of them, there is a map:
-%%      Key => {type_verificator, value_verificator}
+%%      Key => {type_constraint, value_constraint}
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req()) -> op_validator:op_logic_params_signature().
-validate(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
+-spec data_signature(op_logic:req()) -> op_validator:data_signature().
+data_signature(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
     required => #{
         <<"application/javascript">> => {binary, any}
     },
@@ -311,17 +311,17 @@ validate(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
         <<"providers[]">> => {any, any}
     }
 };
-validate(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
+data_signature(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
     required => #{<<"application/javascript">> => {binary, any}}
 };
 
-validate(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
+data_signature(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
     optional => #{
         <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {binary, any}
     }
 };
-validate(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
+data_signature(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
     optional => #{
         <<"descending">> => {boolean, any},
         <<"limit">> => {integer, {not_lower_than, 1}},
@@ -338,7 +338,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
         <<"bbox">> => {binary, any}
     }
 };
-validate(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+data_signature(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
     optional => #{
         <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
         <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
@@ -346,7 +346,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
     }
 };
 
-validate(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
+data_signature(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
     optional => #{
         <<"application/javascript">> => {binary, any},
         <<"spatial">> => {boolean, any},
@@ -356,7 +356,7 @@ validate(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
     }
 };
 
-validate(_) -> #{}.
+data_signature(_) -> #{}.
 
 
 %%%===================================================================

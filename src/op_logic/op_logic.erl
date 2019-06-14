@@ -188,9 +188,9 @@ validate_request(#req_ctx{plugin = Plugin, req = #op_req{
     gri = #gri{aspect = Aspect},
     data = RawData
 } = Req} = ReqCtx) ->
-    DataSignature = Plugin:validate(Req),
+    DataSignature = Plugin:data_signature(Req),
     DataWithAspect = RawData#{aspect => Aspect},
-    SanitizedData = op_validator:validate_params(DataWithAspect, DataSignature),
+    SanitizedData = op_validator:validate_data(DataWithAspect, DataSignature),
     ReqCtx#req_ctx{req = Req#op_req{data = maps:remove(aspect, SanitizedData)}}.
 
 
