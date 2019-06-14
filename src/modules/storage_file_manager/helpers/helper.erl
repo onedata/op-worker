@@ -76,7 +76,7 @@ allow_insecure(_) -> true.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Injects user context into helper parameters.
+%% Returns helper arguments with user ctx added.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_args_with_user_ctx(helpers:helper(), user_ctx()) ->

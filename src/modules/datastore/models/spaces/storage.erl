@@ -563,7 +563,7 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
 
 
 %%%===================================================================
-%%% Internal functons
+%%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -580,6 +580,8 @@ update_helper(StorageId, HelperName, DiffFun) ->
         case select_helper(Storage, HelperName) of
             {ok, Helper} ->
                 case DiffFun(Helper) of
+                    {ok, Helper} ->
+                        {error, no_changes};
                     {ok, NewHelper} ->
                         {ok, replace_helper(Storage, HelperName, NewHelper)};
                     {error, _} = Error ->
@@ -591,6 +593,7 @@ update_helper(StorageId, HelperName, DiffFun) ->
     end,
     case update(StorageId, UpdateFun) of
         {ok, _} -> on_helper_changed(StorageId);
+        {error, no_changes} -> ok;
         Error -> Error
     end.
 

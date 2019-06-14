@@ -22,6 +22,7 @@
 -export([delete_helpers_on_node/1]).
 
 -define(HELPER_HANDLES_TREE_ID, <<"helper_handles">>).
+-define(LINK_NAME_SEPARATOR, ":").
 
 % link name constructed from storage id and space id
 -type handle_link_name() :: datastore:link_name().
@@ -188,7 +189,7 @@ add_missing_helper(SessId, SpaceId, StorageDoc) ->
 %%--------------------------------------------------------------------
 -spec make_link_name(storage:id(), od_space:id()) -> handle_link_name().
 make_link_name(StorageId, SpaceId) ->
-    <<StorageId/binary, ":", SpaceId/binary>>.
+    <<StorageId/binary, ?LINK_NAME_SEPARATOR, SpaceId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -198,5 +199,5 @@ make_link_name(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec unpack_link_name(handle_link_name()) -> {storage:id(), od_space:id()}.
 unpack_link_name(LinkKey) ->
-    [StorageId, SpaceId] = binary:split(LinkKey, <<":">>),
+    [StorageId, SpaceId] = binary:split(LinkKey, <<?LINK_NAME_SEPARATOR>>),
     {StorageId, SpaceId}.
