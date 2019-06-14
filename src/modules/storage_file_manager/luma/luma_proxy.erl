@@ -210,46 +210,41 @@ get_user_details(SessionId, UserId) ->
 -spec filter_null_and_undefined_values(term()) -> term().
 filter_null_and_undefined_values(Map) when is_map(Map) ->
     maps:fold(fun(Key, Value, AccIn) ->
-        case filter_null_and_undefined_values(Value) of
-            null ->
+        FilteredValue = filter_null_and_undefined_values(Value),
+        case should_filter(FilteredValue) of
+            true ->
                 AccIn;
-            <<"null">> ->
-                AccIn;
-            undefined ->
-                AccIn;
-            <<"undefined">> ->
-                AccIn;
-            EmptyFilteredMap
-                when is_map(EmptyFilteredMap)
-                andalso map_size(EmptyFilteredMap) =:= 0
-            ->
-                AccIn;
-            OtherFilteredValue ->
-                AccIn#{Key => OtherFilteredValue}
+            false ->
+                AccIn#{Key => FilteredValue}
         end
     end, #{}, Map);
 filter_null_and_undefined_values(List) when is_list(List) ->
     lists:filtermap(fun(Element) ->
-        case filter_null_and_undefined_values(Element) of
-            null ->
+        FilteredElement = filter_null_and_undefined_values(Element),
+        case should_filter(FilteredElement) of
+            true ->
                 false;
-            <<"null">> ->
-                false;
-            undefined ->
-                false;
-            <<"undefined">> ->
-                false;
-            EmptyFilteredMap
-                when is_map(EmptyFilteredMap)
-                andalso map_size(EmptyFilteredMap) =:= 0
-            ->
-                false;
-            (OtherFilteredValue) ->
-                {true, OtherFilteredValue}
+            false ->
+                {true, FilteredElement}
         end
     end, List);
 filter_null_and_undefined_values(OtherValue) ->
     OtherValue.
+
+
+-spec should_filter(term()) -> boolean().
+should_filter(null) ->
+    true;
+should_filter(<<"null">>) ->
+    true;
+should_filter(undefined) ->
+    true;
+should_filter(<<"undefined">>) ->
+    true;
+should_filter(Map) when is_map(Map) andalso map_size(Map) =:= 0 ->
+    true;
+should_filter(_) ->
+    false.
 
 
 %%-------------------------------------------------------------------
