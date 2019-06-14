@@ -61,8 +61,7 @@ user_ctx_validation_test_() ->
             {ctx_test_name(HelperName, Remove), ?_assertError(_,
                 helper:new_helper(HelperName, Args, BadCtx, false, <<"flat">>)
             )}
-        end,
-            maps:keys(AdminCtx))
+        end, maps:keys(AdminCtx))
     end, ?USER_CTXS).
 
 ctx_test_name(HelperName, Key) ->

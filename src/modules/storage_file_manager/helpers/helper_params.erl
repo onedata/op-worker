@@ -33,6 +33,7 @@
 
 -type field() :: binary().
 -type optional_field() :: {optional, field()}.
+-type field_spec() :: field() | optional_field().
 
 
 %%%===================================================================
@@ -261,9 +262,7 @@ expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
 %% Removes unknown fields from args or ctx map.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_fields(AllowedFields, Params) -> Params when
-    AllowedFields :: [field() | optional_field()],
-    Params :: args() | ctx().
+-spec filter_fields([field_spec()], args() | ctx()) -> args() | ctx().
 filter_fields(AllowedFields, Map) ->
     Fields = strip_optional_modifier(AllowedFields),
     maps:with(Fields, Map).
@@ -279,8 +278,7 @@ strip_optional_modifier(Fields) ->
 
 
 %% @private
--spec remove_field(ToRemove :: field(), FieldsList) -> FieldsList when
-    FieldsList :: [field() | optional_field()].
+-spec remove_field(ToRemove :: field(), [field_spec()]) -> [field_spec()].
 remove_field(ToRemove, Fields) ->
     lists:filter(fun(Field) -> case Field of
         ToRemove -> false;

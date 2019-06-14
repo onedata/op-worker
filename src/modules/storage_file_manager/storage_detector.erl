@@ -211,7 +211,8 @@ verify_storage_internal(Helper, AdminCtx, [Node | Nodes], FileId, ExpectedFileCo
                 {ok, FileContent} ->
                     verify_storage_internal(Helper, AdminCtx,
                         Nodes, FileId2, FileContent);
-                Error -> Error
+                Error ->
+                    Error
             end;
         Error ->
             Error

@@ -402,9 +402,6 @@ is_luma_enabled(#storage{luma_config = undefined}) ->
 is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
     true;
 is_luma_enabled(#document{value = #storage{} = Storage}) ->
-    is_luma_enabled(Storage);
-is_luma_enabled(StorageId) when is_binary(StorageId) ->
-    {ok, #document{value = #storage{} = Storage}} = ?MODULE:get(StorageId),
     is_luma_enabled(Storage).
 
 
@@ -593,7 +590,8 @@ update_helper(StorageId, HelperName, DiffFun) ->
                     {error, _} = Error ->
                         Error
                 end;
-            {error, _} = Error -> Error
+            {error, _} = Error ->
+                Error
         end
     end)).
 
@@ -601,7 +599,7 @@ update_helper(StorageId, HelperName, DiffFun) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Replaces storage with given name.
+%% Replaces storage helper with given name.
 %% @end
 %%--------------------------------------------------------------------
 -spec replace_helper(record(), helper:name(), NewHelper :: helpers:helper()) ->
