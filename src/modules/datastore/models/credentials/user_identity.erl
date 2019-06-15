@@ -12,9 +12,11 @@
 -module(user_identity).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([get/1, fetch/1, get_or_fetch/1, delete/1, get_user_id/1,
@@ -58,17 +60,22 @@ fetch(Credentials) ->
     try
         case user_logic:get_by_auth(Auth) of
             {ok, #document{key = UserId}} ->
-                NewDoc = #document{
-                    key = term_to_binary(Auth),
-                    value = #user_identity{user_id = UserId}
-                },
-                case datastore_model:create(?CTX, NewDoc) of
-                    {ok, _} -> ok;
-                    {error, already_exists} -> ok
-                end,
-                {ok, NewDoc};
-             {error, _} = Error ->
-                 Error
+                case provider_logic:has_eff_user(UserId) of
+                    false ->
+                        ?ERROR_FORBIDDEN;
+                    true ->
+                        NewDoc = #document{
+                            key = term_to_binary(Auth),
+                            value = #user_identity{user_id = UserId}
+                        },
+                        case datastore_model:create(?CTX, NewDoc) of
+                            {ok, _} -> ok;
+                            {error, already_exists} -> ok
+                        end,
+                        {ok, NewDoc}
+                end;
+            {error, _} = Error ->
+                Error
         end
     catch
         _:Reason ->

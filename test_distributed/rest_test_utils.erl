@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([request/5, request/6, user_token_header/2]).
+-export([request/5, request/6, user_token_header/2, assert_request_error/2]).
 
 %%%===================================================================
 %%% API
@@ -48,6 +48,37 @@ user_token_header(Config, User)  ->
         3 -> {<<"Authorization">>, <<"Bearer ", Macaroon/binary>>}
     end.
 
+assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
+    _RequestParams = {Node, URL, Method, Headers, Body}) ->
+    assert_request_error({ExpectedCode, ExpectedBody}, {Node, URL, Method, Headers, Body, []});
+assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
+    _RequestParams = {Node, URL, Method, Headers, Body, Opts}) ->
+    Response = request(Node, URL, Method, Headers, Body, Opts),
+    {ok, RespCode, _, RespBody} = ?assertMatch({ok, _RespCode, _, _RespBody}, Response),
+
+    CodeMatched = case ExpectedCode == RespCode of
+        true ->
+            true;
+        false ->
+            ct:pal("Wrong response code: ~n"
+                   "    Expected: ~p~n"
+                   "    Got: ~p~n", [ExpectedCode, RespCode]),
+            print_request(Node, URL, Method, Headers, Body),
+            false
+    end,
+
+    DecodedBody = json_utils:decode(RespBody),
+    BodyMatched = case ExpectedBody == DecodedBody of
+        true ->
+            true;
+        false ->
+            ct:pal("Wrong response body: ~n"
+            "Expected: ~p~n"
+            "Got: ~p~n", [ExpectedBody, DecodedBody]),
+            print_request(Node, URL, Method, Headers, Body),
+            false
+    end,
+    CodeMatched andalso BodyMatched.
 
 %%%===================================================================
 %%% Internal functions
@@ -68,3 +99,12 @@ rest_endpoint(Node) ->
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
     <<"https://", (str_utils:to_binary(Domain))/binary, Port/binary, "/api/v3/oneprovider/">>.
 
+print_request(URL, Method, Headers, Body, Opts) ->
+    ct:pal("Failed for request: ~n"
+    "   ReqMethod: ~p~n"
+    "   URL: ~p~n"
+    "   Headers: ~p~n"
+    "   ReqBody: ~p~n"
+    "   Opts: ~p~n", [
+        Method, URL, Headers, Body, Opts
+    ]).

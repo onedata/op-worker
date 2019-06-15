@@ -452,7 +452,7 @@ transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
                 transfer:increment_files_to_process_counter(TransferId, length(ObjectIds)),
                 NewFileCtxs = lists:filtermap(fun(O) ->
                     try
-                        {ok, G} = cdmi_id:objectid_to_guid(O),
+                        {ok, G} = file_id:objectid_to_guid(O),
                         {true, file_ctx:new_by_guid(G)}
                     catch
                         Error:Reason ->

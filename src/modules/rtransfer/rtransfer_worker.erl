@@ -53,7 +53,7 @@ handle(healthcheck) ->
 handle(refresh_disabled_spaces) ->
     case space_quota:get_disabled_spaces() of
         {ok, BlockedSpaces} ->
-            {_, BadNodes} = rpc:multicall(consistent_hasing:get_all_nodes(),
+            {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                 rtransfer_link_quota_manager,
                 update_disabled_spaces,
                 [BlockedSpaces]),

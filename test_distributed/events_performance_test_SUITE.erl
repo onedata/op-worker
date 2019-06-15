@@ -49,7 +49,7 @@ all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(TIMEOUT, timer:minutes(1)).
--define(FILE_GUID(Id), fslogic_uuid:uuid_to_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
+-define(FILE_GUID(Id), file_id:pack_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
 -define(STM_ID(N), list_to_atom("stream_id_" ++ integer_to_list(N))).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
@@ -428,10 +428,11 @@ end_per_testcase(_Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Con) ->
+    Iden :: session:identity(), Conn :: pid()) -> ok.
+session_setup(Worker, SessId, Iden, Conn) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #macaroon_auth{}, [Con]])).
+        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Conn]
+    )).
 
 %%--------------------------------------------------------------------
 %% @private

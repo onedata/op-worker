@@ -60,8 +60,8 @@
 %
 
 -record(od_user, {
-    name :: undefined | binary(),
-    alias :: undefined | binary(),
+    full_name :: undefined | binary(),
+    username :: undefined | binary(),
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
@@ -82,17 +82,6 @@
     name :: undefined | binary(),
     type = role :: od_group:type(),
 
-    % Group graph related entities
-    direct_parents = [] :: [binary()],
-    direct_children = #{} :: maps:map(od_group:id(), [privileges:group_privilege()]),
-    eff_children = #{} :: maps:map(od_group:id(), [privileges:group_privilege()]),
-
-    % Direct relations to other entities
-    direct_users = #{} :: maps:map(od_user:id(), [privileges:group_privilege()]),
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:group_privilege()]),
-
-    eff_spaces = [] :: [od_space:id()],
-
     cache_state = #{} :: cache_state()
 }).
 
@@ -109,6 +98,8 @@
     providers = #{} :: maps:map(od_provider:id(), Size :: integer()),
 
     shares = [] :: [od_share:id()],
+
+    harvesters = [] :: [od_harvester:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -176,6 +167,12 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_harvester, {
+    indices = [] :: [od_harvester:index()],
+    spaces = [] :: [od_space:id()],
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -191,6 +188,11 @@
 
 -record(authorization_nonce, {
     timestamp :: integer()
+}).
+
+-record(file_download_code, {
+    session_id :: session:id(),
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% Identity containing user_id
@@ -257,13 +259,9 @@
     mode = 0 :: file_meta:posix_permissions(),
     owner :: undefined | od_user:id(),
     group_owner :: undefined | od_group:id(),
-    size = 0 :: undefined | file_meta:size(),
-    version = 0, %% Snapshot version
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid()
@@ -526,8 +524,8 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
-    file_objectid :: undefined | cdmi_id:object_id(), % undefined only for upgraded docs
-    value = #{} :: maps:map()
+    file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
+    value = #{} :: json_utils:json_term()
 }).
 
 %% Model that holds database views
@@ -694,6 +692,12 @@
     reduce_function :: undefined | index:index_function(),
     index_options = [] :: index:options(),
     providers = [] :: all | [od_provider:id()]
+}).
+
+%% Model that holds information about state of harvesting for given space
+-record(harvesting_state, {
+    % structure that holds progress of harvesting for {Harvester, Index} pairs
+    progress :: harvesting_progress:progress()
 }).
 
 -endif.

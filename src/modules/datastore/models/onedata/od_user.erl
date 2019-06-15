@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model server as cache for od_user records
+%%% This model serves as cache for od_user records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -23,13 +23,13 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--type name() :: binary().
+-type full_name() :: binary().
 %% Linked account is expressed in the form of map:
 %% #{
 %%     <<"idp">> => binary(),
 %%     <<"subjectId">> => binary(),
 %%     <<"name">> => undefined | binary(),
-%%     <<"alias">> => undefined | binary(),
+%%     <<"login">> => undefined | binary(),
 %%     <<"emails">> => [binary()],
 %%     <<"entitlements">> => [binary()],
 %%     <<"custom">> => jiffy:json_value()
@@ -37,7 +37,7 @@
 -type linked_account() :: maps:map().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, linked_account/0]).
+-export_type([full_name/0, linked_account/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -45,7 +45,7 @@
 }).
 
 %% API
--export([save/1, get/1, delete/1, list/0, run_after/3]).
+-export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
@@ -56,13 +56,8 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves handle.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc) ->
+-spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
+save_to_cache(Doc) ->
     case datastore_model:save(?CTX, Doc) of
         {ok, #document{key = UserId, value = #od_user{eff_spaces = EffSpaces}}} ->
             file_meta:setup_onedata_user(UserId, EffSpaces),
@@ -71,32 +66,21 @@ save(Doc) ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns handle.
-%% @end
-%%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
+
+-spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
+get_from_cache(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes handle.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(id()) -> ok | {error, term()}.
-delete(Key) ->
+
+-spec invalidate_cache(id()) -> ok | {error, term()}.
+invalidate_cache(Key) ->
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -131,7 +115,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,7 +185,26 @@ get_record_struct(3) ->
 get_record_struct(4) ->
     {record, Struct} = get_record_struct(3),
     % Rename email_list to emails
-    {record, lists:keyreplace(email_list, 1, Struct, {emails, [string]})}.
+    {record, lists:keyreplace(email_list, 1, Struct, {emails, [string]})};
+get_record_struct(5) ->
+    % Rename name -> full_name
+    % Rename alias -> username
+    {record, [
+        {full_name, string},
+        {username, string},
+        {emails, [string]},
+        {linked_accounts, [ #{string => term} ]},
+
+        {default_space, string},
+        {space_aliases, #{string => string}},
+
+        {eff_groups, [string]},
+        {eff_spaces, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
+
+        {cache_state, #{atom => term}}
+    ]}.
 
 
 %%--------------------------------------------------------------------
@@ -305,10 +308,44 @@ upgrade_record(3, User) ->
         CacheState
     } = User,
 
-    {4, #od_user{
-        name = Name,
-        alias = Alias,
-        emails = EmailList,
+    {4, {od_user,
+        Name,
+        Alias,
+        EmailList,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    }};
+upgrade_record(4, User) ->
+    {od_user,
+        Name,
+        Alias,
+        Emails,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    } = User,
+
+    {5, #od_user{
+        full_name = Name,
+        username = Alias,
+        emails = Emails,
         linked_accounts = LinkedAccounts,
 
         default_space = DefaultSpace,

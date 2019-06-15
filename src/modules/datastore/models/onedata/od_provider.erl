@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model server as cache for od_provider records
+%%% This model serves as cache for od_provider records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -34,51 +34,43 @@
 }).
 
 %% API
--export([save/1, get/1, delete/1, list/0]).
+-export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2]).
+-export([get_record_struct/1, upgrade_record/2, get_posthooks/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves handle.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc) ->
+-spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
+save_to_cache(Doc) ->
     ?extract_key(datastore_model:save(?CTX, Doc)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns handle.
-%% @end
-%%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
+
+-spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
+get_from_cache(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes handle.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(id()) -> ok | {error, term()}.
-delete(Key) ->
+
+-spec invalidate_cache(id()) -> ok | {error, term()}.
+invalidate_cache(Key) ->
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provider create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(_Function, _Args, Result) ->
+    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -192,20 +184,30 @@ upgrade_record(2, Provider) ->
         #{}
     } = Provider,
     #{host := Domain} = url_utils:parse(hd(Urls)),
-    {3, #od_provider{
-        name = Name,
-        admin_email = undefined,
-        subdomain_delegation = false,
-        domain = Domain,
-        subdomain = undefined,
-        latitude = 0.0,
-        longitude = 0.0,
-        online = false,
+    {3, {od_provider,
+        Name,
+        undefined,
+        false,
+        Domain,
+        undefined,
+        0.0,
+        0.0,
+        false,
 
-        spaces = #{},
+        #{},
 
-        eff_users = [],
-        eff_groups = [],
+        [],
+        [],
 
-        cache_state = #{}
+        #{}
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].

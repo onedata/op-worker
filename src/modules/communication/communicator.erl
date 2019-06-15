@@ -15,6 +15,7 @@
 -include("timeouts.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("modules/communication/connection.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
@@ -40,6 +41,8 @@
 -type generic_message() :: client_message() | server_message() | tuple().
 
 -type error() :: {error, Reason :: term()}.
+
+-define(RESPONSE_AWAITING_PERIOD, 3 * ?WORKERS_STATUS_CHECK_INTERVAL).
 
 %%%===================================================================
 %%% API - convenience functions
@@ -68,7 +71,7 @@ send_to_oneclient(SessionId, Msg) ->
 -spec send_to_oneclient(session:id(), generic_message(), retries()) ->
     ok | error().
 send_to_oneclient(SessionId, #server_message{} = Msg0, Retries) ->
-    Msg1 = connection_utils:fill_effective_session_info(Msg0, SessionId),
+    Msg1 = clproto_utils:fill_effective_session_info(Msg0, SessionId),
     send_to_oneclient_internal(SessionId, Msg1, Retries);
 send_to_oneclient(SessionId, Msg, RetriesLeft) ->
     ServerMsg = #server_message{message_body = Msg},
@@ -107,9 +110,8 @@ send_to_provider(SessionId, Msg, RecipientPid) ->
     retries()) -> ok | {ok | clproto_message_id:id()} | error().
 send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
     {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
-    Msg2 = connection_utils:fill_effective_session_info(Msg1, SessionId),
-    Res = send_to_provider_internal(SessionId, Msg2, Retries),
-    case {Res, RecipientPid} of
+    Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
+    case {send_to_provider_internal(SessionId, Msg2, Retries), RecipientPid} of
         {ok, undefined} ->
             ok;
         {ok, _} ->
@@ -144,10 +146,12 @@ communicate_with_provider(SessionId, Msg) ->
 -spec communicate_with_provider(session:id(), generic_message(), retries()) ->
     {ok, message()} | error().
 communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
-    Msg1 = connection_utils:fill_effective_session_info(Msg0, SessionId),
-    case communicate_with_provider_internal(SessionId, Msg1, Retries) of
-        {ok, _} = Ans ->
-            Ans;
+    {ok, MsgId} = clproto_message_id:generate(self()),
+    Msg1 = Msg0#client_message{message_id = MsgId},
+    Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
+    case send_to_provider_internal(SessionId, Msg2, Retries) of
+        ok ->
+            await_response(MsgId);
         {error, no_connections} ->
             ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
         Error ->
@@ -167,7 +171,6 @@ communicate_with_provider(SessionId, Msg, Retries) ->
     sequencer:stream_id(), recipient_pid()) ->
     ok | {ok | clproto_message_id:id()} | error().
 stream_to_provider(SessionId, #client_message{} = Msg0, StmId, RecipientPid) ->
-    session_connections:ensure_connected(SessionId),
     {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
     case {sequencer:send_message(Msg, StmId, SessionId), RecipientPid} of
         {ok, undefined} ->
@@ -191,7 +194,7 @@ stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
 -spec send_to_oneclient_internal(session:id(), server_message(), retries()) ->
     ok | error().
 send_to_oneclient_internal(SessionId, Msg, 0) ->
-    connection_api:send(SessionId, Msg);
+    connection_api:send(SessionId, Msg, [], true);
 send_to_oneclient_internal(SessionId, Msg, Retries) ->
     case connection_api:send(SessionId, Msg) of
         ok ->
@@ -200,7 +203,7 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
             NoConnectionsError;
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_oneclient_internal(SessionId, Msg, retries_left(Retries))
+            send_to_oneclient_internal(SessionId, Msg, decrement_retries(Retries))
     end.
 
 
@@ -208,41 +211,42 @@ send_to_oneclient_internal(SessionId, Msg, Retries) ->
 -spec send_to_provider_internal(session:id(), client_message(), retries()) ->
     ok | error().
 send_to_provider_internal(SessionId, Msg, 0) ->
-    session_connections:ensure_connected(SessionId),
-    connection_api:send(SessionId, Msg);
+    connection_api:send(SessionId, Msg, [], true);
 send_to_provider_internal(SessionId, Msg, Retries) ->
-    session_connections:ensure_connected(SessionId),
     case connection_api:send(SessionId, Msg) of
         ok ->
             ok;
+        {error, R} when R == not_found orelse R == uninitialized_session ->
+            session_connections:ensure_connected(SessionId),
+            timer:sleep(?SEND_RETRY_DELAY),
+            send_to_provider_internal(SessionId, Msg, decrement_retries(Retries));
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
-            send_to_provider_internal(SessionId, Msg, retries_left(Retries))
+            send_to_provider_internal(SessionId, Msg, decrement_retries(Retries))
     end.
 
 
 %% @private
--spec communicate_with_provider_internal(session:id(), client_message(),
-    retries()) -> {ok, message()} | error().
-communicate_with_provider_internal(SessionId, Msg, 0) ->
-    session_connections:ensure_connected(SessionId),
-    connection_api:communicate(SessionId, Msg);
-communicate_with_provider_internal(SessionId, Msg, Retries) ->
-    session_connections:ensure_connected(SessionId),
-    case connection_api:communicate(SessionId, Msg) of
-        {ok, _Response} = Ans ->
-            Ans;
-        {error, _Reason} ->
-            timer:sleep(?SEND_RETRY_DELAY),
-            RetriesLeft = retries_left(Retries),
-            communicate_with_provider_internal(SessionId, Msg, RetriesLeft)
+-spec await_response(clproto_message_id:id()) ->
+    {ok, message()} | ?ERROR_TIMEOUT.
+await_response(MsgId) ->
+    receive
+        #server_message{
+            message_id = MsgId,
+            message_body = #processing_status{code = 'IN_PROGRESS'}
+        } ->
+            await_response(MsgId);
+        #server_message{message_id = MsgId} = ServerMsg ->
+            {ok, ServerMsg}
+    after ?RESPONSE_AWAITING_PERIOD ->
+        ?ERROR_TIMEOUT
     end.
 
 
 %% @private
--spec retries_left(retries()) -> retries().
-retries_left(infinity) -> infinity;
-retries_left(Num) -> Num - 1.
+-spec decrement_retries(retries()) -> retries().
+decrement_retries(infinity) -> infinity;
+decrement_retries(Num) -> Num - 1.
 
 
 %% @private

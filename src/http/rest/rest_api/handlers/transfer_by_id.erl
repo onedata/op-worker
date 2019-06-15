@@ -181,9 +181,9 @@ transfer_to_json(#transfer{
     dy_hist = DyHist,
     mth_hist = MthHist
 }) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     NullableCallback = utils:ensure_defined(Callback, undefined, null),
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ReplicationStatusBin = atom_to_binary(ReplicationStatus, utf8),
     ReplicatingProvider = utils:ensure_defined(

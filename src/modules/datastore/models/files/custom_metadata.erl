@@ -32,11 +32,12 @@
 % Metadata types
 -type type() :: json | rdf.
 -type name() :: binary().
--type value() :: rdf() | jiffy:json_value().
+-type value() :: rdf() | json_utils:json_term().
 -type names() :: [name()].
--type doc() :: datastore_doc:doc(metadata()).
--type diff() :: datastore_doc:diff(metadata()).
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type metadata() :: #metadata{}.
+-type record() :: #custom_metadata{}.
 -type rdf() :: binary().
 -type view_id() :: binary().
 -type filter() :: [binary()].
@@ -223,8 +224,8 @@ set_xattr_metadata(FileUuid, SpaceId, Name, Value, Create, Replace) ->
                 Other -> Other
             end;
         false ->
-            FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-            {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+            {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
             Default = #custom_metadata{
                 space_id = SpaceId,
                 file_objectid = FileObjectId,

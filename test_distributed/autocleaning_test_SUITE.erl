@@ -126,7 +126,7 @@ end, __Distributions))).
 
 -define(id_to_guid(CdmiId),
     begin
-        {ok, Guid} = cdmi_id:objectid_to_guid(CdmiId),
+        {ok, Guid} = file_id:objectid_to_guid(CdmiId),
         Guid
     end).
 
@@ -829,7 +829,7 @@ current_timestamp_hours(Worker) ->
     rpc:call(Worker, time_utils, cluster_time_seconds, []) div 3600.
 
 change_last_open(Worker, FileGuid, NewLastOpen) ->
-    Uuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    Uuid = file_id:guid_to_uuid(FileGuid),
     rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
         {ok, FP#file_popularity{last_open = NewLastOpen}}
     end]).

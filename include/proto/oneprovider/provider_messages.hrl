@@ -150,7 +150,7 @@
 
 -record(share, {
     share_id :: od_share:id(),
-    share_file_guid :: od_share:share_guid()
+    root_file_guid :: od_share:root_file_guid()
 }).
 
 -record(scheduled_transfer, {

@@ -82,46 +82,45 @@ child_specs(SessId, guest) ->
     [event_manager_sup_spec(SessId)];
 child_specs(SessId, provider_incoming) ->
     [
-        session_watcher_spec(SessId, provider_incoming),
-        async_request_manager_spec(SessId, false),
-        event_manager_sup_spec(SessId)
+        async_request_manager_spec(SessId),
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, provider_incoming)
     ];
 child_specs(SessId, provider_outgoing) ->
     [
-        session_watcher_spec(SessId, provider_outgoing),
-        async_request_manager_spec(SessId, true),
         sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        outgoing_connection_manager_spec(SessId)
     ];
 child_specs(SessId, fuse) ->
     [
-        session_watcher_spec(SessId, fuse),
-        async_request_manager_spec(SessId, false),
+        async_request_manager_spec(SessId),
         sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, fuse)
     ];
 child_specs(SessId, SessType) ->
     [
-        session_watcher_spec(SessId, SessType),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, SessType)
     ].
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a worker child_spec for a session watcher child.
+%% Creates a worker child_spec for a incoming session watcher child.
 %% @end
 %%--------------------------------------------------------------------
--spec session_watcher_spec(SessId :: session:id(), SessType :: session:type()) ->
+-spec incoming_session_watcher_spec(session:id(), session:type()) ->
     supervisor:child_spec().
-session_watcher_spec(SessId, SessType) ->
+incoming_session_watcher_spec(SessId, SessType) ->
     #{
-        id => session_watcher,
-        start => {session_watcher, start_link, [SessId, SessType]},
+        id => incoming_session_watcher,
+        start => {incoming_session_watcher, start_link, [SessId, SessType]},
         restart => transient,
         shutdown => timer:seconds(10),
         type => worker,
-        modules => [session_watcher]
+        modules => [incoming_session_watcher]
     }.
 
 %%--------------------------------------------------------------------
@@ -130,17 +129,33 @@ session_watcher_spec(SessId, SessType) ->
 %% Creates a supervisor child_spec for a async_request_manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec async_request_manager_spec(SessId :: session:id(),
-    SetKeepaliveTimeout :: boolean()) -> supervisor:child_spec().
-async_request_manager_spec(SessId, SetKeepaliveTimeout) ->
-    StartLinkArgs = [SessId, SetKeepaliveTimeout],
+-spec async_request_manager_spec(session:id()) -> supervisor:child_spec().
+async_request_manager_spec(SessId) ->
     #{
         id => async_request_manager,
-        start => {async_request_manager, start_link, StartLinkArgs},
+        start => {async_request_manager, start_link, [SessId]},
         restart => permanent,
         shutdown => timer:seconds(10),
         type => worker,
         modules => [async_request_manager]
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates a supervisor child_spec for a connection_manager child.
+%% @end
+%%--------------------------------------------------------------------
+-spec outgoing_connection_manager_spec(session:id()) ->
+    supervisor:child_spec().
+outgoing_connection_manager_spec(SessId) ->
+    #{
+        id => outgoing_connection_manager,
+        start => {outgoing_connection_manager, start_link, [SessId]},
+        restart => permanent,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [outgoing_connection_manager]
     }.
 
 %%--------------------------------------------------------------------

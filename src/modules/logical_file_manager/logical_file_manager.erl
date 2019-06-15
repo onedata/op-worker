@@ -254,7 +254,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId) ->
     {ok, transfer:id()} | error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
     % Scheduling and target providers must support given space
     HasAccess = provider_logic:supports_space(SpaceId)
@@ -306,7 +306,7 @@ schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
     {ok, transfer:id()} | error_reply().
 schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
     SupportedByTarget = case TargetProviderId of
         undefined -> true;
@@ -692,8 +692,8 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), file_key(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:share_guid()}} | error_reply().
+-spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
+    {ok, {od_share:id(), od_share:root_file_guid()}} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
@@ -711,7 +711,7 @@ remove_share(SessId, ShareID) ->
 %% Removes file share by ShareGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), od_share:share_guid()) -> ok | error_reply().
+-spec remove_share_by_guid(session:id(), od_share:root_file_guid()) -> ok | error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
     ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 

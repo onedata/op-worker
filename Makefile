@@ -36,13 +36,13 @@ all: test_rel
 ## Rebar targets
 ##
 
-compile:
-	$(REBAR) compile
-
 deps:
 	$(REBAR) get-deps
 	make -C _build/default/lib/helpers submodules submodule=clproto
-	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
+	$(LIB_DIR)/gui/pull-gui.sh gui-image.conf
+
+compile: deps
+	$(REBAR) compile
 
 upgrade:
 	$(REBAR) upgrade

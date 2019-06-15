@@ -45,11 +45,11 @@
 send_message(#server_message{} = Msg, StmId, Ref) ->
     communicate_with_sequencer_manager(Msg#server_message{
         message_stream = #message_stream{stream_id = StmId}
-    }, Ref);
+    }, Ref, true);
 send_message(#client_message{} = Msg, StmId, Ref) ->
     communicate_with_sequencer_manager(Msg#client_message{
         message_stream = #message_stream{stream_id = StmId}
-    }, Ref);
+    }, Ref, true);
 
 send_message(Msg, StmId, Ref) ->
     send_message(#server_message{message_body = Msg}, StmId, Ref).
