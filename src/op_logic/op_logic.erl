@@ -123,7 +123,9 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
         ReqCtx1 = validate_request(ReqCtx0),
         ReqCtx2 = maybe_fetch_entity(ReqCtx1),
 
-        handle_unsafe(ReqCtx2)
+        ensure_exists(ReqCtx2),
+        ensure_authorized(ReqCtx2),
+        execute_op_logic_request(ReqCtx2)
     catch
         throw:Error ->
             Error;
@@ -225,14 +227,92 @@ maybe_fetch_entity(#req_ctx{plugin = Plugin, req = #op_req{
 
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Ensures aspect of entity specified in request exists, throws on error.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_exists(req_ctx()) -> ok | no_return().
+ensure_exists(#req_ctx{req = #op_req{operation = create}}) ->
+    % Aspects where entity id is undefined always exist.
+    ok;
+ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
+    % Aspects where entity id is undefined always exist.
+    ok;
+ensure_exists(#req_ctx{plugin = Plugin, req = ElReq, entity = Entity}) ->
+    % If function is not implemented by plugin then entity always exist.
+    Result = case erlang:function_exported(Plugin, exists, 1) of
+        true ->
+            try
+                Plugin:exists(ElReq, Entity)
+            catch _:_ ->
+                % No need for log here, 'exists' may crash depending on what the
+                % request contains and this is expected.
+                false
+            end;
+        false ->
+            true
+    end,
+    case Result of
+        true -> ok;
+        false -> throw(?ERROR_NOT_FOUND)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Ensures client specified in request is authorized to perform the request,
+%% throws on error.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_authorized(req_ctx()) -> ok | no_return().
+ensure_authorized(#req_ctx{req = #op_req{client = ?ROOT}}) ->
+    % Root client is authorized to do everything (that client is only available
+    % internally).
+    ok;
+ensure_authorized(#req_ctx{plugin = Plugin, req = ElReq, entity = Entity}) ->
+    Result = try
+        Plugin:authorize(ElReq, Entity)
+    catch _:_ ->
+        % No need for log here, 'authorize' may crash depending on what the
+        % request contains and this is expected.
+        false
+    end,
+    case Result of
+        true ->
+            ok;
+        false ->
+            case ElReq#op_req.client of
+                ?NOBODY ->
+                    % The client was not authenticated -> unauthorized
+                    throw(?ERROR_UNAUTHORIZED);
+                _ ->
+                    % The client was authenticated but cannot access the
+                    % aspect -> forbidden
+                    throw(?ERROR_FORBIDDEN)
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Handles an entity logic request based on operation,
 %% should be wrapped in a try-catch.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_unsafe(req_ctx()) -> result().
-handle_unsafe(State = #req_ctx{req = Req = #op_req{operation = create}}) ->
-    Result = call_create(ensure_authorized(State)),
+-spec execute_op_logic_request(req_ctx()) -> result().
+execute_op_logic_request(#req_ctx{
+    plugin = Plugin,
+    req = #op_req{operation = create} = Req,
+    entity = Entity
+}) ->
+    Result = case Plugin:create(Req) of
+        Fun when is_function(Fun, 1) ->
+            Fun(Entity);
+        Res ->
+            Res
+    end,
     case {Result, Req} of
         {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, client = Cl}} ->
             % If an entity instance is created, log an information about it
@@ -250,15 +330,24 @@ handle_unsafe(State = #req_ctx{req = Req = #op_req{operation = create}}) ->
             Result
     end;
 
-handle_unsafe(State = #req_ctx{req = #op_req{operation = get}}) ->
-    call_get(ensure_authorized(ensure_exists(State)));
+execute_op_logic_request(#req_ctx{
+    plugin = Plugin, 
+    req = #op_req{operation = get} = Req, 
+    entity = Entity
+}) ->
+    Plugin:get(Req, Entity);
 
-handle_unsafe(State = #req_ctx{req = #op_req{operation = update}}) ->
-    call_update(ensure_authorized(ensure_exists(State)));
+execute_op_logic_request(#req_ctx{
+    plugin = Plugin, 
+    req = #op_req{operation = update} = Req
+}) ->
+    Plugin:update(Req);
 
-handle_unsafe(State = #req_ctx{req = Req = #op_req{operation = delete}}) ->
-    Result = call_delete(ensure_authorized(ensure_exists(State))),
-    case {Result, Req} of
+execute_op_logic_request(#req_ctx{
+    plugin = Plugin, 
+    req = #op_req{operation = delete} = Req
+}) ->
+    case {Plugin:delete(Req), Req} of
         {ok, #op_req{gri = #gri{type = Type, id = _Id, aspect = instance}, client = Cl}} ->
             % If an entity instance is deleted, log an information about it
             % (it's a significant operation and this information might be useful).
@@ -267,119 +356,6 @@ handle_unsafe(State = #req_ctx{req = Req = #op_req{operation = delete}}) ->
                 client_to_string(Cl)
             ]),
             ok;
-        _ ->
+        {Result, _} ->
             Result
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates an aspect of entity specified in request by calling back
-%% proper entity logic plugin.
-%% @end
-%%--------------------------------------------------------------------
--spec call_create(req_ctx()) -> create_result().
-call_create(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity}) ->
-    case Plugin:create(ElReq) of
-        Fun when is_function(Fun, 1) ->
-            Fun(Entity);
-        Result ->
-            Result
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Retrieves an aspect specified in request by calling back
-%% proper entity logic plugin.
-%% @end
-%%--------------------------------------------------------------------
--spec call_get(req_ctx()) -> get_result().
-call_get(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity}) ->
-    Plugin:get(ElReq, Entity).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates an aspect of entity specified in request by calling back
-%% proper entity logic plugin.
-%% @end
-%%--------------------------------------------------------------------
--spec call_update(req_ctx()) -> update_result().
-call_update(#req_ctx{req = ElReq, plugin = Plugin}) ->
-    Plugin:update(ElReq).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Deletes an aspect of entity specified in request by calling back
-%% proper entity logic plugin.
-%% @end
-%%--------------------------------------------------------------------
--spec call_delete(req_ctx()) -> delete_result().
-call_delete(#req_ctx{req = ElReq, plugin = Plugin}) ->
-    Plugin:delete(ElReq).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures aspect of entity specified in request exists, throws on error.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_exists(req_ctx()) -> req_ctx().
-ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = State) ->
-    % Aspects where entity id is undefined always exist.
-    State;
-ensure_exists(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
-    Result = try
-        Plugin:exists(ElReq, Entity)
-    catch _:_ ->
-        % No need for log here, 'exists' may crash depending on what the
-        % request contains and this is expected.
-        false
-    end,
-    case Result of
-        true -> State;
-        false -> throw(?ERROR_NOT_FOUND)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures client specified in request is authorized to perform the request,
-%% throws on error.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_authorized(req_ctx()) -> req_ctx().
-ensure_authorized(#req_ctx{req = #op_req{client = ?ROOT}} = State) ->
-    % Root client is authorized to do everything (that client is only available
-    % internally).
-    State;
-ensure_authorized(#req_ctx{req = ElReq, plugin = Plugin, entity = Entity} = State) ->
-    Result = try
-        Plugin:authorize(ElReq, Entity)
-    catch _:_ ->
-        % No need for log here, 'authorize' may crash depending on what the
-        % request contains and this is expected.
-        false
-    end,
-    case Result of
-        true ->
-            State;
-        false ->
-            case ElReq#op_req.client of
-                ?NOBODY ->
-                    % The client was not authenticated -> unauthorized
-                    throw(?ERROR_UNAUTHORIZED);
-                _ ->
-                    % The client was authenticated but cannot access the
-                    % aspect -> forbidden
-                    throw(?ERROR_FORBIDDEN)
-            end
     end.

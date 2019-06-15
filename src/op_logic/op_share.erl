@@ -22,7 +22,7 @@
 -export([op_logic_plugin/0]).
 -export([operation_supported/3]).
 -export([create/1, get/2, update/1, delete/1]).
--export([exists/2, authorize/2, data_signature/1]).
+-export([authorize/2, data_signature/1]).
 
 %%%===================================================================
 %%% API
@@ -158,19 +158,7 @@ delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given resource (aspect of entity) exists, based on op
-%% logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
+%% Returns true as authorization is checked later by oz.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
