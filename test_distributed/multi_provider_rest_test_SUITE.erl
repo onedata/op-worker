@@ -110,7 +110,7 @@ all() ->
         delete_share_public_id,
         update_share_name,
         update_share_name_id,
-        update_share_name_public_id
+        update_share_name_public_id,
 
 %%        set_get_json_metadata,
 %%        set_get_json_metadata_id,
@@ -121,7 +121,7 @@ all() ->
 %%        set_get_json_metadata_using_filter,
 %%        primitive_json_metadata_test,
 %%        empty_metadata_invalid_json_test,
-%%        list_transfers,
+        list_transfers
 %%        track_transferred_files
     ]).
 

@@ -181,7 +181,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, 
 
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
-    TransferState = maps:get(<<"status">>, Data, <<"ongoing">>),
+    TransferState = maps:get(<<"state">>, Data, <<"ongoing">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_TRANSFER_LIST_LIMIT),
 
     {StartId, Offset} = case PageToken of
