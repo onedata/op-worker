@@ -102,7 +102,12 @@ allowed_methods(Req, #state{allowed_methods = AllowedMethods} = State) ->
     Params :: '*' | [{binary(), binary()}],
     AcceptResource :: atom().
 content_types_accepted(Req, #state{rest_req = #rest_req{consumes = Consumes}} = State) ->
-    {[{MediaType, accept_resource} || MediaType <- Consumes], Req, State}.
+    case {cowboy_req:has_body(Req), length(Consumes)} of
+        {false, 1} ->
+            {[{'*', accept_resource}], Req, State};
+        _ ->
+            {[{MediaType, accept_resource} || MediaType <- Consumes], Req, State}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -242,11 +247,12 @@ process_request(Req, State) ->
         #state{session_id = SessionId, rest_req = #rest_req{
             method = Method,
             parse_body = ParseBody,
+            consumes = Consumes,
             b_gri = GriWithBindings
         }} = State,
         Operation = method_to_operation(Method),
         GRI = resolve_gri_bindings(SessionId, GriWithBindings, Req),
-        {Data, Req2} = get_data(Req, ParseBody),
+        {Data, Req2} = get_data(Req, ParseBody, Consumes),
         ElReq = #op_req{
             operation = Operation,
             client = ?USER(SessionId),
@@ -372,11 +378,11 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% under content-type key or as json object containing additional parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec get_data(cowboy_req:req(), ParseBody :: parse_body()) ->
+-spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
     {Data :: op_logic:data(), cowboy_req:req()}.
-get_data(Req, ignore) ->
+get_data(Req, ignore, _Consumes) ->
     {parse_query_string(Req), Req};
-get_data(Req, as_json_params) ->
+get_data(Req, as_json_params, _Consumes) ->
     QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ParsedBody = try
@@ -389,12 +395,18 @@ get_data(Req, as_json_params) ->
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
-get_data(Req, as_is) ->
+get_data(Req, as_is, Consumes) ->
     {ok, Body, Req2} = cowboy_req:read_body(Req),
-    ContentType = cowboy_req:header(<<"content-type">>, Req2),
+    ContentType = case Consumes of
+        [ConsumedType] ->
+            ConsumedType;
+        _ ->
+            {Type, Subtype, _} = cowboy_req:parse_header(<<"content-type">>, Req),
+            <<Type/binary, "/", Subtype/binary>>
+    end,
     ParsedBody = try
         case ContentType of
-            <<"application/json", _/binary>> -> json_utils:decode(Body);
+            <<"application/json">> -> json_utils:decode(Body);
             _ -> Body
         end
     catch _:_ ->

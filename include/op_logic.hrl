@@ -14,6 +14,7 @@
 -ifndef(ENTITY_LOGIC_HRL).
 -define(ENTITY_LOGIC_HRL, 1).
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 % Record expressing entity logic request client (REST and Graph Sync).
@@ -38,8 +39,8 @@
 -define(USER(__Id), #client{type = user, id = __Id}).
 -define(PROVIDER, #client{type = provider}).
 -define(PROVIDER(__Id), #client{type = provider, id = __Id}).
--define(NOBODY, #client{type = nobody}).
--define(ROOT, #client{type = root}).
+-define(NOBODY, #client{type = nobody, id = ?GUEST_SESS_ID}).
+-define(ROOT, #client{type = root, id = ?ROOT_SESS_ID}).
 
 % Regexp to validate names. Name must be 2-50 characters long and composed of
 % UTF-8 letters, digits, brackets and underscores.
