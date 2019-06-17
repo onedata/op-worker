@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides base functionality for directory tree traversing.
+%%% Bases on traverse framework (see traverse.erl in cluster_worker).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(tree_traverse).
@@ -27,14 +28,17 @@
 %% Behaviour callbacks
 -export([do_master_job/1, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
+% Record that defined master job
 -record(tree_travserse, {
     doc :: file_meta:doc(),
+    % Fields used for directory listing
     token :: datastore_links_iter:token() | undefined,
     last_name = <<>> :: file_meta:name(),
     last_tree = <<>> :: od_provider:id(),
-    execute_slave_on_dir :: execute_slave_on_dir(),
     batch_size :: batch_size(),
-    traverse_info :: traverse_info()
+    % Traverse config
+    execute_slave_on_dir :: execute_slave_on_dir(), % generate slave jobs also for directories
+    traverse_info :: traverse_info() % Info passed to every slave job
 }).
 
 -type master_job() :: #tree_travserse{}.
@@ -43,13 +47,16 @@
 -type batch_size() :: non_neg_integer().
 -type traverse_info() :: term().
 -type run_options() :: #{
+    % Options of traverse framework
     task_id => traverse:id(),
+    callback_module => traverse:callback_module(),
+    group_id => traverse:group(),
+    % Options used to create jobs
     execute_slave_on_dir => execute_slave_on_dir(),
     batch_size => batch_size(),
     traverse_info => traverse_info(),
-    target_provider_id => oneprovider:id(),
-    callback_module => traverse:callback_module(),
-    group_id => traverse:group()
+    % Provider which should execute task
+    target_provider_id => oneprovider:id()
 }.
 
 -export_type([slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
@@ -176,6 +183,7 @@ get_task(Pool, ID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job()) -> {ok, traverse:master_job_map()}.
+% TODO - moze dac mozliwosc zmiany traverse info?
 do_master_job(#tree_travserse{
     doc = #document{value = #file_meta{}} = Doc,
     token = Token,
@@ -234,10 +242,10 @@ update_job_progress(ID, #tree_travserse{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, Pool, TaskID, Status, CallbackModule) when Status =:= waiting ; Status =:= on_pool ->
-    tree_travserse_job:save(ID, Scope, Pool, CallbackModule, TaskID, DocID, LN, LT,
+    tree_traverse_job:save(ID, Scope, Pool, CallbackModule, TaskID, DocID, LN, LT,
         OnDir, BatchSize, TraverseInfo);
 update_job_progress(ID, #tree_travserse{doc = #document{scope = Scope}}, _, _, _, _) ->
-    ok = tree_travserse_job:delete(ID, Scope),
+    ok = tree_traverse_job:delete(ID, Scope),
     {ok, ID}.
 
 %%--------------------------------------------------------------------
@@ -245,10 +253,10 @@ update_job_progress(ID, #tree_travserse{doc = #document{scope = Scope}}, _, _, _
 %% Gets master job.
 %% @end
 %%--------------------------------------------------------------------
--spec get_job(traverse:job_id() | tree_travserse_job:doc()) ->
+-spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
     {ok, master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_job(DocOrID) ->
-    case tree_travserse_job:get(DocOrID) of
+    case tree_traverse_job:get(DocOrID) of
         {ok, Pool, _CallbackModule, TaskID, DocID, LN, LT, OnDir, BatchSize, TraverseInfo} ->
             {ok, Doc} = file_meta:get(DocID),
             Job = #tree_travserse{

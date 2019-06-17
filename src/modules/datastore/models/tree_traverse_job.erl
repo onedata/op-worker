@@ -5,10 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding traverse jobs.
+%%% @doc Model for holding traverse jobs. Main jobs for each task
+%%% are synchrinized between providers, other are local for provider executing task.
 %%% @end
 %%%-------------------------------------------------------------------
--module(tree_travserse_job).
+-module(tree_traverse_job).
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -44,7 +45,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves information about job.
+%% Saves information about job. See save/3 for more information.
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:key() | main_job, datastore_doc:scope(), traverse:pool(), traverse:callback_module(), traverse:id(),
@@ -56,15 +57,11 @@ save(Key, Scope, Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir,
 
 -spec delete(datastore:key(), datastore_doc:scope()) -> ok | {error, term()}.
 delete(<<?MAIN_JOB_PREFIX, _>> = Key, Scope) ->
+    % TODO - moze zachowac na przyszlosc? Przyda sie na cos?
     datastore_model:delete(?SYNC_CTX#{scope => Scope}, Key);
 delete(Key, _) ->
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets information about job.
-%% @end
-%%--------------------------------------------------------------------
 -spec get(key() | doc()) -> {ok, traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(), file_meta:name(),
     od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(), tree_traverse:traverse_info()} | {error, term()}.
 get(#document{value = #tree_travserse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID,
@@ -116,6 +113,13 @@ get_record_struct(1) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves information about job. Generates special key for main jobs to treat the differently (main jobs are
+%% synchronized between providers - other not).
+%% @end
+%%--------------------------------------------------------------------
 -spec save(datastore:key() | main_job, datastore_doc:scope(), record()) -> {ok, key()} | {error, term()}.
 save(main_job, Scope, Value) ->
     RandomPart = datastore_utils:gen_key(),

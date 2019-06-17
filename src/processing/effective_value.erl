@@ -98,7 +98,3 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, TraverseC
 -spec invalidate(tmp_cache:cache()) -> ok.
 invalidate(Cache) ->
     tmp_cache:invalidate(Cache).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

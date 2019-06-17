@@ -696,14 +696,18 @@
     providers = [] :: all | [od_provider:id()]
 }).
 
-% TODO - zapisac callback module
+% Model that stores information about traverse job that processes single directory/file
 -record(tree_travserse_job, {
+    % Information about execution environment and processing task
     pool :: traverse:pool(),
     callback_module :: traverse:callback_module(),
     task_id :: traverse_task:key(),
+    % Document of processed directory/file
     doc_id :: file_meta:uuid(),
+    % Information needed to restart directory listing
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
+    % Traverse task specific info
     execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary()
