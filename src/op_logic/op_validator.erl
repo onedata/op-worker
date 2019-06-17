@@ -336,6 +336,9 @@ check_value(_, any, _Key, _) ->
 
 check_value(binary, non_empty, Key, <<"">>) ->
     throw(?ERROR_BAD_VALUE_EMPTY(Key));
+check_value(_, non_empty, _Key, _) ->
+    ok;
+
 check_value(binary, name, _Key, Value) ->
     case validate_name(Value) of
         true -> ok;
