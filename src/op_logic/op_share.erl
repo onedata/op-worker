@@ -6,8 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements op logic plugin behaviour and handles
-%%% op logic operations corresponding to op_share model.
+%%% This module handles op logic operations corresponding to op_share model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_share).
@@ -15,7 +14,6 @@
 
 -include("op_logic.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
--include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
@@ -95,6 +93,7 @@ get(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = 
         Error ->
             Error
     end;
+
 get(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}, _) ->
     case share_logic:get(Cl#client.id, ShareId) of
         {ok, #document{value = Share}} ->
@@ -131,6 +130,7 @@ update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
         Error ->
             Error
     end;
+
 update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}, data = Data} = Req) ->
     ensure_space_supported(Req),
     NewName = maps:get(<<"name">>, Data),
@@ -151,6 +151,7 @@ delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
         Error ->
             Error
     end;
+
 delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
     ensure_space_supported(Req),
     logical_file_manager:remove_share(Cl#client.id, ShareId).

@@ -22,6 +22,8 @@
 -define(ERROR_SPACE_NOT_SUPPORTED, {error, space_not_supported}).
 -define(ERROR_SPACE_NOT_SUPPORTED_BY(__ProviderId), {error, {space_not_supported_by, __ProviderId}}).
 
+-define(ERROR_INDEX_NOT_SUPPORTED_BY(__ProviderId), {error, {index_not_supported_by, __ProviderId}}).
+
 
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,

@@ -255,6 +255,7 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
         Result ->
             Result
     end;
+
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
     case index:update_reduce_function(SpaceId, IndexName, undefined) of
         {error, ?EINVAL} ->

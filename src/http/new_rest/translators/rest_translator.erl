@@ -20,6 +20,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([response/2, error_response/1]).
@@ -44,18 +45,22 @@ response(_, {error, _} = Err) ->
 response(#op_req{operation = create}, ok) ->
     % No need for translation, 'ok' means success with no response data
     rest_translator:ok_no_content_reply();
-response(#op_req{operation = create} = ElReq, {ok, DataFormat, Result}) ->
-    #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = ElReq,
+response(#op_req{operation = create} = OpReq, {ok, DataFormat, Result}) ->
+    #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = OpReq,
     Translator = entity_type_to_translator(Model),
     Translator:create_response(GRI, AuthHint, DataFormat, Result);
-response(#op_req{operation = get} = ElReq, {ok, Data}) ->
-    #op_req{gri = GRI = #gri{type = Model}} = ElReq,
+response(#op_req{operation = get} = OpReq, {ok, Data}) ->
+    #op_req{gri = GRI = #gri{type = Model}} = OpReq,
     Translator = entity_type_to_translator(Model),
     Translator:get_response(GRI, Data);
 response(#op_req{operation = update}, ok) ->
     updated_reply();
 response(#op_req{operation = delete}, ok) ->
-    deleted_reply().
+    deleted_reply();
+response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
+    #op_req{gri = GRI = #gri{type = Model}} = OpReq,
+    Translator = entity_type_to_translator(Model),
+    Translator:delete_response(GRI, DataFormat, Result).
 
 
 %%--------------------------------------------------------------------
@@ -175,6 +180,9 @@ translate_error(?ERROR_UNAUTHORIZED) ->
     ?HTTP_401_UNAUTHORIZED;
 
 translate_error(?ERROR_FORBIDDEN) ->
+    ?HTTP_403_FORBIDDEN;
+
+translate_error({error, ?EACCES}) ->
     ?HTTP_403_FORBIDDEN;
 
 % Errors connected with macaroons
@@ -375,6 +383,10 @@ translate_error(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
         <<"The space of requested resource is not supported by ~s.">>, [ProviderId]
     }};
+translate_error(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId)) ->
+    {?HTTP_400_BAD_REQUEST, {
+        <<"The specified index is not supported by ~s.">>, [ProviderId]
+    }};
 
 % Wildcard match
 translate_error({error, Reason}) ->
@@ -383,6 +395,8 @@ translate_error({error, Reason}) ->
 
 
 -spec entity_type_to_translator(atom()) -> module().
+entity_type_to_translator(op_provider) -> provider_rest_translator;
 entity_type_to_translator(op_replica) -> replica_rest_translator;
 entity_type_to_translator(op_share) -> share_rest_translator;
-entity_type_to_translator(op_space) -> space_rest_translator.
+entity_type_to_translator(op_space) -> space_rest_translator;
+entity_type_to_translator(op_transfer) -> transfer_rest_translator.
