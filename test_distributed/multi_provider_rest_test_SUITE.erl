@@ -84,7 +84,7 @@
 
 all() ->
     ?ALL([
-%%        get_simple_file_distribution,
+        get_simple_file_distribution,
 %%        transfers_should_be_ordered_by_timestamps,
 %%        posix_mode_get,
 %%        posix_mode_put,
@@ -121,8 +121,8 @@ all() ->
 %%        set_get_json_metadata_using_filter,
 %%        primitive_json_metadata_test,
 %%        empty_metadata_invalid_json_test,
-        list_transfers
-%%        track_transferred_files
+        list_transfers,
+        track_transferred_files
     ]).
 
 -define(ATTEMPTS, 100).

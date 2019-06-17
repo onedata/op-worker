@@ -24,6 +24,7 @@
 -type value_constraint() ::
     any |
     name |
+    non_empty |
     [term()] | % A list of accepted values
     {between, integer(), integer()} |
     {not_lower_than, integer()} | {not_greater_than, integer()}.
@@ -332,11 +333,15 @@ check_type(TypeConstraint, Key, _) ->
     Value :: term()) -> ok | no_return().
 check_value(_, any, _Key, _) ->
     ok;
+
+check_value(binary, non_empty, Key, <<"">>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Key));
 check_value(binary, name, _Key, Value) ->
     case validate_name(Value) of
         true -> ok;
         false -> throw(?ERROR_BAD_VALUE_NAME)
     end;
+
 check_value(_, {not_lower_than, Threshold}, Key, Value) ->
     case Value >= Threshold of
         true ->
@@ -351,6 +356,7 @@ check_value(_, {between, Low, High}, Key, Value) ->
         false ->
             throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(Key, Low, High))
     end;
+
 check_value(_, AllowedValues, Key, Val) when is_list(AllowedValues) ->
     case lists:member(Val, AllowedValues) of
         true ->
@@ -358,6 +364,7 @@ check_value(_, AllowedValues, Key, Val) when is_list(AllowedValues) ->
         _ ->
             throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValues))
     end;
+
 check_value(TypeConstraint, ValueConstraint, Key, _) ->
     ?error("Unknown {type, value} constraint: {~p, ~p} for key: ~p", [
         TypeConstraint, ValueConstraint, Key

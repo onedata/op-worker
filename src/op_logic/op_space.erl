@@ -291,7 +291,7 @@ authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
 -spec data_signature(op_logic:req()) -> op_validator:data_signature().
 data_signature(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
     required => #{
-        <<"application/javascript">> => {binary, any}
+        <<"application/javascript">> => {binary, non_empty}
     },
     optional => #{
         <<"spatial">> => {boolean, any},
@@ -302,7 +302,7 @@ data_signature(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> 
 };
 
 data_signature(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
-    required => #{<<"application/javascript">> => {binary, any}}
+    required => #{<<"application/javascript">> => {binary, non_empty}}
 };
 
 data_signature(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
