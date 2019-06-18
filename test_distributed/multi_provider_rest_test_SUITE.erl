@@ -86,14 +86,15 @@ all() ->
     ?ALL([
         get_simple_file_distribution,
         transfers_should_be_ordered_by_timestamps,
+        posix_mode_get,
+        posix_mode_put,
+        attributes_list,
+        xattr_get,
+        xattr_put,
+        xattr_list,
 
-%%        posix_mode_get,
-%%        posix_mode_put,
-%%        attributes_list,
-%%        xattr_get,
-%%        xattr_put,
-%%        xattr_list,
 %%        metric_get,
+
         list_file,
         list_dir,
         list_dir_range,

@@ -42,7 +42,7 @@ routes() -> [
     %% Set file attribute
     {<<"/attributes/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_json_params,
+        parse_body = as_is,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = attributes}
     }},

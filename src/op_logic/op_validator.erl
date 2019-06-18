@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
--type type_constraint() :: any | boolean | integer | binary.
+-type type_constraint() :: any | boolean | integer | binary | json.
 
 -type value_constraint() ::
     any |
@@ -318,6 +318,11 @@ check_type(integer, _Key, Int) when is_integer(Int) ->
 check_type(integer, Key, _) ->
     throw(?ERROR_BAD_VALUE_INTEGER(Key));
 
+check_type(json, _Key, JSON) when is_map(JSON) ->
+    JSON;
+check_type(json, Key, _) ->
+    throw(?ERROR_BAD_VALUE_JSON(Key));
+
 check_type(TypeConstraint, Key, _) ->
     ?error("Unknown type constraint: ~p for key: ~p", [TypeConstraint, Key]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
@@ -335,6 +340,8 @@ check_value(_, any, _Key, _) ->
     ok;
 
 check_value(binary, non_empty, Key, <<"">>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Key));
+check_value(json, non_empty, Key, Map) when map_size(Map) == 0 ->
     throw(?ERROR_BAD_VALUE_EMPTY(Key));
 check_value(_, non_empty, _Key, _) ->
     ok;
