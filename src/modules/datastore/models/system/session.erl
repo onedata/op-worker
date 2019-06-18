@@ -52,7 +52,6 @@
 % status to active.
 -type status() :: initializing | active | inactive.
 -type identity() :: #user_identity{}.
--type one_or_many(Type) :: Type | [Type].
 
 -export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
@@ -193,8 +192,9 @@ fold_links(SessId, TreeID, Fun) ->
 %% Deletes link from a tree.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
+-spec delete_links
+    (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
+    (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
 delete_links(SessId, TreeID, HandleId) ->
     datastore_model:delete_links(?CTX, SessId, TreeID, HandleId).
 
@@ -237,8 +237,9 @@ fold_local_links(SessId, TreeID, Fun) ->
 %% Deletes local link from a tree.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_local_links(id(), datastore:tree_id(),
-    one_or_many(datastore:link_name())) -> ok | {error, term()}.
+-spec delete_local_links
+    (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
+    (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
 delete_local_links(SessId, TreeID, HandleId) ->
     datastore_model:delete_links(?CTX#{routing => local},
         SessId, TreeID, HandleId).

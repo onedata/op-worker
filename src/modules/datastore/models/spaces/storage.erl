@@ -598,7 +598,6 @@ update_helper(StorageId, HelperName, DiffFun) ->
     end.
 
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
