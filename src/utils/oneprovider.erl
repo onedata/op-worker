@@ -75,7 +75,7 @@ get_node_ip() ->
 %% Returns full provider rest endpoint URL.
 %% @end
 %%-------------------------------------------------------------------
--spec get_rest_endpoint(string()) -> string().
+-spec get_rest_endpoint(binary() | string()) -> string().
 get_rest_endpoint(Path) ->
     Port = https_listener:port(),
     Host = get_domain(),

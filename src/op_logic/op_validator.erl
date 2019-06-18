@@ -35,7 +35,7 @@
     Key :: binary() | {aspect, binary()} => param_signature()
 }.
 
--type data() :: #{Key :: binary() | {aspect, binary()} => term()}.
+-type data() :: #{Key :: aspect | binary() => term()}.
 -type data_signature() :: #{
     required => params_signature(),
     at_least_one => params_signature(),

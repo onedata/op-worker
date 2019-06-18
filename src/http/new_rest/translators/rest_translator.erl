@@ -117,7 +117,9 @@ created_reply([<<"/", Path/binary>> | Tail]) ->
     created_reply([Path | Tail]);
 created_reply(PathTokens) ->
     <<"/", Path/binary>> = filename:join([<<"/">> | PathTokens]),
-    LocationHeader = #{<<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(Path))},
+    LocationHeader = #{
+        <<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(Path))
+    },
     #rest_resp{code = ?HTTP_201_CREATED, headers = LocationHeader}.
 
 
@@ -144,6 +146,15 @@ deleted_reply() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec entity_type_to_translator(atom()) -> module().
+entity_type_to_translator(op_provider) -> provider_rest_translator;
+entity_type_to_translator(op_replica) -> replica_rest_translator;
+entity_type_to_translator(op_share) -> share_rest_translator;
+entity_type_to_translator(op_space) -> space_rest_translator;
+entity_type_to_translator(op_transfer) -> transfer_rest_translator.
 
 
 %%--------------------------------------------------------------------
@@ -213,11 +224,6 @@ translate_error(?ERROR_BAD_BASIC_CREDENTIALS) ->
     {?HTTP_401_UNAUTHORIZED,
         <<"Provided basic authorization credentials are not valid">>
     };
-% TODO uncomment?
-%%translate_error(?ERROR_BAD_EXTERNAL_ACCESS_TOKEN(OAuthProviderId)) ->
-%%    {?HTTP_401_UNAUTHORIZED,
-%%        {<<"Provided access token for \"~p\" is not valid">>, [OAuthProviderId]}
-%%    };
 translate_error(?ERROR_MISSING_REQUIRED_VALUE(Key)) ->
     {?HTTP_400_BAD_REQUEST,
         {<<"Missing required value: ~s">>, [Key]}
@@ -387,6 +393,8 @@ translate_error(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
         <<"The specified index is not supported by ~s provider.">>, [ProviderId]
     }};
+
+% Errors associated with transfers
 translate_error(?ERROR_TRANSFER_ALREADY_ENDED) ->
     {?HTTP_400_BAD_REQUEST, <<"Specified transfer has already ended.">>};
 translate_error(?ERROR_TRANSFER_NOT_ENDED) ->
@@ -396,11 +404,3 @@ translate_error(?ERROR_TRANSFER_NOT_ENDED) ->
 translate_error({error, Reason}) ->
     ?error("Unexpected error: {error, ~p} in rest error translator", [Reason]),
     translate_error(?ERROR_INTERNAL_SERVER_ERROR).
-
-
--spec entity_type_to_translator(atom()) -> module().
-entity_type_to_translator(op_provider) -> provider_rest_translator;
-entity_type_to_translator(op_replica) -> replica_rest_translator;
-entity_type_to_translator(op_share) -> share_rest_translator;
-entity_type_to_translator(op_space) -> space_rest_translator;
-entity_type_to_translator(op_transfer) -> transfer_rest_translator.

@@ -15,22 +15,11 @@
 -include("op_logic.hrl").
 -include("http/rest/rest.hrl").
 
--export([create_response/4, get_response/2]).
+-export([get_response/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link rest_translator_behaviour} callback create_response/4.
-%% @end
-%%--------------------------------------------------------------------
--spec create_response(op_logic:gri(), op_logic:auth_hint(),
-    op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
-    {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = instance}, _, value, SpaceId) ->
-    rest_translator:ok_body_reply(#{<<"spaceId">> => SpaceId}).
 
 
 %%--------------------------------------------------------------------

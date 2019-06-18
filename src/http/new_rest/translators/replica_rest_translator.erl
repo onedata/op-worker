@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc This module handles translation of op logic results concerning
-%%% share entities into REST responses.
+%%% replica entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_rest_translator).

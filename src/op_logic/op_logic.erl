@@ -30,18 +30,8 @@
 -type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
-
-% TODO fix types
--type entity_id() ::
-    undefined | od_user:id() | od_group:id() | od_space:id() |
-    od_share:id() | od_provider:id() | od_handle_service:id() | od_handle:id().
--type entity_type() ::
-    od_user | od_group | od_space | od_share | od_provider |
-    od_handle_service | od_handle | oz_privileges.
--type entity() ::
-    undefined | #od_user{} | #od_group{} | #od_space{} |
-    #od_share{} | #od_provider{} | #od_handle_service{} | #od_handle{}.
-
+-type entity_id() :: undefined | binary().
+-type entity() :: undefined | #transfer{}.
 -type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
@@ -61,7 +51,6 @@
     op_plugin/0,
     operation/0,
     entity_id/0,
-    entity_type/0,
     entity/0,
     aspect/0,
     scope/0,
