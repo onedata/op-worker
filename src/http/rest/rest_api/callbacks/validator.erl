@@ -20,20 +20,17 @@
 
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
--define(DEFAULT_EXTENDED, <<"false">>).
 -define(DEFAULT_INHERITED, <<"false">>).
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
 -define(DEFAULT_LAST_SEQ, <<"now">>).
--define(DEFAULT_OFFSET, <<"0">>).
-
--define(MAX_LIMIT, 1000).
 
 %% API
--export([malformed_request/2, parse_path/2,
-    parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
+-export([
+    malformed_request/2, parse_path/2,
+    parse_id/2, parse_objectid/2,
     parse_space_id/2, parse_user_id/2,
-    parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
-    parse_page_token/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
+    parse_timeout/2, parse_last_seq/2,
+    parse_metadata_type/2,
 
     parse_filter/2, parse_filter_type/2, parse_inherited/2
 ]).
@@ -105,76 +102,6 @@ parse_user_id(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's xattr flag and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_extended(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_extended(Req, State) ->
-    {Extended, NewReq} = qs_val(<<"extended">>, Req, ?DEFAULT_EXTENDED),
-    case Extended of
-        <<"true">> ->
-            {State#{extended => true}, NewReq};
-        <<"false">> ->
-            {State#{extended => false}, NewReq};
-        _ ->
-            throw(?ERROR_INVALID_EXTENDED_FLAG)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's attribute and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_attribute(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_attribute(Req, State = #{extended := true}) ->
-    {Attribute, NewReq} = qs_val(<<"attribute">>, Req),
-    case Attribute =:= undefined orelse is_binary(Attribute) of
-        true ->
-            {State#{attribute => Attribute}, NewReq};
-        false ->
-            throw(?ERROR_INVALID_ATTRIBUTE_NAME)
-    end;
-parse_attribute(Req, State) ->
-    {Attribute, NewReq} = qs_val(<<"attribute">>, Req),
-    {State#{attribute => Attribute}, NewReq}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's attribute from body and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_attribute_body(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_attribute_body(Req, State = #{extended := Extended}) ->
-    {ok, Body, Req2} = cowboy_req:read_body(Req),
-
-    Json = json_utils:decode(Body),
-    case {
-        maps:to_list(Json),
-        Extended
-    } of
-        {[{<<"mode">>, Value}], false} ->
-            try binary_to_integer(Value, 8) of
-                Mode ->
-                    {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
-            catch
-                _:_ ->
-                    throw(?ERROR_INVALID_MODE)
-            end;
-        {[{_Attr, _Value}], false} ->
-            throw(?ERROR_INVALID_ATTRIBUTE);
-        {[{Attr, _Value}], true} when not is_binary(Attr) ->
-            throw(?ERROR_INVALID_ATTRIBUTE_NAME);
-        {[{Attr, Value}], true} ->
-            {State#{attribute_body => {Attr, Value}}, Req2};
-        {_, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Retrieves request's space id and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
@@ -237,65 +164,6 @@ parse_last_seq(Req, #{space_id := SpaceId} = State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's offset and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_offset(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_offset(Req, State) ->
-    {RawOffset, NewReq} = qs_val(<<"offset">>, Req, ?DEFAULT_OFFSET),
-    try binary_to_integer(RawOffset) of
-        Offset ->
-            {State#{offset => Offset}, NewReq}
-    catch
-        _:_ ->
-            throw(?ERROR_INVALID_OFFSET)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's limit and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_dir_limit(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_dir_limit(Req, State) ->
-    {RawLimit, NewReq} = qs_val(<<"limit">>, Req),
-    case RawLimit of
-        undefined ->
-            {State#{limit => undefined}, NewReq};
-        _ ->
-            try
-                Limit = binary_to_integer(RawLimit),
-                case Limit > 0 of
-                    true -> ok;
-                    false -> throw(?ERROR_INVALID_LIMIT)
-                end,
-                case Limit < ?MAX_LIMIT of
-                    true ->
-                        {State#{limit => Limit}, NewReq};
-                    false ->
-                        throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT))
-                end
-            catch
-                _:_ ->
-                    throw(?ERROR_INVALID_LIMIT)
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's status and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_page_token(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_page_token(Req, State) ->
-    {PageToken, NewReq} = qs_val(<<"page_token">>, Req, <<"null">>),
-    {State#{page_token => PageToken}, NewReq}.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Retrieves request's metadata type and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
@@ -314,29 +182,6 @@ parse_metadata_type(Req, State) ->
         false ->
             throw(?ERROR_INVALID_METADATA_TYPE)
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's name and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_name(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_name(Req, State) ->
-    {ok, Body, NewReq} = cowboy_req:read_body(Req),
-    JsonMap = json_utils:decode(Body),
-    {State#{name => maps:get(<<"name">>, JsonMap, undefined)}, NewReq}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves request's space_id and adds it to State.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_query_space_id(cowboy_req:req(), maps:map()) ->
-    {parse_result(), cowboy_req:req()}.
-parse_query_space_id(Req, State) ->
-    {SpaceId, NewReq} = qs_val(<<"space_id">>, Req),
-    {State#{space_id => SpaceId}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -368,7 +213,7 @@ parse_filter_type(Req, State) ->
 -spec parse_inherited(cowboy_req:req(), maps:map()) ->
     {parse_result(), cowboy_req:req()}.
 parse_inherited(Req, State) ->
-    {Inherited, NewReq} = qs_val(<<"inherited">>, Req, ?DEFAULT_EXTENDED),
+    {Inherited, NewReq} = qs_val(<<"inherited">>, Req, ?DEFAULT_INHERITED),
     case Inherited of
         <<"true">> ->
             {State#{inherited => true}, NewReq};

@@ -34,45 +34,10 @@
 }}).
 
 %% HTTP 400 errors
--define(ERROR_INVALID_ATTRIBUTE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_attribute">>,
-    <<"Given attribute is not valid">>)
-).
--define(ERROR_UNDEFINED_ATTRIBUTE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"undefined_attribute">>,
-    <<"You must define attribute name when requesting for extended attribute.">>)
-).
--define(ERROR_INVALID_ATTRIBUTE_BODY, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_attribute_body">>,
-    <<"Request's body is malformed, provide one valid attribute with its value.">>)
-).
--define(ERROR_INVALID_ATTRIBUTE_NAME, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_attribute_name">>,
-    <<"Request's attribute name is invalid.">>)
-).
--define(ERROR_INVALID_EXTENDED_FLAG, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_extended_flag">>,
-    <<"Given extended flag is not a valid boolean.">>)
-).
 -define(ERROR_INVALID_INHERITED_FLAG, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_inherited_flag">>,
     <<"Given inherited flag is not a valid boolean.">>)
-).
--define(ERROR_INVALID_MODE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_mode">>,
-    <<"Given mode is invalid, it should be provided in octal form.">>)
-).
--define(ERROR_TOO_MANY_ENTRIES, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"too_many_entries">>,
-    <<"The directory contains too many entries to list them all, ask for specific range.">>)
 ).
 -define(ERROR_INVALID_METRIC, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
@@ -94,36 +59,10 @@
     <<"invalid_last_seq">>,
     <<"Requested last_seq is invalid, it must be of integer type.">>)
 ).
--define(ERROR_INVALID_OFFSET, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_offset">>,
-    <<"Requested offset is invalid, it must be of integer type.">>)
-).
--define(ERROR_INVALID_LIMIT, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_limit">>,
-    <<"Requested limit is invalid, it must be a positive integer.">>)
-).
-
--define(ERROR_LIMIT_TOO_LARGE(Max), ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"limit_too_large">>,
-    <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>)
-).
--define(ERROR_INVALID_STATUS, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_status">>,
-    <<"Requested transfer status is invalid, must be one of: scheduled, current, past.">>)
-).
 -define(ERROR_INVALID_METADATA_TYPE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_metadata_type">>,
     <<"Given metadatadata type is invalid for selected contentent type.">>)
-).
--define(ERROR_SPACE_NOT_PROVIDED, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"space_not_provided">>,
-    <<"Required space_id was not provided.">>)
 ).
 -define(ERROR_INVALID_FILTER_TYPE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
@@ -170,11 +109,6 @@
     <<"error_invalid_format">>,
     <<"Invalid record \"", __Record/binary, "\" or it's specification.">>
 )).
--define(ERROR_AMBIGUOUS_INDEX_NAME, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_ambiguous_index_name">>,
-    <<"Given index could not be found.">>)
-).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED_REST, ?ERROR_REPLY(
@@ -205,11 +139,6 @@
     ?HTTP_404_NOT_FOUND,
     <<"space_not_found">>,
     <<"The space could not be found.">>)
-).
--define(ERROR_INDEX_NOT_FOUND, ?ERROR_REPLY(
-    ?HTTP_404_NOT_FOUND,
-    <<"error_index_not_found">>,
-    <<"Given index could not be found.">>)
 ).
 
 -endif.
