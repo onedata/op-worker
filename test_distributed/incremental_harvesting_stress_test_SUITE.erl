@@ -26,8 +26,6 @@
 -define(STRESS_CASES, []).
 -define(STRESS_NO_CLEARING_CASES, [incremental_harvesting_test]).
 
--define(FILES_SUM, files_sum).
-
 all() ->
     ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
 
@@ -60,11 +58,11 @@ incremental_harvesting_test(Config) ->
     ]).
 incremental_harvesting_test_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = files_stress_test_base:many_files_creation_tree_test_base(Config, false, true, true, true),
+    Result = files_stress_test_base:many_files_creation_tree_test_base(Config, false, true, true),
     NewFiles = files_stress_test_base:get_param_value(files_saved, Result),
-    OldFilesSum = get(?FILES_SUM, 0),
+    OldFilesSum = get(files_sum, 0),
     NewFilesSum = OldFilesSum + NewFiles,
-    put(?FILES_SUM, NewFilesSum),
+    put(files_sum, NewFilesSum),
 
     Start = time_utils:system_time_millis(),
     % start harvesting_stream
@@ -73,7 +71,7 @@ incremental_harvesting_test_base(Config) ->
     Diff = time_utils:system_time_millis() - Start,
 
     DiffSec = Diff/1000,
-    AvgRate =  NewFilesSum /(DiffSec),
+    AvgRate =  NewFilesSum /DiffSec,
     ct:print("Harvesting ~p files took ~p s.~n"
     "Average rate was ~p files per second.", [NewFilesSum, DiffSec, AvgRate]),
     [
@@ -100,7 +98,6 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(Case = stress_test, Config) ->
     files_stress_test_base:end_per_testcase(Case, Config);
-
 end_per_testcase(Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     % stop harvesting_stream

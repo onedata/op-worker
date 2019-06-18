@@ -23,7 +23,7 @@
 %% export for ct
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
-    many_files_creation_tree_test_base/5, single_dir_creation_test_base/2]).
+    many_files_creation_tree_test_base/4, single_dir_creation_test_base/2]).
 -export([create_single_call/4]).
 -export([get_param_value/2]).
 
@@ -142,9 +142,9 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
     many_files_creation_tree_test_base(Config, WriteToFile, false).
 
 many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
-    many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, false, false).
+    many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, false).
 
-many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata, SilenceLogs) ->
+many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
@@ -258,9 +258,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                                     WriteSize = size(WriteBuf),
                                     {ok, WriteSize} = lfm_proxy:write(Worker, Handle, 0, WriteBuf),
                                     ok = lfm_proxy:close(Worker, Handle),
-                                    file_ok;
+                                    ok;
                                 _ ->
-                                    file_ok
+                                    ok
                             end,
 
                             % set xattr metadata if needed (depends on test config)
@@ -293,7 +293,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             % Gather test results
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
-                {other, {0,0}}], round(DirsToDo + LastLevelDirs), SilenceLogs),
+                {other, {0,0}}], round(DirsToDo + LastLevelDirs)),
 
             % Calculate and log output
             NewLevels = lists:foldl(fun
@@ -342,12 +342,8 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             end,
             NewSum = Sum + FilesSaved + DirsSaved,
             put(ok_sum, NewSum),
-            case SilenceLogs of
-                true ->
-                    ok;
-                false ->
-                    ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum])
-            end,
+
+            ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum]),
             ?assertEqual(ok, TimeoutCheck),
             ?assertEqual(0, OtherAns),
 
@@ -439,20 +435,15 @@ spawn_workers({Dir, Children}, Fun, Fun2, Level, EndSpawnLevel) ->
     end, Children),
     spawn_workers(Children2, Fun, Fun2, Level + 1, EndSpawnLevel).
 
-gather_answers(Answers, Num, SilenceLogs) ->
-    gather_answers(Answers, Num, 0, 0, SilenceLogs).
+gather_answers(Answers, Num) ->
+    gather_answers(Answers, Num, 0, 0).
 
-gather_answers(Answers, 0, _, _, _SilenceLogs) ->
+gather_answers(Answers, 0, _, _) ->
     {ok, Answers};
-gather_answers(Answers, Num, Gathered, LastReport, SilenceLogs) ->
+gather_answers(Answers, Num, Gathered, LastReport) ->
     NewLastReport = case (Gathered - LastReport) >= 1000 of
         true ->
-            case SilenceLogs of
-                true ->
-                    ok;
-                false ->
-                    ct:print("Gather answers num ~p", [Gathered])
-            end,
+            ct:print("Gather answers num ~p", [Gathered]),
             Gathered;
         _ ->
             LastReport
@@ -467,7 +458,7 @@ gather_answers(Answers, Num, Gathered, LastReport, SilenceLogs) ->
                     {other, {V1 + 1, V2 + ToAddV}}
             end,
             NewAnswers = [ToAdd | proplists:delete(K, Answers)],
-            gather_answers(NewAnswers, Num - 1, Gathered + 1, NewLastReport, SilenceLogs);
+            gather_answers(NewAnswers, Num - 1, Gathered + 1, NewLastReport);
         {worker_ans, AnswersBatch} ->
             {NewAnswers, Sum} = lists:foldl(fun({K, {V1, V2}} = CurrentV, {Acc, TmpSum}) ->
                 {NewV, Add} = case proplists:lookup(K, AnswersBatch) of
@@ -481,7 +472,7 @@ gather_answers(Answers, Num, Gathered, LastReport, SilenceLogs) ->
                 end,
                 {[NewV | Acc], TmpSum + Add}
             end, {[], 0}, Answers),
-            gather_answers(NewAnswers, Num - 1, Gathered + Sum, NewLastReport, SilenceLogs)
+            gather_answers(NewAnswers, Num - 1, Gathered + Sum, NewLastReport)
     after
         ?TIMEOUT ->
             {timeout, Answers}

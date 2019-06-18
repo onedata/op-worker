@@ -59,7 +59,7 @@ continuous_harvesting_test(Config) ->
     ]).
 continuous_harvesting_test_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = files_stress_test_base:many_files_creation_tree_test_base(Config, false, true, true, true),
+    Result = files_stress_test_base:many_files_creation_tree_test_base(Config, false, true, true),
     NewFiles = files_stress_test_base:get_param_value(files_saved, Result),
     Start = time_utils:system_time_millis(),
     % start harvesting_stream
@@ -67,7 +67,7 @@ continuous_harvesting_test_base(Config) ->
     harvesting_stress_test_utils:harvesting_receive_loop(NewFiles),
     Diff = time_utils:system_time_millis() - Start,
     DiffSec = Diff/1000,
-    AvgRate =  NewFiles /(DiffSec),
+    AvgRate =  NewFiles /DiffSec,
     ct:print("Harvesting ~p files took ~p s.~n"
     "Average rate was ~p files per second.", [NewFiles, DiffSec, AvgRate]),
     [
@@ -94,7 +94,6 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(Case = stress_test, Config) ->
     files_stress_test_base:end_per_testcase(Case, Config);
-
 end_per_testcase(Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     % stop harvesting_stream
