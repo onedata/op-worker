@@ -81,7 +81,7 @@ sanitize_query_options([{<<"bbox">>, Val} | Rest], Options) ->
         end
     catch
         _:_ ->
-            throw(?ERROR_INVALID_BBOX)
+            throw(?ERROR_BAD_DATA(<<"bbox">>))
     end,
     sanitize_query_options(Rest, [{bbox, Bbox} | Options]);
 

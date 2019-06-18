@@ -253,7 +253,7 @@ parse_attribute_body(Json, Extended) ->
         {[{Attr, Value}], true} ->
             {Attr, Value};
         {_, _} ->
-            throw(?ERROR_BAD_DATA)
+            throw(?ERROR_BAD_DATA(<<"attribute">>))
     end.
 
 

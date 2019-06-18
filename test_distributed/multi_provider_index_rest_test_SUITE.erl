@@ -450,7 +450,7 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         <<"spatial">> := false
     }}, get_index_via_rest(Config, WorkerP2, SpaceId, IndexName), ?ATTEMPTS),
 
-    ExpRestError = get_rest_error(?ERROR_NOT_FOUND),
+    ExpRestError = get_rest_error(?ERROR_SPACE_NOT_SUPPORTED),
     ?assertMatch(ExpRestError, get_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName
     )).
@@ -548,8 +548,8 @@ quering_index_with_invalid_params_should_fail(Config) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpRestError, Query(Worker, Options))
     end, [
-%%        {#{bbox => ok}, ?ERROR_INVALID_BBOX},
-%%        {#{bbox => 1}, ?ERROR_INVALID_BBOX},
+        {#{bbox => ok}, ?ERROR_BAD_DATA(<<"bbox">>)},
+        {#{bbox => 1}, ?ERROR_BAD_DATA(<<"bbox">>)},
 
         {#{descending => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
         {#{descending => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
@@ -559,9 +559,9 @@ quering_index_with_invalid_params_should_fail(Config) ->
         {#{inclusive_end => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
         {#{inclusive_end => -15.6}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
 
-%%        {#{keys => ok}, ?ERROR_INVALID_KEYS},
-%%        {#{keys => 1}, ?ERROR_INVALID_KEYS},
-%%        {#{keys => -15.6}, ?ERROR_INVALID_KEYS},
+        {#{keys => ok}, ?ERROR_BAD_VALUE_JSON(<<"keys">>)},
+        {#{keys => 1}, ?ERROR_BAD_VALUE_JSON(<<"keys">>)},
+        {#{keys => -15.6}, ?ERROR_BAD_VALUE_JSON(<<"keys">>)},
 
         {#{limit => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
         {#{limit => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
