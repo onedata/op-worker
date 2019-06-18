@@ -387,6 +387,10 @@ translate_error(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
         <<"The specified index is not supported by ~s provider.">>, [ProviderId]
     }};
+translate_error(?ERROR_TRANSFER_ALREADY_ENDED) ->
+    {?HTTP_400_BAD_REQUEST, <<"Specified transfer has already ended.">>};
+translate_error(?ERROR_TRANSFER_NOT_ENDED) ->
+    {?HTTP_400_BAD_REQUEST, <<"Specified transfer has not ended yet.">>};
 
 % Wildcard match
 translate_error({error, Reason}) ->

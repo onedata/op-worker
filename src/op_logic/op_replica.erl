@@ -185,6 +185,10 @@ authorize(#op_req{client = Cl, gri = #gri{id = Guid, aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Cl, SpaceId);
 
+authorize(#op_req{client = Cl, gri = #gri{id = Guid, aspect = distribution}}, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Cl, SpaceId);
+
 authorize(#op_req{client = Cl, gri = #gri{aspect = replicate_by_index}} = Req, _) ->
     SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
     op_logic_utils:is_eff_space_member(Cl, SpaceId);

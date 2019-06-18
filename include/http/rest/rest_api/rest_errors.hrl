@@ -24,6 +24,9 @@
 
 -define(ERROR_INDEX_NOT_SUPPORTED_BY(__ProviderId), {error, {index_not_supported_by, __ProviderId}}).
 
+-define(ERROR_TRANSFER_ALREADY_ENDED, {error, transfer_already_ended}).
+-define(ERROR_TRANSFER_NOT_ENDED, {error, transfer_not_ended}).
+
 
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,
@@ -31,21 +34,6 @@
 }}).
 
 %% HTTP 400 errors
--define(ERROR_INVALID_NAME, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_name">>,
-    <<"Given name is not valid">>)
-).
--define(ERROR_NOT_A_DIRECTORY, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"not_a_directory">>,
-    <<"Given path or id does not refer to a directory.">>)
-).
--define(ERROR_SHARE_ALREADY_EXISTS, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_share_already_exists">>,
-    <<"Share for given directory already exists.">>)
-).
 -define(ERROR_INVALID_ATTRIBUTE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_attribute">>,
@@ -157,62 +145,10 @@
     <<"invalid_objectid">>,
     <<"Given id is invalid.">>)
 ).
--define(ERROR_INVALID_KEYS, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_keys">>,
-    <<"The keys parameter is invalid, it must be a valid json list.">>)
-).
--define(ERROR_INVALID_SPATIAL_FLAG, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_spatial_flag">>,
-    <<"Given spatial flag is not a valid boolean.">>)
-).
 -define(ERROR_INVALID_BBOX, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"error_invalid_bbox">>,
     <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
-).
--define(ERROR_PROVIDER_NOT_SUPPORTING_INDEX(__ProviderId, __IndexName, __SpaceId), ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_provider_not_supporting_index">>,
-    <<"Provider ", (__ProviderId)/binary, " does not support index ", (__IndexName)/binary, "in space ", (__SpaceId)/binary>>)
-).
--define(ERROR_INDEX_FUNCTION, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_index_function">>,
-    <<"Processing query result failed."
-    "Ensure that returned value from map/reduce function is file id or list of which first element is file id.">>)
-).
-
--define(ERROR_SPACE_NOT_SUPPORTED_REST, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_space_not_supported">>,
-    <<"The space of requested file is not locally supported.">>)
-).
--define(ERROR_PROVIDER_NOT_FOUND, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_provider_not_found">>,
-    <<"Given provider could not be found.">>)
-).
--define(ERROR_PROVIDER_NOT_SUPPORTING_SPACE(__ProviderId), ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_provider_not_supporting_space">>,
-    <<"Provider ", __ProviderId/binary, " does not support requested space.">>)
-).
--define(ERROR_TRANSFER_NOT_FOUND, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_transfer_not_found">>,
-    <<"Given transfer could not be found.">>)
-).
--define(ERROR_TRANSFER_ALREADY_ENDED, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_transfer_already_ended">>,
-    <<"Given transfer could not be cancelled because it has already ended.">>)
-).
--define(ERROR_TRANSFER_NOT_ENDED, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_transfer_not_ended">>,
-    <<"Given transfer could not be rerun because it has not ended yet.">>)
 ).
 
 % Changes errors

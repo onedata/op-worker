@@ -1,159 +1,155 @@
-%%%--------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%%%--------------------------------------------------------------------
+%%%-------------------------------------------------------------------
 %%% @doc
-%%% Handler for getting details and managing transfers.
+%%% This module handles op logic operations corresponding to op_transfer model.
 %%% @end
-%%%--------------------------------------------------------------------
--module(transfer_by_id).
--author("Lukasz Opiola").
+%%%-------------------------------------------------------------------
+-module(op_transfer).
+-author("Bartosz Walkowicz").
 
--include("global_definitions.hrl").
--include("http/http_common.hrl").
--include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/logging.hrl").
--include("http/rest/rest.hrl").
+-include("op_logic.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
+-export([op_logic_plugin/0]).
+-export([fetch_entity/1, operation_supported/3]).
+-export([create/1, get/2, delete/1]).
+-export([authorize/2, data_signature/1]).
 
-%% API
--export([
-    terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2, delete_resource/2, content_types_accepted/2
-]).
-
-%% resource functions
--export([get_transfer/2, rerun_transfer/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:terminate/3
-%%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), maps:map()) -> ok.
-terminate(_, _, _) ->
-    ok.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:allowed_methods/2
-%%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) ->
-    {[binary()], req(), maps:map()}.
-allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"DELETE">>, <<"POST">>], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
-%%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) ->
-    {true | {false, binary()} | stop, req(), maps:map()}.
-is_authorized(Req, State) ->
-    rest_auth:is_authorized(Req, State).
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_provided/2
-%%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) ->
-    {[{binary(), atom()}], req(), maps:map()}.
-content_types_provided(Req, State) ->
-    {[
-        {<<"application/json">>, get_transfer}
-    ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/transfers/{tid}'
-%% @doc Cancels a scheduled or active transfer. Returns 400 in case
-%% the transfer is already completed, canceled or failed.
-%%
-%% HTTP method: DELETE
-%%
-%% @param tid Transfer ID.
-%%--------------------------------------------------------------------
--spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
-delete_resource(Req, State) ->
-    {State2, Req2} = validator:parse_id(Req, State),
-
-    #{id := Id} = State2,
-
-    case transfer:cancel(Id) of
-        ok ->
-            {true, Req2, State2};
-        {error, already_ended} ->
-            throw(?ERROR_TRANSFER_ALREADY_ENDED)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), maps:map()) ->
-    {[{atom() | binary(), atom()}], req(), maps:map()}.
-content_types_accepted(Req, State) ->
-    {[
-        {'*', rerun_transfer}
-    ], Req, State}.
-
-%%%===================================================================
-%%% Content type handler functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/transfers/{tid}'
-%% @doc Returns status of specific transfer. In case the transfer has
-%% been scheduled for entire folder, the result is a list of transfer
-%% statuses for each item in the folder.
-%%
-%% HTTP method: GET
-%%
-%% @param tid Transfer ID.
+%% @doc
+%% Returns the op logic plugin module that handles model logic.
 %% @end
 %%--------------------------------------------------------------------
--spec get_transfer(req(), maps:map()) -> {term(), req(), maps:map()}.
-get_transfer(Req, State) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+op_logic_plugin() ->
+    op_transfer.
 
-    #{id := Id} = State2,
 
-    {ok, #document{value = Transfer}} = transfer:get(Id),
-    Response = json_utils:encode(transfer_to_json(Transfer)),
-    {Response, Req2, State2}.
-
-%%-------------------------------------------------------------------
-%% '/api/v3/oneprovider/transfers/{tid}/rerun'
-%% @doc Restarts transfer with given tid.
-%%
-%% HTTP method: POST
-%%
-%% @param tid Transfer ID.
-%%-------------------------------------------------------------------
--spec rerun_transfer(req(), maps:map()) -> {term(), req(), maps:map()}.
-rerun_transfer(Req, State) ->
-    {State2, Req2} = validator:parse_id(Req, State),
-    #{auth := SessionId, id := Tid} = State2,
-
-    {ok, UserId} = session:get_user_id(SessionId),
-    case transfer:rerun_ended(UserId, Tid) of
-        {ok, NewTransferId} ->
-            Path = binary_to_list(<<"transfers/", NewTransferId/binary>>),
-            Location = oneprovider:get_rest_endpoint(Path),
-            Req3 = cowboy_req:reply(201, #{<<"location">> => Location}, Req2),
-            {stop, Req3, State2};
-        {error, not_ended} ->
-            throw(?ERROR_TRANSFER_NOT_ENDED);
-        {error, not_found} ->
-            throw(?ERROR_TRANSFER_NOT_FOUND)
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves an entity from datastore based on its EntityId.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_entity(op_logic:entity_id()) ->
+    {ok, op_logic:entity()} | entity_logic:error().
+fetch_entity(TransferId) ->
+    case transfer:get(TransferId) of
+        {ok, #document{value = Transfer}} ->
+            % Transfer doc is synchronized only with providers supporting space
+            % so if it was fetched then space must be supported locally
+            {ok, Transfer};
+        _ ->
+            ?ERROR_NOT_FOUND
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given operation is supported based on operation, aspect and
+%% scope (entity type is known based on the plugin itself).
+%% @end
+%%--------------------------------------------------------------------
+-spec operation_supported(op_logic:operation(), op_logic:aspect(),
+    op_logic:scope()) -> boolean().
+operation_supported(create, rerun, private) -> true;
+
+operation_supported(get, instance, private) -> true;
+
+operation_supported(delete, instance, private) -> true;
+
+operation_supported(_, _, _) -> false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(op_logic:req()) -> op_logic:create_result().
+create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
+    {ok, UserId} = session:get_user_id(Cl#client.id),
+    case transfer:rerun_ended(UserId, TransferId) of
+        {ok, NewTransferId} ->
+            {ok, value, NewTransferId};
+        {error, not_ended} ->
+            ?ERROR_TRANSFER_NOT_ENDED;
+        Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves a resource (aspect of entity) based on op logic request and
+%% prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
+    {ok, transfer_to_json(Transfer)}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(op_logic:req()) -> op_logic:delete_result().
+delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
+    case transfer:cancel(TransferId) of
+        ok ->
+            ok;
+        {error, already_ended} ->
+            ?ERROR_TRANSFER_ALREADY_ENDED
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = Cl, gri = #gri{aspect = instance}}, Transfer) ->
+    op_logic_utils:is_eff_space_member(Cl, Transfer#transfer.space_id);
+authorize(#op_req{client = Cl, gri = #gri{aspect = rerun}}, Transfer) ->
+    op_logic_utils:is_eff_space_member(Cl, Transfer#transfer.space_id).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns data signature for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_signature(op_logic:req()) -> op_validator:data_signature().
+data_signature(_) -> #{}.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
 -spec transfer_to_json(transfer:transfer()) -> maps:map().
 transfer_to_json(#transfer{
     file_uuid = FileUuid,
