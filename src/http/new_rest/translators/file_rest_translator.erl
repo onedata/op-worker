@@ -9,7 +9,7 @@
 %%% replica entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
--module(replica_rest_translator).
+-module(file_rest_translator).
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
@@ -43,8 +43,8 @@ create_response(#gri{aspect = replicate_by_index}, _, value, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(_, ReplicaData) ->
-    rest_translator:ok_body_reply(ReplicaData).
+get_response(_, FileData) ->
+    rest_translator:ok_body_reply(FileData).
 
 
 %%--------------------------------------------------------------------

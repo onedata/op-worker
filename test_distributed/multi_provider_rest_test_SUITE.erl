@@ -94,10 +94,9 @@ all() ->
 %%        xattr_put,
 %%        xattr_list,
 %%        metric_get,
-%%        list_file,
-%%        list_dir,
-%%        list_dir_range,
-
+        list_file,
+        list_dir,
+        list_dir_range,
         list_spaces,
         get_space,
         create_share,
