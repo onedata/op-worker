@@ -66,9 +66,7 @@ all() ->
         getting_index_of_not_supported_space_should_fail,
         list_indexes,
         query_index,
-
         quering_index_with_invalid_params_should_fail,
-
         create_geospatial_index,
         query_geospatial_index,
         query_file_popularity_index,
