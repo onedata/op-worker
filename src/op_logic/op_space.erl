@@ -84,7 +84,7 @@ create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
         ProviderId when is_binary(ProviderId) -> [ProviderId];
         ProvidersList when is_list(ProvidersList) -> ProvidersList
     end,
-    ensure_space_supported_by_providers(SpaceId, Providers),
+    op_logic_utils:ensure_space_support(SpaceId, Providers),
 
     index:save(
         SpaceId, IndexName, MapFunction, undefined,
@@ -92,6 +92,8 @@ create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
     );
 
 create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}} = Req) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     ReduceFunction = maps:get(<<"application/javascript">>, Req#op_req.data),
     case index:update_reduce_function(SpaceId, IndexName, ReduceFunction) of
         {error, ?EINVAL} ->
@@ -119,6 +121,8 @@ get(#op_req{client = #client{id = SessionId}, gri = #gri{aspect = list}}, _) ->
 
 get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     SessionId = Cl#client.id,
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     case space_logic:get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name, providers = ProvidersIds}}} ->
             Providers = lists:map(fun(ProviderId) ->
@@ -138,6 +142,8 @@ get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     end;
 
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_INDEX_LIST_LIMIT),
 
@@ -160,6 +166,8 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
     {ok, maps:merge(#{<<"indexes">> => Indexes}, NextPageToken)};
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     case index:get_json(SpaceId, IndexName) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
@@ -168,6 +176,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
     end;
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     Options = index_utils:sanitize_query_options(Req#op_req.data),
     case index:query(SpaceId, IndexName, Options) of
         {ok, {Rows}} ->
@@ -180,6 +190,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, 
     end;
 
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
     TransferState = maps:get(<<"state">>, Data, <<"ongoing">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_TRANSFER_LIST_LIMIT),
@@ -232,7 +244,7 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
         ProviderId when is_binary(ProviderId) -> [ProviderId];
         ProvidersList when is_list(ProvidersList) -> ProvidersList
     end,
-    ensure_space_supported_by_providers(SpaceId, Providers),
+    op_logic_utils:ensure_space_support(SpaceId, Providers),
 
     case index:update(SpaceId, IndexName, MapFun,  IndexOptions, Spatial, Providers) of
         {error, ?EINVAL} ->
@@ -249,6 +261,8 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     case index:delete(SpaceId, IndexName) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
@@ -257,6 +271,8 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
     end;
 
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     case index:update_reduce_function(SpaceId, IndexName, undefined) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
@@ -275,9 +291,7 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 authorize(#op_req{gri = #gri{id = undefined}}, _) ->
     true;
 authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
-    SessionId = Cl#client.id,
-    {ok, UserId} = session:get_user_id(SessionId),
-    user_logic:has_eff_space(SessionId, UserId, SpaceId).
+    op_logic_utils:is_eff_space_member(Cl, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -355,22 +369,6 @@ data_signature(_) -> #{}.
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec ensure_space_supported_by_providers(od_space:id(), [od_provider:id()]) ->
-    ok | no_return().
-ensure_space_supported_by_providers(_SpaceId, undefined) ->
-    ok;
-ensure_space_supported_by_providers(SpaceId, Providers) ->
-    lists:foreach(fun(ProviderId) ->
-        case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
-            true ->
-                ok;
-            false ->
-                throw(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId))
-        end
-    end, Providers).
 
 
 %% @private

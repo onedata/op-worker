@@ -67,8 +67,8 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
     Callback = maps:get(<<"url">>, Data, undefined),
     ReplicatingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
 
-    ensure_space_support(SpaceId, [ReplicatingProvider]),
-    ensure_file_exists(Cl, FileGuid),
+    op_logic_utils:ensure_space_support(SpaceId, [ReplicatingProvider]),
+    op_logic_utils:ensure_file_exists(Cl, FileGuid),
 
     case logical_file_manager:schedule_file_replication(
         SessionId,
@@ -89,8 +89,8 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
     QueryViewOptions = index_utils:sanitize_query_options(Data),
     ReplicatingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
 
-    ensure_space_support(SpaceId, [ReplicatingProvider]),
-    ensure_index_support(SpaceId, IndexName, [ReplicatingProvider]),
+    op_logic_utils:ensure_space_support(SpaceId, [ReplicatingProvider]),
+    op_logic_utils:ensure_index_support(SpaceId, IndexName, [ReplicatingProvider]),
 
     case logical_file_manager:schedule_replication_by_index(
         SessionId,
@@ -116,7 +116,7 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    ensure_space_supported_locally(SpaceId),
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
     logical_file_manager:get_file_distribution(Cl#client.id, {guid, FileGuid}).
 
 
@@ -132,8 +132,8 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
     EvictingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
     ReplicatingProvider = maps:get(<<"migration_provider_id">>, Data, undefined),
 
-    ensure_space_support(SpaceId, [EvictingProvider, ReplicatingProvider]),
-    ensure_file_exists(Cl, FileGuid),
+    op_logic_utils:ensure_space_support(SpaceId, [EvictingProvider, ReplicatingProvider]),
+    op_logic_utils:ensure_file_exists(Cl, FileGuid),
 
     case logical_file_manager:schedule_replica_eviction(
         SessionId,
@@ -156,8 +156,8 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evi
     ReplicatingProvider = maps:get(<<"migration_provider_id">>, Data, undefined),
 
     TargetProviders = [EvictingProvider, ReplicatingProvider],
-    ensure_space_support(SpaceId, TargetProviders),
-    ensure_index_support(SpaceId, IndexName, TargetProviders),
+    op_logic_utils:ensure_space_support(SpaceId, TargetProviders),
+    op_logic_utils:ensure_index_support(SpaceId, IndexName, TargetProviders),
 
     case logical_file_manager:schedule_replica_eviction_by_index(
         SessionId,
@@ -182,11 +182,16 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evi
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
 authorize(#op_req{client = Cl, gri = #gri{id = Guid, aspect = instance}}, _) ->
-    is_eff_space_member(Cl, file_id:guid_to_space_id(Guid));
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Cl, SpaceId);
+
 authorize(#op_req{client = Cl, gri = #gri{aspect = replicate_by_index}} = Req, _) ->
-    is_eff_space_member(Cl, maps:get(<<"space_id">>, Req#op_req.data));
+    SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
+    op_logic_utils:is_eff_space_member(Cl, SpaceId);
+
 authorize(#op_req{client = Cl, gri = #gri{aspect = evict_by_index}} = Req, _) ->
-    is_eff_space_member(Cl, maps:get(<<"space_id">>, Req#op_req.data)).
+    SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
+    op_logic_utils:is_eff_space_member(Cl, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -260,82 +265,3 @@ data_signature(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}})
 };
 
 data_signature(_) -> #{}.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec is_eff_space_member(op_logic:client(), op_space:id()) -> boolean().
-is_eff_space_member(#client{id = SessionId}, SpaceId) ->
-    {ok, UserId} = session:get_user_id(SessionId),
-    user_logic:has_eff_space(SessionId, UserId, SpaceId).
-
-
-%% @private
--spec ensure_space_support(od_space:id(), [undefined | od_provider:id()]) ->
-    ok | no_return().
-ensure_space_support(SpaceId, TargetProviders) ->
-    ensure_space_supported_locally(SpaceId),
-    lists:foreach(fun(ProviderId) ->
-        ensure_space_supported_by_provider(SpaceId, ProviderId)
-    end, TargetProviders).
-
-
-%% @private
-ensure_space_supported_locally(SpaceId) ->
-    case provider_logic:supports_space(SpaceId) of
-        true -> ok;
-        false -> throw(?ERROR_SPACE_NOT_SUPPORTED)
-    end.
-
-
-%% @private
--spec ensure_space_supported_by_provider(od_space:id(), od_provider:id()) ->
-    ok | no_return().
-ensure_space_supported_by_provider(_SpaceId, undefined) ->
-    ok;
-ensure_space_supported_by_provider(SpaceId, ProviderId) ->
-    case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId))
-    end.
-
-
-%% @private
--spec ensure_file_exists(op_logic:client(), file_id:file_guid()) ->
-    ok | no_return().
-ensure_file_exists(#client{id = SessionId}, FileGuid) ->
-    case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
-        {ok, _} ->
-            ok;
-        _ ->
-            throw(?ERROR_NOT_FOUND)
-    end.
-
-
-%% @private
--spec ensure_index_support(od_space:id(), binary(),
-    [undefined | od_provider:id()]) -> ok | no_return().
-ensure_index_support(SpaceId, IndexName, TargetProviders) ->
-    lists:foreach(fun(ProviderId) ->
-        ensure_index_supported_by_provider(SpaceId, IndexName, ProviderId)
-    end, TargetProviders).
-
-
-%% @private
--spec ensure_index_supported_by_provider(od_space:id(), binary(),
-    od_provider:id()) -> ok | no_return().
-ensure_index_supported_by_provider(_SpaceId, _IndexName, undefined) ->
-    ok;
-ensure_index_supported_by_provider(SpaceId, IndexName, ProviderId) ->
-    case index:is_supported(SpaceId, IndexName, ProviderId) of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId))
-    end.

@@ -381,11 +381,11 @@ translate_error(?ERROR_SPACE_NOT_SUPPORTED) ->
     {?HTTP_400_BAD_REQUEST, <<"The space of requested resource is not locally supported.">>};
 translate_error(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
-        <<"The space of requested resource is not supported by ~s.">>, [ProviderId]
+        <<"The space of requested resource is not supported by ~s provider.">>, [ProviderId]
     }};
 translate_error(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
-        <<"The specified index is not supported by ~s.">>, [ProviderId]
+        <<"The specified index is not supported by ~s provider.">>, [ProviderId]
     }};
 
 % Wildcard match
