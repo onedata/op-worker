@@ -103,6 +103,7 @@ end_per_testcase(Case, Config) ->
     % stop harvesting_stream
     harvesting_stress_test_utils:mock_harvesting_stopped(Worker),
     harvesting_stress_test_utils:revise_space_harvesters(Worker, ?SPACE_ID),
+    ?assertMatch(0, harvesting_stream_test_SUITE:count_active_children(Worker, harvesting_stream_sup), 30),
     % delete harvesting_state doc
     harvesting_stress_test_utils:delete_harvesting_state(Worker, ?SPACE_ID),
     files_stress_test_base:end_per_testcase(Case, Config).

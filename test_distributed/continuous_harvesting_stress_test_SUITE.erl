@@ -99,4 +99,5 @@ end_per_testcase(Case, Config) ->
     % stop harvesting_stream
     harvesting_stress_test_utils:mock_harvesting_stopped(Worker),
     harvesting_stress_test_utils:revise_all_spaces(Worker),
+    ?assertMatch(0, harvesting_stream_test_SUITE:count_active_children(Worker, harvesting_stream_sup), 30),
     files_stress_test_base:end_per_testcase(Case, Config).
