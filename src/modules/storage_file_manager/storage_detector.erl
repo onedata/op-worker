@@ -138,7 +138,9 @@ verify_storage_on_all_nodes(Helper) ->
             case verify_storage_internal(Helper, AdminCtx2, Nodes, FileId, FileContent) of
                 {ok, {FileId2, FileContent2}} ->
                     verify_test_file(Node, Helper, AdminCtx2, FileId2, FileContent2);
-                Error ->
+                {error, _} = Error ->
+                    Error;
+                {error, _, _} = Error ->
                     Error
             end;
         Error ->
