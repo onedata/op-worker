@@ -13,6 +13,7 @@
 -module(cdmi_arg_parser).
 -author("Piotr Ociepka").
 
+-include("op_logic.hrl").
 -include("http/http_common.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
@@ -380,8 +381,10 @@ is_capability_object(#{path := Path} = Req) ->
 -spec try_authenticate(req()) -> rest_auth:auth().
 try_authenticate(Req) ->
     case rest_auth:authenticate(Req) of
-        {ok, Auth} ->
-            Auth;
+        {ok, ?NOBODY} ->
+            throw(?ERROR_UNAUTHORIZED_REST);
+        {ok, ?USER(SessionId)} ->
+            SessionId;
         _ ->
             throw(?ERROR_UNAUTHORIZED_REST)
     end.

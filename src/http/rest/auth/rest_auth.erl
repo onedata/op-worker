@@ -12,6 +12,7 @@
 -module(rest_auth).
 -author("Tomasz Lichon").
 
+-include("op_logic.hrl").
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -38,8 +39,11 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, Auth} ->
-            {true, Req, State#{auth => Auth}};
+        {ok, ?USER(SessionId)} ->
+            {true, Req, State#{auth => SessionId}};
+        {ok, ?NOBODY} ->
+            NewReq = cowboy_req:reply(401, Req),
+            {stop, NewReq, State};
         {error, not_found} ->
             NewReq = cowboy_req:reply(401, Req),
             {stop, NewReq, State};
@@ -54,17 +58,17 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(req()) -> {ok, session:id()} | {error, term()}.
+-spec authenticate(req()) -> op_logic:client() | {error, term()}.
 authenticate(Req) ->
     case resolve_auth(Req) of
-        {error, Reason} ->
-            {error, Reason};
+        {error, not_found} ->
+            {ok, ?NOBODY};
         Auth ->
             case user_identity:get_or_fetch(Auth) of
                 {ok, #document{value = Iden}} ->
                     case session_manager:reuse_or_create_rest_session(Iden, Auth) of
                         {ok, SessId} ->
-                            {ok, SessId};
+                            {ok, ?USER(SessId)};
                         {error, {invalid_identity, _}} ->
                             user_identity:delete(Auth),
                             authenticate(Req)
@@ -78,13 +82,14 @@ authenticate(Req) ->
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Resolves authorization carried by request (if any).
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(req()) -> user_identity:credentials() | {error, term()}.
+-spec resolve_auth(req()) -> user_identity:credentials() | {error, not_found}.
 resolve_auth(Req) ->
     case parse_macaroon_from_header(Req) of
         undefined -> {error, not_found};
@@ -114,4 +119,3 @@ parse_macaroon_from_header(Req) ->
                     Value
             end
     end.
-
