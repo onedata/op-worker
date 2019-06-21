@@ -19,6 +19,6 @@
 
 -define(HARVEST_METADATA(BatchSize), {harvest_metadata, BatchSize}).
 
--define(TIMEOUT, timer:minutes(30)).
+-define(TIMEOUT, timer:minutes(15)).
 
 -endif.

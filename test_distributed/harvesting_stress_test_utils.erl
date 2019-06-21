@@ -49,7 +49,8 @@ harvesting_receive_loop(ExpChangesNum) ->
             harvesting_receive_loop(ExpChangesNum - Size)
     after
         ?TIMEOUT ->
-            ct:fail("harvesting_receive_loop timeout with ~p changes left.", [ExpChangesNum])
+            ct:print("harvesting_receive_loop timeout with ~p changes left.", [ExpChangesNum]),
+            ct:fail("harvesting_receive_loop timeout")
     end.
 
 revise_space_harvesters(Node, SpaceId) ->
