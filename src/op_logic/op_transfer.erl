@@ -12,6 +12,8 @@
 -module(op_transfer).
 -author("Bartosz Walkowicz").
 
+-behaviour(op_logic_behaviour).
+
 -include("op_logic.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -20,7 +22,7 @@
 
 -export([op_logic_plugin/0]).
 -export([fetch_entity/1, operation_supported/3]).
--export([create/1, get/2, delete/1]).
+-export([create/1, get/2, update/1, delete/1]).
 -export([authorize/2, data_signature/1]).
 
 
@@ -89,7 +91,10 @@ create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
             ?ERROR_TRANSFER_NOT_ENDED;
         Error ->
             Error
-    end.
+    end;
+
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -100,7 +105,20 @@ create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
-    {ok, transfer_to_json(Transfer)}.
+    {ok, transfer_to_json(Transfer)};
+
+get(_, _) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(op_logic:req()) -> op_logic:update_result().
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -115,7 +133,10 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
             ok;
         {error, already_ended} ->
             ?ERROR_TRANSFER_ALREADY_ENDED
-    end.
+    end;
+
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -125,10 +146,17 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = Cl, gri = #gri{aspect = instance}}, Transfer) ->
-    op_logic_utils:is_eff_space_member(Cl, Transfer#transfer.space_id);
-authorize(#op_req{client = Cl, gri = #gri{aspect = rerun}}, Transfer) ->
-    op_logic_utils:is_eff_space_member(Cl, Transfer#transfer.space_id).
+authorize(#op_req{operation = create, gri = #gri{aspect = rerun}} = Req, Transfer) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
+
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}} = Req, Transfer) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
+
+authorize(#op_req{operation = delete, gri = #gri{aspect = instance}} = Req, Transfer) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
+
+authorize(_, _) ->
+    false.
 
 
 %%--------------------------------------------------------------------

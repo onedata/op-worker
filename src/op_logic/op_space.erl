@@ -12,10 +12,13 @@
 -module(op_space).
 -author("Bartosz Walkowicz").
 
+-behaviour(op_logic_behaviour).
+
 -include("op_logic.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 -export([op_logic_plugin/0]).
@@ -100,7 +103,10 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
         Result ->
             Result
-    end.
+    end;
+
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -223,7 +229,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
             #{}
     end,
 
-    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)}.
+    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
+
+get(_, _) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -251,7 +260,10 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
         Result ->
             Result
-    end.
+    end;
+
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -278,7 +290,10 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
         Result ->
             Result
-    end.
+    end;
+
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -288,7 +303,7 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{gri = #gri{id = undefined}}, _) ->
+authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     true;
 authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
     op_logic_utils:is_eff_space_member(Cl, SpaceId).

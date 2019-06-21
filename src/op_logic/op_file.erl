@@ -12,13 +12,14 @@
 -module(op_file).
 -author("Bartosz Walkowicz").
 
+-behaviour(op_logic_behaviour).
+
 -include("op_logic.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 -export([op_logic_plugin/0]).
 -export([operation_supported/3]).
--export([create/1, get/2]).
+-export([create/1, get/2, update/1, delete/1]).
 -export([authorize/2, data_signature/1]).
 
 -define(DEFAULT_LIST_OFFSET, 0).
@@ -88,7 +89,10 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attr
     end;
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = metadata}}) ->
-    ok.
+    ok;
+
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -158,7 +162,30 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attribu
     end;
 
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = metadata}}, _) ->
-    ok.
+    ok;
+
+get(_, _) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(op_logic:req()) -> op_logic:update_result().
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(op_logic:req()) -> op_logic:delete_result().
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------

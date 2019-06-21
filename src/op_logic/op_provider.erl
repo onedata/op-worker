@@ -6,22 +6,25 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_transfer model.
+%%% This module handles op logic operations corresponding to op_provider model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_provider).
 -author("Bartosz Walkowicz").
 
+-behaviour(op_logic_behaviour).
+
 -include("op_logic.hrl").
 -include("global_definitions.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -export([gather_configuration/0]).
 
-% Op logic callbacks
+% op logic callbacks
 -export([op_logic_plugin/0]).
 -export([operation_supported/3]).
--export([get/2]).
+-export([create/1, get/2, update/1, delete/1]).
 -export([authorize/2, data_signature/1]).
 
 -define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
@@ -92,13 +95,46 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(op_logic:req()) -> op_logic:create_result().
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Retrieves a resource (aspect of entity) based on op logic request and
 %% prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{gri = #gri{aspect = configuration}}, _) ->
-    {ok, gather_configuration()}.
+    {ok, gather_configuration()};
+
+get(_, _) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(op_logic:req()) -> op_logic:update_result().
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(op_logic:req()) -> op_logic:delete_result().
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------

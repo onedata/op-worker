@@ -12,13 +12,15 @@
 -module(op_replica).
 -author("Bartosz Walkowicz").
 
+-behaviour(op_logic_behaviour).
+
 -include("op_logic.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 -export([op_logic_plugin/0]).
 -export([operation_supported/3]).
--export([create/1, get/2, delete/1]).
+-export([create/1, get/2, update/1, delete/1]).
 -export([authorize/2, data_signature/1]).
 
 
@@ -104,7 +106,10 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
             {ok, value, TransferId};
         Error ->
             Error
-    end.
+    end;
+
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -117,7 +122,20 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:ensure_space_supported_locally(SpaceId),
-    logical_file_manager:get_file_distribution(Cl#client.id, {guid, FileGuid}).
+    logical_file_manager:get_file_distribution(Cl#client.id, {guid, FileGuid});
+
+get(_, _) ->
+    ?ERROR_NOT_SUPPORTED.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(op_logic:req()) -> op_logic:update_result().
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -171,7 +189,10 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evi
             {ok, value, TransferId};
         Error ->
             Error
-    end.
+    end;
+
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -181,21 +202,28 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evi
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = Cl, gri = #gri{id = Guid, aspect = instance}}, _) ->
+authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Cl, SpaceId);
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
 
-authorize(#op_req{client = Cl, gri = #gri{id = Guid, aspect = distribution}}, _) ->
+authorize(#op_req{operation = create, gri = #gri{aspect = replicate_by_index}} = Req, _) ->
+    SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Cl, SpaceId);
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
 
-authorize(#op_req{client = Cl, gri = #gri{aspect = replicate_by_index}} = Req, _) ->
-    SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
-    op_logic_utils:is_eff_space_member(Cl, SpaceId);
+authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
 
-authorize(#op_req{client = Cl, gri = #gri{aspect = evict_by_index}} = Req, _) ->
+authorize(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}} = Req, _) ->
     SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
-    op_logic_utils:is_eff_space_member(Cl, SpaceId).
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(_, _) ->
+    false.
 
 
 %%--------------------------------------------------------------------

@@ -30,7 +30,7 @@
 -type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
--type entity_id() :: undefined | binary().
+-type entity_id() :: undefined | transfer:id().
 -type entity() :: undefined | #transfer{}.
 -type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
