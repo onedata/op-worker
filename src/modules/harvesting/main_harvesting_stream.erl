@@ -465,52 +465,55 @@ revise_harvester_internal(HarvesterId, CurrentIndices, State = #hs_state{
     last_seen_seq = MainSeq,
     space_id = SpaceId
 }, CleanupSeenSeqs) ->
+    case harvesting_state:get(SpaceId) of
+        {ok, HDoc} ->
+            IndicesInMainStream = harvesting_destination:get(HarvesterId, Destination),
+            IndicesInAuxStreams = harvesting_destination:get(HarvesterId, AuxDestination),
+            IndicesInAllStreams = IndicesInMainStream ++ IndicesInAuxStreams,
+            IndicesToStart = CurrentIndices -- IndicesInAllStreams,
+            IndicesToStopInMainStream = IndicesInMainStream -- CurrentIndices,
+            IndicesToStopInAuxStream = IndicesInAuxStreams -- CurrentIndices,
+            IndicesToStop = IndicesToStopInMainStream ++ IndicesToStopInAuxStream,
+            {NewIndicesInMainStream, NewIndicesInAuxStreams} = lists:foldl(
+                fun(IndexId, {AccMainIndices, AccAuxIndices}) ->
+                    {ok, IndexSeq} = harvesting_state:get_seen_seq(HDoc, HarvesterId, IndexId),
+                    case IndexSeq < MainSeq of
+                        true ->
+                            harvesting_stream_sup:start_aux_stream(SpaceId,
+                                HarvesterId, IndexId, MainSeq),
+                            {AccMainIndices, [IndexId | AccAuxIndices]};
+                        false ->
+                            {[IndexId | AccMainIndices], AccAuxIndices}
+                    end
+                end, {[], []}, IndicesToStart),
 
-    {ok, HDoc} = harvesting_state:get(SpaceId),
-    IndicesInMainStream = harvesting_destination:get(HarvesterId, Destination),
-    IndicesInAuxStreams = harvesting_destination:get(HarvesterId, AuxDestination),
-    IndicesInAllStreams = IndicesInMainStream ++ IndicesInAuxStreams,
-    IndicesToStart = CurrentIndices -- IndicesInAllStreams,
-    IndicesToStopInMainStream = IndicesInMainStream -- CurrentIndices,
-    IndicesToStopInAuxStream = IndicesInAuxStreams -- CurrentIndices,
-    IndicesToStop = IndicesToStopInMainStream ++ IndicesToStopInAuxStream,
-    {NewIndicesInMainStream, NewIndicesInAuxStreams} = lists:foldl(
-        fun(IndexId, {AccMainIndices, AccAuxIndices}) ->
-            {ok, IndexSeq} = harvesting_state:get_seen_seq(HDoc, HarvesterId, IndexId),
-            case IndexSeq < MainSeq of
+            lists:foreach(fun(IndexId) ->
+                harvesting_stream_sup:terminate_aux_stream(SpaceId, HarvesterId, IndexId)
+            end, IndicesToStopInAuxStream),
+
+            case CleanupSeenSeqs of
                 true ->
-                    harvesting_stream_sup:start_aux_stream(SpaceId,
-                        HarvesterId, IndexId, MainSeq),
-                    {AccMainIndices, [IndexId | AccAuxIndices]};
+                    harvesting_state:delete_progress_entries(SpaceId, HarvesterId, IndicesToStop);
                 false ->
-                    {[IndexId | AccMainIndices], AccAuxIndices}
-            end
-        end, {[], []}, IndicesToStart),
+                    ok
+            end,
 
-    lists:foreach(fun(IndexId) ->
-        harvesting_stream_sup:terminate_aux_stream(SpaceId, HarvesterId, IndexId)
-    end, IndicesToStopInAuxStream),
+            Destination2 = harvesting_destination:add(HarvesterId,
+                NewIndicesInMainStream, Destination),
+            Destination3 = harvesting_destination:delete(HarvesterId,
+                IndicesToStopInMainStream, Destination2),
+            AuxDestination2 = harvesting_destination:add(HarvesterId,
+                NewIndicesInAuxStreams, AuxDestination),
+            AuxDestination3 = harvesting_destination:delete(HarvesterId,
+                IndicesToStopInAuxStream, AuxDestination2),
 
-    case CleanupSeenSeqs of
-        true ->
-            harvesting_state:delete_progress_entries(SpaceId, HarvesterId, IndicesToStop);
-        false ->
-            ok
-    end,
-
-    Destination2 = harvesting_destination:add(HarvesterId,
-        NewIndicesInMainStream, Destination),
-    Destination3 = harvesting_destination:delete(HarvesterId,
-        IndicesToStopInMainStream, Destination2),
-    AuxDestination2 = harvesting_destination:add(HarvesterId,
-        NewIndicesInAuxStreams, AuxDestination),
-    AuxDestination3 = harvesting_destination:delete(HarvesterId,
-        IndicesToStopInAuxStream, AuxDestination2),
-
-    State#hs_state{
-        destination = Destination3,
-        aux_destination = AuxDestination3
-    }.
+            State#hs_state{
+                destination = Destination3,
+                aux_destination = AuxDestination3
+            };
+        {error, not_found} ->
+            harvesting_stream:throw_harvesting_not_found_exception(State)
+    end.
 
 -spec revise_space_harvesters_internal([od_harvester:id()],
     harvesting_stream:state()) -> harvesting_stream:state().
