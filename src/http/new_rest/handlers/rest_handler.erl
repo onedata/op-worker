@@ -253,13 +253,13 @@ process_request(Req, State) ->
         Operation = method_to_operation(Method),
         GRI = resolve_gri_bindings(Client#client.id, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody, Consumes),
-        ElReq = #op_req{
+        OpReq = #op_req{
             operation = Operation,
             client = Client,
             gri = GRI,
             data = Data
         },
-        RestResp = handle_request(ElReq),
+        RestResp = handle_request(OpReq),
         {stop, send_response(RestResp, Req2), State}
     catch
         throw:Error ->

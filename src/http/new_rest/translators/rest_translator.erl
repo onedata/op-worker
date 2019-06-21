@@ -151,6 +151,7 @@ deleted_reply() ->
 %% @private
 -spec entity_type_to_translator(atom()) -> module().
 entity_type_to_translator(op_file) -> file_rest_translator;
+entity_type_to_translator(op_metrics) -> metrics_rest_translator;
 entity_type_to_translator(op_provider) -> provider_rest_translator;
 entity_type_to_translator(op_replica) -> replica_rest_translator;
 entity_type_to_translator(op_share) -> share_rest_translator;

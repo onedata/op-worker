@@ -92,9 +92,7 @@ all() ->
         xattr_get,
         xattr_put,
         xattr_list,
-
-%%        metric_get,
-
+        metric_get,
         list_file,
         list_dir,
         list_dir_range,

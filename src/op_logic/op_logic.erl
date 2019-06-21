@@ -228,12 +228,12 @@ ensure_exists(#req_ctx{req = #op_req{operation = create}}) ->
 ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
     % Aspects where entity id is undefined always exist.
     ok;
-ensure_exists(#req_ctx{plugin = Plugin, req = ElReq, entity = Entity}) ->
+ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
     % If function is not implemented by plugin then entity always exist.
     Result = case erlang:function_exported(Plugin, exists, 1) of
         true ->
             try
-                Plugin:exists(ElReq, Entity)
+                Plugin:exists(OpReq, Entity)
             catch _:_ ->
                 % No need for log here, 'exists' may crash depending on what the
                 % request contains and this is expected.
@@ -260,9 +260,9 @@ ensure_authorized(#req_ctx{req = #op_req{client = ?ROOT}}) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     ok;
-ensure_authorized(#req_ctx{plugin = Plugin, req = ElReq, entity = Entity}) ->
+ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
     Result = try
-        Plugin:authorize(ElReq, Entity)
+        Plugin:authorize(OpReq, Entity)
     catch _:_ ->
         % No need for log here, 'authorize' may crash depending on what the
         % request contains and this is expected.
@@ -272,7 +272,7 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = ElReq, entity = Entity}) ->
         true ->
             ok;
         false ->
-            case ElReq#op_req.client of
+            case OpReq#op_req.client of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
