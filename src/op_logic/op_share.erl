@@ -12,6 +12,8 @@
 -module(op_share).
 -author("Bartosz Walkowicz").
 
+-behaviour(op_logic_behaviour).
+
 -include("op_logic.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -76,7 +78,10 @@ create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
             ?ERROR_ALREADY_EXISTS;
         Error ->
             Error
-    end.
+    end;
+
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -112,7 +117,10 @@ get(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}, _) ->
             }};
         Error->
             Error
-    end.
+    end;
+
+get(_, _) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -134,7 +142,10 @@ update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}, data = Data} = Req) ->
     ensure_space_supported(Req),
     NewName = maps:get(<<"name">>, Data),
-    share_logic:update_name(Cl#client.id, ShareId, NewName).
+    share_logic:update_name(Cl#client.id, ShareId, NewName);
+
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -154,7 +165,10 @@ delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 
 delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
     ensure_space_supported(Req),
-    logical_file_manager:remove_share(Cl#client.id, ShareId).
+    logical_file_manager:remove_share(Cl#client.id, ShareId);
+
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
