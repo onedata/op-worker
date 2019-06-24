@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([remove_qos/2, fulfill_qos/6, init_pool/0, get_space_storages/2,
+-export([remove_qos/2, fulfill_qos/4, init_pool/0, get_space_storages/2,
     schedule_transfers/3]).
 
 %% Pool callbacks
@@ -30,8 +30,8 @@
 -record(add_qos_traverse_args, {
     session_id :: session:id(),
     qos_id :: qos_entry:id(),
-    qos_expression :: qos_expression:expression(),
-    replicas_num :: qos_entry:replicas_num(),
+    qos_entry :: #qos_entry{},
+    file_path_tokens = [] :: [binary()],
     target_storages = undefined :: file_qos:target_storages() | undefined
 }).
 
@@ -40,9 +40,7 @@
 }).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, begin
-    {ok, BatchSize} = application:get_env(?APP_NAME, qos_traverse_batch_size),
-    BatchSize
+-define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)
 end).
 
 %%%===================================================================
@@ -54,17 +52,18 @@ end).
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), qos_expression:expression(),
-    pos_integer(), [storage:id()] | undefined) -> ok.
-fulfill_qos(SessionId, FileCtx, QosId, QosExpression, ReplicasNum, TargetStorages) ->
+-spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined) -> ok.
+fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
+    {ok, #document{value = QosItem}} = qos_entry:get(QosId),
+    QosOriginFileGuid = QosItem#qos_entry.file_guid,
+    {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
     Options = #{
         task_id => QosId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #add_qos_traverse_args{
             session_id = SessionId,
             qos_id = QosId,
-            qos_expression = QosExpression,
-            replicas_num = ReplicasNum,
+            file_path_tokens = FilePathTokens,
             target_storages = TargetStorages
         }
     },
@@ -113,19 +112,8 @@ init_pool() ->
 list_ongoing_jobs() ->
     {ok, []}.
 
-task_finished(TaskId) ->
-    case binary:split(TaskId, <<"#">>) of
-        [_QosId, <<"remove">>] ->
-            ok;
-        _ ->
-            QosId = TaskId,
-            case qos_entry:get_status(QosId) of
-                ?IMPOSSIBLE ->
-                    ok;
-                _ ->
-                    {ok, _} = qos_entry:set_status(QosId, ?FULFILLED)
-            end
-    end,
+task_finished(QosId) ->
+    {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
     ok.
 
 get_job(DocOrID) ->
@@ -140,40 +128,15 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job) ->
     tree_traverse:do_master_job(Job).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Performs slave job for traverse task responsible for scheduling replications
 %% to fulfill QoS requirements.
-%% For directory target_storages are chosen before starting traverse task and
-%% passed to slave job.
-%% For file target_storages are chosen in slave job and "undefined" is passed
-%% in target_storages argument.
 %% @end
 %%--------------------------------------------------------------------
-do_slave_job({#document{key = FileUuid, scope = SpaceId},
-        TraverseArgs = #add_qos_traverse_args{target_storages = undefined}}) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    SessId = TraverseArgs#add_qos_traverse_args.session_id,
-    QosId = TraverseArgs#add_qos_traverse_args.qos_id,
-    QosExpression = TraverseArgs#add_qos_traverse_args.qos_expression,
-    ReplicasNum = TraverseArgs#add_qos_traverse_args.replicas_num,
-
-    case get_target_storages(SessId, {guid, FileGuid}, QosExpression, ReplicasNum) of
-        ?CANNOT_FULFILL_QOS ->
-            {ok, _} = qos_entry:set_status(QosId, ?IMPOSSIBLE),
-            ok;
-        TargetStorages ->
-            {ok, _} = file_qos:add_to_target_storages(FileGuid, TargetStorages, QosId),
-            TransfersList = qos_traverse:schedule_transfers(SessId, FileGuid, TargetStorages),
-            wait_for_transfers_completion(TransfersList)
-    end;
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    SessId = TraverseArgs#add_qos_traverse_args.session_id,
-
-    % TODO: VFS-5574 add check if storage has enough free space
-    TransfersList = qos_traverse:schedule_transfers(SessId, FileGuid, TargetStorages),
-    wait_for_transfers_completion(TransfersList);
+do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}) ->
+    create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs);
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -246,3 +209,24 @@ wait_for_transfers_completion(TransfersList) ->
         {completed, TransferId} ->
             wait_for_transfers_completion(lists:delete(TransferId, TransfersList))
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file replicas on given storages.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_qos_replicas(file_meta:uuid(), datastore_doc:scope(), file_qos:target_storages(),
+    #add_qos_traverse_args{}) -> ok.
+create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs) ->
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+    RelativePath = fslogic_path:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
+
+    SessId = TraverseArgs#add_qos_traverse_args.session_id,
+    QosId = TraverseArgs#add_qos_traverse_args.qos_id,
+    % TODO: add space check and optionally choose other storage
+    TransfersList = schedule_transfers(SessId, FileGuid, TargetStorages),
+    qos_entry:add_status_link(QosId, Scope, RelativePath),
+    wait_for_transfers_completion(TransfersList),
+    qos_entry:delete_status_link(QosId, Scope, RelativePath),
+    ok.

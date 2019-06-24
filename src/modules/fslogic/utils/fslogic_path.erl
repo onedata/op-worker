@@ -21,7 +21,7 @@
 %% API
 -export([split_skipping_dots/1]).
 -export([split/1, join/1, basename_and_parent/1, logical_to_canonical_path/2,
-    to_uuid/2]).
+    to_uuid/2, get_relative_path/2]).
 -export([resolve/1, resolve/2]).
 
 %%%===================================================================
@@ -153,6 +153,24 @@ get_leaf(#document{key = ParentUuid}, [Name | Names]) ->
         {ok, Doc} -> get_leaf(Doc, Names);
         {error, Reason} -> {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns child file path relative to ancestor's, e.g:
+%%         AncestorAbsolutePath: space1/dir1/dir2
+%%         ChildAbsolutePath: space1/dir1/dir2/dir3/file
+%%         Result: dir2/dir3/file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_relative_path([binary()] | file_meta:uuid(), fslogic_worker:guid()) -> binary().
+get_relative_path(AncestorPathTokens, ChildGuid) when is_list(AncestorPathTokens) ->
+    {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(ChildGuid)),
+    filename:join(lists:sublist(FilePathTokens, length(AncestorPathTokens), length(FilePathTokens)));
+get_relative_path(AncestorUuid, ChildGuid) ->
+    AncestorGuid = fslogic_uuid:uuid_to_guid(AncestorUuid),
+    {AncestorPathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(AncestorGuid)),
+    get_relative_path(AncestorPathTokens, ChildGuid).
 
 %%%===================================================================
 %%% Internal functions

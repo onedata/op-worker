@@ -13,6 +13,7 @@
 -define(PROVIDER_MESSAGES_HRL, 1).
 
 -include("proto/oneclient/common_messages.hrl").
+-include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
@@ -184,7 +185,7 @@
     file_guid :: file_meta:uuid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Number of required file replicas.
-    status = undefined :: qos_entry:status()
+    status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status()
 }).
 
 -record(effective_file_qos, {

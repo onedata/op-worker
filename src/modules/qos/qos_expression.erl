@@ -46,7 +46,7 @@ transform_to_rpn(Expression) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get list of storage on which file should be replicated according to given
+%% Get list of storages on which file should be replicated according to given
 %% QoS expression and number of replicas.
 %% Takes into consideration actual file locations.
 %% @end

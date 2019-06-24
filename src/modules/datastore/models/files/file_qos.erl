@@ -60,6 +60,7 @@
 
 -export([list/0]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -131,6 +132,19 @@ get_effective(FileGuid) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, FileMeta} = file_meta:get(FileUuid),
     get_effective(FileMeta).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes file_qos document.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(key()) -> ok | {error, term()}.
+delete(FileUuid) ->
+    case datastore_model:delete(?CTX, FileUuid) of
+        ok -> ok;
+        {error, ?ENOENT} -> ok;
+        {error, _} = Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

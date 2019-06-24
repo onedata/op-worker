@@ -198,7 +198,7 @@ assert_file_qos(Worker, SessId, ExpectedFileQosList, QosDescList) ->
 
         lists:foldl(fun(Path, Matched) ->
             % get actual file qos
-            {ok, FileQos} = lfm_proxy:get_file_qos(Worker, SessId, {path, Path}),
+            {ok, {QosList, TargetStorages}} = lfm_proxy:get_file_qos(Worker, SessId, {path, Path}),
 
             % in test spec we pass qos name, now we have to change it to qos id
             ExpectedQosList = lists:map(fun(QosName) ->
@@ -208,7 +208,7 @@ assert_file_qos(Worker, SessId, ExpectedFileQosList, QosDescList) ->
 
             % sort both expected and actual qos_list and check if they match
             ExpectedQosListSorted = lists:sort(ExpectedQosList),
-            FileQosSorted = lists:sort(FileQos#file_qos.qos_list),
+            FileQosSorted = lists:sort(QosList),
             QosListMatched = ExpectedQosListSorted == FileQosSorted,
             case QosListMatched of
                 true ->
@@ -233,7 +233,7 @@ assert_file_qos(Worker, SessId, ExpectedFileQosList, QosDescList) ->
             % sort qos id lists in actual target providers
             TargetProvidersSorted = maps:map(fun(_ProvId, QosIdList) ->
                 lists:sort(QosIdList)
-            end, FileQos#file_qos.target_storages),
+            end, TargetStorages),
 
             TargetProvidersMatched = TargetProvidersSorted == ExpectedTargetProvidersSorted,
             case TargetProvidersMatched of
@@ -263,8 +263,7 @@ assert_qos_invalidated(Worker, SessId, QosToCheckList, QosDescList, GuidsAndPath
 
         FileGuid = get_guid(Path, GuidsAndPaths),
         {ok, #file_qos{qos_list = FileQos}} = ?assertMatch(
-            {ok, #file_qos{qos_list = _FileQos}},
-            lfm_proxy:get_file_qos(Worker, SessId, {guid, FileGuid})
+            {ok, {_,_}}, lfm_proxy:get_file_qos(Worker, SessId, {guid, FileGuid})
         ),
 
         QosId = element(2, lists:keyfind(QosName, 1, QosDescList)),
@@ -275,22 +274,14 @@ assert_qos_invalidated(Worker, SessId, QosToCheckList, QosDescList, GuidsAndPath
     end, [], QosToCheckList).
 
 wait_for_qos_fulfilment_in_parallel(Worker, SessId, QosPathToId) ->
-    Res = utils:pmap(fun({QosName, QosId, Path}) ->
-        ?assertMatch(true, assert_qos_fulfilled(Worker, SessId, QosId), ?ATTEMPTS)
-    end, QosPathToId),
-    ok.
-%%    lists:foreach(
-%%        fun(timeout) -> throw(timeout);
-%%           ({_Path, QosId}) -> ?assertMatch(true, assert_qos_fulfilled(Worker, SessId, QosId))
-%%    end, Res).
-
-assert_qos_fulfilled(Worker, SessId, QosId) ->
-    case rpc:call(Worker, lfm_qos, check_qos_fulfilled, [SessId, QosId]) of
-        true ->
-            true;
-        false ->
-            false
-    end.
+    utils:pforeach(fun({QosName, QosId, _Path}) ->
+        {ok, QosRecord} = ?assertMatch({ok, _}, lfm_proxy:get_qos(Worker, SessId, QosId)),
+        ct:pal("Waiting for fulfilment of qos ~p: ~n"
+        "    Expression:          ~p~n",
+            [QosName, QosRecord#qos_entry.expression]
+        ),
+        ?assertEqual(true, rpc:call(Worker, lfm_qos, check_qos_fulfilled, [SessId, QosId]), ?ATTEMPTS*5)
+    end, QosPathToId).
 
 add_qos_in_parallel(Worker, SessId, QosToAddList, GuidsAndPaths) ->
     utils:pmap(fun(QosToAdd) ->
@@ -314,74 +305,11 @@ add_qos(Worker, SessId, Path, QosExpression, ReplicasNum, QosName, GuidsAndPaths
 
     % check that file qos has been set and that it is not fulfilled
     {ok, #file_qos{qos_list = FileQos}} = ?assertMatch(
-        {ok, #file_qos{qos_list = _FileQos}},
-        lfm_proxy:get_file_qos(Worker, SessId, {guid, Guid})
+        {ok, {_,_}}, lfm_proxy:get_file_qos(Worker, SessId, {guid, Guid})
     ),
     ?assertMatch(false, rpc:call(Worker, lfm_qos, check_qos_fulfilled, [SessId, FileQos])),
 
     {QosName, QosId, Path}.
-
-wait_for_qos_fulfilment(Worker, SessId, QosId, QosName, Path) ->
-    {ok, QosRecord} = ?assertMatch({ok, _}, lfm_proxy:get_qos_details(Worker, SessId, QosId)),
-    ct:pal("Waiting for fulfilment of qos ~p: ~n"
-    "    Expression:          ~p~n", [QosName, QosRecord#qos_item.expression]
-    ),
-    wait_for_qos_fulfilment(Worker, SessId, QosId, QosName, Path, ?ATTEMPTS).
-
-wait_for_qos_fulfilment(Worker, SessId, QosId, QosName, Path, _Attempts) ->
-    {ok, QosRecord} = ?assertMatch({ok, _}, lfm_proxy:get_qos_details(Worker, SessId, QosId)),
-    case wait_for_transfers(Worker, [], Path, QosId) of
-        true ->
-            {Path, QosId};
-        false ->
-            print_qos_fulfilment_timeout_msg(QosRecord, QosName),
-            timeout
-    end.
-
-print_qos_fulfilment_timeout_msg(Qos, QosName) ->
-    ct:pal("Timeout while waiting for fulfilment of qos ~p: ~n"
-    "    Expression:          ~p~n",
-        [QosName, Qos#qos_item.expression]
-    ).
-
-wait_for_transfers(Worker, Transfers, Path, QosId) ->
-    lists:foreach(fun(TransferId) ->
-        {ok, #document{value = TransferRecord}} = rpc:call(Worker, transfer, get, [TransferId]),
-        ct:pal("Transfer for ~p in progress: ~n"
-        "  from: ~p~n"
-        "  to    ~p~n",
-            [TransferRecord#transfer.path, TransferRecord#transfer.scheduling_provider,
-                TransferRecord#transfer.replicating_provider])
-    end, Transfers),
-    wait_for_transfers(Worker, Transfers, Path, QosId, ?ATTEMPTS).
-
-wait_for_transfers(Worker, Transfers, Path, QosId, Attempts) ->
-    ActiveTransferList = lists:foldl(fun(TransferId, Acc) ->
-        case rpc:call(Worker, transfer, get, [TransferId]) of
-            {ok, #document{value = TransferRecord}} ->
-                case rpc:call(Worker, transfer, is_ended, [TransferRecord]) of
-                    true ->
-                        Acc;
-                    false ->
-                        [TransferId | Acc]
-                end;
-            {error, not_found} ->
-                Acc
-        end
-    end, [], Transfers),
-
-    case length(ActiveTransferList) of
-        0 ->
-            true;
-        _ ->
-            case Attempts == 0 of
-                true ->
-                    false;
-                false ->
-                    timer:sleep(1000),
-                    wait_for_transfers(Worker, Transfers, Path, QosId, Attempts - 1)
-            end
-    end.
 
 mock_providers_qos(Config, Mock) ->
     Workers = ?config(op_worker_nodes, Config),

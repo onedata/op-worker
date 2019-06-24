@@ -70,4 +70,15 @@
 -define(IN_PROGRESS, in_progess).
 -define(FULFILLED, fulfilled).
 
+% Traverse task statuses
+-define(TRAVERSE_TASK_ONGOING_STATUS, ongoing).
+-define(TRAVERSE_TASK_FINISHED_STATUS, finished).
+
+-define(IMPOSSIBLE_QOS_KEY, <<"unsatisfiable_qos_key">>).
+
+% qos status
+-define(QOS_IN_PROGRESS_STATUS, in_progress).
+-define(QOS_TRAVERSE_FINISHED_STATUS, traverse_finished).
+-define(QOS_IMPOSSIBLE_STATUS, impossible).
+
 -endif.

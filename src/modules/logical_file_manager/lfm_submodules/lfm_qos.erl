@@ -18,7 +18,8 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% API
--export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2, check_qos_fulfilled/2]).
+-export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2,
+    check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -88,10 +89,24 @@ remove_qos(SessId, QosId) ->
 %% Check if given qos is fulfilled.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id() | file_qos:qos_list()) -> boolean().
-check_qos_fulfilled(SessId, QosList) when is_list(QosList) ->
-    lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId) end, QosList);
-check_qos_fulfilled(SessId, QosId) ->
-    {ok, Qos} = get_qos_details(SessId, QosId),
-    Qos#qos_entry.status == ?FULFILLED.
+-spec check_qos_fulfilled(session:id(), qos_entry:id() | list(qos_entry:id())) -> boolean().
+check_qos_fulfilled(SessId, QosList) ->
+    check_qos_fulfilled(SessId, QosList, {guid, undefined}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given qos is fulfilled for given file.
+%% @end
+%%--------------------------------------------------------------------
+check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
+    lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
+check_qos_fulfilled(SessId, QosId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    case get_qos_details(SessId, QosId) of
+        {ok, QosItem} ->
+            qos_entry:check_fulfilment(QosId, FileGuid, QosItem);
+        {error, ?ENOENT} ->
+            false
+    end.
 

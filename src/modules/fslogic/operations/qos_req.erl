@@ -73,6 +73,25 @@ remove_qos(UserCtx, FileCtx, QosId) ->
         fun remove_qos_insecure/3
     ).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicates file according to it's effective qos.
+%% @end
+%%--------------------------------------------------------------------
+replicate_using_effective_qos(FileCtx, SessId) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    EffQos = file_qos:get(FileUuid),
+
+    case EffQos of
+        undefined ->
+            ok;
+        _ ->
+            TargetStorages = maps:keys(EffQos#file_qos.target_storages),
+            lists:foreach(fun(QosId) ->
+                qos_traverse:fulfill_qos(SessId, FileCtx, QosId, TargetStorages)
+            end, EffQos#file_qos.qos_list)
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -100,68 +119,22 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
     }},
     {ok, #document{key = QosId}} = qos_entry:create(QosEntryToCreate, SpaceId),
 
-    case file_ctx:is_dir(FileCtx) of
-        {true, _FileCtx} ->
-            add_qos_for_dir(UserCtx, FileCtx, QosId, QosExpressionInRPN, ReplicasNum);
-        {false, _FileCtx} ->
-            add_qos_for_file(UserCtx, FileCtx, QosId, QosExpressionInRPN, ReplicasNum)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Adds QoS ID to file_qos document. Starts qos_traverse task for file.
-%% @end
-%%--------------------------------------------------------------------
--spec add_qos_for_file(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(),
-    qos_expression:expression(), qos_entry:replicas_num()) ->
-    fslogic_worker:provider_response().
-add_qos_for_file(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    SessId = user_ctx:get_session_id(UserCtx),
-
-    create_or_update_file_qos_doc(FileGuid, QosId, []),
-    qos_traverse:fulfill_qos(SessId, FileCtx, QosId, QosExpression, ReplicasNum, undefined),
-
-    % invalidate bounded cache
-    qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #qos_id{id = QosId}
-    }.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Adds QoS ID to file_qos document. Starts qos_traverse task for directory.
-%% @end
-%%--------------------------------------------------------------------
--spec add_qos_for_dir(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(),
-    qos_expression:expression(), pos_integer()) -> fslogic_worker:provider_response().
-add_qos_for_dir(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    SessId = user_ctx:get_session_id(UserCtx),
 
     % TODO: for now target storage for dir is selected here and does not change
     % in qos traverse task. Have to figure out how to choose different
     % storages for subdirs and/or file if multiple storage fulfilling qos are
     % available.
-    TargetStorageList = qos_traverse:get_target_storages(
-        SessId, {guid, FileGuid}, QosExpression, ReplicasNum
-    ),
+    Guid = file_ctx:get_guid_const(FileCtx),
+    TargetStoragesList = qos_traverse:get_target_storages(user_ctx:get_session_id(UserCtx),
+        {guid, Guid}, QosExpressionInRPN, ReplicasNum),
 
-    case TargetStorageList of
-        ?CANNOT_FULFILL_QOS ->
-            create_or_update_file_qos_doc(FileGuid, QosId, []),
-            {ok, _} = qos_entry:set_status(QosId, ?IMPOSSIBLE);
-        TargetStorageList ->
-            create_or_update_file_qos_doc(FileGuid, QosId, TargetStorageList),
-            qos_traverse:fulfill_qos(
-                SessId, FileCtx, QosId, QosExpression, ReplicasNum, TargetStorageList
-            )
+    case TargetStoragesList of
+        {error, cannot_fulfill_qos} ->
+            qos_entry:add_impossible_qos(QosId, SpaceId);
+        _ ->
+            create_or_update_file_qos_doc(FileCtx, QosId, TargetStoragesList),
+            qos_traverse:fulfill_qos(user_ctx:get_session_id(UserCtx), FileCtx, QosId,
+                TargetStoragesList)
     end,
 
     % invalidate bounded cache
@@ -171,6 +144,7 @@ add_qos_for_dir(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
         status = #status{code = ?OK},
         provider_response = #qos_id{id = QosId}
     }.
+
 
 %%--------------------------------------------------------------------
 %% @private

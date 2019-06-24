@@ -272,7 +272,7 @@
     file_guid :: file_id:guid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
-    status = undefined :: qos_entry:status()
+    status = in_progress :: qos_entry:status()
 }).
 
 -record(file_meta, {
