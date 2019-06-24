@@ -35,7 +35,7 @@
 %% Behaviour callbacks
 -export([do_master_job/1, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
-% Record that defined master job
+% Record that defines master job
 -record(tree_travserse, {
     % File or directory processed by job
     doc :: file_meta:doc(),
@@ -97,25 +97,25 @@ run(Pool, DocOrCtx, Opts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), DocOrCtx, Opts);
 run(Pool, #document{} = Doc, Opts) ->
     TaskID = case maps:get(task_id, Opts, undefined) of
-                 undefined -> datastore_utils:gen_key();
-                 ID -> ID
-             end,
+        undefined -> datastore_utils:gen_key();
+        ID -> ID
+    end,
     ExecuteActionOnDir = maps:get(execute_slave_on_dir, Opts, false),
     BatchSize = maps:get(batch_size, Opts, 100),
     TraverseInfo = maps:get(traverse_info, Opts, undefined),
 
     RunOpts = case maps:get(target_provider_id, Opts, undefined) of
-                  undefined -> #{executor => oneprovider:get_id_or_undefined()};
-                  TargetID -> #{creator => oneprovider:get_id_or_undefined(), executor => TargetID}
-              end,
+        undefined -> #{executor => oneprovider:get_id_or_undefined()};
+        TargetID -> #{creator => oneprovider:get_id_or_undefined(), executor => TargetID}
+    end,
     RunOpts2 = case maps:get(callback_module, Opts, undefined) of
-                   undefined -> RunOpts;
-                   CM -> RunOpts#{callback_module => CM}
-               end,
+        undefined -> RunOpts;
+        CM -> RunOpts#{callback_module => CM}
+    end,
     RunOpts3 = case maps:get(group_id, Opts, undefined) of
-                   undefined -> RunOpts2;
-                   Group -> RunOpts2#{group_id => Group}
-               end,
+        undefined -> RunOpts2;
+        Group -> RunOpts2#{group_id => Group}
+    end,
 
     ok = traverse:run(Pool, TaskID, #tree_travserse{
         doc = Doc,
@@ -201,13 +201,13 @@ do_master_job(#tree_travserse{
 
     % TODO - czy job na nastepny batch nie powinien isc na koniec listy?
     FinalMasterJobs = case Token2#link_token.is_last of
-                          true -> lists:reverse(MasterJobs);
-                          false -> [TT#tree_travserse{
-                              token = Token2,
-                              last_name = LN2,
-                              last_tree = LT2
-                          } | lists:reverse(MasterJobs)]
-                      end,
+        true -> lists:reverse(MasterJobs);
+        false -> [TT#tree_travserse{
+            token = Token2,
+            last_name = LN2,
+            last_tree = LT2
+        } | lists:reverse(MasterJobs)]
+    end,
     {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}}.
 
 %%--------------------------------------------------------------------

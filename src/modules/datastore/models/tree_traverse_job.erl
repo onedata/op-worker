@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding traverse jobs (see tree_traverse.erl). Main jobs for each task
-%%% are synchrinized between providers, other are local for provider executing task.
+%%% are synchronized between providers, other are local for provider executing task.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(tree_traverse_job).
