@@ -53,6 +53,8 @@
 -define(HANDLE_SERVICE_2, <<"hservice2Id">>).
 -define(HANDLE_1, <<"handle1Id">>).
 -define(HANDLE_2, <<"handle2Id">>).
+-define(HARVESTER_1, <<"harvester1Id">>).
+-define(HARVESTER_2, <<"harvester2Id">>).
 
 % User authorizations
 % Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
@@ -81,8 +83,8 @@
 -define(GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS, #{?GROUP_1 := [?HANDLE_VIEW], ?GROUP_2 := [?HANDLE_VIEW]}).
 
 % Mocked user data
--define(USER_NAME(__User), __User).
--define(USER_ALIAS(__User), __User).
+-define(USER_FULL_NAME(__User), __User).
+-define(USER_USERNAME(__User), __User).
 -define(USER_EMAIL_LIST(__User), [__User]).
 -define(USER_LINKED_ACCOUNTS_VALUE(__User), [#{<<"userId">> => __User}]).
 -define(USER_LINKED_ACCOUNTS_MATCHER(__User), [#{<<"userId">> := __User}]).
@@ -97,16 +99,6 @@
 -define(GROUP_NAME(__Group), __Group).
 -define(GROUP_TYPE_JSON(__Group), <<"role">>).
 -define(GROUP_TYPE_ATOM(__Group), role).
--define(GROUP_DIRECT_PARENTS(__Group), [?GROUP_1, ?GROUP_2]).
--define(GROUP_DIRECT_CHILDREN_VALUE(__Group), ?GROUP_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_DIRECT_CHILDREN_MATCHER(__Group), ?GROUP_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_EFF_CHILDREN_VALUE(__Group), ?GROUP_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_EFF_CHILDREN_MATCHER(__Group), ?GROUP_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_DIRECT_USERS_VALUE(__Group), ?USER_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_DIRECT_USERS_MATCHER(__Group), ?USER_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_EFF_USERS_VALUE(__Group), ?USER_PERMS_IN_GROUP_VALUE_BINARIES).
--define(GROUP_EFF_USERS_MATCHER(__Group), ?USER_PERMS_IN_GROUP_MATCHER_ATOMS).
--define(GROUP_EFF_SPACES(__Group), [?SPACE_1, ?SPACE_2]).
 
 % Mocked space data
 -define(SPACE_NAME(__Space), __Space).
@@ -121,6 +113,7 @@
 -define(SPACE_PROVIDERS_VALUE(__Space), #{?PROVIDER_1 => 1000000000, ?PROVIDER_2 => 1000000000}).
 -define(SPACE_PROVIDERS_MATCHER(__Space), #{?PROVIDER_1 := 1000000000, ?PROVIDER_2 := 1000000000}).
 -define(SPACE_SHARES(__Space), [?SHARE_1, ?SHARE_2]).
+-define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -163,6 +156,31 @@
 -define(HANDLE_EFF_GROUPS_VALUE(__Handle), ?GROUP_PERMS_IN_HANDLE_VALUE_BINARIES).
 -define(HANDLE_EFF_GROUPS_MATCHER(__Handle), ?GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS).
 
+% Mocked harvester data
+-define(HARVESTER_SPACE1(__Harvester), <<"harvesterSpace1">>).
+-define(HARVESTER_SPACE2(__Harvester), <<"harvesterSpace2">>).
+-define(HARVESTER_SPACE3(__Harvester), <<"harvesterSpace3">>).
+
+-define(HARVESTER_INDEX1(__Harvester), <<"harvesterIndex1">>).
+-define(HARVESTER_INDEX2(__Harvester), <<"harvesterIndex2">>).
+-define(HARVESTER_INDEX3(__Harvester), <<"harvesterIndex3">>).
+
+-define(HARVESTER_SPACES(__Harvester), [
+    ?HARVESTER_SPACE1(__Harvester)
+]).
+-define(HARVESTER_SPACES2(__Harvester), [
+    ?HARVESTER_SPACE2(__Harvester),
+    ?HARVESTER_SPACE3(__Harvester)
+]).
+
+-define(HARVESTER_INDICES(__Harvester), [
+    ?HARVESTER_INDEX1(__Harvester)
+]).
+-define(HARVESTER_INDICES2(__Harvester), [
+    ?HARVESTER_INDEX2(__Harvester),
+    ?HARVESTER_INDEX3(__Harvester)
+]).
+
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
 -define(MOCK_JOINED_GROUP_ID, <<"mockJoinedGroupId">>).
@@ -180,8 +198,8 @@
 -define(MOCK_IDP, <<"mockIdP">>).
 
 -define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
-    name = ?USER_NAME(__User),
-    alias = ?USER_ALIAS(__User),
+    full_name = ?USER_FULL_NAME(__User),
+    username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = ?USER_DEFAULT_SPACE(__User),
@@ -192,8 +210,8 @@
     eff_handles = ?USER_EFF_HANDLES(__User)
 }}).
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
-    name = ?USER_NAME(__User),
-    alias = ?USER_ALIAS(__User),
+    full_name = ?USER_FULL_NAME(__User),
+    username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     default_space = undefined,
@@ -204,8 +222,8 @@
     eff_handles = []
 }}).
 -define(USER_SHARED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
-    name = ?USER_NAME(__User),
-    alias = ?USER_ALIAS(__User),
+    full_name = ?USER_FULL_NAME(__User),
+    username = ?USER_USERNAME(__User),
     emails = [],
     linked_accounts = [],
     default_space = undefined,
@@ -217,27 +235,10 @@
 }}).
 
 
--define(GROUP_PRIVATE_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
+-define(GROUP_SHARED_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
     name = ?GROUP_NAME(__Group),
-    type = ?GROUP_TYPE_ATOM(__Group),
-    direct_parents = ?GROUP_DIRECT_PARENTS(__Group),
-    direct_children = ?GROUP_DIRECT_CHILDREN_MATCHER(__Group),
-    eff_children = ?GROUP_EFF_CHILDREN_MATCHER(__Group),
-    direct_users = ?GROUP_DIRECT_USERS_MATCHER(__Group),
-    eff_users = ?GROUP_EFF_USERS_MATCHER(__Group),
-    eff_spaces = ?GROUP_EFF_SPACES(__Group)
+    type = ?GROUP_TYPE_ATOM(__Group)
 }}).
--define(GROUP_PROTECTED_DATA_MATCHER(__Group), #document{key = __Group, value = #od_group{
-    name = ?GROUP_NAME(__Group),
-    type = ?GROUP_TYPE_ATOM(__Group),
-    direct_parents = [],
-    direct_children = #{},
-    eff_children = #{},
-    direct_users = #{},
-    eff_users = #{},
-    eff_spaces = []
-}}).
--define(GROUP_SHARED_DATA_MATCHER(__Group), ?GROUP_PROTECTED_DATA_MATCHER(__Group)).
 
 
 -define(SPACE_PRIVATE_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
@@ -247,7 +248,8 @@
     direct_groups = ?SPACE_DIRECT_GROUPS_MATCHER(__Space),
     eff_groups = ?SPACE_EFF_GROUPS_MATCHER(__Space),
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
-    shares = ?SPACE_SHARES(__Space)
+    shares = ?SPACE_SHARES(__Space),
+    harvesters = ?SPACE_HARVESTERS(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -256,7 +258,8 @@
     direct_groups = #{},
     eff_groups = #{},
     providers = #{},
-    shares = []
+    shares = [],
+    harvesters = []
 }}).
 
 
@@ -325,12 +328,20 @@
 
 }}).
 
+-define(HARVESTER_PRIVATE_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
+    indices = ?HARVESTER_INDICES(__Harvester),
+    spaces = ?HARVESTER_SPACES(__Harvester)
+}}).
+
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
-    <<"name">> => ?USER_NAME(__UserId),
-    <<"alias">> => ?USER_ALIAS(__UserId),
-    <<"login">> => ?USER_ALIAS(__UserId) % @TODO deprecated, included for backward compatibility
+    <<"fullName">> => ?USER_FULL_NAME(__UserId),
+    <<"username">> => ?USER_USERNAME(__UserId),
+    % @TODO deprecated, included for backward compatibility
+    <<"name">> => ?USER_FULL_NAME(__UserId),
+    <<"login">> => ?USER_USERNAME(__UserId),
+    <<"alias">> => ?USER_USERNAME(__UserId)
 }).
 -define(USER_PROTECTED_DATA_VALUE(__UserId), begin
     __SharedData = ?USER_SHARED_DATA_VALUE(__UserId),
@@ -360,26 +371,6 @@ end).
     <<"name">> => ?GROUP_NAME(__GroupId),
     <<"type">> => ?GROUP_TYPE_JSON(__GroupId)
 }).
--define(GROUP_PROTECTED_DATA_VALUE(__GroupId), begin
-    __SharedData = ?GROUP_SHARED_DATA_VALUE(__GroupId),
-    __SharedData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_group, id = __GroupId, aspect = instance, scope = protected})
-    }
-end).
--define(GROUP_PRIVATE_DATA_VALUE(__GroupId), begin
-    __ProtectedData = ?GROUP_PROTECTED_DATA_VALUE(__GroupId),
-    __ProtectedData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_group, id = __GroupId, aspect = instance, scope = private}),
-        <<"children">> => ?GROUP_DIRECT_CHILDREN_VALUE(__GroupId),
-        <<"effectiveChildren">> => ?GROUP_EFF_CHILDREN_VALUE(__GroupId),
-        <<"parents">> => ?GROUP_DIRECT_PARENTS(__GroupId),
-
-        <<"users">> => ?GROUP_DIRECT_USERS_VALUE(__GroupId),
-        <<"effectiveUsers">> => ?GROUP_EFF_USERS_VALUE(__GroupId),
-
-        <<"spaces">> => ?GROUP_EFF_SPACES(__GroupId)
-    }
-end).
 
 
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
@@ -388,8 +379,7 @@ end).
     <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
-    __ProtectedData = ?SPACE_PROTECTED_DATA_VALUE(__SpaceId),
-    __ProtectedData#{
+    (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = private}),
         <<"users">> => ?SPACE_DIRECT_USERS_VALUE(__SpaceId),
         <<"effectiveUsers">> => ?SPACE_EFF_USERS_VALUE(__SpaceId),
@@ -398,7 +388,8 @@ end).
         <<"effectiveGroups">> => ?SPACE_EFF_GROUPS_VALUE(__SpaceId),
 
         <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-        <<"shares">> => ?SPACE_SHARES(__SpaceId)
+        <<"shares">> => ?SPACE_SHARES(__SpaceId),
+        <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
     }
 end).
 
@@ -446,7 +437,6 @@ end).
             ?DUMMY_PROVIDER_ID -> [];
             _ -> ?PROVIDER_EFF_GROUPS(__ProviderId)
         end
-
     }
 end).
 
@@ -477,7 +467,8 @@ end).
     }
 end).
 
-
-
-
-
+-define(HARVESTER_PRIVATE_DATA_VALUE(__HarvesterId), #{
+    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = private}),
+    <<"indices">> => ?HARVESTER_INDICES(__HarvesterId),
+    <<"spaces">> => ?HARVESTER_SPACES(__HarvesterId)
+}).

@@ -94,7 +94,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     }),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #dir{guid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
+        fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
     }.
 
 %%--------------------------------------------------------------------

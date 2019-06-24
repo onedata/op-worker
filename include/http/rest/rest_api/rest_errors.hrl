@@ -25,6 +25,16 @@
     <<"invalid_name">>,
     <<"Given name is not valid">>)
 ).
+-define(ERROR_NOT_A_DIRECTORY, ?ERROR_REPLY(
+    ?HTTP_400_BAD_REQUEST,
+    <<"not_a_directory">>,
+    <<"Given path or id does not refer to a directory.">>)
+).
+-define(ERROR_SHARE_ALREADY_EXISTS, ?ERROR_REPLY(
+    ?HTTP_400_BAD_REQUEST,
+    <<"error_share_already_exists">>,
+    <<"Share for given directory already exists.">>)
+).
 -define(ERROR_INVALID_ATTRIBUTE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_attribute">>,

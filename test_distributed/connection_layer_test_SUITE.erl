@@ -51,7 +51,6 @@
     fulfill_promises_after_connection_error_test/1,
 
     send_test/1,
-    send_async_test/1,
     communicate_test/1,
 
     client_keepalive_test/1,
@@ -72,7 +71,6 @@
     fulfill_promises_after_connection_error_test,
 
     send_test,
-    send_async_test,
     communicate_test,
 
     client_keepalive_test,
@@ -281,7 +279,7 @@ send_test(Config) ->
         code = ?OK,
         description = Description
     }},
-    ?assertMatch(ok, send_sync_msg(Worker1, SessionId, ServerMsgInternal)),
+    ?assertMatch(ok, send_msg(Worker1, SessionId, ServerMsgInternal)),
 
     ?assertMatch(#'ServerMessage'{
         message_id = undefined,
@@ -296,7 +294,7 @@ send_test(Config) ->
     ok = ssl:close(Sock2).
 
 
-send_async_test(Config) ->
+communicate_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Status = #status{
@@ -311,29 +309,14 @@ send_async_test(Config) ->
 
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
 
-    % when
-    ?assertMatch(ok, send_sync_msg(Worker1, SessionId, ServerMsgInternal)),
+    % when sending msg with id to peer
+    ?assertMatch(ok, send_msg(Worker1, SessionId, ServerMsgInternal)),
 
-    % then
+    % then response should be sent back
     ?assertReceivedMatch(#client_message{
         message_id = MsgId, message_body = Status
     }, ?TIMEOUT),
 
-    ok = ssl:close(Sock).
-
-
-communicate_test(Config) ->
-    % given
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Status = #status{code = ?OK, description = <<"desc">>},
-    ServerMsgInternal = #server_message{message_body = Status},
-
-    % when
-    {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
-    CommunicateResult = communicate(Worker1, SessionId, ServerMsgInternal),
-
-    % then
-    ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
     ok = ssl:close(Sock).
 
 
@@ -482,17 +465,19 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     % when
     fuse_test_utils:create_file(Sock, RootGuid, <<"f1">>),
     FileGuid = get_guid(Worker1, SessionId, <<"/space_name1/f1">>),
-    FileUuid = rpc:call(Worker1, fslogic_uuid, guid_to_uuid, [FileGuid]),
+    FileUuid = rpc:call(Worker1, file_id, guid_to_uuid, [FileGuid]),
     fuse_test_utils:open(Sock, FileGuid),
     ok = ssl:close(Sock),
 
     % then
     timer:sleep(timer:seconds(90)),
 
-    % File was opened 2 times (create and following open) so cancel should
-    % also be called 2 times
+    % File was opened 2 times (create and following open) but since it's one file
+    % cancel should be called once. Unfortunately due to how session is terminated
+    % (session_manager:remove_session may be called several times) it is possible
+    % that cancel will be called more than once.
     CallsNum = rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'], timer:seconds(60)),
-    ?assertMatch(2, CallsNum),
+    ?assert(CallsNum >= 1),
 
     lists:foreach(fun(Num) ->
         ?assertMatch(FileUuid,
@@ -708,12 +693,8 @@ create_resolve_guid_req(Path) ->
     FuseReq.
 
 
-send_sync_msg(Node, SessionId, Msg) ->
+send_msg(Node, SessionId, Msg) ->
     rpc:call(Node, connection_api, send, [SessionId, Msg]).
-
-
-communicate(Node, SessionId, Msg) ->
-    rpc:call(Node, connection_api, communicate, [SessionId, Msg]).
 
 
 %%--------------------------------------------------------------------

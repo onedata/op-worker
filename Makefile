@@ -2,10 +2,11 @@
 
 REPO	        ?= op-worker
 
-# distro for package building (oneof: wily, fedora-23-x86_64)
+# distro for package building (oneof: xenial, centos-7-x86_64)
 DISTRIBUTION    ?= none
 export DISTRIBUTION
 
+RELEASE         ?= 1802
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
 PKG_ID           = op-worker-$(PKG_VERSION)
@@ -21,7 +22,7 @@ OVERLAY_VARS    ?= --overlay_vars=rel/vars.config
 TEMPLATE_SCRIPT := ./rel/overlay.escript
 
 GIT_URL := $(shell git config --get remote.origin.url | sed -e 's/\(\/[^/]*\)$$//g')
-GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgrid.pl:7999/vfs'; else echo ${GIT_URL}; fi)
+GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.onedata.org:7999/vfs'; else echo ${GIT_URL}; fi)
 ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
 export ONEDATA_GIT_URL
 
@@ -35,13 +36,13 @@ all: test_rel
 ## Rebar targets
 ##
 
-compile:
-	$(REBAR) compile
-
 deps:
 	$(REBAR) get-deps
 	make -C _build/default/lib/helpers submodules submodule=clproto
-	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
+	$(LIB_DIR)/gui/pull-gui.sh gui-image.conf
+
+compile: deps
+	$(REBAR) compile
 
 upgrade:
 	$(REBAR) upgrade
@@ -124,7 +125,7 @@ dialyzer:
 
 check_distribution:
 ifeq ($(DISTRIBUTION), none)
-	@echo "Please provide package distribution. Oneof: 'wily', 'fedora-23-x86_64'"
+	@echo "Please provide package distribution. Oneof: 'xenial', 'centos-7-x86_64'"
 	@exit 1
 else
 	@echo "Building package for distribution $(DISTRIBUTION)"

@@ -259,12 +259,14 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 translate_from_protobuf(#'ClientHandshakeRequest'{
     macaroon = Macaroon,
     session_id = SessionId,
-    version = Version
+    version = Version,
+    compatible_oneprovider_versions = CompOpVersions
 }) ->
     #client_handshake_request{
         auth = translate_from_protobuf(Macaroon),
         session_id = SessionId,
-        version = Version
+        version = Version,
+        compatible_oneprovider_versions = CompOpVersions
     };
 translate_from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
@@ -587,7 +589,7 @@ translate_from_protobuf(#'FileChildrenAttrs'{
     };
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
-        uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
+        uuid = file_id:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
@@ -952,18 +954,6 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'CreateShare'{name = Name}) ->
-    #create_share{name = Name};
-translate_from_protobuf(#'RemoveShare'{}) ->
-    #remove_share{};
-translate_from_protobuf(#'Share'{
-    share_id = ShareId,
-    share_file_uuid = ShareGuid
-}) ->
-    #share{
-        share_id = ShareId,
-        share_file_guid = ShareGuid
-    };
 translate_from_protobuf(#'ScheduledTransfer'{transfer_id = TransferId}) ->
     #scheduled_transfer{transfer_id = TransferId};
 
@@ -1605,7 +1595,7 @@ translate_to_protobuf(#file_location{
     blocks = Blocks
 } = Record) ->
     {file_location, #'FileLocation'{
-        uuid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
+        uuid = file_id:pack_guid(Uuid, SpaceId),
         provider_id = ProviderId,
         space_id = SpaceId,
         storage_id = StorageId,
@@ -1969,18 +1959,6 @@ translate_to_protobuf(#metadata{
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
-    }};
-translate_to_protobuf(#create_share{name = Name}) ->
-    {create_share, #'CreateShare'{name = Name}};
-translate_to_protobuf(#remove_share{}) ->
-    {remove_share, #'RemoveShare'{}};
-translate_to_protobuf(#share{
-    share_id = ShareId,
-    share_file_guid = ShareGuid
-}) ->
-    {share, #'Share'{
-        share_id = ShareId,
-        share_file_uuid = ShareGuid
     }};
 translate_to_protobuf(#scheduled_transfer{
     transfer_id = TransferId

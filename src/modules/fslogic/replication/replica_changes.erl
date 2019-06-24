@@ -162,7 +162,7 @@ rename_or_delete(FileCtx,
                 ok -> ok;
                 {error, ?ENOENT} -> ok
             end,
-            NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
+            NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
             {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
 
             RenamedDoc = Doc#document{value = Loc#file_location{

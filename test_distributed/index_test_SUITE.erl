@@ -117,9 +117,8 @@ query_index_using_file_meta(Config) ->
     SpaceId = <<"space_id1">>,
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
+    {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -138,12 +137,7 @@ query_index_using_file_meta(Config) ->
             <<"mode">> := 8#775,
             <<"owner">> := ?ROOT_USER_ID,
             <<"group_owner">> := null,
-            <<"size">> := 0,
-            <<"version">> := 0,
-            <<"is_scope">> := true,
-            <<"scope">> := SpaceUuid,
             <<"provider_id">> := ProviderId,
-            <<"link_value">> := null,
             <<"shares">> := [],
             <<"deleted">> := false,
             <<"parent_uuid">> := <<"">>
@@ -155,7 +149,7 @@ query_index_using_times(Config) ->
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
+    {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -195,7 +189,7 @@ query_index_using_custom_metadata(Config) ->
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
+    {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
 
     XattrName = <<"xattr_name">>,
@@ -236,12 +230,12 @@ query_index_using_file_popularity(Config) ->
     ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
     FilePath = ?TEST_FILE(?SPACE_NAME),
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath, 8#664),
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    Uuid = file_id:guid_to_uuid(Guid),
     {ok, H} = lfm_proxy:open(Worker, SessionId, {guid, Guid}, write),
     lfm_proxy:write(Worker, H, 0, TestData),
     lfm_proxy:close(Worker, H),
 
-    {ok, CdmiId} = cdmi_id:guid_to_objectid(Guid),
+    {ok, CdmiId} = file_id:guid_to_objectid(Guid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
 
     SimpleMapFunction = <<"
@@ -275,7 +269,7 @@ query_index_and_emit_ctx(Config) ->
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
+    {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -298,7 +292,7 @@ wrong_map_function(Config) ->
     IndexName = ?index_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    {ok, CdmiId} = cdmi_id:guid_to_objectid(SpaceGuid),
+    {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(_, _, _, _) {

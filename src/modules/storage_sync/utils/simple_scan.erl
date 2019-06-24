@@ -161,7 +161,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
             case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
-                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+                    FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
                     sync_if_file_is_not_being_replicated(Job2, FileCtx, FileType);
                 {ok, _} ->
@@ -261,6 +261,7 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
 import_children(_Job, _Type, _Offset, undefined, _BatchSize) ->
     [];
 import_children(Job = #space_strategy_job{
+    strategy_args = Args,
     strategy_type = StrategyType,
     data = #{
         max_depth := MaxDepth,
@@ -274,8 +275,9 @@ import_children(Job = #space_strategy_job{
     BatchKey = Offset div BatchSize,
     {ChildrenStorageCtxsBatch1, _} =
         storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
+    SyncAcl = maps:get(sync_acl, Args, false),
     {BatchHash, ChildrenStorageCtxsBatch2} =
-        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1),
+        storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch1, SyncAcl),
     {FilesJobs, DirsJobs} = generate_jobs_for_importing_children(Job, Offset,
         FileCtx, ChildrenStorageCtxsBatch2),
     FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
@@ -455,7 +457,7 @@ import_file(#space_strategy_job{
     {ParentCanonicalPath, _} = file_ctx:get_canonical_path(ParentCtx2),
     StorageFileId = filename:join([ParentStorageFileId, FileName]),
     CanonicalPath = filename:join([ParentCanonicalPath, FileName]),
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid2, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
     case file_meta:type(Mode) of
@@ -475,7 +477,7 @@ import_file(#space_strategy_job{
     end,
 
     {ok, FileUuid2} = create_file_meta(FileUuid2, FileName, Mode, OwnerId,
-        GroupId, FSize, ParentUuid, SpaceId, CreateLinks),
+        GroupId, ParentUuid, SpaceId, CreateLinks),
     {ok, _} = create_times(FileUuid2, MTime, ATime, CTime, SpaceId),
     SyncAcl = maps:get(sync_acl, Args, false),
     case SyncAcl of
@@ -868,27 +870,26 @@ maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) -
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file_meta(file_meta:uuid() | undefined, file_meta:name(),
-    file_meta:mode(), od_user:id(), undefined | od_group:id(), file_meta:size(),
-    file_meta:uuid(), od_space:id(), boolean()) -> {ok, file_meta:uuid()}.
+    file_meta:mode(), od_user:id(), undefined | od_group:id(), file_meta:uuid(),
+    od_space:id(), boolean()) -> {ok, file_meta:uuid()}.
 % TODO VFS-5273 - Maybe delete CreateLinks argument
-create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, FileSize,
-    ParentUuid, SpaceId, CreateLinks
+create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, ParentUuid,
+    SpaceId, CreateLinks
 ) ->
     FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode),
-        Mode band 8#1777, OwnerId, GroupId, FileSize, ParentUuid, SpaceId),
+        Mode band 8#1777, OwnerId, GroupId, ParentUuid, SpaceId),
     case CreateLinks of
         true ->
             case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
                 {error, already_exists} ->
                     FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
                     FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode),
-                        Mode band 8#1777, OwnerId, GroupId, FileSize, ParentUuid, SpaceId),
+                        Mode band 8#1777, OwnerId, GroupId, ParentUuid, SpaceId),
                     file_meta:create({uuid, ParentUuid}, FileMetaDoc2);
                 Other ->
                     Other
             end;
         _ ->
-            %  TODO - czy czegos nie zniszczymy? - wywalic fragment
             file_meta:save(FileMetaDoc, false)
     end.
 
@@ -988,6 +989,8 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                 throw:?ENOTSUP ->
                     ok;
                 throw:?ENOENT ->
+                    ok;
+                throw:?ENODATA ->
                     ok
             end
     end.
@@ -1024,7 +1027,9 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
                 throw:?ENOTSUP ->
                     not_updated;
                 throw:?ENOENT ->
-                    not_updated
+                    not_updated;
+                throw:?ENODATA ->
+                    ok
             end
     end.
 

@@ -158,7 +158,7 @@ end).
 
 -define(assertVersion(ExpectedVersion, Worker, FileGuid, ProviderId, Attempts),
     ?assertEqual(ExpectedVersion, try
-        __FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        __FileUuid = file_id:guid_to_uuid(FileGuid),
         __LocId = file_location:id(__FileUuid, ProviderId),
         {ok, __LocDoc} = rpc:call(Worker, fslogic_location_cache, get_location, [__LocId, __FileUuid]),
         version_vector:get_version(__LocId, ProviderId, file_location:get_version_vector(__LocDoc))

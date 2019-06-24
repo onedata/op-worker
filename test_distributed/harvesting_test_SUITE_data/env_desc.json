@@ -1,0 +1,172 @@
+{
+    "dirs_config": {
+        "cluster_manager": {
+            "input_dir": "_build/default/rel/cluster_manager",
+            "target_dir": "_build/default/rel/test_cluster"
+        },
+        "op_worker": {
+            "input_dir": "_build/default/rel/op_worker",
+            "target_dir": "_build/default/rel/test_cluster"
+        }
+    },
+    "os_configs": {
+        "cfg1": {
+            "storages": [],
+            "users": [],
+            "groups": {}
+        }
+    },
+    "provider_domains": {
+        "p1": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "graph_sync_healthcheck_interval": 999999999
+                    }
+                }
+            }
+        },
+        "p2": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "graph_sync_healthcheck_interval": 999999999
+                    }
+                }
+            }
+        }
+
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space_id1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space_id1": {
+                "displayed_name": "space1",
+                "users": ["user1"],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_id2": {
+                "displayed_name": "space2",
+                "users": ["user1"],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_id3": {
+                "displayed_name": "space3",
+                "users": ["user1"],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_id4": {
+                "displayed_name": "space4",
+                "users": ["user1"],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_id5": {
+                "displayed_name": "space5",
+                "users": ["user1"],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            }
+        },
+        "harvesters": {
+            "harvester1": {
+                "spaces": ["space_id1", "space_id2", "space_id3", "space_id4"],
+                "indices": ["index11"]
+            },
+            "harvester2": {
+                "spaces": ["space_id2"],
+                "indices": ["index21", "index22", "index23"]
+            },
+            "harvester3": {
+                "spaces": ["space_id5"],
+                "indices": ["index31"]
+            }
+        }
+    }
+}

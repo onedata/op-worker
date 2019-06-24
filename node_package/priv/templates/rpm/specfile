@@ -17,8 +17,14 @@
 ## under the License.
 ##
 ## -------------------------------------------------------------------
+%global nfsmountable 0
+%global _scl_prefix {{scl_prefix}}
+%global scl {{scl}}
 
-Name: {{package_name}}
+%{?scl:%scl_package op-worker}
+%{!?scl:%global pkg_name %{name}}
+
+Name: %{?scl_prefix}{{package_name}}
 Version: {{version_}}
 Release: {{release_}}%{?dist}
 License: {{license_type}}
@@ -30,13 +36,21 @@ Vendor: {{vendor_name}}
 Packager: {{vendor_contact_name}} <{{vendor_contact_email}}>
 BuildRoot: %{_tmppath}/%{name}-{{revision_}}-%{release}-root
 Summary: {{package_shortdesc}}
-Obsoletes: {{package_name}}
+Obsoletes: %{?scl_prefix}{{package_name}}
 
-Requires: initscripts{{rpm_requires}}
-BuildRequires: erlang-erts{{rpm_build_requires}}
+Requires: initscripts
+{{rpm_requires}}
+{{rpm_build_requires}}
+
+%undefine _missing_build_ids_terminate_build
+%define _unpackaged_files_terminate_build 0
 
 %description
 {{package_desc}}
+
+%define _sysconfdir %{_scl_root}/etc
+%define _localstatedir %{_scl_root}/var
+%define _sharedstatedir %{_scl_root}/var/lib
 
 %define init_script %{_sysconfdir}/init.d/{{package_install_name}}
 %define debug_package %{nil}
@@ -48,6 +62,7 @@ BuildRequires: erlang-erts{{rpm_build_requires}}
 %define platform_base_dir %{_libdir}/{{package_install_name}}
 %define platform_lib_dir %{platform_base_dir}/lib
 %define platform_log_dir %{_localstatedir}/log/{{package_install_name}}
+%define platform_run_dir %{_localstatedir}/run
 
 
 %prep
@@ -63,6 +78,7 @@ cat > rpm.vars.config <<EOF
 {platform_base_dir,   "%{platform_base_dir}"}.
 {platform_lib_dir,    "%{platform_lib_dir}"}.
 {platform_log_dir,    "%{platform_log_dir}"}.
+{platform_run_dir,    "%{platform_run_dir}"}.
 
 {runner_script_dir,   "%{platform_bin_dir}"}.
 {runner_base_dir,     "%{platform_base_dir}"}.
@@ -71,6 +87,7 @@ cat > rpm.vars.config <<EOF
 {runner_log_dir,      "%{platform_log_dir}"}.
 {runner_lib_dir,      "%{platform_lib_dir}"}.
 {runner_patch_dir,    "%{platform_lib_dir}/{{package_patch_dir}}"}.
+{runner_run_dir,      "%{platform_run_dir}"}.
 {runner_user,         "{{package_runner_user}}"}.
 {runner_wait_process, "{{package_runner_wait_process}}"}.
 {pipe_dir,            "%{_localstatedir}/run/{{package_install_name}}/"}.
@@ -78,19 +95,31 @@ cat > rpm.vars.config <<EOF
 EOF
 
 %build
-{{rpm_build}}
-OVERLAY_VARS="--overlay_vars=rpm.vars.config" make {{build_envs}} rel
-
+. /opt/rh/devtoolset-6/enable
+. /opt/onedata/%{scl}/enable
+mkdir -p %{_builddir}/tmp/cmake3
+ln -nsf /usr/bin/cmake3 %{_builddir}/tmp/cmake3/cmake
+OVERLAY_VARS="--overlay_vars=rpm.vars.config" \
+LD_LIBRARY_PATH="/opt/onedata/{{scl}}/root/usr/lib64" \
+LDFLAGS="-L/opt/onedata/{{scl}}/root/usr/lib64" \
+CFLAGS="-I/opt/onedata/{{scl}}/root/usr/include" \
+CXXFLAGS="-I/opt/onedata/{{scl}}/root/usr/include -L/opt/onedata/{{scl}}/root/usr/lib64" \
+CMAKE_CXX_FLAGS="-I/opt/onedata/{{scl}}/root/usr/include" \
+CPLUS_INCLUDE_PATH="/opt/onedata/{{scl}}/root/usr/include" \
+CMAKE_INCLUDE_PATH="/opt/onedata/{{scl}}/root/usr/include" \
+PATH=$PATH:/opt/onedata/{{scl}}/root/usr/lib64:%{_builddir}/tmp/cmake3 \
+make REBAR_PROFILE=package rel
 %install
 %define relpath       %{_builddir}/%{buildsubdir}/_build/package/rel/{{package_install_name}}
-%define buildroot_lib %{buildroot}%{_libdir}/{{package_install_name}}
 %define buildroot_etc %{buildroot}%{_sysconfdir}/{{package_install_name}}
+%define buildroot_lib %{buildroot}%{_libdir}/{{package_install_name}}
+%define buildroot_var %{buildroot}%{_localstatedir}
 
 mkdir -p %{buildroot_etc}
 mkdir -p %{buildroot_lib}
-mkdir -p %{buildroot}%{_localstatedir}/lib/{{package_install_name}}
-mkdir -p %{buildroot}%{_localstatedir}/log/{{package_install_name}}
-mkdir -p %{buildroot}%{_localstatedir}/run/{{package_install_name}}
+mkdir -p %{buildroot_var}/lib/{{package_install_name}}
+mkdir -p %{buildroot_var}/log/{{package_install_name}}
+mkdir -p %{buildroot_var}/run/{{package_install_name}}
 
 cp -R %{relpath}/lib       %{buildroot_lib}
 cp -R %{relpath}/erts-*    %{buildroot_lib}
@@ -117,12 +146,12 @@ if [ -d %{_builddir}/%{buildsubdir}/doc/man/man1 ]; then \
 
 cp -R %{relpath}/etc/* %{buildroot_etc}
 
-mkdir -p %{buildroot}%{_localstatedir}/lib/{{package_install_name}}
+mkdir -p %{buildroot_var}/lib/{{package_install_name}}
 cp -R %{relpath}/data/* \
-      %{buildroot}%{_localstatedir}/lib/{{package_install_name}}
+      %{buildroot_var}/lib/{{package_install_name}}
 
-mkdir -p %{buildroot}%{_sysconfdir}/init.d
-install -m755 %SOURCE1 %{buildroot}%{_sysconfdir}/init.d/{{package_install_name}}
+mkdir -p %{buildroot}%{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/init.d
+install -m755 %SOURCE1 %{buildroot}%{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/init.d/{{package_install_name}}
 
 # Needed to work around check-rpaths which seems to be hardcoded into recent
 # RPM releases
@@ -186,7 +215,7 @@ exit 0
 %{_localstatedir}/lib/{{package_install_name}}
 %{_localstatedir}/log/{{package_install_name}}
 %{_localstatedir}/run/{{package_install_name}}
-%{_sysconfdir}/init.d/{{package_install_name}}
+%{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/init.d/{{package_install_name}}
 
 %clean
 rm -rf %{buildroot}

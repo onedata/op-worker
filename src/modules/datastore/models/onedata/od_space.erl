@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model server as cache for od_space records
+%%% This model serves as cache for od_space records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -36,7 +36,7 @@
 }).
 
 %% API
--export([save/1, get/1, delete/1, list/0, run_after/3]).
+-export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
@@ -47,38 +47,21 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves handle.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc) ->
+-spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
+save_to_cache(Doc) ->
     ?extract_key(datastore_model:save(?CTX, Doc)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns handle.
-%% @end
-%%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
+
+-spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
+get_from_cache(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes handle.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(id()) -> ok | {error, term()}.
-delete(Key) ->
+
+-spec invalidate_cache(id()) -> ok | {error, term()}.
+invalidate_cache(Key) ->
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
@@ -89,21 +72,28 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(create, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
+run_after(create, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
-run_after(update, [_, _, _, _], {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc),
+    Result;
+run_after(update, [_, _, _, _], Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
-run_after(save, _, {ok, SpaceDoc = #document{key = SpaceId}}) ->
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc),
+    Result;
+run_after(save, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc),
+    Result;
 run_after(update, _, {ok, SpaceDoc = #document{}}) ->
     ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc);
+    emit_monitoring_event(SpaceDoc),
+    maybe_revise_space_harvesters(SpaceDoc);
 run_after(_Function, _Args, Result) ->
     Result.
 
@@ -127,7 +117,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -174,6 +164,22 @@ get_record_struct(2) ->
         {shares, [string]},
 
         {cache_state, #{atom => term}}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {name, string},
+
+        {direct_users, #{string => [atom]}},
+        {eff_users, #{string => [atom]}},
+
+        {direct_groups, #{string => [atom]}},
+        {eff_groups, #{string => [atom]}},
+
+        {providers, #{string => integer}},
+        {shares, [string]},
+        {harvesters, [string]}, % new field
+
+        {cache_state, #{atom => term}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -199,19 +205,50 @@ upgrade_record(1, Space) ->
 
         _RevisionHistory
     } = Space,
-    {2, #od_space{
+    {2, {od_space,
+        Name,
+
+        #{},
+        #{},
+
+        #{},
+        #{},
+
+        #{},
+        [],
+
+        #{}
+    }};
+upgrade_record(2, Space) ->
+    {
+        od_space,
+        Name,
+
+        DirectUsers,
+        EffUsers,
+
+        DirectGroups,
+        EffGroups,
+
+        Providers,
+        Shares,
+
+        CacheState
+    } = Space,
+    {3, #od_space{
         name = Name,
 
-        direct_users = #{},
-        eff_users = #{},
+        direct_users = DirectUsers,
+        eff_users = EffUsers,
 
-        direct_groups = #{},
-        eff_groups = #{},
+        direct_groups = DirectGroups,
+        eff_groups = EffGroups,
 
-        providers = #{},
-        shares = [],
+        providers = Providers,
+        shares = Shares,
+        harvesters = [],
 
-        cache_state = #{}
+        cache_state = CacheState
     }}.
 
 %%%===================================================================
@@ -224,7 +261,7 @@ upgrade_record(1, Space) ->
 %% Sends event informing about od_space update if provider supports the space.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_monitoring_event(doc()) -> no_return().
+-spec emit_monitoring_event(doc()) -> {ok, id()}.
 emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
     case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
         true -> monitoring_event_emitter:emit_od_space_updated(SpaceId);
@@ -232,3 +269,16 @@ emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
     end,
     {ok, SpaceId}.
 
+-spec maybe_revise_space_harvesters(doc()) -> ok.
+maybe_revise_space_harvesters(#document{
+    key = SpaceId,
+    value = #od_space{harvesters = Harvesters}
+}) ->
+    case provider_logic:supports_space(SpaceId) of
+        true ->
+            spawn(fun() ->
+                main_harvesting_stream:revise_space_harvesters(SpaceId, Harvesters)
+            end);
+        false ->
+            ok
+    end.

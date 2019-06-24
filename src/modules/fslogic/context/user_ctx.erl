@@ -15,6 +15,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Context definition
@@ -40,10 +41,10 @@
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
-    {ok, Session} = session:get(SessId),
-    #user_ctx{
-        session = Session
-    }.
+    case session:get(SessId) of
+        {ok, Session} -> #user_ctx{session = Session};
+        {error, not_found} -> throw(?EACCES)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

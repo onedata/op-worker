@@ -31,7 +31,7 @@
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
--export([has_eff_user/2, has_eff_user/3]).
+-export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
 -export([support_space/2, support_space/3]).
 -export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
@@ -49,7 +49,7 @@
 -export([fetch_compatibility_config/1]).
 -export([assert_zone_compatibility/0]).
 -export([provider_connection_ssl_opts/1]).
--export([assert_provider_compatibility/3]).
+-export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1, verify_provider_identity/2]).
 -export([verify_provider_nonce/2]).
 
@@ -98,7 +98,6 @@ get(SessionId, ProviderId) ->
         gri = #gri{type = od_provider, id = ProviderId, aspect = instance},
         subscribe = true
     }).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -252,10 +251,13 @@ get_spaces(SessionId, ProviderId) ->
     end.
 
 
+-spec has_eff_user(od_user:id()) -> boolean().
+has_eff_user(UserId) ->
+    has_eff_user(?ROOT_SESS_ID, ?SELF, UserId).
+
 -spec has_eff_user(od_provider:doc(), od_user:id()) -> boolean().
 has_eff_user(#document{value = #od_provider{eff_users = EffUsers}}, UserId) ->
     lists:member(UserId, EffUsers).
-
 
 -spec has_eff_user(gs_client_worker:client(), od_provider:id(), od_user:id()) ->
     boolean().
@@ -368,7 +370,7 @@ update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain() ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:domain()} | gs_protocol:error().
 get_domain() ->
     get_domain(?ROOT_SESS_ID, ?SELF).
 
@@ -378,7 +380,7 @@ get_domain() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_domain(od_provider:id()) ->
-    {ok, od_provider:doc()} | gs_protocol:error().
+    {ok, od_provider:domain()} | gs_protocol:error().
 get_domain(ProviderId) ->
     get_domain(?ROOT_SESS_ID, ProviderId).
 
@@ -748,7 +750,11 @@ verify_provider_identity(ProviderId) ->
             {error, _} = Error ->
                 Error
         end
-    catch _:_ ->
+    catch Type:Reason ->
+        ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
+            provider_logic:to_string(ProviderId),
+            Type, Reason
+        ]),
         ?ERROR_UNAUTHORIZED
     end.
 
@@ -886,10 +892,9 @@ provider_connection_ssl_opts(Domain) ->
 %% Assert that peer provider is of compatible version.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_provider_compatibility(od_provider:id(), Domain :: binary(), Hostname :: binary()) ->
-    ok | no_return().
-assert_provider_compatibility(ProviderId, Domain, Hostname) ->
-    case fetch_compatibility_config({oneprovider, Domain, Hostname}) of
+-spec assert_provider_compatibility(Domain :: binary()) -> ok | no_return().
+assert_provider_compatibility(Domain) ->
+    case fetch_compatibility_config({oneprovider, Domain, Domain}) of
         {ok, RemoteOpVersion, RemoteCompOpVersionsBin} ->
             OpVersion = oneprovider:get_version(),
             CompOpVersions = application:get_env(
@@ -901,24 +906,14 @@ assert_provider_compatibility(ProviderId, Domain, Hostname) ->
                 true ->
                     ok;
                 false ->
-                    ?error("Discarding connection to provider ~p because of "
-                    "incompatible version. ~n"
-                    "Local version: ~s, supports providers: ~p~n"
-                    "Remote version: ~s, supports providers: ~p~n", [
-                        ProviderId,
-                        OpVersion,
-                        CompOpVersions,
+                    throw({
+                        incompatible_peer_op_version,
                         RemoteOpVersion,
                         binaries_to_strings(RemoteCompOpVersionsBin)
-                    ]),
-                    throw(incompatible_peer_op_version)
+                    })
             end;
         {error, {bad_response, Code, _ResponseBody}} ->
-            ?warning("Discarding connection to provider ~p because its "
-            "version cannot be determined (HTTP ~b). ~n", [
-                ProviderId, Code
-            ]),
-            throw(cannot_check_peer_op_version);
+            throw({cannot_check_peer_op_version, Code});
         {error, Error} ->
             error(Error)
     end.

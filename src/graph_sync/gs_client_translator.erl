@@ -41,8 +41,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
             default_space = gs_protocol:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
@@ -59,8 +59,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null)),
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result)
         }
@@ -70,33 +70,12 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
     #document{
         key = Id,
         value = #od_user{
-            name = maps:get(<<"name">>, Result),
-            alias = gs_protocol:null_to_undefined(maps:get(<<"alias">>, Result, null))
+            full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
+            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null)))
         }
     };
 
-translate(#gri{type = od_group, id = Id, aspect = instance, scope = private}, Result) ->
-    #document{
-        key = Id,
-        value = #od_group{
-            name = maps:get(<<"name">>, Result),
-            type = binary_to_atom(maps:get(<<"type">>, Result), utf8),
-
-            direct_children = privileges_to_atoms(maps:get(<<"children">>, Result)),
-            eff_children = privileges_to_atoms(maps:get(<<"effectiveChildren">>, Result)),
-            direct_parents = maps:get(<<"parents">>, Result),
-
-            direct_users = privileges_to_atoms(maps:get(<<"users">>, Result)),
-            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
-
-            eff_spaces = maps:get(<<"spaces">>, Result)
-        }
-    };
-
-% shared and protected scopes carry the same data
-translate(GRI = #gri{type = od_group, aspect = instance, scope = shared}, Result) ->
-    translate(GRI#gri{scope = protected}, Result);
-translate(#gri{type = od_group, id = Id, scope = protected}, Result) ->
+translate(#gri{type = od_group, id = Id, scope = shared}, Result) ->
     #document{
         key = Id,
         value = #od_group{
@@ -127,7 +106,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
             providers = maps:get(<<"providers">>, Result),
-            shares = maps:get(<<"shares">>, Result)
+            shares = maps:get(<<"shares">>, Result),
+            harvesters = maps:get(<<"harvesters">>, Result)
         }
     };
 
@@ -232,6 +212,15 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         }
     };
 
+translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_harvester{
+            indices = maps:get(<<"indices">>, Result),
+            spaces = maps:get(<<"spaces">>, Result)
+        }
+    };
+
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [
         GRI, Result
@@ -274,22 +263,6 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
         }
     };
 
-apply_scope_mask(Doc = #document{value = #od_group{}}, protected) ->
-    apply_scope_mask(Doc, shared);
-apply_scope_mask(Doc = #document{value = Group = #od_group{}}, shared) ->
-    Doc#document{
-        value = Group#od_group{
-            direct_children = #{},
-            eff_children = #{},
-            direct_parents = [],
-
-            direct_users = #{},
-            eff_users = #{},
-
-            eff_spaces = []
-        }
-    };
-
 apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
     Doc#document{
         value = Space#od_space{
@@ -299,7 +272,8 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
             direct_groups = #{},
             eff_groups = #{},
 
-            shares = []
+            shares = [],
+            harvesters = []
         }
     };
 

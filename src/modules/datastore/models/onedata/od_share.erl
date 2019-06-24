@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model server as cache for od_share records
+%%% This model serves as cache for od_share records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -28,10 +28,10 @@
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
 % Apart from FileUuid and SpaceId, it contains also ShareId.
--type share_guid() :: fslogic_worker:file_guid().
+-type root_file_guid() :: fslogic_worker:file_guid().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, share_guid/0]).
+-export_type([name/0, root_file_guid/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -39,7 +39,7 @@
 }).
 
 %% API
--export([save/1, get/1, delete/1, list/0]).
+-export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
@@ -49,38 +49,21 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves handle.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc) ->
+-spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
+save_to_cache(Doc) ->
     ?extract_key(datastore_model:save(?CTX, Doc)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns handle.
-%% @end
-%%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
+
+-spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
+get_from_cache(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes handle.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(id()) -> ok | {error, term()}.
-delete(Key) ->
+
+-spec invalidate_cache(id()) -> ok | {error, term()}.
+invalidate_cache(Key) ->
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).

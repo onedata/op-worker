@@ -81,7 +81,7 @@ get_session_id(#lfm_context{session_id = SessionId}) ->
 %%--------------------------------------------------------------------
 -spec get_share_id(ctx()) -> od_share:id() | undefined.
 get_share_id(#lfm_context{file_guid = Guid}) ->
-    fslogic_uuid:guid_to_share_id(Guid).
+    file_id:guid_to_share_id(Guid).
 
 %%--------------------------------------------------------------------
 %% @doc

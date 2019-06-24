@@ -29,8 +29,10 @@ get_models() -> [
     od_provider,
     od_handle_service,
     od_handle,
+    od_harvester,
     provider_auth,
     authorization_nonce,
+    file_download_code,
     subscription,
     file_subscription,
     session,
@@ -68,6 +70,7 @@ get_models() -> [
     index,
     autocleaning_run,
     file_popularity_config,
+    harvesting_state,
     idp_access_token,
     tree_travserse_job
 ].

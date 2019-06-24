@@ -98,12 +98,12 @@ list_files(Req, State) ->
                     {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
                     json_utils:encode(
                         lists:map(fun({ChildGuid, ChildPath}) ->
-                            {ok, ObjectId} = cdmi_id:guid_to_objectid(ChildGuid),
+                            {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
                             #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
                         end, Children))
             end;
         {ok, #file_attr{guid = Guid}} ->
-            {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
             json_utils:encode([#{<<"id">> => ObjectId, <<"path">> => Path}])
     end,
     {Response, Req4, State4}.

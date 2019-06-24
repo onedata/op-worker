@@ -198,7 +198,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #user_identity{user_id = <<"user_id">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self]
+        reuse_or_create_fuse_session, [SessId, Iden, undefined, Self]
     )),
     {ok, SessId}.
 

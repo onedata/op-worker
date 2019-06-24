@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @copyright (C) 2017 ACK CYFRONET AGH
-%%% This software is released under the MIT license cited in 'LICENSE.txt'.
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
@@ -22,7 +23,7 @@
 
 %% API
 -export([is_connected/0, force_connection_start/0]).
--export([restart_connection/0]).
+-export([terminate_connection/0, restart_connection/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -47,7 +48,7 @@ supervisor_flags() ->
 %% GraphSync channel.
 %% @end
 %%--------------------------------------------------------------------
-is_connected()->
+is_connected() ->
     worker_proxy:call(?MODULE, is_connected).
 
 
@@ -59,6 +60,7 @@ is_connected()->
 %%--------------------------------------------------------------------
 -spec force_connection_start() -> boolean() | no_return().
 force_connection_start() ->
+    ?info("Attempting to start connection to Onezone (forced)"),
     Node = get_gs_client_node(),
     case rpc:call(Node, worker_proxy, call, [?MODULE, ensure_connected]) of
         % throw on rpc error
@@ -68,18 +70,23 @@ force_connection_start() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Kills existing Onezone connection (if any) and starts a new one if run on
-%% dedicated graph_sync node.
-%% If run on all cluster nodes, the connection will be restarted immediately.
+%% Terminates existing Onezone connection (if any).
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate_connection() -> ok.
+terminate_connection() ->
+    ?info("Terminating connection to Onezone (forced)"),
+    gs_client_worker:force_terminate().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Kills existing Onezone connection (if any) and starts a new one.
 %% @end
 %%--------------------------------------------------------------------
 -spec restart_connection() -> ok.
 restart_connection() ->
-    case global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME) of
-        Pid when is_pid(Pid) -> exit(Pid, kill);
-        _ -> ok
-    end,
-    % Force a reconnection attempt:
+    terminate_connection(),
     force_connection_start(),
     ok.
 
@@ -217,7 +224,7 @@ get_connection_status() ->
 %% @end
 %%--------------------------------------------------------------------
 get_gs_client_node() ->
-    consistent_hasing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
+    consistent_hashing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
 -spec start_gs_client_worker() -> alive | connection_error.
