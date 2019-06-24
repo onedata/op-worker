@@ -61,8 +61,6 @@
     only_one_change_per_fileid_should_be_harvested_in_one_batch_test/1
 ]).
 
--export([count_active_children/2]).
-
 all() -> ?ALL([
     stream_sup_should_be_started,
     stream_supervisor_should_be_restarted,

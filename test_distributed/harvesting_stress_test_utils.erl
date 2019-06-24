@@ -16,7 +16,7 @@
 
 %% API
 -export([mock_harvesting/1, mock_harvesting_stopped/1, harvesting_receive_loop/1,
-    revise_all_spaces/1, revise_space_harvesters/2, delete_harvesting_state/2]).
+    revise_all_spaces/1, revise_space_harvesters/2, delete_harvesting_state/2, count_active_children/2]).
 
 %%%===================================================================
 %%% API
@@ -61,3 +61,9 @@ revise_all_spaces(Node) ->
 
 delete_harvesting_state(Worker, SpaceId) ->
     ok = rpc:call(Worker, harvesting_state, delete, [SpaceId]).
+
+count_active_children(Nodes, Ref) ->
+    lists:foldl(fun(Node, Sum) ->
+        Result = rpc:call(Node, supervisor, count_children, [Ref]),
+        Sum + proplists:get_value(active, Result)
+    end, 0, utils:ensure_list(Nodes)).
