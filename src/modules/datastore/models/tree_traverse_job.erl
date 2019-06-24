@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding traverse jobs. Main jobs for each task
+%%% @doc Model for holding traverse jobs (see tree_traverse.erl). Main jobs for each task
 %%% are synchrinized between providers, other are local for provider executing task.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -22,14 +22,13 @@
 -export([get_ctx/0, get_record_struct/1]).
 
 -type key() :: datastore:key().
--type record() :: #tree_travserse_job{}.
+-type record() :: #tree_traverse_job{}.
 -type doc() :: datastore_doc:doc(record()).
 
 -export_type([doc/0]).
 
 -define(CTX, #{
-    model => ?MODULE,
-    local_links_tree_id => oneprovider:get_id_or_undefined()
+    model => ?MODULE
 }).
 -define(SYNC_CTX, #{
     model => ?MODULE,
@@ -48,23 +47,23 @@
 %% Saves information about job. See save/3 for more information.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:key() | main_job, datastore_doc:scope(), traverse:pool(), traverse:callback_module(), traverse:id(),
-    file_meta:uuid(), file_meta:name(), od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(),
-    tree_traverse:traverse_info()) -> {ok, key()} | {error, term()}.
+-spec save(datastore:key() | main_job, datastore_doc:scope(), traverse:pool(), traverse:callback_module(),
+    traverse:id(), file_meta:uuid(), file_meta:name(), od_provider:id(), tree_traverse:execute_slave_on_dir(),
+    tree_traverse:batch_size(), tree_traverse:traverse_info()) -> {ok, key()} | {error, term()}.
 save(Key, Scope, Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo) ->
     Value = get_record(Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo),
     save(Key, Scope, Value).
 
 -spec delete(datastore:key(), datastore_doc:scope()) -> ok | {error, term()}.
 delete(<<?MAIN_JOB_PREFIX, _>> = Key, Scope) ->
-    % TODO - moze zachowac na przyszlosc? Przyda sie na cos?
     datastore_model:delete(?SYNC_CTX#{scope => Scope}, Key);
 delete(Key, _) ->
     datastore_model:delete(?CTX, Key).
 
--spec get(key() | doc()) -> {ok, traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(), file_meta:name(),
-    od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(), tree_traverse:traverse_info()} | {error, term()}.
-get(#document{value = #tree_travserse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID,
+-spec get(key() | doc()) -> {ok, traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(),
+    file_meta:name(), od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(),
+    tree_traverse:traverse_info()} | {error, term()}.
+get(#document{value = #tree_traverse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID,
     doc_id = DocID, last_name = LastName, last_tree = LastTree, execute_slave_on_dir = OnDir,
     batch_size = BatchSize, traverse_info = TraverseInfo}}) ->
     {ok, Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, binary_to_term(TraverseInfo)};
@@ -82,18 +81,13 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns model's context.
+%% Returns model's context for documents that are not synced.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
@@ -116,23 +110,25 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves information about job. Generates special key for main jobs to treat the differently (main jobs are
-%% synchronized between providers - other not).
+%% Saves information about job. Generates special key for main jobs (see tree_traverse.erl) to treat the differently
+%% (main jobs are synchronized between providers - other not).
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:key() | main_job, datastore_doc:scope(), record()) -> {ok, key()} | {error, term()}.
 save(main_job, Scope, Value) ->
     RandomPart = datastore_utils:gen_key(),
     GenKey = <<?MAIN_JOB_PREFIX, RandomPart/binary>>,
-    ?extract_key(datastore_model:save(?SYNC_CTX#{generated_key => true}, #document{key = GenKey, scope = Scope, value = Value}));
+    ?extract_key(datastore_model:save(?SYNC_CTX#{generated_key => true},
+        #document{key = GenKey, scope = Scope, value = Value}));
 save(<<?MAIN_JOB_PREFIX, _>> = Key, Scope, Value) ->
     ?extract_key(datastore_model:save(?SYNC_CTX, #document{key = Key, scope = Scope, value = Value}));
 save(Key, _, Value) ->
     ?extract_key(datastore_model:save(?CTX, #document{key = Key, value = Value})).
 
 -spec get_record(traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(), file_meta:name(),
-    od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(), tree_traverse:traverse_info()) -> record().
+    od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(),
+    tree_traverse:traverse_info()) -> record().
 get_record(Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo) ->
-    #tree_travserse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID, doc_id = DocID,
+    #tree_traverse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID, doc_id = DocID,
             last_name = LastName, last_tree = LastTree, execute_slave_on_dir = OnDir, batch_size = BatchSize,
             traverse_info = term_to_binary(TraverseInfo)}.

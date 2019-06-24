@@ -285,7 +285,7 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
         master_jobs_delegated => MJobsNum,
         master_jobs_done => MJobsNum
     },
-ct:print("aaaaa ~p", [Description]),
+
     ?assertEqual(Expected, lists:sort(Ans)),
     ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
         rpc:call(Worker, tree_traverse, get_task, [?MODULE, TaskID])),

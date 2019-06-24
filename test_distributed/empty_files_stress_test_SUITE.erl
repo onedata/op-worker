@@ -172,16 +172,16 @@ get_sync_info(Job) ->
 %%%===================================================================
 
 cache_proc(Options) ->
-    tmp_cache:init_cache(?CACHE, Options),
+    bounded_cache:init_cache(?CACHE, Options),
     cache_proc().
 
 cache_proc() ->
     receive
-        {tmp_cache_timer, Options} ->
-            tmp_cache:check_cache_size(Options),
+        {bounded_cache_timer, Options} ->
+            bounded_cache:check_cache_size(Options),
             cache_proc();
         {finish, Pid} ->
-            tmp_cache:terminate_cache(?CACHE, #{}),
+            bounded_cache:terminate_cache(?CACHE),
             Pid ! finished
     end.
 

@@ -131,8 +131,8 @@ effective_value_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir2)),
     {ok, Guid3} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir3)),
 
-    Uid1 = fslogic_uuid:guid_to_uuid(Guid1),
-    Uid3 = fslogic_uuid:guid_to_uuid(Guid3),
+    Uid1 = file_id:guid_to_uuid(Guid1),
+    Uid3 = file_id:guid_to_uuid(Guid3),
 
     {ok, Doc1} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, Uid1}])),
     {ok, Doc3} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, Uid3}])),
@@ -153,7 +153,7 @@ effective_value_test(Config) ->
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>}]},
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
 
-    Timestamp = tmp_cache:get_timestamp(),
+    Timestamp = bounded_cache:get_timestamp(),
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
@@ -610,16 +610,16 @@ extract_query_values(QueryResult) ->
     end, Rows).
 
 cache_proc(Options) ->
-    tmp_cache:init_cache(?CACHE, Options),
+    bounded_cache:init_cache(?CACHE, Options),
     cache_proc().
 
 cache_proc() ->
     receive
-        {tmp_cache_timer, Options} ->
-            tmp_cache:check_cache_size(Options),
+        {bounded_cache_timer, Options} ->
+            bounded_cache:check_cache_size(Options),
             cache_proc();
         {finish, Pid} ->
-            tmp_cache:terminate_cache(?CACHE, #{}),
+            bounded_cache:terminate_cache(?CACHE),
             Pid ! finished
     end.
 

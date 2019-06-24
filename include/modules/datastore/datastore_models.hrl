@@ -700,13 +700,13 @@
     progress :: harvesting_progress:progress()
 }).
 
-% Model that stores information about traverse job that processes single directory/file
--record(tree_travserse_job, {
+% Model that stores information about single traverse job that processes single directory/file (see tree_traverse.erl)
+-record(tree_traverse_job, {
     % Information about execution environment and processing task
     pool :: traverse:pool(),
     callback_module :: traverse:callback_module(),
     task_id :: traverse_task:key(),
-    % Document of processed directory/file
+    % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
     % Information needed to restart directory listing
     last_name :: file_meta:name(),

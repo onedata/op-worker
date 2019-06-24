@@ -7,15 +7,22 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides base functionality for directory tree traversing.
-%%% Bases on traverse framework (see traverse.erl in cluster_worker).
+%%% It bases on traverse framework (see traverse.erl in cluster_worker).
+%%% The module provides functions for pool and tasks start and implementation of some callbacks.
+%%% To use tree traverse, new callback module has to be defined (see traverse_behaviour.erl from cluster_worker) that
+%%% uses callbacks defined in this module and additionally provides do_slave_job function implementation. Next,
+%%% pool and tasks are started using init and run functions from this module.
+%%% The traverse jobs (see traverse.erl for jobs definition) are persisted using tree_traverse_job datastore model
+%%% which stores jobs locally and synchronizes main job for each task between providers (to allow tasks execution
+%%% on other provider resources).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(tree_traverse).
 -author("Michal Wrzeszcz").
 
-% This module is base for traver jobs
+% This module is a base for traverse callback
 % (other callbacks especially for slave jobs have to be defined)
-%-behaviour(job_behaviour).
+%-behaviour(traverse_behaviour).
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -30,6 +37,7 @@
 
 % Record that defined master job
 -record(tree_travserse, {
+    % File or directory processed by job
     doc :: file_meta:doc(),
     % Fields used for directory listing
     token :: datastore_links_iter:token() | undefined,
@@ -38,7 +46,7 @@
     batch_size :: batch_size(),
     % Traverse config
     execute_slave_on_dir :: execute_slave_on_dir(), % generate slave jobs also for directories
-    traverse_info :: traverse_info() % Info passed to every slave job
+    traverse_info :: traverse_info() % info passed to every slave job
 }).
 
 -type master_job() :: #tree_travserse{}.
@@ -65,11 +73,6 @@
 %%% Main API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes pool.
-%% @end
-%%--------------------------------------------------------------------
 -spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit);
@@ -77,11 +80,6 @@ init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
     traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
         #{executor => oneprovider:get_id_or_undefined()}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes pool.
-%% @end
-%%--------------------------------------------------------------------
 -spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer(),
     [traverse:callback_module()]) -> ok.
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) when is_atom(Pool) ->
@@ -90,20 +88,10 @@ init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) ->
     traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
         #{executor => oneprovider:get_id_or_undefined(), callback_modules => CallbackModules}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv run(Pool, Doc, #{}).
-%% @end
-%%--------------------------------------------------------------------
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx()) -> {ok, traverse:id()}.
 run(Pool, DocOrCtx) ->
     run(Pool, DocOrCtx, #{}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Runs job on pool.
-%% @end
-%%--------------------------------------------------------------------
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, traverse:id()}.
 run(Pool, DocOrCtx, Opts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), DocOrCtx, Opts);
@@ -155,18 +143,13 @@ get_traverse_info(#tree_travserse{traverse_info = TraverseInfo}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Provides doc info from master job record.
+%% Provides file_meta document from master job record.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_doc(master_job()) -> file_meta:job().
 get_doc(#tree_travserse{doc = Doc}) ->
     Doc.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns task.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_task(traverse:pool() | atom(), traverse:id()) -> {ok, traverse_task:doc()} | {error, term()}.
 get_task(Pool, ID) when is_atom(Pool) ->
     get_task(atom_to_binary(Pool, utf8), ID);
@@ -179,7 +162,8 @@ get_task(Pool, ID) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Does master job that traverse directory tree.
+%% Does master job that traverse directory tree. The job lists directory (number of listed children is limited) and
+%% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job()) -> {ok, traverse:master_job_map()}.
@@ -228,7 +212,7 @@ do_master_job(#tree_travserse{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates information about master jobs.
+%% Updates information about master jobs saving it in datastore or deleting if it is finished or canceled.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
@@ -248,11 +232,6 @@ update_job_progress(ID, #tree_travserse{doc = #document{scope = Scope}}, _, _, _
     ok = tree_traverse_job:delete(ID, Scope),
     {ok, ID}.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets master job.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
     {ok, master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_job(DocOrID) ->
@@ -274,7 +253,7 @@ get_job(DocOrID) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Provides information needed for doc synchronization.
+%% Provides information needed for task document synchronization basing on file_meta scope.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sync_info(master_job()) -> {ok, traverse:ctx_sync_info()}.

@@ -59,11 +59,18 @@
 -type time() :: non_neg_integer().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
--type list_opts() :: #{token => datastore_links_iter:token() | undefined,
-    size => non_neg_integer(), offset => non_neg_integer(),
-    prev_link_name => name(), prev_tree_id => od_provider:id()}.
--type list_extended_info() :: #{token => datastore_links_iter:token(),
-    last_name => name(), last_tree => od_provider:id()}.
+% Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
+-type list_opts() :: #{
+    token => datastore_links_iter:token() | undefined,
+    size => non_neg_integer(),
+    offset => non_neg_integer(),
+    prev_link_name => name(),
+    prev_tree_id => od_provider:id()}.
+% Map returned from listing functions, containing information needed for next batch listing
+-type list_extended_info() :: #{
+    token => datastore_links_iter:token(),
+    last_name => name(),
+    last_tree => od_provider:id()}.
 
 -export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
     offset/0, size/0, mode/0, time/0, posix_permissions/0,
@@ -771,55 +778,56 @@ is_child_of_hidden_dir(Path) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists children of given #file_meta.
+%% Lists children of given #file_meta using different listing options (see datastore_links_iter.erl in cluster_worker)
 %% @end
 %%--------------------------------------------------------------------
 -spec list_children_internal(entry(), list_opts()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children_internal(Entry, Opts) ->
     ?run(begin
-             {ok, FileUuid} = get_uuid(Entry),
-             Result = datastore_model:fold_links(?CTX, FileUuid, all, fun
-                                                                          (Link = #link{name = Name}, Acc) ->
-                                                                              case {is_hidden(Name), is_deletion_link(Name)} of
-                                                                                  {false, false} -> {ok, [Link | Acc]};
-                                                                                  _ -> {ok, Acc}
-                                                                              end
-                                                                      end, [], Opts),
+        {ok, FileUuid} = get_uuid(Entry),
+        Result = datastore_model:fold_links(?CTX, FileUuid, all, fun
+            (Link = #link{name = Name}, Acc) ->
+                case {is_hidden(Name), is_deletion_link(Name)} of
+                    {false, false} -> {ok, [Link | Acc]};
+                    _ -> {ok, Acc}
+                end
+        end, [], Opts),
 
-             case Result of
-                 {{ok, Links}, Token2} ->
-                     prepare_list_ans(Links, #{token => Token2}, Opts);
-                 {ok, Links} ->
-                     prepare_list_ans(Links, #{}, Opts);
-                 {error, Reason} ->
-                     {error, Reason}
-             end
-         end).
+        case Result of
+            {{ok, Links}, Token2} ->
+                prepare_list_ans(Links, #{token => Token2}, Opts);
+            {ok, Links} ->
+                prepare_list_ans(Links, #{}, Opts);
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists children of given #file_meta.
+%% Prepares list answer tagging children and setting information needed to list next batcg.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_list_ans([datastore_links:link()], list_extended_info(), list_opts()) ->
     {ok, [#child_link_uuid{}], list_extended_info()}.
 prepare_list_ans(Links, ExtendedInfo, Opts) ->
     ExtendedInfo2 = case Opts of
-                        #{offset := _} ->
-                            ExtendedInfo;
-                        _ ->
-                            case Links of
-                                [#link{name = Name, tree_id = Tree} | _] ->
-                                    ExtendedInfo#{last_name => Name, last_tree => Tree};
-                                _ ->
-                                    ExtendedInfo#{last_name => undefined, last_tree => undefined}
-                            end
-                    end,
+        #{offset := _} ->
+            ExtendedInfo;
+        _ ->
+            case Links of
+                [#link{name = Name, tree_id = Tree} | _] ->
+                    ExtendedInfo#{last_name => Name, last_tree => Tree};
+                _ ->
+                    ExtendedInfo#{last_name => undefined, last_tree => undefined}
+            end
+    end,
     {ok, tag_children(lists:reverse(Links)), ExtendedInfo2}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Adds links tree ID suffix to file children with ambiguous names.
 %% @end
@@ -829,45 +837,45 @@ tag_children([]) ->
     [];
 tag_children(Links) ->
     {Group2, Groups2} = lists:foldl(fun
-                                        (Link = #link{}, {[], Groups}) ->
-                                            {[Link], Groups};
-                                        (Link = #link{name = N}, {Group = [#link{name = N} | _], Groups}) ->
-                                            {[Link | Group], Groups};
-                                        (Link = #link{}, {Group, Groups}) ->
-                                            {[Link], [Group | Groups]}
-                                    end, {[], []}, Links),
+        (Link = #link{}, {[], Groups}) ->
+            {[Link], Groups};
+        (Link = #link{name = N}, {Group = [#link{name = N} | _], Groups}) ->
+            {[Link | Group], Groups};
+        (Link = #link{}, {Group, Groups}) ->
+            {[Link], [Group | Groups]}
+    end, {[], []}, Links),
     lists:foldl(fun
-                    ([#link{name = Name, target = FileUuid}], Children) ->
-                        [#child_link_uuid{
-                            uuid = FileUuid,
-                            name = Name
-                        } | Children];
-                    (Group, Children) ->
-                        LocalTreeId = oneprovider:get_id(),
-                        {LocalLinks, RemoteLinks} = lists:partition(fun
-                                                                        (#link{tree_id = TreeId}) -> TreeId == LocalTreeId
-                                                                    end, Group),
-                        RemoteTreeIds = [Link#link.tree_id || Link <- RemoteLinks],
-                        RemoteTreeIdsLen = [size(TreeId) || TreeId <- RemoteTreeIds],
-                        Len = binary:longest_common_prefix(RemoteTreeIds),
-                        Len2 = min(max(4, Len + 1), lists:min(RemoteTreeIdsLen)),
-                        lists:foldl(fun
-                                        (#link{
-                                            tree_id = TreeId, name = Name, target = FileUuid
-                                        }, Children2) when TreeId == LocalTreeId ->
-                                            [#child_link_uuid{
-                                                uuid = FileUuid,
-                                                name = Name
-                                            } | Children2];
-                                        (#link{
-                                            tree_id = TreeId, name = Name, target = FileUuid
-                                        }, Children2) ->
-                                            [#child_link_uuid{
-                                                uuid = FileUuid,
-                                                name = <<Name/binary, "@", TreeId:Len2/binary>>
-                                            } | Children2]
-                                    end, Children, LocalLinks ++ RemoteLinks)
-                end, [], [Group2 | Groups2]).
+        ([#link{name = Name, target = FileUuid}], Children) ->
+            [#child_link_uuid{
+                uuid = FileUuid,
+                name = Name
+            } | Children];
+        (Group, Children) ->
+            LocalTreeId = oneprovider:get_id(),
+            {LocalLinks, RemoteLinks} = lists:partition(fun
+                (#link{tree_id = TreeId}) -> TreeId == LocalTreeId
+            end, Group),
+            RemoteTreeIds = [Link#link.tree_id || Link <- RemoteLinks],
+            RemoteTreeIdsLen = [size(TreeId) || TreeId <- RemoteTreeIds],
+            Len = binary:longest_common_prefix(RemoteTreeIds),
+            Len2 = min(max(4, Len + 1), lists:min(RemoteTreeIdsLen)),
+            lists:foldl(fun
+                (#link{
+                    tree_id = TreeId, name = Name, target = FileUuid
+                }, Children2) when TreeId == LocalTreeId ->
+                    [#child_link_uuid{
+                        uuid = FileUuid,
+                        name = Name
+                    } | Children2];
+                (#link{
+                    tree_id = TreeId, name = Name, target = FileUuid
+                }, Children2) ->
+                    [#child_link_uuid{
+                        uuid = FileUuid,
+                        name = <<Name/binary, "@", TreeId:Len2/binary>>
+                    } | Children2]
+            end, Children, LocalLinks ++ RemoteLinks)
+    end, [], [Group2 | Groups2]).
 
 %%--------------------------------------------------------------------
 %% @private

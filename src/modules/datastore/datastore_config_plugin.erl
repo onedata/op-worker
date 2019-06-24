@@ -72,7 +72,7 @@ get_models() -> [
     file_popularity_config,
     harvesting_state,
     idp_access_token,
-    tree_travserse_job
+    tree_traverse_job
 ].
 
 %%--------------------------------------------------------------------
