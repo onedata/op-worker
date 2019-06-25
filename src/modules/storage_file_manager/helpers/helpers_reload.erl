@@ -36,7 +36,7 @@
 -spec refresh_helpers_by_storage(storage:id()) -> ok.
 refresh_helpers_by_storage(StorageId) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
-    {_, []} = rpc:multicall(Nodes, ?MODULE, local_refresh_helpers, [StorageId]),
+    rpc:multicall(Nodes, ?MODULE, local_refresh_helpers, [StorageId]),
     ok.
 
 
