@@ -207,9 +207,12 @@ data_signature(_) -> #{}.
 
 %% @private
 -spec ensure_space_supported(od_space:id() | op_logic:req()) -> ok | no_return().
-ensure_space_supported(#op_req{gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
+ensure_space_supported(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    ensure_space_supported(SpaceId);
+    case op_logic_utils:is_eff_space_member(Cl, SpaceId) of
+        true -> ensure_space_supported(SpaceId);
+        false -> throw(?ERROR_FORBIDDEN)
+    end;
 ensure_space_supported(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
     case share_logic:get(Cl#client.id, ShareId) of
         {ok, #document{value = #od_share{space = SpaceId}}} ->

@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("rest_test_utils.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -68,14 +69,18 @@ invalid_request_should_fail(Config) ->
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     lists:foreach(fun({Json, ExpError}) ->
-        ?assertMatch(ExpError, get_changes(Config, WorkerP1, SpaceId, Json))
+        ExpRestError = get_rest_error(ExpError),
+        ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json))
     end, [
-        {<<"ASD">>, ?ERROR_INVALID_CHANGES_REQ},
-        {#{}, ?ERROR_INVALID_CHANGES_REQ},
-        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_INVALID_FORMAT(<<"fielMeta">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_INVALID_FORMAT(<<"fileMeta">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"HEH">>)},
-        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"always">>)}
+        {<<"ASD">>, ?ERROR_BAD_VALUE_JSON(<<"changes specification">>)},
+        {#{}, ?ERROR_BAD_VALUE_EMPTY(<<"changes specification">>)},
+        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_BAD_DATA(<<"fielMeta">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"fileMeta.fields">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
+            <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+            <<"provider_id">>, <<"shares">>, <<"deleted">>
+        ])},
+        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"fileMeta.always">>)}
     ]).
 
 
@@ -484,8 +489,8 @@ init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     ct:timetrap(timer:minutes(3)),
     Workers = ?config(op_worker_nodes, Config),
     Pid = self(),
-    ok = test_utils:mock_new(Workers, changes),
-    ok = test_utils:mock_expect(Workers, changes, init_stream,
+    ok = test_utils:mock_new(Workers, changes_stream_handler),
+    ok = test_utils:mock_expect(Workers, changes_stream_handler, init_stream,
         fun(State) ->
             State1 = meck:passthrough([State]),
             StreamPid = maps:get(changes_stream, State1, undefined),
@@ -501,7 +506,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, changes),
+    test_utils:mock_unload(Workers, changes_stream_handler),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
@@ -555,4 +560,14 @@ get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
             {ok, RealChanges};
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
+    end.
+
+
+get_rest_error(Error) ->
+    #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
+    case ExpBody of
+        {binary, Bin} ->
+            {ExpCode, json_utils:decode(Bin)};
+        _ ->
+            {ExpCode, ExpBody}
     end.

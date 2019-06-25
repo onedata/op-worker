@@ -226,7 +226,7 @@ get_metric(
             end, Providers),
             {ok, Json};
         {error, not_found} ->
-            throw(?ERROR_NOT_FOUND_REST)
+            throw(?ERROR_NOT_FOUND)
     end.
 
 

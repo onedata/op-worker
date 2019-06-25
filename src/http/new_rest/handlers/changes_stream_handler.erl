@@ -95,9 +95,10 @@
 %%%
 %%% @end
 %%%--------------------------------------------------------------------
--module(changes).
+-module(changes_stream_handler).
 -author("Tomasz Lichon").
 
+-include("op_logic.hrl").
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
 -include("http/rest/rest.hrl").
@@ -105,10 +106,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
-    terminate/3,
+    init/2, terminate/3,
     allowed_methods/2, is_authorized/2,
     content_types_accepted/2
 ]).
@@ -128,13 +130,41 @@
 
 -type change_req() :: #change_req{}.
 
+-define(DEFAULT_TIMEOUT, <<"infinity">>).
+-define(DEFAULT_LAST_SEQ, <<"now">>).
+
 -define(DEFAULT_ALWAYS, false).
 -define(ONEDATA_SPECIAL_XATTRS, [<<"onedata_json">>, <<"onedata_rdf">>]).
+
+-define(FILE_META_FIELDS, [
+    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+    <<"provider_id">>, <<"shares">>, <<"deleted">>
+]).
+
+-define(FILE_LOCATION_FIELDS, [
+    <<"provider_id">>, <<"storage_id">>, <<"size">>, <<"space_id">>, <<"storage_file_created">>
+]).
+
+-define(TIME_FIELDS, [
+    <<"provider_id">>, <<"storage_id">>, <<"size">>
+]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function.
+%% Initialize the state for this request.
+%% @end
+%%--------------------------------------------------------------------
+-spec init(cowboy_req:req(), term()) ->
+    {cowboy_rest, cowboy_req:req(), maps:map()}.
+init(Req, _Opts) ->
+    {cowboy_rest, Req, #{}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -148,6 +178,7 @@ terminate(_, _, #{changes_stream := Stream}) ->
 terminate(_, _, #{}) ->
     ok.
 
+
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
@@ -155,12 +186,14 @@ terminate(_, _, #{}) ->
 allowed_methods(Req, State) ->
     {[<<"POST">>], Req, State}.
 
+
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
+
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -171,9 +204,11 @@ content_types_accepted(Req, State) ->
         {<<"application/json">>, stream_space_changes}
     ], Req, State}.
 
+
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/changes/metadata/:sid'
@@ -188,27 +223,36 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec stream_space_changes(req(), maps:map()) -> {term(), req(), maps:map()}.
 stream_space_changes(Req, State) ->
-    {State2, Req2} = validator:parse_space_id(Req, State),
-    {State3, Req3} = validator:parse_timeout(Req2, State2),
-    {State4, Req4} = validator:parse_last_seq(Req3, State3),
+    try parse_params(Req, State) of
+        {Req2, State2} ->
+            State3 = ?MODULE:init_stream(State2),
+            Req3 = cowboy_req:stream_reply(
+                ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req2
+            ),
+            stream_loop(Req3, State3),
+            cowboy_req:stream_body(<<"">>, fin, Req3),
 
-    #{auth := Auth, space_id := SpaceId} = State4,
-    space_membership:check_with_auth(Auth, SpaceId),
-    put(auth, Auth),
-    put(space_id, SpaceId),
-
-    {ok, Body, Req5} = cowboy_req:read_body(Req4),
-    State5 = parse_body(Body, State4),
-
-    State6 = ?MODULE:init_stream(State5),
-    Req6 = cowboy_req:stream_reply(
-        ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req5
-    ),
-
-    ok = stream_loop(Req6, State6),
-
-    cowboy_req:stream_body(<<"">>, fin, Req6),
-    {stop, Req6, State6}.
+            {stop, Req3, State3}
+    catch
+        throw:Error ->
+            #rest_resp{
+                code = Code,
+                headers = Headers,
+                body = Body
+            } = rest_translator:error_response(Error),
+            RespBody = case Body of
+                {binary, Bin} -> Bin;
+                _ -> json_utils:encode(Body)
+            end,
+            NewReq = cowboy_req:reply(Code, Headers, RespBody, Req),
+            {stop, NewReq, State};
+        Type:Message ->
+            ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
+                ?MODULE, Type, Message
+            ]),
+            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
+            {stop, NewReq, State}
+    end.
 
 
 %%%===================================================================
@@ -217,12 +261,68 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
--spec parse_body(binary(), maps:map()) -> maps:map().
+parse_params(Req, #{auth := SessionId} = State0) ->
+    SpaceId = cowboy_req:binding(sid, Req),
+    case op_logic_utils:is_eff_space_member(?USER(SessionId), SpaceId) of
+        true -> ok;
+        false -> throw(?ERROR_FORBIDDEN)
+    end,
+
+    put(auth, SessionId),
+    put(space_id, SpaceId),
+
+    QueryParams = maps:from_list(cowboy_req:parse_qs(Req)),
+    State1 = State0#{
+        space_id => SpaceId,
+        timeout => parse_timeout(QueryParams),
+        last_seq => parse_last_seq(SpaceId, QueryParams)
+    },
+
+    {ok, Body, Req2} = cowboy_req:read_body(Req),
+    State2 = parse_body(Body, State1),
+
+    {Req2, State2}.
+
+
+%% @private
+-spec parse_timeout(map()) -> infinity | integer() | no_return().
+parse_timeout(Params) ->
+    case maps:get(<<"timeout">>, Params, ?DEFAULT_TIMEOUT) of
+        <<"infinity">> ->
+            infinity;
+        Number ->
+            try
+                binary_to_integer(Number)
+            catch
+                _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(<<"timeout">>))
+            end
+    end.
+
+
+%% @private
+-spec parse_last_seq(od_space:id(), map()) -> null | integer() | no_return().
+parse_last_seq(SpaceId, Params) ->
+    case maps:get(<<"last_seq">>, Params, ?DEFAULT_LAST_SEQ) of
+        <<"now">> ->
+            dbsync_state:get_seq(SpaceId, oneprovider:get_id());
+        Number ->
+            try
+                binary_to_integer(Number)
+            catch
+                _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(<<"last_seq">>))
+            end
+    end.
+
+
+%% @private
+-spec parse_body(binary(), maps:map()) -> maps:map() | no_return().
 parse_body(Body, State) ->
     Json = json_utils:decode(Body),
     case is_map(Json) of
         true -> ok;
-        false -> throw(?ERROR_INVALID_CHANGES_REQ)
+        false -> throw(?ERROR_BAD_VALUE_JSON(<<"changes specification">>))
     end,
 
     ChangesReqs = maps:fold(fun
@@ -253,12 +353,10 @@ parse_body(Body, State) ->
             case {is_list(Fields), is_list(Exists)} of
                 {true, true} ->
                     ok;
-                {true, false} ->
-                    throw(?ERROR_INVALID_FIELD(RecName, <<"exists">>));
-                {false, true} ->
-                    throw(?ERROR_INVALID_FIELD(RecName, <<"fields">>));
-                {false, false} ->
-                    throw(?ERROR_INVALID_FIELD(RecName, <<"fields and exists">>))
+                {false, _} ->
+                    throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<RecName/binary, ".fields">>));
+                {_, false} ->
+                    throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<RecName/binary, ".exists">>))
             end,
             ChangesReq = #change_req{
                 record = custom_metadata,
@@ -268,17 +366,17 @@ parse_body(Body, State) ->
             },
             [ChangesReq | Acc];
         (RecordName, _, _) ->
-            throw(?ERROR_INVALID_FORMAT(RecordName))
+            throw(?ERROR_BAD_DATA(RecordName))
     end, [], Json),
 
     case ChangesReqs of
-        [] -> throw(?ERROR_INVALID_CHANGES_REQ);
+        [] -> throw(?ERROR_BAD_VALUE_EMPTY(<<"changes specification">>));
         _ -> State#{changes_reqs => ChangesReqs}
     end.
 
 
 %% @private
--spec parse_always_flag(binary(), maps:map()) -> true | false.
+-spec parse_always_flag(binary(), maps:map()) -> true | false | no_return().
 parse_always_flag(RecName, Spec) ->
     case maps:get(<<"always">>, Spec, ?DEFAULT_ALWAYS) of
         true ->
@@ -286,12 +384,12 @@ parse_always_flag(RecName, Spec) ->
         false ->
             false;
         _ ->
-            throw(?ERROR_INVALID_FIELD(RecName, <<"always">>))
+            throw(?ERROR_BAD_VALUE_BOOLEAN(<<RecName/binary, ".always">>))
     end.
 
 
 %% @private
--spec parse_fields(binary(), term()) -> [{binary(), integer()}].
+-spec parse_fields(binary(), term()) -> [{binary(), integer()}] | no_return().
 parse_fields(<<"fileMeta">>, RawFields) when is_list(RawFields) ->
     [{FieldName, file_meta_field_idx(FieldName)} || FieldName <- RawFields];
 parse_fields(<<"fileLocation">>, RawFields) when is_list(RawFields) ->
@@ -299,11 +397,11 @@ parse_fields(<<"fileLocation">>, RawFields) when is_list(RawFields) ->
 parse_fields(<<"times">>, RawFields) when is_list(RawFields) ->
     [{FieldName, times_field_idx(FieldName)} || FieldName <- RawFields];
 parse_fields(RecName, _RawFields) ->
-    throw(?ERROR_INVALID_FORMAT(RecName)).
+    throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<RecName/binary, ".fields">>)).
 
 
 %% @private
--spec file_meta_field_idx(binary()) -> integer().
+-spec file_meta_field_idx(binary()) -> integer() | no_return().
 file_meta_field_idx(<<"name">>) -> #file_meta.name;
 file_meta_field_idx(<<"type">>) -> #file_meta.type;
 file_meta_field_idx(<<"mode">>) -> #file_meta.mode;
@@ -312,28 +410,28 @@ file_meta_field_idx(<<"group_owner">>) -> #file_meta.group_owner;
 file_meta_field_idx(<<"provider_id">>) -> #file_meta.provider_id;
 file_meta_field_idx(<<"shares">>) -> #file_meta.shares;
 file_meta_field_idx(<<"deleted">>) -> #file_meta.deleted;
-file_meta_field_idx(FieldName) ->
-    throw(?ERROR_INVALID_FIELD(<<"fileMeta">>, FieldName)).
+file_meta_field_idx(_FieldName) ->
+    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, ?FILE_META_FIELDS)).
 
 
 %% @private
--spec file_location_field_idx(binary()) -> integer().
+-spec file_location_field_idx(binary()) -> integer() | no_return().
 file_location_field_idx(<<"provider_id">>) -> #file_location.provider_id;
 file_location_field_idx(<<"storage_id">>) -> #file_location.storage_id;
 file_location_field_idx(<<"size">>) -> #file_location.size;
 file_location_field_idx(<<"space_id">>) -> #file_location.space_id;
 file_location_field_idx(<<"storage_file_created">>) -> #file_location.storage_file_created;
-file_location_field_idx(FieldName) ->
-    throw(?ERROR_INVALID_FIELD(<<"fileLocation">>, FieldName)).
+file_location_field_idx(_FieldName) ->
+    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileLocation.fields">>, ?FILE_LOCATION_FIELDS)).
 
 
 %% @private
--spec times_field_idx(binary()) -> integer().
+-spec times_field_idx(binary()) -> integer() | no_return().
 times_field_idx(<<"atime">>) -> #times.atime;
 times_field_idx(<<"mtime">>) -> #times.mtime;
 times_field_idx(<<"ctime">>) -> #times.ctime;
-times_field_idx(FieldName) ->
-    throw(?ERROR_INVALID_FIELD(<<"times">>, FieldName)).
+times_field_idx(_FieldName) ->
+    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"times.fields">>, ?TIME_FIELDS)).
 
 
 %%--------------------------------------------------------------------
@@ -362,7 +460,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(req(), maps:map()) -> ok | no_return().
+-spec stream_loop(req(), maps:map()) -> ok.
 stream_loop(Req, State = #{
     timeout := Timeout,
     ref := Ref,
