@@ -34,81 +34,11 @@
 }}).
 
 %% HTTP 400 errors
--define(ERROR_INVALID_INHERITED_FLAG, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_inherited_flag">>,
-    <<"Given inherited flag is not a valid boolean.">>)
-).
--define(ERROR_INVALID_METRIC, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_metric">>,
-    <<"Requested metric is invalid.">>)
-).
--define(ERROR_INVALID_STEP, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_step">>,
-    <<"Requested step is invalid.">>)
-).
--define(ERROR_INVALID_TIMEOUT, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_timeout">>,
-    <<"Requested timeout is invalid, it must be of integer type.">>)
-).
--define(ERROR_INVALID_LAST_SEQ, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_last_seq">>,
-    <<"Requested last_seq is invalid, it must be of integer type.">>)
-).
--define(ERROR_INVALID_METADATA_TYPE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_metadata_type">>,
-    <<"Given metadatadata type is invalid for selected contentent type.">>)
-).
--define(ERROR_INVALID_FILTER_TYPE, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_filter_type">>,
-    <<"The filter_type parameter is invalid.">>)
-).
--define(ERROR_INVALID_FILTER, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_filter">>,
-    <<"The filter parameter is invalid.">>)
-).
--define(ERROR_MISSING_FILTER, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"missing_filter">>,
-    <<"The filter parameter is missing.">>)
-).
 -define(ERROR_INVALID_OBJECTID, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_objectid">>,
     <<"Given id is invalid.">>)
 ).
--define(ERROR_INVALID_BBOX, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_invalid_bbox">>,
-    <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>)
-).
-
-% Changes errors
--define(ERROR_INVALID_CHANGES_REQ, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_invalid_changes_req">>,
-    <<"Given metadata changes request has invalid format.">>
-)).
--define(ERROR_INVALID_FIELD(__Record, __Field), ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_invalid_field">>,
-    <<
-        "Given field(s) \"", __Field/binary, "\"
-        is/are invalidly specified for ", __Record/binary, " record."
-    >>
-)).
--define(ERROR_INVALID_FORMAT(__Record), ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"error_invalid_format">>,
-    <<"Invalid record \"", __Record/binary, "\" or it's specification.">>
-)).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED_REST, ?ERROR_REPLY(
@@ -134,11 +64,6 @@
     ?HTTP_404_NOT_FOUND,
     <<"not_found">>,
     <<"The resource could not be found.">>)
-).
--define(ERROR_SPACE_NOT_FOUND, ?ERROR_REPLY(
-    ?HTTP_404_NOT_FOUND,
-    <<"space_not_found">>,
-    <<"The space could not be found.">>)
 ).
 
 -endif.
