@@ -89,7 +89,33 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attr
     end;
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = metadata}}) ->
-    ok;
+    SessionId = Cl#client.id,
+    case Data of
+        #{<<"application/json">> := Metadata} ->
+            FilterType = maps:get(<<"filter_type">>, Data, undefined),
+            Filter = maps:get(<<"filter">>, Data, undefined),
+
+            FilterList = case {FilterType, Filter} of
+                {undefined, _} ->
+                    [];
+                {<<"keypath">>, undefined} ->
+                    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+                {<<"keypath">>, _} ->
+                    binary:split(Filter, <<".">>, [global])
+            end,
+
+            logical_file_manager:set_metadata(
+                SessionId, {guid, FileGuid},
+                json, Metadata,
+                FilterList
+            );
+        #{<<"application/rdf+xml">> := Metadata} ->
+            logical_file_manager:set_metadata(
+                SessionId, {guid, FileGuid},
+                rdf, Metadata,
+                []
+            )
+    end;
 
 create(_) ->
     ?ERROR_NOT_SUPPORTED.
@@ -161,8 +187,42 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attribu
             {ok, #{XattrName => Value}}
     end;
 
-get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = metadata}}, _) ->
-    ok;
+get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = metadata}}, _) ->
+    SessionId = Cl#client.id,
+    RequestedType = maps:get(requested_type, Data),
+    MetadataType = maps:get(<<"metadata_type">>, Data, undefined),
+    RequestedMetadata = validate_metadata_type(RequestedType, MetadataType),
+
+    case RequestedMetadata of
+        <<"json">> ->
+            Inherited = maps:get(<<"inherited">>, Data, false),
+            FilterType = maps:get(<<"filter_type">>, Data, undefined),
+            Filter = maps:get(<<"filter">>, Data, undefined),
+
+            FilterList = case {FilterType, Filter} of
+                 {undefined, _} ->
+                     [];
+                 {<<"keypath">>, undefined} ->
+                     throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+                 {<<"keypath">>, _} ->
+                     binary:split(Filter, <<".">>, [global])
+             end,
+
+            case logical_file_manager:get_metadata(
+                SessionId, {guid, FileGuid},
+                json, FilterList, Inherited
+            ) of
+                {ok, Meta} ->
+                    {ok, json_utils:encode(Meta)};
+                Error ->
+                    Error
+            end;
+        <<"rdf">> ->
+            logical_file_manager:get_metadata(
+                SessionId, {guid, FileGuid},
+                rdf, [], false
+            )
+    end;
 
 get(_, _) ->
     ?ERROR_NOT_SUPPORTED.
@@ -195,8 +255,9 @@ delete(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(_, _) ->
-    true.
+authorize(#op_req{client = Client, gri = #gri{id = FileGuid}}, _) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    op_logic_utils:is_eff_space_member(Client, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -216,9 +277,12 @@ data_signature(#op_req{operation = create, gri = #gri{aspect = attributes}}) -> 
 
 data_signature(#op_req{operation = create, gri = #gri{aspect = metadata}}) -> #{
     optional => #{
-        <<"metadata_type">> => {binary, [<<"JSON">>, <<"RDF">>]},
-        <<"filter_type">> => {binary, any},
+        <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any}
+    },
+    at_least_one => #{
+        <<"application/json">> => {any, any},
+        <<"application/rdf+xml">> => {any, any}
     }
 };
 
@@ -239,7 +303,7 @@ data_signature(#op_req{operation = get, gri = #gri{aspect = attributes}}) -> #{
 
 data_signature(#op_req{operation = get, gri = #gri{aspect = metadata}}) -> #{
     optional => #{
-        <<"metadata_type">> => {binary, [<<"JSON">>, <<"RDF">>]},
+        <<"metadata_type">> => {binary, [<<"json">>, <<"rdf">>]},
         <<"filter_type">> => {binary, any},
         <<"filter">> => {binary, any},
         <<"inherited">> => {boolean, any}
@@ -322,3 +386,26 @@ add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?SYMLINK_TYPE}) ->
 add_attr(Map, [<<"file_id">> | Rest], Attr = #file_attr{guid = Guid}) ->
     {ok, Id} = file_id:guid_to_objectid(Guid),
     maps:put(<<"file_id">>, Id, add_attr(Map, Rest, Attr)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Validate metadata type according to provided default
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_metadata_type(undefined | binary(), undefined | binary()) ->
+    binary() | no_return().
+validate_metadata_type(undefined, undefined) ->
+    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"metadata_type">>));
+validate_metadata_type(undefined, MetadataType) ->
+    MetadataType;
+validate_metadata_type(<<"application/json">>, undefined) ->
+    <<"json">>;
+validate_metadata_type(<<"application/json">>, <<"json">>) ->
+    <<"json">>;
+validate_metadata_type(<<"application/rdf+xml">>, undefined) ->
+    <<"rdf">>;
+validate_metadata_type(<<"application/rdf+xml">>, <<"rdf">>) ->
+    <<"rdf">>;
+validate_metadata_type(_, _) ->
+    throw(?ERROR_BAD_DATA(<<"metadata_type">>)).

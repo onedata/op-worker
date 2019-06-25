@@ -381,7 +381,8 @@ resolve_bindings(_SessionId, Other, _Req) ->
 -spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
     {Data :: op_logic:data(), cowboy_req:req()}.
 get_data(Req, ignore, _Consumes) ->
-    {parse_query_string(Req), Req};
+    QueryParams = parse_query_string(Req),
+    {QueryParams#{requested_type => get_requested_type(Req)}, Req};
 get_data(Req, as_json_params, _Consumes) ->
     QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
@@ -394,14 +395,16 @@ get_data(Req, as_json_params, _Consumes) ->
         throw(?ERROR_MALFORMED_DATA)
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
-    {maps:merge(ParsedBody, QueryParams), Req2};
+    Data = maps:merge(ParsedBody, QueryParams),
+    {Data#{requested_type => get_requested_type(Req2)}, Req2};
 get_data(Req, as_is, Consumes) ->
+    QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of
         [ConsumedType] ->
             ConsumedType;
         _ ->
-            {Type, Subtype, _} = cowboy_req:parse_header(<<"content-type">>, Req),
+            {Type, Subtype, _} = cowboy_req:parse_header(<<"content-type">>, Req2),
             <<Type/binary, "/", Subtype/binary>>
     end,
     ParsedBody = try
@@ -412,8 +415,21 @@ get_data(Req, as_is, Consumes) ->
     catch _:_ ->
         throw(?ERROR_MALFORMED_DATA)
     end,
-    Params = parse_query_string(Req2),
-    {Params#{ContentType => ParsedBody}, Req2}.
+    Data = QueryParams#{
+        ContentType => ParsedBody,
+        requested_type => get_requested_type(Req2)
+    },
+    {Data, Req2}.
+
+
+%% @private
+get_requested_type(Req) ->
+    case cowboy_req:parse_header(<<"accept">>, Req) of
+        undefined ->
+            undefined;
+        [{{AcceptType, AcceptSubtype, _}, _, _} | _] ->
+            <<AcceptType/binary, "/", AcceptSubtype/binary>>
+    end.
 
 
 %%--------------------------------------------------------------------
