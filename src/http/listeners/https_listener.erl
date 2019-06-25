@@ -59,6 +59,7 @@ start() ->
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
+        {?RTRANSFER_MOCK_PATH, transfers_mock, []},
         rest_handler:rest_routes(),
         rest_router:top_level_routing()
     ]),

@@ -17,7 +17,8 @@
 
 %% API
 -export([
-    terminate/3, allowed_methods/2, 
+    init/2, terminate/3,
+    allowed_methods/2,
     content_types_provided/2, delete_resource/2, content_types_accepted/2
 ]).
 
@@ -27,6 +28,16 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function.
+%% Initialize the state for this request.
+%% @end
+%%--------------------------------------------------------------------
+-spec init(cowboy_req:req(), term()) ->
+    {cowboy_rest, cowboy_req:req(), term()}.
+init(Req, Opts) ->
+    {cowboy_rest, Req, Opts}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3

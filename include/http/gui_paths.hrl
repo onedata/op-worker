@@ -39,6 +39,10 @@
 % Endpoint for a dummy favicon used to check connectivity in GUI
 -define(FAVICON_PATH, "/favicon.ico").
 
+% Endpoint for mocking transfers
+% (rtransfer returns immediately without fetching remote blocks)
+-define(RTRANSFER_MOCK_PATH, "/api/v3/oneprovider/debug/transfers_mock").
+
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 
