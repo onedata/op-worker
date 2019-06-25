@@ -12,11 +12,12 @@
 -module(tree_traverse_job).
 -author("Michal Wrzeszcz").
 
+-include("tree_traverse.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([save/11, delete/2, get/1]).
+-export([save_master_job/5, delete_master_job/2, get_master_job/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -47,30 +48,50 @@
 %% Saves information about job. See save/3 for more information.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:key() | main_job, datastore_doc:scope(), traverse:pool(), traverse:callback_module(),
-    traverse:id(), file_meta:uuid(), file_meta:name(), od_provider:id(), tree_traverse:execute_slave_on_dir(),
-    tree_traverse:batch_size(), tree_traverse:traverse_info()) -> {ok, key()} | {error, term()}.
-save(Key, Scope, Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo) ->
-    Value = get_record(Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo),
-    save(Key, Scope, Value).
+-spec save_master_job(datastore:key() | main_job, tree_traverse:master_job(), traverse:pool(), traverse:id(),
+    traverse:callback_module()) -> {ok, key()} | {error, term()}.
+save_master_job(Key, #tree_travserse{
+    doc = #document{key = DocID, scope = Scope},
+    last_name = LastName,
+    last_tree = LastTree,
+    execute_slave_on_dir = OnDir,
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
+}, Pool, TaskID, CallbackModule) ->
+    Record = create_record(Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo),
+    save(Key, Scope, Record).
 
--spec delete(datastore:key(), datastore_doc:scope()) -> ok | {error, term()}.
-delete(<<?MAIN_JOB_PREFIX, _>> = Key, Scope) ->
+-spec delete_master_job(datastore:key(), datastore_doc:scope()) -> ok | {error, term()}.
+delete_master_job(<<?MAIN_JOB_PREFIX, _>> = Key, Scope) ->
     datastore_model:delete(?SYNC_CTX#{scope => Scope}, Key);
-delete(Key, _) ->
+delete_master_job(Key, _) ->
     datastore_model:delete(?CTX, Key).
 
--spec get(key() | doc()) -> {ok, traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(),
-    file_meta:name(), od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(),
-    tree_traverse:traverse_info()} | {error, term()}.
-get(#document{value = #tree_traverse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID,
-    doc_id = DocID, last_name = LastName, last_tree = LastTree, execute_slave_on_dir = OnDir,
-    batch_size = BatchSize, traverse_info = TraverseInfo}}) ->
-    {ok, Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, binary_to_term(TraverseInfo)};
-get(Key) ->
+-spec get_master_job(key() | doc()) ->
+    {ok, tree_traverse:master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
+get_master_job(#document{value = #tree_traverse_job{
+    pool = Pool, task_id = TaskID,
+    doc_id = DocID,
+    last_name = LastName,
+    last_tree = LastTree,
+    execute_slave_on_dir = OnDir,
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
+}}) ->
+    {ok, Doc} = file_meta:get(DocID),
+    Job = #tree_travserse{
+        doc = Doc,
+        last_name = LastName,
+        last_tree = LastTree,
+        execute_slave_on_dir = OnDir,
+        batch_size = BatchSize,
+        traverse_info = TraverseInfo
+    },
+    {ok, Job, Pool, TaskID};
+get_master_job(Key) ->
     case datastore_model:get(?CTX, Key) of
         {ok, Doc} ->
-            ?MODULE:get(Doc);
+            get_master_job(Doc);
         Other ->
             Other
     end.
@@ -125,10 +146,18 @@ save(<<?MAIN_JOB_PREFIX, _>> = Key, Scope, Value) ->
 save(Key, _, Value) ->
     ?extract_key(datastore_model:save(?CTX, #document{key = Key, value = Value})).
 
--spec get_record(traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(), file_meta:name(),
+-spec create_record(traverse:pool(), traverse:callback_module(), traverse:id(), file_meta:uuid(), file_meta:name(),
     od_provider:id(), tree_traverse:execute_slave_on_dir(), tree_traverse:batch_size(),
     tree_traverse:traverse_info()) -> record().
-get_record(Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo) ->
-    #tree_traverse_job{pool = Pool, callback_module = CallbackModule, task_id = TaskID, doc_id = DocID,
-            last_name = LastName, last_tree = LastTree, execute_slave_on_dir = OnDir, batch_size = BatchSize,
-            traverse_info = term_to_binary(TraverseInfo)}.
+create_record(Pool, CallbackModule, TaskID, DocID, LastName, LastTree, OnDir, BatchSize, TraverseInfo) ->
+    #tree_traverse_job{
+        pool = Pool,
+        callback_module = CallbackModule,
+        task_id = TaskID,
+        doc_id = DocID,
+        last_name = LastName,
+        last_tree = LastTree,
+        execute_slave_on_dir = OnDir,
+        batch_size = BatchSize,
+        traverse_info = term_to_binary(TraverseInfo)
+    }.

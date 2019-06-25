@@ -82,7 +82,7 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialTr
                 _ ->
                     {ok, ParentDoc} = file_meta:get_parent(Doc),
                     {ok, ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
-                        CalculateCallback, InitialTraverseCache, Args, Timestamp),
+                        CalculateCallback, InitialTraverseCache, Args, Timestamp, false),
                     bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
                         [Doc, ParentValue, CalculationInfo | Args], Timestamp)
             end
