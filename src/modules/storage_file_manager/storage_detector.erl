@@ -136,8 +136,8 @@ verify_storage_on_all_nodes(Helper) ->
     case create_test_file(Node, Helper, AdminCtx2, FileId) of
         {ok, FileContent} ->
             case verify_storage_internal(Helper, AdminCtx2, Nodes, FileId, FileContent) of
-                {ok, {FileId, FileContent}} ->
-                    verify_test_file(Node, Helper, AdminCtx2, FileId, FileContent);
+                {ok, {FileId2, FileContent2}} ->
+                    verify_test_file(Node, Helper, AdminCtx2, FileId2, FileContent2);
                 Error ->
                     Error
             end;
@@ -206,11 +206,11 @@ verify_storage_internal(_Helper, _AdminCtx, [], FileId, FileContent) ->
 verify_storage_internal(Helper, AdminCtx, [Node | Nodes], FileId, ExpectedFileContent) ->
     case verify_test_file(Node, Helper, AdminCtx, FileId, ExpectedFileContent) of
         ok ->
-            FileId2 = generate_file_id(),
-            case create_test_file(Node, Helper, AdminCtx, FileId) of
-                {ok, FileContent} ->
+            NewFileId = generate_file_id(),
+            case create_test_file(Node, Helper, AdminCtx, NewFileId) of
+                {ok, NewFileContent} ->
                     verify_storage_internal(Helper, AdminCtx,
-                        Nodes, FileId2, FileContent);
+                        Nodes, NewFileId, NewFileContent);
                 Error ->
                     Error
             end;
