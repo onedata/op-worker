@@ -303,8 +303,12 @@ delete(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     true;
+
 authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
     op_logic_utils:is_eff_space_member(Cl, SpaceId).
 

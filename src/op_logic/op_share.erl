@@ -177,6 +177,9 @@ delete(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
 authorize(_, _) ->
     true.
 

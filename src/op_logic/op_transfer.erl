@@ -146,6 +146,9 @@ delete(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
 authorize(#op_req{operation = create, gri = #gri{aspect = rerun}} = Req, Transfer) ->
     op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
 

@@ -255,9 +255,11 @@ delete(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = Client, gri = #gri{id = FileGuid}}, _) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    op_logic_utils:is_eff_space_member(Client, SpaceId).
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
+authorize(_, _) ->
+    true.
 
 
 %%--------------------------------------------------------------------
