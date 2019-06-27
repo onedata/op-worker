@@ -29,9 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = attributes}, Attributes) ->
-    rest_translator:ok_body_reply(Attributes);
-get_response(#gri{aspect = list}, ListData) ->
-    rest_translator:ok_body_reply(ListData);
-get_response(#gri{aspect = metadata}, Metadata) ->
-    rest_translator:ok_body_reply({binary, Metadata}).
+get_response(#gri{aspect = rdf_metadata}, Metadata) ->
+    rest_translator:ok_body_reply({binary, Metadata});
+get_response(_, Metadata) ->
+    rest_translator:ok_body_reply(Metadata).

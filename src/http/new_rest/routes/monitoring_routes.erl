@@ -44,6 +44,6 @@ routes() -> [
         method = 'POST',
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_metric, id = ?BINDING(sid), aspect = changes}
+        b_gri = #b_gri{type = op_metrics, id = ?BINDING(sid), aspect = changes}
     }}
 ].
