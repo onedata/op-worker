@@ -25,14 +25,11 @@
 -export([create/1, get/2, update/1, delete/1]).
 -export([authorize/2, data_signature/1]).
 
--type subject_type() :: space | user.
--type subject_id() :: undefined | binary().
 -type metric_type() ::
     storage_quota | storage_used |
     data_access | block_access |
-    remote_transfer |connected_users.
+    remote_transfer | connected_users.
 -type step() :: '5m' | '1h' | '1d' | '1m'.
--type format() :: 'json'.
 
 -define(DEFAULT_STEP, <<"5m">>).
 
@@ -85,22 +82,12 @@ create(_) ->
 get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = space}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(
-        Cl#client.id, SpaceId,
-        space, SpaceId,
-        undefined, undefined,
-        Metric, Step
-    );
+    get_metric(Cl#client.id, SpaceId, undefined, Metric, Step);
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = {user, UserId}}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(
-        Cl#client.id, SpaceId,
-        space, SpaceId,
-        user, UserId,
-        Metric, Step
-    );
+    get_metric(Cl#client.id, SpaceId, UserId, Metric, Step);
 
 get(_, _) ->
     ?ERROR_NOT_SUPPORTED.
@@ -195,25 +182,13 @@ data_signature(_) -> #{}.
 
 
 %% @private
--spec get_metric(session:id(), od_space:id(), subject_type(), subject_id(),
-    subject_type(), subject_id(), metric_type(), step()) ->
-    {ok, [maps:map()]} | {error, term()}.
-get_metric(
-    SessionId, SpaceId,
-    SubjectType, SubjectId, SecondarySubjectType, SecondarySubjectId,
-    Metric, Step
-) ->
+-spec get_metric(session:id(), od_space:id(), undefined | od_user:id(),
+    metric_type(), step()) -> {ok, [maps:map()]} | {error, term()}.
+get_metric(SessionId, SpaceId, UserId, Metric, Step) ->
     case space_logic:get_provider_ids(SessionId, SpaceId) of
         {ok, Providers} ->
             Json = lists:map(fun(ProviderId) ->
-                case get_metric_internal(
-                    SessionId,
-                    SubjectType, SubjectId,
-                    SecondarySubjectType, SecondarySubjectId,
-                    Metric, Step,
-                    ProviderId,
-                    json
-                ) of
+                case get_metric_internal(SpaceId, UserId, Metric, Step, ProviderId) of
                     {ok, Data} ->
                         DecodedJson = json_utils:decode(Data),
                         #{
@@ -228,8 +203,8 @@ get_metric(
                 end
             end, Providers),
             {ok, Json};
-        {error, not_found} ->
-            throw(?ERROR_NOT_FOUND)
+        Error ->
+            Error
     end.
 
 
@@ -239,30 +214,23 @@ get_metric(
 %% Get RRD database for given metric.
 %% @end
 %%--------------------------------------------------------------------
--spec get_metric_internal(rest_auth:auth(), subject_type(), subject_id(),
-    subject_type(), subject_id(), metric_type(), step(), oneprovider:id(),
-    format()) -> {ok, binary()} | {error, term()}.
-get_metric_internal(
-    _Auth, SubjectType, SubjectId, undefined, _,
-    MetricType, Step, ProviderId, Format
-) ->
+-spec get_metric_internal(od_space:id(), undefined | od_user:id(),
+    metric_type(), step(), oneprovider:id()) -> {ok, binary()} | {error, term()}.
+get_metric_internal(SpaceId, undefined, MetricType, Step, ProviderId) ->
     MonitoringId = #monitoring_id{
-        main_subject_type = SubjectType,
-        main_subject_id = SubjectId,
+        main_subject_type = space,
+        main_subject_id = SpaceId,
         metric_type = MetricType,
         provider_id = ProviderId
     },
-    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format});
-get_metric_internal(
-    _Auth, SubjectType, SubjectId, SecondarySubjectType, SecondarySubjectId,
-    MetricType, Step, ProviderId, Format
-) ->
+    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, json});
+get_metric_internal(SpaceId, UserId, MetricType, Step, ProviderId) ->
     MonitoringId = #monitoring_id{
-        main_subject_type = SubjectType,
-        main_subject_id = SubjectId,
+        main_subject_type = space,
+        main_subject_id = SpaceId,
         metric_type = MetricType,
-        secondary_subject_id = SecondarySubjectId,
-        secondary_subject_type = SecondarySubjectType,
+        secondary_subject_type = user,
+        secondary_subject_id = UserId,
         provider_id = ProviderId
     },
-    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format}).
+    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, json}).
