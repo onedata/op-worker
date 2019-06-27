@@ -436,20 +436,15 @@ get_requested_type(Req) ->
 %% @private
 %% @doc
 %% Parses and returns query string parameters. For every parameter
-%% specified multiple times it's values are merge into list.
+%% specified multiple times it's values are merged into list.
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_query_string(cowboy_req:req()) -> maps:map().
 parse_query_string(Req) ->
     Params = lists:foldl(fun({Key, Val}, AccMap) ->
-        case maps:get(Key, AccMap, undefined) of
-            undefined ->
-                AccMap#{Key => Val};
-            OldVal when is_list(OldVal) ->
-                AccMap#{Key => [Val | OldVal]};
-            OldVal ->
-                AccMap#{Key => [Val, OldVal]}
-        end
+        maps:update_with(Key, fun(OldVal) ->
+            [Val | ensure_list(OldVal)]
+        end, Val, AccMap)
     end, #{}, cowboy_req:parse_qs(Req)),
 
     maps:fold(fun
@@ -458,6 +453,12 @@ parse_query_string(Req) ->
         (_K, _V, AccIn) ->
             AccIn
     end, Params, Params).
+
+
+%% @private
+-spec ensure_list(Val | [Val]) -> [Val] when Val :: true | binary().
+ensure_list(Val) when is_list(Val) -> Val;
+ensure_list(Val) -> [Val].
 
 
 %%--------------------------------------------------------------------

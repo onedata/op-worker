@@ -158,12 +158,12 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attribu
     case {Attribute, Extended} of
         {undefined, false} ->
             {ok, Attrs} = logical_file_manager:stat(SessionId, {guid, FileGuid}),
-            {ok, add_attr(#{}, ?ALL_BASIC_ATTRIBUTES, Attrs)};
+            {ok, gather_attributes(#{}, ?ALL_BASIC_ATTRIBUTES, Attrs)};
         {Attribute, false} ->
             case lists:member(Attribute, ?ALL_BASIC_ATTRIBUTES) of
                 true ->
                     {ok, Attrs} = logical_file_manager:stat(SessionId, {guid, FileGuid}),
-                    {ok, add_attr(#{}, [Attribute], Attrs)};
+                    {ok, gather_attributes(#{}, [Attribute], Attrs)};
                 false ->
                     ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?ALL_BASIC_ATTRIBUTES)
             end;
@@ -356,38 +356,38 @@ parse_attribute_body(Json, Extended) ->
 %% Adds attributes listed in list, to given map.
 %% @end
 %%--------------------------------------------------------------------
--spec add_attr(maps:map(), list(), #file_attr{}) -> maps:map().
-add_attr(Map, [], _Attr) ->
+-spec gather_attributes(maps:map(), list(), #file_attr{}) -> maps:map().
+gather_attributes(Map, [], _Attr) ->
     Map;
-add_attr(Map, [<<"mode">> | Rest], Attr = #file_attr{mode = Mode}) ->
-    maps:put(<<"mode">>, <<"0", (integer_to_binary(Mode, 8))/binary>>, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"size">> | Rest], Attr = #file_attr{size = Size}) ->
-    maps:put(<<"size">>, Size, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"atime">> | Rest], Attr = #file_attr{atime = ATime}) ->
-    maps:put(<<"atime">>, ATime, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"ctime">> | Rest], Attr = #file_attr{ctime = CTime}) ->
-    maps:put(<<"ctime">>, CTime, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"mtime">> | Rest], Attr = #file_attr{mtime = MTime}) ->
-    maps:put(<<"mtime">>, MTime, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"storage_group_id">> | Rest], Attr = #file_attr{gid = Gid}) ->
-    maps:put(<<"storage_group_id">>, Gid, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"storage_user_id">> | Rest], Attr = #file_attr{uid = Gid}) ->
-    maps:put(<<"storage_user_id">>, Gid, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"name">> | Rest], Attr = #file_attr{name = Name}) ->
-    maps:put(<<"name">>, Name, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"owner_id">> | Rest], Attr = #file_attr{owner_id = OwnerId}) ->
-    maps:put(<<"owner_id">>, OwnerId, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"shares">> | Rest], Attr = #file_attr{shares = Shares}) ->
-    maps:put(<<"shares">>, Shares, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?REGULAR_FILE_TYPE}) ->
-    maps:put(<<"type">>, <<"reg">>, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?DIRECTORY_TYPE}) ->
-    maps:put(<<"type">>, <<"dir">>, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?SYMLINK_TYPE}) ->
-    maps:put(<<"type">>, <<"lnk">>, add_attr(Map, Rest, Attr));
-add_attr(Map, [<<"file_id">> | Rest], Attr = #file_attr{guid = Guid}) ->
+gather_attributes(Map, [<<"mode">> | Rest], Attr = #file_attr{mode = Mode}) ->
+    maps:put(<<"mode">>, <<"0", (integer_to_binary(Mode, 8))/binary>>, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"size">> | Rest], Attr = #file_attr{size = Size}) ->
+    maps:put(<<"size">>, Size, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"atime">> | Rest], Attr = #file_attr{atime = ATime}) ->
+    maps:put(<<"atime">>, ATime, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"ctime">> | Rest], Attr = #file_attr{ctime = CTime}) ->
+    maps:put(<<"ctime">>, CTime, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"mtime">> | Rest], Attr = #file_attr{mtime = MTime}) ->
+    maps:put(<<"mtime">>, MTime, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"storage_group_id">> | Rest], Attr = #file_attr{gid = Gid}) ->
+    maps:put(<<"storage_group_id">>, Gid, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"storage_user_id">> | Rest], Attr = #file_attr{uid = Gid}) ->
+    maps:put(<<"storage_user_id">>, Gid, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"name">> | Rest], Attr = #file_attr{name = Name}) ->
+    maps:put(<<"name">>, Name, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"owner_id">> | Rest], Attr = #file_attr{owner_id = OwnerId}) ->
+    maps:put(<<"owner_id">>, OwnerId, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"shares">> | Rest], Attr = #file_attr{shares = Shares}) ->
+    maps:put(<<"shares">>, Shares, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?REGULAR_FILE_TYPE}) ->
+    maps:put(<<"type">>, <<"reg">>, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?DIRECTORY_TYPE}) ->
+    maps:put(<<"type">>, <<"dir">>, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?SYMLINK_TYPE}) ->
+    maps:put(<<"type">>, <<"lnk">>, gather_attributes(Map, Rest, Attr));
+gather_attributes(Map, [<<"file_id">> | Rest], Attr = #file_attr{guid = Guid}) ->
     {ok, Id} = file_id:guid_to_objectid(Guid),
-    maps:put(<<"file_id">>, Id, add_attr(Map, Rest, Attr)).
+    maps:put(<<"file_id">>, Id, gather_attributes(Map, Rest, Attr)).
 
 
 %%--------------------------------------------------------------------

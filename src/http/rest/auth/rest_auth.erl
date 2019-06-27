@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("op_logic.hrl").
+-include("http/rest/rest.hrl").
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -42,10 +43,10 @@ is_authorized(Req, State) ->
         {ok, ?USER(SessionId)} ->
             {true, Req, State#{auth => SessionId}};
         {ok, ?NOBODY} ->
-            NewReq = cowboy_req:reply(401, Req),
+            NewReq = cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req),
             {stop, NewReq, State};
         {error, not_found} ->
-            NewReq = cowboy_req:reply(401, Req),
+            NewReq = cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req),
             {stop, NewReq, State};
         {error, Error} ->
             ?debug("Authentication error ~p", [Error]),
