@@ -45,7 +45,8 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
             UserCtxBinaries = integers_to_binary(UserCtx),
-            case helper_params:validate_user_ctx(Helper, UserCtxBinaries) of
+            HelperName = helper:get_name(Helper),
+            case helper_params:validate_user_ctx(HelperName, UserCtxBinaries) of
                 ok -> {ok, UserCtxBinaries};
                 {error, Reason} -> {error, Reason}
             end;
