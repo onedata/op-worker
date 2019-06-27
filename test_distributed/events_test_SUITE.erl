@@ -63,7 +63,6 @@ all() ->
 -define(SPACE_ID, <<"spaceid">>).
 -define(FILE_GUID, file_id:pack_guid(?FILE_UUID, ?SPACE_ID)).
 -define(STORAGE_ID1, <<"storageid1">>).
--define(STORAGE_ID2, <<"storageid2">>).
 
 %%%===================================================================
 %%% Test functions
@@ -124,13 +123,9 @@ emit_file_location_changed_event_should_execute_handler(Config) ->
 
 emit_helper_params_changed_event_should_execute_handler(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    % only ?STORAGE_ID1 has handler set up
-    Evt1 = helper_params_changed_event(?STORAGE_ID1),
-    Evt2 = helper_params_changed_event(?STORAGE_ID2),
-    emit(Worker, ?config(session_id, Config), Evt2),
-    emit(Worker, ?config(session_id, Config), Evt1),
-    ?assertNotReceivedMatch({event_handler, [Evt2]}, ?TIMEOUT),
-    ?assertReceivedMatch({event_handler, [Evt1]}, ?TIMEOUT).
+    Evt = helper_params_changed_event(?STORAGE_ID1),
+    emit(Worker, ?config(session_id, Config), Evt),
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
 flush_should_notify_awaiting_process(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
