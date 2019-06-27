@@ -26,7 +26,7 @@
 -export([update_args/2, update_admin_ctx/2, update_insecure/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
--export([insert_user_ctx/2]).
+-export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
 -type name() :: binary().
@@ -76,14 +76,14 @@ allow_insecure(_) -> true.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Injects user context into helper parameters.
+%% Returns helper arguments with user ctx added.
 %% @end
 %%--------------------------------------------------------------------
--spec insert_user_ctx(helpers:helper(), user_ctx()) ->
-    {ok, helpers:helper()} | {error, Reason :: term()}.
-insert_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
-    case helper_params:validate_user_ctx(Helper, UserCtx) of
-        ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
+-spec get_args_with_user_ctx(helpers:helper(), user_ctx()) ->
+    {ok, args()} | {error, Reason :: term()}.
+get_args_with_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
+    case helper_params:validate_user_ctx(Helper#helper.name, UserCtx) of
+        ok -> {ok, maps:merge(Args, UserCtx)};
         Error -> Error
     end.
 
@@ -179,14 +179,12 @@ get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_params(helpers:helper(), user_ctx()) -> params().
-get_params(Helper, UserCtx) ->
-    {ok, #helper{name = Name, args = Args, extended_direct_io = DS}} =
-        insert_user_ctx(Helper, UserCtx),
+get_params(#helper{name = Name, extended_direct_io = DS} = Helper, UserCtx) ->
+    {ok, Args} = get_args_with_user_ctx(Helper, UserCtx),
     #helper_params{
         helper_name = Name,
-        helper_args = maps:fold(fun(Key, Value, Acc) ->
-            [#helper_arg{key = Key, value = Value} | Acc]
-        end, [], Args),
+        helper_args = [#helper_arg{key = Key, value = Value}
+            || {Key, Value} <- maps:to_list(Args)],
         extended_direct_io = DS
     }.
 

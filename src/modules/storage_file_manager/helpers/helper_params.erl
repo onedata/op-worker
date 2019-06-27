@@ -126,12 +126,8 @@ validate_args(HelperName, Args) ->
 %% Checks whether user context is valid for the storage helper.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_user_ctx(storage:helper() | name(), user_ctx()) ->
+-spec validate_user_ctx(name(), user_ctx()) ->
     ok | {error, Reason :: term()}.
-validate_user_ctx(#helper{name = StorageType}, UserCtx) ->
-    validate_user_ctx(StorageType, UserCtx);
-
-
 validate_user_ctx(StorageType = ?WEBDAV_HELPER_NAME, UserCtx) ->
     FieldsBase = expected_user_ctx_params(StorageType),
     Fields = case UserCtx of

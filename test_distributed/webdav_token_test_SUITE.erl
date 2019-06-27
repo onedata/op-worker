@@ -77,7 +77,7 @@ all() -> [
 ).
 
 -define(assertRefreshParamsCalls(W, Args, ExpNumCalls),
-    test_utils:mock_assert_num_calls(W, helpers_fallback, refresh_params, Args, ExpNumCalls)).
+    test_utils:mock_assert_num_calls(W, helpers_reload, refresh_handle_params, Args, ExpNumCalls)).
 
 -define(assertSetxattrCalls(W, Args, ExpNumCalls),
     test_utils:mock_assert_num_calls(W, helpers, setxattr, Args, ExpNumCalls)).
@@ -211,12 +211,11 @@ init_per_testcase(Case, Config) when
     Case =:= user_operation_fails_with_expired_token_on_insecure_storage;
     Case =:= root_operation_fails_with_expired_token_on_insecure_storage;
     Case =:= user_operation_succeeds_with_refreshed_token_on_insecure_storage;
-    Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage 
+    Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_insecure_storage(W, ?STORAGE_ID(W)),
-    test_utils:mock_new(W, helpers_fallback, [passthrough]),
-    test_utils:mock_new(W, helpers, [passthrough]),
+    test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
     Config;
 
 init_per_testcase(Case, Config) when
@@ -227,14 +226,13 @@ init_per_testcase(Case, Config) when
     ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_secure_storage(W, ?STORAGE_ID(W)),
-    test_utils:mock_new(W, helpers_fallback, [passthrough]),
-    test_utils:mock_new(W, helpers, [passthrough]),
+    test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
     mock_luma(W),
     Config.
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(W, [helpers_fallback, helpers, luma_proxy]),
+    ok = test_utils:mock_unload(W, [helpers_fallback, helpers_reload, helpers, luma_proxy]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.

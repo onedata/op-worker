@@ -54,6 +54,8 @@ get_routing_key(#file_renamed_event{top_entry = Entry}) ->
     {ok, <<"file_renamed.", (Entry#file_renamed_entry.old_guid)/binary>>};
 get_routing_key(#quota_exceeded_event{}) ->
     {ok, <<"quota_exceeded">>};
+get_routing_key(#helper_params_changed_event{storage_id = StorageId}) ->
+    {ok, <<"helper_params_changed.", StorageId/binary>>};
 get_routing_key(_) ->
     {error, session_only}.
 
@@ -73,6 +75,7 @@ get_stream_key(#file_perm_changed_event{}) -> file_perm_changed;
 get_stream_key(#file_removed_event{}) -> file_removed;
 get_stream_key(#file_renamed_event{}) -> file_renamed;
 get_stream_key(#quota_exceeded_event{}) -> quota_exceeded;
+get_stream_key(#helper_params_changed_event{}) -> helper_params_changed;
 get_stream_key(#monitoring_event{}) -> monitoring.
 
 %%--------------------------------------------------------------------
@@ -103,6 +106,8 @@ get_aggregation_key(#file_removed_event{file_guid = FileGuid}) ->
 get_aggregation_key(#file_renamed_event{top_entry = Entry}) ->
     Entry#file_renamed_entry.old_guid;
 get_aggregation_key(#quota_exceeded_event{}) ->
+    <<>>;
+get_aggregation_key(#helper_params_changed_event{}) ->
     <<>>;
 get_aggregation_key(#monitoring_event{type = #storage_used_updated{} = Type}) ->
     #storage_used_updated{space_id = SpaceId, user_id = UserId} = Type,

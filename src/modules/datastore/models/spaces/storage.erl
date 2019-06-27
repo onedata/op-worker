@@ -249,10 +249,7 @@ update_name(StorageId, NewName) ->
     ok | {error, term()}.
 update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
-    case update_helper(StorageId, HelperName, UpdateFun) of
-        ok -> rtransfer_put_storage(StorageId);
-        Error -> Error
-    end.
+    update_helper(StorageId, HelperName, UpdateFun).
 
 
 %%--------------------------------------------------------------------
@@ -310,9 +307,8 @@ set_luma_config(StorageId, LumaConfig) ->
 -spec set_insecure(storage:id(), helper:name(), Insecure :: boolean()) ->
     ok | {error, term()}.
 set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
-    update_helper(StorageId, HelperName, fun(Helper) ->
-        helper:update_insecure(Helper, Insecure)
-    end).
+    UpdateFun = fun(Helper) -> helper:update_insecure(Helper, Insecure) end,
+    update_helper(StorageId, HelperName, UpdateFun).
 
 
 %%--------------------------------------------------------------------
@@ -567,7 +563,7 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
 
 
 %%%===================================================================
-%%% Internal functons
+%%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -580,11 +576,12 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
     ok | {error, term()} when
     DiffFun :: fun((helper()) -> {ok, helper()} | {error, term()}).
 update_helper(StorageId, HelperName, DiffFun) ->
-    ?extract_ok(update(StorageId, fun(Storage) ->
+    UpdateFun = fun(Storage) ->
         case select_helper(Storage, HelperName) of
             {ok, Helper} ->
-                HelperName = helper:get_name(Helper),
                 case DiffFun(Helper) of
+                    {ok, Helper} ->
+                        {error, no_changes};
                     {ok, NewHelper} ->
                         {ok, replace_helper(Storage, HelperName, NewHelper)};
                     {error, _} = Error ->
@@ -593,7 +590,27 @@ update_helper(StorageId, HelperName, DiffFun) ->
             {error, _} = Error ->
                 Error
         end
-    end)).
+    end,
+    case update(StorageId, UpdateFun) of
+        {ok, _} -> on_helper_changed(StorageId);
+        {error, no_changes} -> ok;
+        Error -> Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles actions necessary after helper params have been changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_helper_changed(StorageId :: storage:id()) -> ok.
+on_helper_changed(StorageId) ->
+    {ok, Nodes} = node_manager:get_cluster_nodes(),
+    fslogic_event_emitter:emit_helper_params_changed(StorageId),
+    rtransfer_put_storage(StorageId),
+    rpc:multicall(Nodes, rtransfer_config, restart_link, []),
+    helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
 %%--------------------------------------------------------------------

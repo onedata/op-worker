@@ -100,6 +100,11 @@
     spaces = [] :: [od_space:id()]
 }).
 
+%% definition of an event triggered when storage helper params are changed
+-record(helper_params_changed_event, {
+    storage_id :: storage:id()
+}).
+
 %% definition of a monitoring event
 -record(monitoring_event, {
     type :: monitoring_event_emitter:type()
