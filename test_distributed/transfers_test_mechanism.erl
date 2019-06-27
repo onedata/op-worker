@@ -329,7 +329,7 @@ evict_each_file_replica_separately(Config, #scenario{
         lists:map(fun({Guid, Path}) ->
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -353,7 +353,7 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
             ?assertMatch({error, _},
                 ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
-                schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type))
+                schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type))
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
     Config.
@@ -369,7 +369,7 @@ cancel_replica_eviction_on_target_nodes(Config, #scenario{
     FileKey = file_key(Guid, Path, FileKeyType),
     NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
         EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
         {EvictingNode, Tid, Guid, Path}
     end, EvictingNodes),
 
@@ -430,7 +430,7 @@ remove_file_during_eviction(Config, #scenario{
         lists:map(fun({Guid, Path}) ->
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -516,7 +516,7 @@ schedule_replica_migration_without_permissions(Config, #scenario{
                 EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
                 ?assertMatch({error, _},
                     ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
-                    schedule_replica_migration(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type, ReplicatingProviderId))
+                    schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId))
             end, FilesGuidsAndPaths)
         end, ReplicatingNodes)
     end, EvictingNodes),
@@ -716,6 +716,19 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
                     ct:fail("assertion failed")
             end
     end.
+
+create_files(Config, #setup{
+    root_directory = {RootDirGuid, RootDirPath},
+    files_structure = {pre_created, GuidsAndPaths}
+}) ->
+    DirsGuidsAndPaths = maps:get(dirs, GuidsAndPaths, []),
+    FilesGuidsAndPaths = maps:get(files, GuidsAndPaths, []),
+
+    [
+        {?ROOT_DIR_KEY, {RootDirGuid, RootDirPath}},
+        {?DIRS_KEY, DirsGuidsAndPaths},
+        {?FILES_KEY, FilesGuidsAndPaths} | Config
+    ];
 
 create_files(Config, #setup{
     user = User,
