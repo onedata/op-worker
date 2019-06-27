@@ -50,7 +50,7 @@
 %%--------------------------------------------------------------------
 -spec save_master_job(datastore:key() | main_job, tree_traverse:master_job(), traverse:pool(), traverse:id(),
     traverse:callback_module()) -> {ok, key()} | {error, term()}.
-save_master_job(Key, #tree_travserse{
+save_master_job(Key, #tree_traverse{
     doc = #document{key = DocID, scope = Scope},
     last_name = LastName,
     last_tree = LastTree,
@@ -79,7 +79,7 @@ get_master_job(#document{value = #tree_traverse_job{
     traverse_info = TraverseInfo
 }}) ->
     {ok, Doc} = file_meta:get(DocID),
-    Job = #tree_travserse{
+    Job = #tree_traverse{
         doc = Doc,
         last_name = LastName,
         last_tree = LastTree,

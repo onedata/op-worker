@@ -22,7 +22,6 @@
 
 % This module is a base for traverse callback
 % (other callbacks especially for slave jobs have to be defined)
-%-behaviour(traverse_behaviour).
 
 -include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -36,7 +35,7 @@
 %% Behaviour callbacks
 -export([do_master_job/1, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
--type master_job() :: #tree_travserse{}.
+-type master_job() :: #tree_traverse{}.
 -type slave_job() :: file_meta:doc().
 -type execute_slave_on_dir() :: boolean().
 -type batch_size() :: non_neg_integer().
@@ -104,7 +103,7 @@ run(Pool, #document{} = Doc, Opts) ->
         Group -> RunOpts2#{group_id => Group}
     end,
 
-    ok = traverse:run(Pool, TaskID, #tree_travserse{
+    ok = traverse:run(Pool, TaskID, #tree_traverse{
         doc = Doc,
         execute_slave_on_dir = ExecuteActionOnDir,
         batch_size = BatchSize,
@@ -125,7 +124,7 @@ run(Pool, FileCtx, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_traverse_info(master_job()) -> traverse_info().
-get_traverse_info(#tree_travserse{traverse_info = TraverseInfo}) ->
+get_traverse_info(#tree_traverse{traverse_info = TraverseInfo}) ->
     TraverseInfo.
 
 %%--------------------------------------------------------------------
@@ -134,7 +133,7 @@ get_traverse_info(#tree_travserse{traverse_info = TraverseInfo}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_doc(master_job()) -> file_meta:job().
-get_doc(#tree_travserse{doc = Doc}) ->
+get_doc(#tree_traverse{doc = Doc}) ->
     Doc.
 
 -spec get_task(traverse:pool() | atom(), traverse:id()) -> {ok, traverse_task:doc()} | {error, term()}.
@@ -154,8 +153,7 @@ get_task(Pool, ID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job()) -> {ok, traverse:master_job_map()}.
-% TODO - moze dac mozliwosc zmiany traverse info?
-do_master_job(#tree_travserse{
+do_master_job(#tree_traverse{
     doc = #document{value = #file_meta{}} = Doc,
     token = Token,
     last_name = LN,
@@ -186,10 +184,9 @@ do_master_job(#tree_travserse{
         end
     end, {[], []}, Children),
 
-    % TODO - czy job na nastepny batch nie powinien isc na koniec listy?
     FinalMasterJobs = case Token2#link_token.is_last of
         true -> lists:reverse(MasterJobs);
-        false -> [TT#tree_travserse{
+        false -> [TT#tree_traverse{
             token = Token2,
             last_name = LN2,
             last_tree = LT2
@@ -207,7 +204,7 @@ do_master_job(#tree_travserse{
     {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(ID, Job, Pool, TaskID, Status, CallbackModule) when Status =:= waiting ; Status =:= on_pool ->
     tree_traverse_job:save_master_job(ID, Job, Pool, TaskID, CallbackModule);
-update_job_progress(ID, #tree_travserse{doc = #document{scope = Scope}}, _, _, _, _) ->
+update_job_progress(ID, #tree_traverse{doc = #document{scope = Scope}}, _, _, _, _) ->
     ok = tree_traverse_job:delete_master_job(ID, Scope),
     {ok, ID}.
 
@@ -222,7 +219,7 @@ get_job(DocOrID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sync_info(master_job()) -> {ok, traverse:ctx_sync_info()}.
-get_sync_info(#tree_travserse{
+get_sync_info(#tree_traverse{
     doc = #document{scope = Scope}
 }) ->
     {ok, #{
@@ -247,12 +244,12 @@ get_timestamp() ->
 %%%===================================================================
 
 -spec get_child_job(master_job(), file_meta:doc()) -> master_job().
-get_child_job(#tree_travserse{
+get_child_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, ChildDoc) ->
-    #tree_travserse{
+    #tree_traverse{
         doc = ChildDoc,
         execute_slave_on_dir = OnDir,
         batch_size = BatchSize,

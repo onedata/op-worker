@@ -807,7 +807,7 @@ list_children_internal(Entry, Opts) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Prepares list answer tagging children and setting information needed to list next batcg.
+%% Prepares list answer tagging children and setting information needed to list next batch.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_list_ans([datastore_links:link()], list_extended_info(), list_opts()) ->

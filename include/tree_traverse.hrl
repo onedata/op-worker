@@ -13,7 +13,7 @@
 -define(TREE_TRAVERSE_HRL, 1).
 
 % Record that defines master job
--record(tree_travserse, {
+-record(tree_traverse, {
     % File or directory processed by job
     doc :: file_meta:doc(),
     % Fields used for directory listing
