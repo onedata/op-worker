@@ -92,7 +92,7 @@ prepare_user_ctx_params(HelperName, Params) ->
 %% @private
 -spec clear_unused_webdav_credentials(user_ctx()) -> user_ctx().
 clear_unused_webdav_credentials(#{<<"credentialsType">> := <<"none">>} = Params) ->
-    Params#{<<"credentials">> => <<>>};
+    maps:remove(<<"credentials">>, Params);
 clear_unused_webdav_credentials(Params) -> Params.
 
 
@@ -132,7 +132,7 @@ validate_user_ctx(StorageType = ?WEBDAV_HELPER_NAME, UserCtx) ->
     FieldsBase = expected_user_ctx_params(StorageType),
     Fields = case UserCtx of
         #{<<"credentialsType">> := <<"none">>} ->
-            FieldsBase;
+            remove_field(<<"credentials">>, FieldsBase);
         #{<<"credentialsType">> := _} ->
             % make "credentials" required rather than optional
             [<<"credentials">> | remove_field(<<"credentials">>, FieldsBase)];
