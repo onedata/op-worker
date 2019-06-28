@@ -21,9 +21,15 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 -export([op_logic_plugin/0]).
--export([fetch_entity/1, operation_supported/3]).
+-export([
+    operation_supported/3,
+    data_spec/1,
+    fetch_entity/1,
+    exists/2,
+    authorize/2,
+    validate/2
+]).
 -export([create/1, get/2, update/1, delete/1]).
--export([authorize/2, data_signature/1]).
 
 
 %%%===================================================================
@@ -38,6 +44,36 @@
 %%--------------------------------------------------------------------
 op_logic_plugin() ->
     op_transfer.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given operation is supported based on operation, aspect and
+%% scope (entity type is known based on the plugin itself).
+%% @end
+%%--------------------------------------------------------------------
+-spec operation_supported(op_logic:operation(), op_logic:aspect(),
+    op_logic:scope()) -> boolean().
+operation_supported(create, rerun, private) -> true;
+
+operation_supported(get, instance, private) -> true;
+
+operation_supported(delete, instance, private) -> true;
+
+operation_supported(_, _, _) -> false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns data signature for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+data_spec(_) -> #{}.
 
 
 %%--------------------------------------------------------------------
@@ -61,19 +97,54 @@ fetch_entity(TransferId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given operation is supported based on operation, aspect and
-%% scope (entity type is known based on the plugin itself).
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
-    op_logic:scope()) -> boolean().
-operation_supported(create, rerun, private) -> true;
+-spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
+exists(_, _) ->
+    true.
 
-operation_supported(get, instance, private) -> true;
 
-operation_supported(delete, instance, private) -> true;
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{operation = create, gri = #gri{aspect = rerun}} = Req, Transfer) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
 
-operation_supported(_, _, _) -> false.
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}} = Req, Transfer) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
+
+authorize(#op_req{operation = delete, gri = #gri{aspect = instance}} = Req, Transfer) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% @end
+%%--------------------------------------------------------------------
+-spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
+    % It would not be possible to fetch transfer doc if space
+    % wasn't locally supported so there is no need to check this.
+    ok;
+
+validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+    % It would not be possible to fetch transfer doc if space
+    % wasn't locally supported so there is no need to check this.
+    ok;
+
+validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
+    % It would not be possible to fetch transfer doc if space
+    % wasn't locally supported so there is no need to check this.
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -91,10 +162,7 @@ create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
             ?ERROR_TRANSFER_NOT_ENDED;
         Error ->
             Error
-    end;
-
-create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -105,10 +173,7 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
-    {ok, transfer_to_json(Transfer)};
-
-get(_, _) ->
-    ?ERROR_NOT_SUPPORTED.
+    {ok, transfer_to_json(Transfer)}.
 
 
 %%--------------------------------------------------------------------
@@ -133,46 +198,7 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
             ok;
         {error, already_ended} ->
             ?ERROR_TRANSFER_ALREADY_ENDED
-    end;
-
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
-    false;
-
-authorize(#op_req{operation = create, gri = #gri{aspect = rerun}} = Req, Transfer) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
-
-authorize(#op_req{operation = get, gri = #gri{aspect = instance}} = Req, Transfer) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
-
-authorize(#op_req{operation = delete, gri = #gri{aspect = instance}} = Req, Transfer) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
-
-authorize(_, _) ->
-    false.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
-%% @end
-%%--------------------------------------------------------------------
--spec data_signature(op_logic:req()) -> op_validator:data_signature().
-data_signature(_) -> #{}.
+    end.
 
 
 %%%===================================================================

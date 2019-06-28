@@ -120,6 +120,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
 %% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
+-spec fetch_entity(op_logic:entity_id()) ->
+    {ok, op_logic:entity()} | entity_logic:error().
 fetch_entity(_) ->
     {ok, undefined}.
 
@@ -130,6 +132,7 @@ fetch_entity(_) ->
 %% op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
+-spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
 exists(_, _) ->
     true.
 
@@ -152,6 +155,7 @@ authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
 %% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
+-spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     ok.
 
