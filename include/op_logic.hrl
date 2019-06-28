@@ -21,8 +21,9 @@
 -record(client, {
     % root is allowed to do anything, it must be used with caution
     % (should not be used in any kind of external API!)
-    type = nobody :: user | provider | root | nobody,
-    id = <<"">> :: binary()
+    type = nobody :: user | root | nobody,
+    id :: binary(),
+    session_id :: session:id()
 }).
 
 % Record expressing entity logic request
@@ -37,17 +38,7 @@
 % Convenience macros for concise code
 -define(USER, #client{type = user}).
 -define(USER(__Id), #client{type = user, id = __Id}).
--define(PROVIDER, #client{type = provider}).
--define(PROVIDER(__Id), #client{type = provider, id = __Id}).
 -define(NOBODY, #client{type = nobody, id = ?GUEST_SESS_ID}).
 -define(ROOT, #client{type = root, id = ?ROOT_SESS_ID}).
-
-% Regexp to validate names. Name must be 2-50 characters long and composed of
-% UTF-8 letters, digits, brackets and underscores.
-% Dashes, spaces and dots are allowed (but not at the beginning or the end).
--define(NAME_FIRST_CHARS_ALLOWED, <<")(\\w_">>).
--define(NAME_MIDDLE_CHARS_ALLOWED, <<">>)(\\w_ .-">>).
--define(NAME_LAST_CHARS_ALLOWED, ?NAME_FIRST_CHARS_ALLOWED).
--define(NAME_MAXIMUM_LENGTH, 50).
 
 -endif.

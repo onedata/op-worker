@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module encapsulates all common logic available in provider.
-%%% It is used to process entity requests is a standardized way, i.e.:
+%%% It is used to process requests in a standardized way, i.e.:
 %%%     # checks existence of given entity
 %%%     # checks authorization of client to perform certain action
 %%%     # checks validity of data provided in the request
@@ -107,14 +107,15 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
             plugin = EntityType:op_logic_plugin(),
             entity = Entity
         },
-
         ensure_operation_supported(ReqCtx0),
-        ReqCtx1 = validate_request(ReqCtx0),
+        ReqCtx1 = sanitize_request(ReqCtx0),
         ReqCtx2 = maybe_fetch_entity(ReqCtx1),
 
         ensure_exists(ReqCtx2),
         ensure_authorized(ReqCtx2),
-        execute_op_logic_request(ReqCtx2)
+        validate_request(ReqCtx2),
+
+        process_request(ReqCtx2)
     catch
         throw:Error ->
             Error;
@@ -131,11 +132,10 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
 %% Returns a readable string representing provided client.
 %% @end
 %%--------------------------------------------------------------------
--spec client_to_string(Client :: client()) -> string().
+-spec client_to_string(client()) -> string().
 client_to_string(?NOBODY) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
-client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]);
-client_to_string(?PROVIDER(PId)) -> str_utils:format("provider:~s", [PId]).
+client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 
 %%%===================================================================
@@ -171,17 +171,17 @@ ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Ensures data specified in request is valid, throws on error.
+%% Sanitizes data specified in request, throws on errors.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_request(req_ctx()) -> req_ctx().
-validate_request(#req_ctx{plugin = Plugin, req = #op_req{
+-spec sanitize_request(req_ctx()) -> req_ctx().
+sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
     gri = #gri{aspect = Aspect},
     data = RawData
 } = Req} = ReqCtx) ->
-    DataSignature = Plugin:data_signature(Req),
+    DataSpec = Plugin:data_spec(Req),
     DataWithAspect = RawData#{aspect => Aspect},
-    SanitizedData = op_validator:validate_data(DataWithAspect, DataSignature),
+    SanitizedData = op_sanitizer:sanitize_data(DataWithAspect, DataSpec),
     ReqCtx#req_ctx{req = Req#op_req{data = maps:remove(aspect, SanitizedData)}}.
 
 
@@ -202,16 +202,11 @@ maybe_fetch_entity(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = ReqCtx)
 maybe_fetch_entity(#req_ctx{plugin = Plugin, req = #op_req{
     gri = #gri{id = Id}
 }} = ReqCtx) ->
-    case erlang:function_exported(Plugin, fetch_entity, 1) of
-        true ->
-            case Plugin:fetch_entity(Id) of
-                {ok, Entity} ->
-                    ReqCtx#req_ctx{entity = Entity};
-                ?ERROR_NOT_FOUND ->
-                    throw(?ERROR_NOT_FOUND)
-            end;
-        false ->
-            ReqCtx
+    case Plugin:fetch_entity(Id) of
+        {ok, Entity} ->
+            ReqCtx#req_ctx{entity = Entity};
+        ?ERROR_NOT_FOUND ->
+            throw(?ERROR_NOT_FOUND)
     end.
 
 
@@ -223,24 +218,18 @@ maybe_fetch_entity(#req_ctx{plugin = Plugin, req = #op_req{
 %%--------------------------------------------------------------------
 -spec ensure_exists(req_ctx()) -> ok | no_return().
 ensure_exists(#req_ctx{req = #op_req{operation = create}}) ->
-    % Aspects where entity id is undefined always exist.
+    % No need to check for create operations.
     ok;
 ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
     % Aspects where entity id is undefined always exist.
     ok;
 ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
-    % If function is not implemented by plugin then entity always exist.
-    Result = case erlang:function_exported(Plugin, exists, 1) of
-        true ->
-            try
-                Plugin:exists(OpReq, Entity)
-            catch _:_ ->
-                % No need for log here, 'exists' may crash depending on what the
-                % request contains and this is expected.
-                false
-            end;
-        false ->
-            true
+    Result = try
+        Plugin:exists(OpReq, Entity)
+    catch _:_ ->
+        % No need for log here, 'exists' may crash depending on what the
+        % request contains and this is expected.
+        false
     end,
     case Result of
         true -> ok;
@@ -285,13 +274,24 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Determines if given request can be further processed.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_request(req_ctx()) -> ok | no_return().
+validate_request(#req_ctx{plugin = Plugin, entity = Entity, req = Req}) ->
+    ok = Plugin:validate(Req, Entity).
+
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Handles an entity logic request based on operation,
 %% should be wrapped in a try-catch.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_op_logic_request(req_ctx()) -> result().
-execute_op_logic_request(#req_ctx{
+-spec process_request(req_ctx()) -> result().
+process_request(#req_ctx{
     plugin = Plugin,
     req = #op_req{operation = create} = Req,
     entity = Entity
@@ -319,29 +319,29 @@ execute_op_logic_request(#req_ctx{
             Result
     end;
 
-execute_op_logic_request(#req_ctx{
+process_request(#req_ctx{
     plugin = Plugin, 
     req = #op_req{operation = get} = Req, 
     entity = Entity
 }) ->
     Plugin:get(Req, Entity);
 
-execute_op_logic_request(#req_ctx{
+process_request(#req_ctx{
     plugin = Plugin, 
     req = #op_req{operation = update} = Req
 }) ->
     Plugin:update(Req);
 
-execute_op_logic_request(#req_ctx{
+process_request(#req_ctx{
     plugin = Plugin, 
-    req = #op_req{operation = delete} = Req
+    req = #op_req{operation = delete, client = Cl, gri = GRI} = Req
 }) ->
-    case {Plugin:delete(Req), Req} of
-        {ok, #op_req{gri = #gri{type = Type, id = _Id, aspect = instance}, client = Cl}} ->
+    case {Plugin:delete(Req), GRI} of
+        {ok, #gri{type = Type, id = Id, aspect = instance}} ->
             % If an entity instance is deleted, log an information about it
             % (it's a significant operation and this information might be useful).
-            ?debug("~s has been deleted by client: ~s", [
-                Type,
+            ?debug("~s(~p) has been deleted by client: ~s", [
+                Type, Id,
                 client_to_string(Cl)
             ]),
             ok;

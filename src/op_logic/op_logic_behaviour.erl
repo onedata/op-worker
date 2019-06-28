@@ -1,6 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -8,10 +9,35 @@
 %%% @doc
 %%% This behaviour should be implemented by modules that implement op logic
 %%% operations. Every op logic plugin serves as a middleware between
-%%% API and datastore in the context of specific entity type (op_xxx records).
+%%% API and op internals (e.g. lfm) in the context of specific
+%%% entity type (op_xxx records).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_logic_behaviour).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given operation is supported based on operation, aspect and
+%% scope (entity type is known based on the plugin itself).
+%% @end
+%%--------------------------------------------------------------------
+-callback operation_supported(
+    op_logic:operation(), op_logic:aspect(), op_logic:scope()
+) ->
+    boolean().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns data spec for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be sanitized.
+%% @end
+%%--------------------------------------------------------------------
+-callback data_spec(op_logic:req()) -> op_sanitizer:data_spec().
 
 
 %%--------------------------------------------------------------------
@@ -22,17 +48,35 @@
 %%--------------------------------------------------------------------
 -callback fetch_entity(op_logic:entity_id()) ->
     {ok, op_logic:entity()} | op_logic:error().
--optional_callbacks([fetch_entity/1]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given operation is supported based on operation, aspect and
-%% scope (entity type is known based on the plugin itself).
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--callback operation_supported(op_logic:operation(), op_logic:aspect(),
-    op_logic:scope()) -> boolean().
+-callback exists(op_logic:req(), op_logic:entity()) -> boolean().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-callback authorize(op_logic:req(), op_logic:entity()) -> boolean().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given request can be processed (e.g. whether space, in
+%% context of which request happens, is supported locally).
+%% Returns ok if request is valid and throws custom error if not
+%% (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% @end
+%%--------------------------------------------------------------------
+-callback validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 
 
 %%--------------------------------------------------------------------
@@ -66,34 +110,3 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback delete(op_logic:req()) -> op_logic:delete_result().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if given resource (aspect of entity) exists, based on
-%% op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--callback exists(op_logic:req(), op_logic:entity()) -> boolean().
--optional_callbacks([exists/2]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--callback authorize(op_logic:req(), op_logic:entity()) -> boolean().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
-%% @end
-%%--------------------------------------------------------------------
--callback data_signature(op_logic:req()) -> op_validator:data_signature().
