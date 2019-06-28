@@ -85,7 +85,7 @@ get_master_job(#document{value = #tree_traverse_job{
         last_tree = LastTree,
         execute_slave_on_dir = OnDir,
         batch_size = BatchSize,
-        traverse_info = TraverseInfo
+        traverse_info = binary_to_term(TraverseInfo)
     },
     {ok, Job, Pool, TaskID};
 get_master_job(Key) ->
