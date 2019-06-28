@@ -23,9 +23,15 @@
 
 % op logic callbacks
 -export([op_logic_plugin/0]).
--export([operation_supported/3]).
+-export([
+    operation_supported/3,
+    data_spec/1,
+    fetch_entity/1,
+    exists/2,
+    authorize/2,
+    validate/2
+]).
 -export([create/1, get/2, update/1, delete/1]).
--export([authorize/2, data_signature/1]).
 
 -define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
 
@@ -36,15 +42,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the op logic plugin module that handles model logic.
-%% @end
-%%--------------------------------------------------------------------
-op_logic_plugin() ->
-    op_provider.
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns contents of the configuration object.
+%% Returns contents of the configuration object.
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_configuration() -> #{binary() := term()}.
@@ -82,6 +80,15 @@ gather_configuration() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the op logic plugin module that handles model logic.
+%% @end
+%%--------------------------------------------------------------------
+op_logic_plugin() ->
+    op_provider.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Determines if given operation is supported based on operation, aspect and
 %% scope (entity type is known based on the plugin itself).
 %% @end
@@ -91,6 +98,62 @@ gather_configuration() ->
 operation_supported(get, configuration, private) -> true;
 
 operation_supported(_, _, _) -> false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns data signature for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
+    #{}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves an entity from datastore based on its EntityId.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
+%% @end
+%%--------------------------------------------------------------------
+fetch_entity(_) ->
+    {ok, undefined}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+exists(_, _) ->
+    true.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
+    true.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% @end
+%%--------------------------------------------------------------------
+validate(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -111,10 +174,7 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{gri = #gri{aspect = configuration}}, _) ->
-    {ok, gather_configuration()};
-
-get(_, _) ->
-    ?ERROR_NOT_SUPPORTED.
+    {ok, gather_configuration()}.
 
 
 %%--------------------------------------------------------------------
@@ -135,30 +195,3 @@ update(_) ->
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
-    true;
-
-authorize(_, _) ->
-    false.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
-%% @end
-%%--------------------------------------------------------------------
--spec data_signature(op_logic:req()) -> op_validator:data_signature().
-data_signature(_) -> #{}.
