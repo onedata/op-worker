@@ -45,7 +45,8 @@
     custom_metadata_doc_should_contain_file_objectid/1,
     create_and_query_view_mapping_one_file_to_many_rows/1,
     effective_value_test/1,
-    traverse_test/1]).
+    traverse_test/1,
+    file_traverse_job_test/1]).
 
 %% Pool callbacks
 -export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
@@ -69,7 +70,8 @@ all() ->
         resolve_guid_of_dir_should_return_dir_guid,
         custom_metadata_doc_should_contain_file_objectid,
         effective_value_test,
-        traverse_test
+        traverse_test,
+        file_traverse_job_test
     ]).
 
 -define(CACHE, test_cache).
@@ -115,6 +117,34 @@ traverse_test(Config) ->
     },
 
     ?assertEqual(Expected, lists:sort(Ans)),
+    ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
+        rpc:call(Worker, tree_traverse, get_task, [?MODULE, ID])),
+    ok.
+
+file_traverse_job_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    File = <<"/", SpaceName/binary, "/1">>,
+    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#600)),
+
+    RunOptions = #{
+        traverse_info => self()
+    },
+    {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid), RunOptions])),
+
+    Expected = [1],
+    Ans = get_slave_ans(),
+    Description = #{
+        slave_jobs_delegated => 1,
+        slave_jobs_done => 1,
+        slave_jobs_failed => 0,
+        master_jobs_delegated => 1,
+        master_jobs_done => 1
+    },
+
+    ?assertEqual(Expected, Ans),
     ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
         rpc:call(Worker, tree_traverse, get_task, [?MODULE, ID])),
     ok.
@@ -565,7 +595,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
-init_per_testcase(traverse_test = Case, Config) ->
+init_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -635,9 +665,9 @@ get_slave_ans() ->
 build_traverse_tree(Worker, SessId, Dir, Num) ->
     NumBin = integer_to_binary(Num),
     Dirs = case Num < 1000 of
-               true -> [10 * Num, 10 * Num + 5];
-               _ -> []
-           end,
+        true -> [10 * Num, 10 * Num + 5];
+        _ -> []
+    end,
     Files = [Num + 1, Num + 2, Num + 3],
 
     DirsPaths = lists:map(fun(DirNum) ->
@@ -645,13 +675,13 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
         NewDir = <<Dir/binary, "/", DirNumBin/binary>>,
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, NewDir)),
         {NewDir, DirNum}
-                          end, Dirs),
+    end, Dirs),
 
     lists:foreach(fun(FileNum) ->
         FileNumBin = integer_to_binary(FileNum),
         NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
         ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
-                  end, Files),
+    end, Files),
 
     NumBin = integer_to_binary(Num),
     Files ++ lists:flatten(lists:map(fun({D, N}) ->

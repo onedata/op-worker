@@ -31,7 +31,7 @@
 %% Main API
 -export([init/4, init/5, run/2, run/3]).
 % Getters API
--export([get_traverse_info/1, get_doc/1, get_task/2]).
+-export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2]).
 %% Behaviour callbacks
 -export([do_master_job/1, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
@@ -115,7 +115,7 @@ run(Pool, FileCtx, Opts) ->
     run(Pool, Doc, Opts).
 
 %%%===================================================================
-%%% Getters API
+%%% Getters/Setters API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -126,6 +126,15 @@ run(Pool, FileCtx, Opts) ->
 -spec get_traverse_info(master_job()) -> traverse_info().
 get_traverse_info(#tree_traverse{traverse_info = TraverseInfo}) ->
     TraverseInfo.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets traverse info in master job record.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_traverse_info(master_job(), traverse_info()) -> master_job().
+set_traverse_info(TraverseJob, TraverseInfo) ->
+    TraverseJob#tree_traverse{traverse_info = TraverseInfo}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -154,7 +163,7 @@ get_task(Pool, ID) ->
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
-    doc = #document{value = #file_meta{}} = Doc,
+    doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
     last_name = LN,
     last_tree = LT,
@@ -192,7 +201,12 @@ do_master_job(#tree_traverse{
             last_tree = LT2
         } | lists:reverse(MasterJobs)]
     end,
-    {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}}.
+    {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}};
+do_master_job(#tree_traverse{
+    doc = Doc,
+    traverse_info = TraverseInfo
+}) ->
+    {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
 %% @doc
