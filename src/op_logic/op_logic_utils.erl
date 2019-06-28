@@ -31,6 +31,8 @@
 
 
 -spec is_eff_space_member(op_logic:client(), op_space:id()) -> boolean().
+is_eff_space_member(?NOBODY, _SpaceId) ->
+    false;
 is_eff_space_member(#client{id = SessionId}, SpaceId) ->
     {ok, UserId} = session:get_user_id(SessionId),
     user_logic:has_eff_space(SessionId, UserId, SpaceId).

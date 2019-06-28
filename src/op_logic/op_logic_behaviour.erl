@@ -70,10 +70,9 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given request can be processed (e.g. whether space, in
-%% context of which request happens, is supported locally).
-%% Returns ok if request is valid and throws custom error if not
-%% (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
 -callback validate(op_logic:req(), op_logic:entity()) -> ok | no_return().

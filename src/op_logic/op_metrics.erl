@@ -21,9 +21,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([op_logic_plugin/0]).
--export([operation_supported/3]).
+-export([
+    operation_supported/3,
+    data_spec/1,
+    fetch_entity/1,
+    exists/2,
+    authorize/2,
+    validate/2
+]).
 -export([create/1, get/2, update/1, delete/1]).
--export([authorize/2, data_signature/1]).
 
 -type metric_type() ::
     storage_quota | storage_used |
@@ -64,6 +70,95 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns data signature for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+data_spec(#op_req{operation = get, gri = #gri{aspect = space}}) -> #{
+    required => #{
+        <<"metric">> => {binary, [
+            <<"storage_quota">>,
+            <<"storage_used">>,
+            <<"data_access">>,
+            <<"block_access">>,
+            <<"connected_users">>,
+            <<"remote_transfer">>
+        ]}
+    },
+    optional => #{
+        <<"step">> => {binary, [<<"5m">>, <<"1h">>, <<"1d">>, <<"1m">>]}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = {user, _}}}) -> #{
+    required => #{
+        <<"metric">> => {binary, [
+            <<"storage_used">>,
+            <<"data_access">>,
+            <<"block_access">>,
+            <<"remote_transfer">>
+        ]}
+    },
+    optional => #{
+        <<"step">> => {binary, [<<"5m">>, <<"1h">>, <<"1d">>, <<"1m">>]}
+    }
+}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves an entity from datastore based on its EntityId.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
+%% @end
+%%--------------------------------------------------------------------
+fetch_entity(_) ->
+    {ok, undefined}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+exists(_, _) ->
+    true.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = space}} = Req, _) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}} = Req, _) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% @end
+%%--------------------------------------------------------------------
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = space}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates a resource (aspect of entity) based on op logic request.
 %% @end
 %%--------------------------------------------------------------------
@@ -87,10 +182,7 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = space}},
 get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = {user, UserId}}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(Cl#client.id, SpaceId, UserId, Metric, Step);
-
-get(_, _) ->
-    ?ERROR_NOT_SUPPORTED.
+    get_metric(Cl#client.id, SpaceId, UserId, Metric, Step).
 
 
 %%--------------------------------------------------------------------
@@ -111,69 +203,6 @@ update(_) ->
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
-    false;
-
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = space}} = Req, _) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
-
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}} = Req, _) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
-
-authorize(_, _) ->
-    false.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
-%% @end
-%%--------------------------------------------------------------------
--spec data_signature(op_logic:req()) -> op_validator:data_signature().
-data_signature(#op_req{operation = get, gri = #gri{aspect = space}}) -> #{
-    required => #{
-        <<"metric">> => {binary, [
-            <<"storage_quota">>,
-            <<"storage_used">>,
-            <<"data_access">>,
-            <<"block_access">>,
-            <<"connected_users">>,
-            <<"remote_transfer">>
-        ]}
-    },
-    optional => #{
-        <<"step">> => {binary, [<<"5m">>, <<"1h">>, <<"1d">>, <<"1m">>]}
-    }
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = {user, _}}}) -> #{
-    required => #{
-        <<"metric">> => {binary, [
-            <<"storage_used">>,
-            <<"data_access">>,
-            <<"block_access">>,
-            <<"remote_transfer">>
-        ]}
-    },
-    optional => #{
-        <<"step">> => {binary, [<<"5m">>, <<"1h">>, <<"1d">>, <<"1m">>]}
-    }
-};
-
-data_signature(_) -> #{}.
 
 
 %%%===================================================================
