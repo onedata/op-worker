@@ -73,7 +73,14 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
-data_spec(_) -> #{}.
+data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
+    #{};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    #{};
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
+    #{}.
 
 
 %%--------------------------------------------------------------------

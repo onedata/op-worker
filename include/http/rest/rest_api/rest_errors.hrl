@@ -27,6 +27,7 @@
 -define(ERROR_TRANSFER_ALREADY_ENDED, {error, transfer_already_ended}).
 -define(ERROR_TRANSFER_NOT_ENDED, {error, transfer_not_ended}).
 
+-define(ERROR_POSIX(__ERRNO), {error, {posix, __ERRNO}}).
 
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,
