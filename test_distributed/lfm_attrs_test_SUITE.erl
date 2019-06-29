@@ -126,7 +126,7 @@ file_traverse_job_test(Config) ->
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
-    File = <<"/", SpaceName/binary, "/1">>,
+    File = <<"/", SpaceName/binary, "/1000000">>,
     {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#600)),
 
     RunOptions = #{
@@ -134,7 +134,7 @@ file_traverse_job_test(Config) ->
     },
     {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid), RunOptions])),
 
-    Expected = [1],
+    Expected = [1000000],
     Ans = get_slave_ans(),
     Description = #{
         slave_jobs_delegated => 1,
@@ -610,6 +610,10 @@ init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [atom_to_binary(?MODULE, utf8)])),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(effective_value_test = Case, Config) ->
     CachePid = ?config(cache_pid, Config),
     CachePid ! {finish, self()},
