@@ -71,7 +71,8 @@ get_models() -> [
     autocleaning_run,
     file_popularity_config,
     harvesting_state,
-    idp_access_token
+    idp_access_token,
+    tree_traverse_job
 ].
 
 %%--------------------------------------------------------------------

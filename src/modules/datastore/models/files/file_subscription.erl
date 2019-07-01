@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([save/1, get/1, list/0, exists/1, delete/2, update/2, create/1]).
+-export([save/1, get/1, exists/1, delete/2, update/2, create/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -91,15 +91,6 @@ delete(Key, Pred) ->
 exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [doc()]} | {error, term()}.
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% datastore_model callbacks

@@ -24,8 +24,7 @@
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
     many_files_creation_tree_test_base/4, single_dir_creation_test_base/2]).
--export([create_single_call/4]).
--export([get_param_value/2]).
+-export([create_single_call/4, get_final_ans_tree/9, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
 
