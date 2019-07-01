@@ -15,12 +15,19 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 -export([op_logic_plugin/0]).
--export([operation_supported/3]).
+-export([
+    operation_supported/3,
+    data_spec/1,
+    fetch_entity/1,
+    exists/2,
+    authorize/2,
+    validate/2
+]).
 -export([create/1, get/2, update/1, delete/1]).
--export([authorize/2, data_signature/1]).
 
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
@@ -31,12 +38,7 @@
     <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
 ]).
 
--define(call_lfm(__FunctionCall),
-    case logical_file_manager:__FunctionCall of
-        {error, _} = __Error -> throw(__Error);
-        __Result -> __Result
-    end
-).
+-define(call_lfm(__FunctionCall), extract_lfm_res(logical_file_manager:__FunctionCall)).
 
 %%%===================================================================
 %%% API
@@ -76,39 +78,210 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns data spec for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
+    required => #{<<"application/json">> => {json,
+        % Currently only file mode can be changed
+        fun(JSON) ->
+            case maps:to_list(JSON) of
+                [{<<"mode">>, Value}] ->
+                    try binary_to_integer(Value, 8) of
+                        Val ->
+                            {true, #{<<"mode">> => Val}}
+                    catch
+                        _:_ ->
+                            throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+                    end;
+                [{_Attr, _Value}] ->
+                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, [<<"mode">>]));
+                _ ->
+                    false
+            end
+        end
+    }}
+};
+
+data_spec(#op_req{operation = create, gri = #gri{aspect = xattrs}}) -> #{
+    required => #{<<"application/json">> => {json,
+        % Accept only one xattr to set
+        fun(JSON) ->
+            case maps:to_list(JSON) of
+                [{Key, _Val}] when not is_binary(Key) ->
+                    throw(?ERROR_BAD_VALUE_BINARY(<<"extended attribute name">>));
+                [{_, _}] ->
+                    true;
+                _ ->
+                    false
+            end
+        end
+    }}
+};
+
+data_spec(#op_req{operation = create, gri = #gri{aspect = json_metadata}}) -> #{
+    required => #{<<"application/json">> => {json, any}},
+    optional => #{
+        <<"filter_type">> => {binary, [<<"keypath">>]},
+        <<"filter">> => {binary, any}
+    }
+};
+
+data_spec(#op_req{operation = create, gri = #gri{aspect = rdf_metadata}}) -> #{
+    required => #{<<"application/rdf+xml">> => {binary, any}}
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) -> #{
+    optional => #{
+        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"offset">> => {integer, {not_lower_than, 0}}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = attrs}}) -> #{
+    optional => #{<<"attribute">> => {binary, ?ALL_BASIC_ATTRIBUTES}}
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = xattrs}}) -> #{
+    optional => #{
+        <<"attribute">> => {binary, any},
+        <<"inherited">> => {boolean, any}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = json_metadata}}) -> #{
+    optional => #{
+        <<"filter_type">> => {binary, any},
+        <<"filter">> => {binary, any},
+        <<"inherited">> => {boolean, any}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
+    undefined.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves an entity from datastore based on its EntityId.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_entity(op_logic:entity_id()) ->
+    {ok, op_logic:entity()} | entity_logic:error().
+fetch_entity(_) ->
+    {ok, undefined}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
+exists(_, _) ->
+    true.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%%
+%% Checks only if user is in space in which file exists. File permissions
+%% are checked later by logical_file_manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
+authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= attrs;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadta
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
+    Client = Req#op_req.client,
+    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
+        Guid ->
+            true;
+        _ ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            op_logic_utils:is_eff_space_member(Client, SpaceId)
+    end;
+
+authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= attrs;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadta
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% @end
+%%--------------------------------------------------------------------
+-spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= attrs;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadta
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
+    Client = Req#op_req.client,
+    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
+        Guid ->
+            ok;
+        _ ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            op_logic_utils:ensure_space_supported_locally(SpaceId)
+    end;
+
+validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= attrs;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadta
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:ensure_space_supported_locally(SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates a resource (aspect of entity) based on op logic request.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}) ->
-    Mode = case maps:to_list(maps:get(<<"application/json">>, Data)) of
-        [{<<"mode">>, Value}] ->
-            try binary_to_integer(Value, 8) of
-                Val ->
-                    Val
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
-            end;
-        [{_Attr, _Value}] ->
-            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, [<<"mode">>]));
-        _ ->
-            throw(?ERROR_BAD_DATA(<<"attribute">>))
-    end,
-
-    ?call_lfm(set_perms(Cl#client.id, {guid, FileGuid}, Mode));
+    #{<<"mode">> := Mode} = maps:get(<<"application/json">>, Data),
+    ?call_lfm(set_perms(Cl#client.session_id, {guid, FileGuid}, Mode));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
-    Xattr = case maps:to_list(maps:get(<<"application/json">>, Data)) of
-        [{Key, _Val}] when not is_binary(Key) ->
-            throw(?ERROR_BAD_VALUE_BINARY(<<"extended attribute name">>));
-        [{Name, Value}] ->
-            #xattr{name = Name, value = Value};
-        _ ->
-            throw(?ERROR_BAD_DATA(<<"attribute">>))
-    end,
-
-    ?call_lfm(set_xattr(Cl#client.id, {guid, FileGuid}, Xattr, false, false));
+    [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
+    Xattr = #xattr{name = Name, value = Value},
+    ?call_lfm(set_xattr(Cl#client.session_id, {guid, FileGuid}, Xattr, false, false));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
     JSON = maps:get(<<"application/json">>, Data),
@@ -123,11 +296,11 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json
             binary:split(Filter, <<".">>, [global])
      end,
 
-    ?call_lfm(set_metadata(Cl#client.id, {guid, FileGuid}, json, JSON, FilterList));
+    ?call_lfm(set_metadata(Cl#client.session_id, {guid, FileGuid}, json, JSON, FilterList));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?call_lfm(set_metadata(Cl#client.id, {guid, FileGuid}, rdf, Rdf, [])).
+    ?call_lfm(set_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, Rdf, [])).
 
 
 %%--------------------------------------------------------------------
@@ -138,15 +311,14 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = rdf_
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
-    SessionId = Cl#client.id,
+    SessionId = Cl#client.session_id,
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-
-    {ok, Path} = logical_file_manager:get_file_path(SessionId, FileGuid),
+    {ok, Path} = ?call_lfm(get_file_path(SessionId, FileGuid)),
 
     case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children} = logical_file_manager:ls(SessionId, {guid, FileGuid}, Offset, Limit),
+            {ok, Children} = ?call_lfm(ls(SessionId, {guid, Guid}, Offset, Limit)),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
                     #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
@@ -154,12 +326,12 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}},
         {ok, #file_attr{guid = Guid}} ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),
             {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]};
-        Error ->
-            Error
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
    end;
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
-    SessionId = Cl#client.id,
+    SessionId = Cl#client.session_id,
     Attributes = case maps:get(<<"attribute">>, Data, undefined) of
         undefined -> ?ALL_BASIC_ATTRIBUTES;
         Attr -> [Attr]
@@ -168,45 +340,34 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}
     case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
         {ok, Attrs} ->
             {ok, gather_attributes(#{}, Attributes, Attrs)};
-        {error, _} = Error ->
-            Error
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end;
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
-    SessionId = Cl#client.id,
+    SessionId = Cl#client.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
-            case logical_file_manager:list_xattr(
+            {ok, Xattrs} = ?call_lfm(list_xattr(
                 SessionId, {guid, FileGuid}, Inherited, true
-            ) of
-                {ok, Xattrs} ->
-                    {ok, lists:foldl(fun(XattrName, Acc) ->
-                        {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(
-                            SessionId,
-                            {guid, FileGuid},
-                            XattrName,
-                            Inherited
-                        ),
-                        Acc#{XattrName => Value}
-                    end, #{}, Xattrs)};
-                {error, _} = Error ->
-                    Error
-            end;
+            )),
+            {ok, lists:foldl(fun(XattrName, Acc) ->
+                {ok, #xattr{value = Value}} = ?call_lfm(get_xattr(
+                    SessionId,
+                    {guid, FileGuid},
+                    XattrName,
+                    Inherited
+                )),
+                Acc#{XattrName => Value}
+            end, #{}, Xattrs)};
         XattrName ->
-            case logical_file_manager:get_xattr(
-                SessionId, {guid, FileGuid}, XattrName, Inherited
-            ) of
-                {ok, #xattr{value = Value}} ->
-                    {ok, #{XattrName => Value}};
-                {error, _} = Error ->
-                    Error
-            end
+            ?call_lfm(get_xattr(SessionId, {guid, FileGuid}, XattrName, Inherited))
     end;
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
-    SessionId = Cl#client.id,
+    SessionId = Cl#client.session_id,
 
     Inherited = maps:get(<<"inherited">>, Data, false),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -247,102 +408,15 @@ delete(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
-    false;
-
-authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
-    As =:= attrs;
-    As =:= xattrs;
-    As =:= json_metadata;
-    As =:= rdf_metadta
-->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
-
-authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    true;
-
-authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
-    As =:= attrs;
-    As =:= xattrs;
-    As =:= json_metadata;
-    As =:= rdf_metadta
-->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns data spec for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
-%% @end
-%%--------------------------------------------------------------------
--spec data_signature(op_logic:req()) -> op_validator:data_signature().
-data_signature(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
-    required => #{<<"application/json">> => {json, any}}
-};
-
-data_signature(#op_req{operation = create, gri = #gri{aspect = xattrs}}) -> #{
-    required => #{<<"application/json">> => {json, any}}
-};
-
-data_signature(#op_req{operation = create, gri = #gri{aspect = json_metadata}}) -> #{
-    required => #{<<"application/json">> => {json, any}},
-    optional => #{
-        <<"filter_type">> => {binary, [<<"keypath">>]},
-        <<"filter">> => {binary, any}
-    }
-};
-
-data_signature(#op_req{operation = create, gri = #gri{aspect = rdf_metadata}}) -> #{
-    required => #{<<"application/rdf+xml">> => {binary, any}}
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = list}}) -> #{
-    optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"offset">> => {integer, {not_lower_than, 0}}
-    }
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = attrs}}) -> #{
-    optional => #{<<"attribute">> => {binary, ?ALL_BASIC_ATTRIBUTES}}
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = xattrs}}) -> #{
-    optional => #{
-        <<"attribute">> => {binary, any},
-        <<"inherited">> => {boolean, any}
-    }
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = json_metadata}}) -> #{
-    optional => #{
-        <<"filter_type">> => {binary, any},
-        <<"filter">> => {binary, any},
-        <<"inherited">> => {boolean, any}
-    }
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
-    #{}.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+-spec extract_lfm_res({ok, term()} | {error, term()}) ->
+    {ok, term()} | no_return().
+extract_lfm_res({ok, _} = Res) -> Res;
+extract_lfm_res({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 
 
 %%--------------------------------------------------------------------
