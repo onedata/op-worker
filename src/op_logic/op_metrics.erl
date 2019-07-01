@@ -77,7 +77,7 @@ operation_supported(_, _, _) -> false.
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = space}}) -> #{
     required => #{
         <<"metric">> => {binary, [
@@ -181,12 +181,12 @@ create(_) ->
 get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = space}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(Cl#client.id, SpaceId, undefined, Metric, Step);
+    get_metric(Cl#client.session_id, SpaceId, undefined, Metric, Step);
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = {user, UserId}}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(Cl#client.id, SpaceId, UserId, Metric, Step).
+    get_metric(Cl#client.session_id, SpaceId, UserId, Metric, Step).
 
 
 %%--------------------------------------------------------------------

@@ -37,7 +37,7 @@
 %% Which means how value of given Key should be sanitized.
 %% @end
 %%--------------------------------------------------------------------
--callback data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+-callback data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 
 
 %%--------------------------------------------------------------------

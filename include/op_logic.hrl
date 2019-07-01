@@ -37,8 +37,24 @@
 
 % Convenience macros for concise code
 -define(USER, #client{type = user}).
--define(USER(__Id), #client{type = user, id = __Id}).
--define(NOBODY, #client{type = nobody, id = ?GUEST_SESS_ID}).
--define(ROOT, #client{type = root, id = ?ROOT_SESS_ID}).
+-define(USER(__Id), #client{
+    type = user,
+    id = __Id
+}).
+-define(USER(__Id, __SessionId), #client{
+    type = user,
+    id = __Id,
+    session_id = __SessionId
+}).
+-define(ROOT, #client{
+    type = root,
+    id = ?ROOT_SESS_ID,
+    session_id = ?ROOT_SESS_ID
+}).
+-define(NOBODY, #client{
+    type = nobody,
+    id = ?GUEST_SESS_ID,
+    session_id = ?GUEST_SESS_ID
+}).
 
 -endif.

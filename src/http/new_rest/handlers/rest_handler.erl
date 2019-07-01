@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Łukasz Opioła
+%%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -12,7 +12,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(rest_handler).
--author("Łukasz Opioła").
+-author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
 -behaviour(cowboy_rest).

@@ -72,15 +72,15 @@ operation_supported(_, _, _) -> false.
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
-    #{};
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    #{};
+    undefined;
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
-    #{}.
+    undefined.
 
 
 %%--------------------------------------------------------------------
@@ -161,13 +161,12 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
-    {ok, UserId} = session:get_user_id(Cl#client.id),
-    case transfer:rerun_ended(UserId, TransferId) of
+    case transfer:rerun_ended(Cl#client.id, TransferId) of
         {ok, NewTransferId} ->
             {ok, value, NewTransferId};
         {error, not_ended} ->
             ?ERROR_TRANSFER_NOT_ENDED;
-        Error ->
+        {error, _} = Error ->
             Error
     end.
 
@@ -204,7 +203,9 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
         ok ->
             ok;
         {error, already_ended} ->
-            ?ERROR_TRANSFER_ALREADY_ENDED
+            ?ERROR_TRANSFER_ALREADY_ENDED;
+        {error, _} = Error ->
+            Error
     end.
 
 

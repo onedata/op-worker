@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Łukasz Opioła
+%%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -16,7 +16,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_logic).
--author("Łukasz Opioła").
+-author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
@@ -179,10 +179,16 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
     gri = #gri{aspect = Aspect},
     data = RawData
 } = Req} = ReqCtx) ->
-    DataSpec = Plugin:data_spec(Req),
-    DataWithAspect = RawData#{aspect => Aspect},
-    SanitizedData = op_sanitizer:sanitize_data(DataWithAspect, DataSpec),
-    ReqCtx#req_ctx{req = Req#op_req{data = maps:remove(aspect, SanitizedData)}}.
+    case Plugin:data_spec(Req) of
+        undefined ->
+            ReqCtx;
+        DataSpec ->
+            DataWithAspect = RawData#{aspect => Aspect},
+            SanitizedData = op_sanitizer:sanitize_data(DataWithAspect, DataSpec),
+            ReqCtx#req_ctx{req = Req#op_req{
+                data = maps:remove(aspect, SanitizedData)
+            }}
+    end.
 
 
 %%--------------------------------------------------------------------

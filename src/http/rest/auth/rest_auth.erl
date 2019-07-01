@@ -40,7 +40,7 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, ?USER(SessionId)} ->
+        {ok, ?USER(_UserId, SessionId)} ->
             {true, Req, State#{auth => SessionId}};
         {ok, ?NOBODY} ->
             NewReq = cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req),
@@ -66,10 +66,10 @@ authenticate(Req) ->
             {ok, ?NOBODY};
         Auth ->
             case user_identity:get_or_fetch(Auth) of
-                {ok, #document{value = Iden}} ->
+                {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
                     case session_manager:reuse_or_create_rest_session(Iden, Auth) of
                         {ok, SessId} ->
-                            {ok, ?USER(SessId)};
+                            {ok, ?USER(UserId, SessId)};
                         {error, {invalid_identity, _}} ->
                             user_identity:delete(Auth),
                             authenticate(Req)

@@ -72,7 +72,7 @@ operation_supported(_, _, _) -> false.
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     optional => #{
         <<"provider_id">> => {binary, any},
@@ -104,7 +104,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = replicate_by_index}}) 
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = distribution}}) ->
-    #{};
+    undefined;
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) -> #{
     optional => #{
@@ -280,7 +280,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_ind
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
     case logical_file_manager:schedule_file_replication(
-        Cl#client.id,
+        Cl#client.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined)
@@ -293,7 +293,7 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_index}}) ->
     case logical_file_manager:schedule_replication_by_index(
-        Cl#client.id,
+        Cl#client.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined),
         maps:get(<<"space_id">>, Data),
@@ -315,7 +315,13 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    logical_file_manager:get_file_distribution(Cl#client.id, {guid, FileGuid}).
+    SessionId = Cl#client.session_id,
+    case logical_file_manager:get_file_distribution(SessionId, {guid, FileGuid}) of
+        {ok, _Blocks} = Res ->
+            Res;
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -336,7 +342,7 @@ update(_) ->
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
     case logical_file_manager:schedule_replica_eviction(
-        Cl#client.id,
+        Cl#client.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined)
@@ -349,7 +355,7 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
 
 delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evict_by_index}}) ->
     case logical_file_manager:schedule_replica_eviction_by_index(
-        Cl#client.id,
+        Cl#client.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined),
         maps:get(<<"space_id">>, Data),

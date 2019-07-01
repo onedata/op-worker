@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Łukasz Opioła
+%%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -11,7 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(rest_translator).
--author("Łukasz Opioła").
+-author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").

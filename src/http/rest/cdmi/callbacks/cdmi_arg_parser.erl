@@ -381,9 +381,7 @@ is_capability_object(#{path := Path} = Req) ->
 -spec try_authenticate(req()) -> rest_auth:auth().
 try_authenticate(Req) ->
     case rest_auth:authenticate(Req) of
-        {ok, ?NOBODY} ->
-            throw(?ERROR_UNAUTHORIZED_REST);
-        {ok, ?USER(SessionId)} ->
+        {ok, ?USER(_UserId, SessionId)} ->
             SessionId;
         _ ->
             throw(?ERROR_UNAUTHORIZED_REST)

@@ -141,7 +141,7 @@ remove_share_insecure(UserCtx, FileCtx) ->
 -spec check_is_dir(file_ctx:ctx()) -> ok | no_return().
 check_is_dir(FileCtx) ->
     case file_ctx:is_dir(FileCtx) of
-        {false, _} -> ?ERROR(?EINVAL);
+        {false, _} -> ?ERROR(?ENOTDIR);
         _ -> ok
     end.
 

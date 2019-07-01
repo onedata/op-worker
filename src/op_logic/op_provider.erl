@@ -109,9 +109,9 @@ operation_supported(_, _, _) -> false.
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
-    #{}.
+    undefined.
 
 
 %%--------------------------------------------------------------------
