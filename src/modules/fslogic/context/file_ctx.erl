@@ -567,7 +567,7 @@ get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     UserDoc = user_ctx:get_user(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     SpaceId = get_space_id_const(FileCtx),
-    case user_logic:has_eff_space(UserDoc, SpaceId) of
+    case user_logic:has_eff_space(UserDoc, SpaceId) orelse SessionId == ?ROOT_SESS_ID of
         false ->
             throw(?ENOENT);
         true ->

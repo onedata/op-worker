@@ -78,8 +78,12 @@ update_local_location_replica(FileCtx,
     case version_vector:compare(LocalVV, RemoteVV) of
         identical -> ok;
         greater -> ok;
-        lesser -> update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc);
-        concurrent -> reconcile_replicas(FileCtx, LocalDoc, RemoteDoc)
+        lesser ->
+            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc),
+            qos_req:restore_qos_on_provider_storages(FileCtx);
+        concurrent ->
+            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc),
+            qos_req:restore_qos_on_provider_storages(FileCtx)
     end.
 
 %%--------------------------------------------------------------------

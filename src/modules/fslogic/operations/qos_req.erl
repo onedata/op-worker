@@ -15,10 +15,12 @@
 -include("modules/datastore/qos.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2]).
+-export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2,
+    restore_qos_on_provider_storages/1, replicate_using_effective_qos/2]).
 
 %%%===================================================================
 %%% API
@@ -76,8 +78,10 @@ remove_qos(UserCtx, FileCtx, QosId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Replicates file according to it's effective qos.
+%% Uses qos traverse pool.
 %% @end
 %%--------------------------------------------------------------------
+-spec replicate_using_effective_qos(file_ctx:ctx(), session:id()) -> ok.
 replicate_using_effective_qos(FileCtx, SessId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     EffQos = file_qos:get(FileUuid),
@@ -90,6 +94,29 @@ replicate_using_effective_qos(FileCtx, SessId) ->
             lists:foreach(fun(QosId) ->
                 qos_traverse:fulfill_qos(SessId, FileCtx, QosId, TargetStorages)
             end, EffQos#file_qos.qos_list)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replication to all storages of this provider that are required by qos.
+%% Uses qos traverse pool.
+%% @end
+%%--------------------------------------------------------------------
+-spec restore_qos_on_provider_storages(file_ctx:ctx()) -> ok.
+restore_qos_on_provider_storages(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    EffFileQos = file_qos:get(FileUuid),
+
+    case EffFileQos of
+        undefined ->
+            ok;
+        _ ->
+            % TODO get all storages of this provider
+            StorageId = oneprovider:get_id_or_undefined(),
+            QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
+            lists:foreach(fun(QosId) ->
+                qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId])
+            end, QosToUpdate)
     end.
 
 %%%===================================================================
