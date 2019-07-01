@@ -16,15 +16,19 @@
 
 -include("op_logic.hrl").
 -include("modules/datastore/transfer.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
--include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 -export([op_logic_plugin/0]).
--export([operation_supported/3]).
+-export([
+    operation_supported/3,
+    data_spec/1,
+    fetch_entity/1,
+    exists/2,
+    authorize/2,
+    validate/2
+]).
 -export([create/1, get/2, update/1, delete/1]).
--export([authorize/2, data_signature/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_INDEX_LIST_LIMIT, 100).
@@ -73,40 +77,256 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns data signature for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
+    required => #{
+        <<"application/javascript">> => {binary, non_empty}
+    },
+    optional => #{
+        <<"spatial">> => {boolean, any},
+        <<"update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"providers[]">> => {any,
+            fun
+                (ProviderId) when is_binary(ProviderId) ->
+                    [ProviderId];
+                (Providers) when is_list(Providers) ->
+                    Providers
+            end
+        }
+    }
+};
+
+data_spec(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
+    required => #{<<"application/javascript">> => {binary, non_empty}}
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= list;
+    As =:= instance
+->
+    #{};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
+    optional => #{
+        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"page_token">> => {binary, non_empty}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = {index, _}}}) ->
+    #{};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
+    optional => #{
+        <<"descending">> => {boolean, any},
+        <<"limit">> => {integer, {not_lower_than, 1}},
+        <<"skip">> => {integer, {not_lower_than, 1}},
+        <<"stale">> => {binary, [<<"ok">>, <<"update_after">>, <<"false">>]},
+        <<"spatial">> => {boolean, any},
+        <<"inclusive_end">> => {boolean, any},
+        <<"start_range">> => {binary, any},
+        <<"end_range">> => {binary, any},
+        <<"startkey">> => {binary, any},
+        <<"endkey">> => {binary, any},
+        <<"key">> => {binary, any},
+        <<"keys">> => {binary, any},
+        <<"bbox">> => {binary, any}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+    optional => #{
+        <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
+        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"page_token">> => {binary, non_empty}
+    }
+};
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
+    optional => #{
+        <<"application/javascript">> => {binary, any},
+        <<"spatial">> => {boolean, any},
+        <<"update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
+        <<"providers[]">> => {any,
+            fun
+                (ProviderId) when is_binary(ProviderId) ->
+                    [ProviderId];
+                (Providers) when is_list(Providers) ->
+                    Providers
+            end
+        }
+    }
+};
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = {index, _}}}) ->
+    #{};
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = {index_reduce_function, _}}}) ->
+    #{}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves an entity from datastore based on its EntityId.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_entity(op_logic:entity_id()) ->
+    {ok, op_logic:entity()} | entity_logic:error().
+fetch_entity(_) ->
+    {ok, undefined}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
+exists(_, _) ->
+    true.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if requesting client is authorized to perform given operation,
+%% based on op logic request and prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
+authorize(#op_req{operation = create, gri = #gri{aspect = {As, _}} = GRI} = Req, _) when
+    As =:= index;
+    As =:= index_reduce_function
+->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, GRI#gri.id);
+
+authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
+    true;
+
+authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= indices
+->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}} = Req, _) when
+    As =:= index;
+    As =:= query_index
+->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}} = Req, _) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = update, gri = #gri{id = SpaceId, aspect = {index, _}}} = Req, _) ->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}} = Req, _) when
+    As =:= index;
+    As =:= index_reduce_function
+->
+    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% @end
+%%--------------------------------------------------------------------
+-spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{aspect = {index, _}} = GRI} = Req, _) ->
+    SpaceId = GRI#gri.id,
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
+    % In case of undefined `providers[]` local provider is chosen instead
+    case maps:get(<<"providers[]">>, Req#op_req.data, undefined) of
+        undefined ->
+            ok;
+        Providers ->
+            lists:foreach(fun(ProviderId) ->
+                op_logic_utils:ensure_space_supported_by(SpaceId, ProviderId)
+            end, Providers)
+    end;
+
+validate(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}} = GRI}, _) ->
+    op_logic_utils:ensure_space_supported_locally(GRI#gri.id);
+
+validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
+    ok;
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= instance;
+    As =:= indices
+->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}}, _) when
+    As =:= index;
+    As =:= query_index
+->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = update, gri = #gri{id = SpaceId, aspect = {index, _}}} = Req, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId),
+
+    % In case of undefined `providers[]` local provider is chosen instead
+    case maps:get(<<"providers[]">>, Req#op_req.data, undefined) of
+        undefined ->
+            ok;
+        Providers ->
+            lists:foreach(fun(ProviderId) ->
+                op_logic_utils:ensure_space_supported_by(SpaceId, ProviderId)
+        end, Providers)
+    end;
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}}, _) when
+    As =:= index;
+    As =:= index_reduce_function
+->
+    op_logic_utils:ensure_space_supported_locally(SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates a resource (aspect of entity) based on op logic request.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
-    Spatial = maps:get(<<"spatial">>, Data, false),
-    MapFunction = maps:get(<<"application/javascript">>, Data),
-    IndexOptions = prepare_index_options(Data),
-
-    Providers = case maps:get(<<"providers[]">>, Data, undefined) of
-        undefined -> [oneprovider:get_id()];
-        ProviderId when is_binary(ProviderId) -> [ProviderId];
-        ProvidersList when is_list(ProvidersList) -> ProvidersList
-    end,
-    op_logic_utils:ensure_space_support(SpaceId, Providers),
-
     index:save(
-        SpaceId, IndexName, MapFunction, undefined,
-        IndexOptions, Spatial, Providers
+        SpaceId, IndexName,
+        maps:get(<<"application/javascript">>, Data), undefined,
+        prepare_index_options(Data),
+        maps:get(<<"spatial">>, Data, false),
+        maps:get(<<"providers[]">>, Data, [oneprovider:get_id()])
     );
 
 create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}} = Req) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     ReduceFunction = maps:get(<<"application/javascript">>, Req#op_req.data),
     case index:update_reduce_function(SpaceId, IndexName, ReduceFunction) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
         Result ->
             Result
-    end;
-
-create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -126,10 +346,7 @@ get(#op_req{client = #client{id = SessionId}, gri = #gri{aspect = list}}, _) ->
     {ok, EffSpaces};
 
 get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
-    SessionId = Cl#client.id,
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
-    case space_logic:get(SessionId, SpaceId) of
+    case space_logic:get(Cl#client.id, SpaceId) of
         {ok, #document{value = #od_space{name = Name, providers = ProvidersIds}}} ->
             Providers = lists:map(fun(ProviderId) ->
                 {ok, ProviderName} = provider_logic:get_name(ProviderId),
@@ -148,8 +365,6 @@ get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     end;
 
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_INDEX_LIST_LIMIT),
 
@@ -172,8 +387,6 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
     {ok, maps:merge(#{<<"indexes">> => Indexes}, NextPageToken)};
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     case index:get_json(SpaceId, IndexName) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
@@ -182,8 +395,6 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
     end;
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     Options = index_utils:sanitize_query_options(Req#op_req.data),
     case index:query(SpaceId, IndexName, Options) of
         {ok, {Rows}} ->
@@ -229,10 +440,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
             #{}
     end,
 
-    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
-
-get(_, _) ->
-    ?ERROR_NOT_SUPPORTED.
+    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)}.
 
 
 %%--------------------------------------------------------------------
@@ -242,28 +450,21 @@ get(_, _) ->
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
 update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
-    Spatial = maps:get(<<"spatial">>, Data, undefined),
-
     MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
     MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
-    IndexOptions = prepare_index_options(Data),
 
-    Providers = case maps:get(<<"providers[]">>, Data, undefined) of
-        undefined -> undefined;
-        ProviderId when is_binary(ProviderId) -> [ProviderId];
-        ProvidersList when is_list(ProvidersList) -> ProvidersList
-    end,
-    op_logic_utils:ensure_space_support(SpaceId, Providers),
-
-    case index:update(SpaceId, IndexName, MapFun,  IndexOptions, Spatial, Providers) of
+    case index:update(
+        SpaceId, IndexName,
+        MapFun,
+        prepare_index_options(Data),
+        maps:get(<<"spatial">>, Data, undefined),
+        maps:get(<<"providers[]">>, Data, undefined)
+    ) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
         Result ->
             Result
-    end;
-
-update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -273,8 +474,6 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     case index:delete(SpaceId, IndexName) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
@@ -283,106 +482,12 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
     end;
 
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     case index:update_reduce_function(SpaceId, IndexName, undefined) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
         Result ->
             Result
-    end;
-
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
-    false;
-
-authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
-    true;
-
-authorize(#op_req{client = Cl, gri = #gri{id = SpaceId}}, _) ->
-    op_logic_utils:is_eff_space_member(Cl, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
-%% @end
-%%--------------------------------------------------------------------
--spec data_signature(op_logic:req()) -> op_validator:data_signature().
-data_signature(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
-    required => #{
-        <<"application/javascript">> => {binary, non_empty}
-    },
-    optional => #{
-        <<"spatial">> => {boolean, any},
-        <<"update_min_changes">> => {integer, {not_lower_than, 1}},
-        <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
-        <<"providers[]">> => {any, any}
-    }
-};
-
-data_signature(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
-    required => #{<<"application/javascript">> => {binary, non_empty}}
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
-    optional => #{
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
-        <<"page_token">> => {binary, any}
-    }
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
-    optional => #{
-        <<"descending">> => {boolean, any},
-        <<"limit">> => {integer, {not_lower_than, 1}},
-        <<"skip">> => {integer, {not_lower_than, 1}},
-        <<"stale">> => {binary, [<<"ok">>, <<"update_after">>, <<"false">>]},
-        <<"spatial">> => {boolean, any},
-        <<"inclusive_end">> => {boolean, any},
-        <<"start_range">> => {binary, any},
-        <<"end_range">> => {binary, any},
-        <<"startkey">> => {binary, any},
-        <<"endkey">> => {binary, any},
-        <<"key">> => {binary, any},
-        <<"keys">> => {binary, any},
-        <<"bbox">> => {binary, any}
-    }
-};
-
-data_signature(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
-    optional => #{
-        <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
-        <<"page_token">> => {binary, any}
-    }
-};
-
-data_signature(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
-    optional => #{
-        <<"application/javascript">> => {binary, any},
-        <<"spatial">> => {boolean, any},
-        <<"update_min_changes">> => {integer, {not_lower_than, 1}},
-        <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
-        <<"providers[]">> => {any, any}
-    }
-};
-
-data_signature(_) -> #{}.
+    end.
 
 
 %%%===================================================================
