@@ -19,8 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([remove_qos/2, fulfill_qos/4, init_pool/0, get_space_storages/2,
-    schedule_transfers/3]).
+-export([remove_qos/2, fulfill_qos/4, init_pool/0, get_space_storages/2]).
 
 %% Pool callbacks
 -export([do_master_job/1, do_slave_job/1, task_finished/1, get_job/1,
@@ -153,23 +152,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, #remove_qos_traverse_a
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates replication of file to all storages specified in given list.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_transfers(session:id(), fslogic_worker:file_guid(),
-    [storage:id()]) -> [transfer:id()].
-schedule_transfers(SessId, FileGuid, TargetStorages) ->
-    lists:foldl(fun(StorageId, TransfersList) ->
-        % TODO: VFS-5573 use storage qos
-        {ok, TransferId} = lfm:schedule_file_replication(
-            SessId, {guid, FileGuid}, StorageId, undefined, self()
-        ),
-        [TransferId | TransfersList]
-    end, [], TargetStorages).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Get list of storage id, on which file should be present according to
 %% qos requirements and available storage.
 %% @end
@@ -201,13 +183,15 @@ get_space_storages(Auth, FileKey) ->
 
 
 % TODO: VFS-5572 use transfers callback
--spec wait_for_transfers_completion([transfer:id()]) -> ok.
-wait_for_transfers_completion([]) ->
+wait_for_transfers_completion([] ,_ ,_ ,_) ->
     ok;
-wait_for_transfers_completion(TransfersList) ->
+wait_for_transfers_completion(TransfersPropList, QosId, Scope, RelativePath) ->
     receive
         {completed, TransferId} ->
-            wait_for_transfers_completion(lists:delete(TransferId, TransfersList))
+            qos_entry:delete_status_link(QosId, Scope, RelativePath,
+                proplists:get_value(TransferId, TransfersPropList)),
+            wait_for_transfers_completion(proplists:delete(TransferId, TransfersPropList),
+                QosId, Scope, RelativePath)
     end.
 
 
@@ -225,8 +209,25 @@ create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs) ->
     SessId = TraverseArgs#add_qos_traverse_args.session_id,
     QosId = TraverseArgs#add_qos_traverse_args.qos_id,
     % TODO: add space check and optionally choose other storage
-    TransfersList = schedule_transfers(SessId, FileGuid, TargetStorages),
-    qos_entry:add_status_link(QosId, Scope, RelativePath),
-    wait_for_transfers_completion(TransfersList),
-    qos_entry:delete_status_link(QosId, Scope, RelativePath),
-    ok.
+    TransfersList = schedule_transfers(SessId, FileGuid, TargetStorages, QosId, Scope, RelativePath),
+    wait_for_transfers_completion(TransfersList, QosId, Scope, RelativePath).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates replication of file to all storages specified in given list.
+%% Adds appropriate status link.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_transfers(session:id(), fslogic_worker:file_guid(), [storage:id()],
+    qos:id(), datastore_doc:scope(), binary()) -> [transfer:id()].
+schedule_transfers(SessId, FileGuid, TargetStorages, QosId, Scope, RelativePath) ->
+    lists:map(fun(StorageId) ->
+        % TODO: VFS-5573 use storage qos
+        {ok, TransferId} = lfm:schedule_file_replication(
+            SessId, {guid, FileGuid}, StorageId, undefined, self()),
+        qos_entry:add_status_link(QosId, Scope, RelativePath, StorageId, TransferId),
+        {TransferId, StorageId}
+    end, TargetStorages).
+
+

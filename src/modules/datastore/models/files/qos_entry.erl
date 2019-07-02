@@ -26,7 +26,7 @@
 
 %% API
 -export([get/1, delete/1, create/2, update/2,
-    add_status_link/3, delete_status_link/3,
+    add_status_link/5, delete_status_link/4,
     add_impossible_qos/2, list_impossible_qos/0,
     get_file_guid/1, check_fulfilment/3,
     set_status/2, get_status/1]).
@@ -128,10 +128,10 @@ get_status(QosId) ->
 %% This links are necessary to calculate qos status.
 %% @end
 %%--------------------------------------------------------------------
--spec add_status_link(id(), datastore_doc:scope(), binary()) ->  ok | {error, term()}.
-add_status_link(QosId, Scope, Name) ->
+-spec add_status_link(id(), datastore_doc:scope(), binary(), storage:id(), transfer:id()) ->  ok | {error, term()}.
+add_status_link(QosId, Scope, Name, StorageId, TransferId) ->
     Ctx = ?CTX#{scope => Scope},
-    Link = {Name, Name},
+    Link = {?QOS_STATUS_LINK_NAME(Name, StorageId), TransferId},
     ?extract_ok(datastore_model:add_links(Ctx, QosId, oneprovider:get_id(), Link)).
 
 %%--------------------------------------------------------------------
@@ -139,9 +139,10 @@ add_status_link(QosId, Scope, Name) ->
 %% Deletes given status link from given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_status_link(id(), datastore_doc:scope(), binary()) ->  ok | {error, term()}.
-delete_status_link(QosId, Scope, LinkName) ->
-    datastore_model:delete_links(?CTX#{scope => Scope}, QosId, oneprovider:get_id(), LinkName).
+-spec delete_status_link(id(), datastore_doc:scope(), binary(), storage:id()) ->  ok | {error, term()}.
+delete_status_link(QosId, Scope, RelativePath, StorageId) ->
+    datastore_model:delete_links(?CTX#{scope => Scope}, QosId, oneprovider:get_id(),
+        ?QOS_STATUS_LINK_NAME(RelativePath, StorageId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -173,12 +174,12 @@ list_impossible_qos() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_fulfilment(id(), fslogic_worker:file_guid() | undefined, #qos_entry{}) ->  boolean().
-check_fulfilment(QosId, undefined, #qos_entry{file_guid = FileUuid} = QosItem) ->
-    check_fulfilment(QosId, fslogic_uuid:uuid_to_guid(FileUuid), QosItem);
-check_fulfilment(QosId, FileGuid, #qos_entry{file_guid = OriginUuid, status = Status}) ->
+check_fulfilment(QosId, undefined, #qos_entry{file_guid = FileGuid} = QosItem) ->
+    check_fulfilment(QosId, FileGuid, QosItem);
+check_fulfilment(QosId, FileGuid, #qos_entry{file_guid = OriginGuid, status = Status}) ->
     case Status of
         ?QOS_TRAVERSE_FINISHED_STATUS ->
-            RelativePath = fslogic_path:get_relative_path(OriginUuid, FileGuid),
+            RelativePath = fslogic_path:get_relative_path(OriginGuid, FileGuid),
             case get_next_status_link(QosId, RelativePath) of
                 {ok, []} ->
                     true;

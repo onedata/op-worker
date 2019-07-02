@@ -167,8 +167,7 @@ get_leaf(#document{key = ParentUuid}, [Name | Names]) ->
 get_relative_path(AncestorPathTokens, ChildGuid) when is_list(AncestorPathTokens) ->
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(ChildGuid)),
     filename:join(lists:sublist(FilePathTokens, length(AncestorPathTokens), length(FilePathTokens)));
-get_relative_path(AncestorUuid, ChildGuid) ->
-    AncestorGuid = fslogic_uuid:uuid_to_guid(AncestorUuid),
+get_relative_path(AncestorGuid, ChildGuid) ->
     {AncestorPathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(AncestorGuid)),
     get_relative_path(AncestorPathTokens, ChildGuid).
 

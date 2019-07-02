@@ -81,4 +81,6 @@
 -define(QOS_TRAVERSE_FINISHED_STATUS, traverse_finished).
 -define(QOS_IMPOSSIBLE_STATUS, impossible).
 
+-define(QOS_STATUS_LINK_NAME(RelativePath, StorageId), <<RelativePath/binary, "###", StorageId/binary>>).
+
 -endif.
