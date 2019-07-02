@@ -139,11 +139,20 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = space}} = Req, _) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
 
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}} = Req, _) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = space
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {user, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId).
 
 
 %%--------------------------------------------------------------------

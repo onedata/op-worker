@@ -261,9 +261,9 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
-parse_params(Req, #{auth := SessionId} = State0) ->
+parse_params(Req, #{user_id := UserId, auth := SessionId} = State0) ->
     SpaceId = cowboy_req:binding(sid, Req),
-    case op_logic_utils:is_eff_space_member(?USER(SessionId), SpaceId) of
+    case op_logic_utils:is_eff_space_member(?USER(UserId, SessionId), SpaceId) of
         true -> ok;
         false -> throw(?ERROR_FORBIDDEN)
     end,

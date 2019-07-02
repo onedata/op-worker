@@ -40,8 +40,11 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, ?USER(_UserId, SessionId)} ->
-            {true, Req, State#{auth => SessionId}};
+        {ok, ?USER(UserId, SessionId)} ->
+            {true, Req, State#{
+                user_id => UserId,
+                auth => SessionId
+            }};
         {ok, ?NOBODY} ->
             NewReq = cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req),
             {stop, NewReq, State};
