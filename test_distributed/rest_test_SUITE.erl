@@ -230,9 +230,9 @@ mock_user_logic(Config) ->
         (UserSessId, ?USER_ID) ->
             try session:get_user_id(UserSessId) of
                 {ok, ?USER_ID} -> UserDoc;
-                _ -> {error, unauthorized}
+                _ -> ?ERROR_UNAUTHORIZED
             catch
-                _:_ -> {error, unauthorized}
+                _:_ -> ?ERROR_UNAUTHORIZED
             end;
         (_, _) ->
             {error, not_found}

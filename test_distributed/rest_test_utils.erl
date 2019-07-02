@@ -18,7 +18,12 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([request/5, request/6, user_token_header/2, assert_request_error/2]).
+-export([
+    request/5, request/6,
+    user_token_header/2,
+    assert_request_error/2,
+    get_rest_error/1
+]).
 
 %%%===================================================================
 %%% API
@@ -90,6 +95,15 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
             false
     end,
     CodeMatched andalso BodyMatched.
+
+get_rest_error(Error) ->
+    #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
+    case ExpBody of
+        {binary, Bin} ->
+            {ExpCode, json_utils:decode(Bin)};
+        _ ->
+            {ExpCode, ExpBody}
+    end.
 
 %%%===================================================================
 %%% Internal functions

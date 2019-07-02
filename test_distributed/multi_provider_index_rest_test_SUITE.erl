@@ -220,7 +220,7 @@ creating_index_with_invalid_params_should_fail(Config) ->
 
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        ExpRestError = get_rest_error(ExpError),
+        ExpRestError = rest_test_utils:get_rest_error(ExpError),
         ?assertMatch(ExpRestError, create_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName),
             maps:get(spatial, Options, false), maps:get(providers, Options, []),
@@ -272,7 +272,7 @@ updating_index_with_invalid_params_should_fail(Config) ->
 
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        ExpRestError = get_rest_error(ExpError),
+        ExpRestError = rest_test_utils:get_rest_error(ExpError),
         ?assertMatch(ExpRestError, update_index_via_rest(
             Config, Worker, ?SPACE_ID, IndexName, <<>>, Options
         )),
@@ -329,7 +329,7 @@ overwriting_index_should_fail(Config) ->
     end, Workers),
 
     % overwrite
-    ExpRestError = get_rest_error(?ERROR_ALREADY_EXISTS),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_ALREADY_EXISTS),
     ?assertMatch(ExpRestError, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
         ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
@@ -422,7 +422,7 @@ create_get_delete_reduce_fun(Config) ->
 getting_nonexistent_index_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
-    ExpRestError = get_rest_error(?ERROR_NOT_FOUND),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
 
     lists:foreach(fun(Worker) ->
         ?assertMatch(ExpRestError, get_index_via_rest(
@@ -450,7 +450,7 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         <<"spatial">> := false
     }}, get_index_via_rest(Config, WorkerP2, SpaceId, IndexName), ?ATTEMPTS),
 
-    ExpRestError = get_rest_error(?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>)),
     ?assertMatch(ExpRestError, get_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName
     )).
@@ -486,7 +486,7 @@ query_index(Config) ->
     Query = query_filter(Config, SpaceId, IndexName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
-    ExpError = get_rest_error(?ERROR_NOT_FOUND),
+    ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
     ExpGuids = lists:sort(Guids),
 
     % support index only by one provider; other should return error on query
@@ -544,7 +544,7 @@ quering_index_with_invalid_params_should_fail(Config) ->
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
     lists:foreach(fun({Options, ExpError}) ->
-        ExpRestError = get_rest_error(ExpError),
+        ExpRestError = rest_test_utils:get_rest_error(ExpError),
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpRestError, Query(Worker, Options))
     end, [
@@ -730,8 +730,8 @@ create_duplicated_indexes_on_remote_providers(Config) ->
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpMapFun2 = index_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
 
-    ExpError = get_rest_error(?ERROR_NOT_FOUND),
-    ExpError2 = get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>)),
+    ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
+    ExpError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>)),
 
     % get by simple name
     ?assertMatch({ok, #{
@@ -1146,13 +1146,3 @@ remove_files(Node, SessionId, Guids) ->
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
-
-
-get_rest_error(Error) ->
-    #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
-    case ExpBody of
-        {binary, Bin} ->
-            {ExpCode, json_utils:decode(Bin)};
-        _ ->
-            {ExpCode, ExpBody}
-    end.

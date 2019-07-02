@@ -69,7 +69,7 @@ invalid_request_should_fail(Config) ->
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     lists:foreach(fun({Json, ExpError}) ->
-        ExpRestError = get_rest_error(ExpError),
+        ExpRestError = rest_test_utils:get_rest_error(ExpError),
         ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json))
     end, [
         {<<"ASD">>, ?ERROR_BAD_VALUE_JSON(<<"changes specification">>)},
@@ -560,14 +560,4 @@ get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
             {ok, RealChanges};
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
-    end.
-
-
-get_rest_error(Error) ->
-    #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
-    case ExpBody of
-        {binary, Bin} ->
-            {ExpCode, json_utils:decode(Bin)};
-        _ ->
-            {ExpCode, ExpBody}
     end.
