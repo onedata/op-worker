@@ -21,10 +21,10 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
-    single_dir_creation_test_base/2]).
--export([create_single_call/4, get_final_ans_tree/9]).
+    many_files_creation_tree_test_base/4, single_dir_creation_test_base/2]).
+-export([create_single_call/4, get_final_ans_tree/9, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
 
@@ -141,6 +141,9 @@ many_files_creation_tree_test_base(Config, WriteToFile) ->
     many_files_creation_tree_test_base(Config, WriteToFile, false).
 
 many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
+    many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, false).
+
+many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
@@ -254,6 +257,21 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
                                     WriteSize = size(WriteBuf),
                                     {ok, WriteSize} = lfm_proxy:write(Worker, Handle, 0, WriteBuf),
                                     ok = lfm_proxy:close(Worker, Handle),
+                                    ok;
+                                _ ->
+                                    ok
+                            end,
+
+                            % set xattr metadata if needed (depends on test config)
+                            case SetMetadata of
+                                true ->
+                                    Xattr = #xattr{name = F, value = F},
+                                    case CacheGUIDS of
+                                        false ->
+                                            lfm_proxy:set_xattr(Worker, SessId, {path, F}, Xattr);
+                                        _ ->
+                                            lfm_proxy:set_xattr(Worker, SessId, {guid, FileGUID}, Xattr)
+                                    end,
                                     file_ok;
                                 _ ->
                                     file_ok
@@ -348,6 +366,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
 
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer, ?MODULE]} | Config].
+
+end_per_suite(_Config) ->
+    ok.
 
 init_per_testcase(stress_test, Config) ->
     ssl:start(),
@@ -544,3 +565,7 @@ ls(_Worker, _SessId, _Dir, _Token, true) ->
 ls(Worker, SessId, Dir, Token, _) ->
     {ok, _, Token2, IsLast} = lfm_proxy:ls(Worker, SessId, {path, Dir}, 0, 2000, Token),
     ls(Worker, SessId, Dir, Token2, IsLast).
+
+get_param_value(ParamName, ParamsList) ->
+    #parameter{value = Value} = lists:keyfind(ParamName, 2, ParamsList),
+    Value.
