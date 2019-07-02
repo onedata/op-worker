@@ -84,7 +84,7 @@ operation_supported(_, _, _) -> false.
 %% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> op_sanitizer:data_spec().
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
     required => #{
         <<"application/javascript">> => {binary, non_empty}
@@ -96,9 +96,11 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
         <<"providers[]">> => {any,
             fun
                 (ProviderId) when is_binary(ProviderId) ->
-                    [ProviderId];
+                    {true, [ProviderId]};
                 (Providers) when is_list(Providers) ->
-                    Providers
+                    lists:all(fun(ProvId) -> is_binary(ProvId) end, Providers);
+                (_) ->
+                    false
             end
         }
     }
@@ -108,11 +110,11 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function
     required => #{<<"application/javascript">> => {binary, non_empty}}
 };
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
-    As =:= list;
-    As =:= instance
-->
-    #{};
+data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
     optional => #{
@@ -122,7 +124,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = {index, _}}}) ->
-    #{};
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
     optional => #{
@@ -159,19 +161,21 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
         <<"providers[]">> => {any,
             fun
                 (ProviderId) when is_binary(ProviderId) ->
-                    [ProviderId];
+                    {true, [ProviderId]};
                 (Providers) when is_list(Providers) ->
-                    Providers
+                    lists:all(fun(ProvId) -> is_binary(ProvId) end, Providers);
+                (_) ->
+                    false
             end
         }
     }
 };
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = {index, _}}}) ->
-    #{};
+    undefined;
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = {index_reduce_function, _}}}) ->
-    #{}.
+    undefined.
 
 
 %%--------------------------------------------------------------------
@@ -207,38 +211,69 @@ exists(_, _) ->
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, gri = #gri{aspect = {As, _}} = GRI} = Req, _) when
-    As =:= index;
-    As =:= index_reduce_function
-->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, GRI#gri.id);
+authorize(#op_req{operation = create, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {index, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = create, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {index_reduce_function, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
 
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
+    % User is always authorized to list his spaces
     true;
 
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}} = Req, _) when
-    As =:= instance;
-    As =:= indices
-->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = instance}
+}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
 
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}} = Req, _) when
-    As =:= index;
-    As =:= query_index
-->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = indices
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
 
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}} = Req, _) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {index, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
 
-authorize(#op_req{operation = update, gri = #gri{id = SpaceId, aspect = {index, _}}} = Req, _) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {query_index, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
 
-authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}} = Req, _) when
-    As =:= index;
-    As =:= index_reduce_function
-->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = transfers
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = update, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {index, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = delete, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {index, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = delete, client = Client, gri = #gri{
+    id = SpaceId,
+    aspect = {index_reduce_function, _}
+}}, _) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -249,12 +284,14 @@ authorize(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}} =
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{aspect = {index, _}} = GRI} = Req, _) ->
-    SpaceId = GRI#gri.id,
+validate(#op_req{operation = create, data = Data, gri = #gri{
+    id = SpaceId,
+    aspect = {index, _}
+}}, _) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
-    case maps:get(<<"providers[]">>, Req#op_req.data, undefined) of
+    case maps:get(<<"providers[]">>, Data, undefined) of
         undefined ->
             ok;
         Providers ->
@@ -263,28 +300,36 @@ validate(#op_req{operation = create, gri = #gri{aspect = {index, _}} = GRI} = Re
             end, Providers)
     end;
 
-validate(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}} = GRI}, _) ->
-    op_logic_utils:ensure_space_supported_locally(GRI#gri.id);
-
-validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
-    ok;
-
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
-    As =:= instance;
-    As =:= indices
-->
+validate(#op_req{operation = create, gri = #gri{
+    id = SpaceId,
+    aspect = {index_reduce_function, _}
+}}, _) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}}, _) when
-    As =:= index;
-    As =:= query_index
-->
+validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
+    % User spaces are listed by fetching information from zone,
+    % whether they are supported locally is irrelevant.
+    ok;
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {index, _}}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_index, _}}}, _) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = update, gri = #gri{id = SpaceId, aspect = {index, _}}} = Req, _) ->
+validate(#op_req{operation = update, gri = #gri{
+    id = SpaceId,
+    aspect = {index, _}
+}} = Req, _) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
@@ -297,10 +342,13 @@ validate(#op_req{operation = update, gri = #gri{id = SpaceId, aspect = {index, _
         end, Providers)
     end;
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {As, _}}}, _) when
-    As =:= index;
-    As =:= index_reduce_function
-->
+validate(#op_req{operation = delete, gri = #gri{id = SpaceId, aspect = {index, _}}}, _) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = delete, gri = #gri{
+    id = SpaceId,
+    aspect = {index_reduce_function, _}
+}}, _) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId).
 
 
@@ -336,17 +384,19 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = #client{id = SessionId}, gri = #gri{aspect = list}}, _) ->
-    {ok, UserId} = session:get_user_id(SessionId),
-    {ok, EffSpacesIds} = user_logic:get_eff_spaces(SessionId, UserId),
-    EffSpaces = lists:map(fun(SpaceId) ->
-        {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-        #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
-    end, EffSpacesIds),
-    {ok, EffSpaces};
+get(#op_req{client = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
+    case user_logic:get_eff_spaces(SessionId, UserId) of
+        {ok, EffSpaces} ->
+            {ok ,lists:map(fun(SpaceId) ->
+                {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+                #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
+            end, EffSpaces)};
+        {error, _} = Error ->
+            Error
+    end;
 
 get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
-    case space_logic:get(Cl#client.id, SpaceId) of
+    case space_logic:get(Cl#client.session_id, SpaceId) of
         {ok, #document{value = #od_space{name = Name, providers = ProvidersIds}}} ->
             Providers = lists:map(fun(ProviderId) ->
                 {ok, ProviderName} = provider_logic:get_name(ProviderId),
@@ -360,7 +410,7 @@ get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
                 <<"providers">> => Providers,
                 <<"spaceId">> => SpaceId
             }};
-        Error ->
+        {error, _} = Error ->
             Error
     end;
 
@@ -375,16 +425,17 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
             % Start after the page token (link key from last listing) if it is given
             {PageToken, 1}
     end,
-    {ok, Indexes} = index:list(SpaceId, StartId, Offset, Limit),
 
-    NextPageToken = case length(Indexes) of
-        Limit ->
-            #{<<"nextPageToken">> => lists:last(Indexes)};
-        _ ->
-            #{}
-    end,
-
-    {ok, maps:merge(#{<<"indexes">> => Indexes}, NextPageToken)};
+    case index:list(SpaceId, StartId, Offset, Limit) of
+        {ok, Indexes} ->
+            NextPageToken = case length(Indexes) of
+                Limit -> #{<<"nextPageToken">> => lists:last(Indexes)};
+                _ -> #{}
+            end,
+            {ok, maps:merge(#{<<"indexes">> => Indexes}, NextPageToken)};
+        {error, _} = Error ->
+            Error
+    end;
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
     case index:get_json(SpaceId, IndexName) of
@@ -402,13 +453,11 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, 
             {ok, QueryResult};
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
-        Error ->
+        {error, _} = Error ->
             Error
     end;
 
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
-
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
     TransferState = maps:get(<<"state">>, Data, <<"ongoing">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_TRANSFER_LIST_LIMIT),
@@ -439,7 +488,6 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
         _ ->
             #{}
     end,
-
     {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)}.
 
 

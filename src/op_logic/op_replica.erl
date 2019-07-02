@@ -75,18 +75,18 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     optional => #{
-        <<"provider_id">> => {binary, any},
-        <<"url">> => {binary, any}
+        <<"provider_id">> => {binary, non_empty},
+        <<"url">> => {binary, non_empty}
     }
 };
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = replicate_by_index}}) -> #{
     required => #{
-        <<"space_id">> => {binary, any}
+        <<"space_id">> => {binary, non_empty}
     },
     optional => #{
-        <<"provider_id">> => {binary, any},
-        <<"url">> => {binary, any},
+        <<"provider_id">> => {binary, non_empty},
+        <<"url">> => {binary, non_empty},
         <<"descending">> => {boolean, any},
         <<"limit">> => {integer, {not_lower_than, 1}},
         <<"skip">> => {integer, {not_lower_than, 1}},
@@ -108,18 +108,18 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = distribution}}) ->
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) -> #{
     optional => #{
-        <<"provider_id">> => {binary, any},
-        <<"migration_provider_id">> => {binary, any}
+        <<"provider_id">> => {binary, non_empty},
+        <<"migration_provider_id">> => {binary, non_empty}
     }
 };
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}}) -> #{
     required => #{
-        <<"space_id">> => {binary, any}
+        <<"space_id">> => {binary, non_empty}
     },
     optional => #{
-        <<"provider_id">> => {binary, any},
-        <<"migration_provider_id">> => {binary, any},
+        <<"provider_id">> => {binary, non_empty},
+        <<"migration_provider_id">> => {binary, non_empty},
         <<"descending">> => {boolean, any},
         <<"limit">> => {integer, {not_lower_than, 1}},
         <<"skip">> => {integer, {not_lower_than, 1}},
@@ -167,6 +167,9 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+authorize(#op_req{client = ?NOBODY}, _) ->
+    false;
+
 authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
@@ -195,7 +198,7 @@ authorize(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}} = Req
 %% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), entity_logic:entity()) -> boolean().
+-spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:ensure_space_supported_locally(SpaceId),
@@ -232,6 +235,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} =
     Data = Req#op_req.data,
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:ensure_space_supported_locally(SpaceId),
+
     op_logic_utils:ensure_file_exists(Req#op_req.client, Guid),
 
     % In case of undefined `provider_id` local provider is chosen instead
