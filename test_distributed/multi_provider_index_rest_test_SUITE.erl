@@ -450,7 +450,7 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         <<"spatial">> := false
     }}, get_index_via_rest(Config, WorkerP2, SpaceId, IndexName), ?ATTEMPTS),
 
-    ExpRestError = get_rest_error(?ERROR_SPACE_NOT_SUPPORTED),
+    ExpRestError = get_rest_error(?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>)),
     ?assertMatch(ExpRestError, get_index_via_rest(
         Config, WorkerP1, SpaceId, IndexName
     )).

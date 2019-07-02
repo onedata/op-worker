@@ -199,6 +199,11 @@ translate_error(?ERROR_FORBIDDEN) ->
 translate_error({error, ?EACCES}) ->
     ?HTTP_403_FORBIDDEN;
 
+translate_error(?ERROR_POSIX(Errno)) ->
+    {?HTTP_400_BAD_REQUEST,
+        {<<"Operation failed with: ~p">>, [Errno]}
+    };
+
 % Errors connected with macaroons
 translate_error(?ERROR_BAD_MACAROON) ->
     {?HTTP_401_UNAUTHORIZED,
@@ -281,10 +286,6 @@ translate_error(?ERROR_BAD_VALUE_TOKEN(Key)) ->
 translate_error(?ERROR_BAD_VALUE_LIST_OF_IPV4_ADDRESSES(Key)) ->
     {?HTTP_400_BAD_REQUEST,
         {<<"Bad value: provided \"~s\" is not a valid list of IPv4 addresses">>, [Key]}
-    };
-translate_error(?ERROR_BAD_VALUE_DIRECTORY) ->
-    {?HTTP_400_BAD_REQUEST,
-        <<"Given path or id does not refer to a directory">>
     };
 translate_error(?ERROR_BAD_VALUE_DOMAIN(Key)) ->
     {?HTTP_400_BAD_REQUEST,
@@ -386,15 +387,13 @@ translate_error(?ERROR_SUBDOMAIN_DELEGATION_DISABLED) ->
     {?HTTP_400_BAD_REQUEST, <<"Subdomain delegation is currently disabled.">>};
 translate_error(?ERROR_BAD_VALUE_EMAIL) ->
     {?HTTP_400_BAD_REQUEST, <<"Bad value: provided e-mail is not a valid e-mail.">>};
-translate_error(?ERROR_SPACE_NOT_SUPPORTED) ->
-    {?HTTP_400_BAD_REQUEST, <<"The space of requested resource is not locally supported.">>};
 translate_error(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
         <<"The space of requested resource is not supported by ~s provider.">>, [ProviderId]
     }};
-translate_error(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId)) ->
+translate_error(?ERROR_INDEX_NOT_EXISTS_ON(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
-        <<"The specified index is not supported by ~s provider.">>, [ProviderId]
+        <<"The specified index doesn't exists on ~s provider.">>, [ProviderId]
     }};
 
 % Errors associated with transfers

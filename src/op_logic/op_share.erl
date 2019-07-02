@@ -267,7 +267,7 @@ create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
-    ShareId = get_share_id(Cl, DirGuid),
+    ShareId = fetch_share_id(Cl, DirGuid),
     case fetch_share(Cl, ShareId) of
         {ok, Share} ->
             get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
@@ -301,7 +301,7 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
 update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    ShareId = get_share_id(Cl, DirGuid),
+    ShareId = fetch_share_id(Cl, DirGuid),
     NewName = maps:get(<<"name">>, Req#op_req.data),
     share_logic:update_name(Cl#client.id, ShareId, NewName);
 
@@ -318,7 +318,7 @@ update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
     SessionId = Cl#client.session_id,
-    ShareId = get_share_id(Cl, DirGuid),
+    ShareId = fetch_share_id(Cl, DirGuid),
     case logical_file_manager:remove_share(SessionId, ShareId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
@@ -349,9 +349,9 @@ fetch_share(#client{session_id = SessionId}, ShareId) ->
 
 
 %% @private
--spec get_share_id(op_logic:client(), file_id:file_guid()) ->
+-spec fetch_share_id(op_logic:client(), file_id:file_guid()) ->
     od_share:id() | ?ERROR_NOT_FOUND.
-get_share_id(#client{session_id = SessionId}, DirGuid) ->
+fetch_share_id(#client{session_id = SessionId}, DirGuid) ->
     case logical_file_manager:stat(SessionId, {guid, DirGuid}) of
         {ok, #file_attr{shares = [ShareId]}} ->
             ShareId;

@@ -290,7 +290,7 @@ posix_mode_get(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
 
     % then
     DecodedBody = json_utils:decode(Body),
@@ -312,11 +312,11 @@ posix_mode_put(Config) ->
     % when
     NewMode = 8#777,
     Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary>>, put,
+    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, put,
         ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
 
     % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
         #{
@@ -334,7 +334,7 @@ attributes_list(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
 
     % then
     {ok, #file_attr{
@@ -606,13 +606,13 @@ create_share_base(Config, RestPathType) ->
 
     % creating share for file should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_BAD_VALUE_DIRECTORY,
+        ?ERROR_POSIX(?ENOTDIR),
         {SupportingProviderNode, FileRestPath, post, Headers, Payload}
     )),
 
     % creating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, SharedDirRestPath, post, Headers, Payload}
     )),
 
@@ -700,7 +700,7 @@ get_file_share_base(Config, RestPathType) ->
 
     % getting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, SharedDirRestPath, get, Headers, <<>>}
     )),
 
@@ -766,7 +766,7 @@ get_share_public_id(Config) ->
 
     % getting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, RestPath, get, Headers, <<>>}
     )),
 
@@ -850,7 +850,7 @@ delete_file_share_base(Config, RestPathType) ->
 
     % deleting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, SharedDirRestPath, delete, Headers, <<>>}
     )),
 
@@ -900,7 +900,7 @@ delete_share_public_id(Config) ->
 
     % deleting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, RestPath, delete, Headers, <<>>}
     )),
 
@@ -981,7 +981,7 @@ update_share_name_base(Config, RestPathType) ->
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, SharedDirRestPath, patch, Headers, Payload}
     )),
 
@@ -1035,7 +1035,7 @@ update_share_name_public_id(Config) ->
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
         {OtherProviderNode, RestPath, patch, Headers, Payload}
     )),
 

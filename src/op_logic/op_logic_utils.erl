@@ -40,7 +40,7 @@ is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->
 ensure_space_supported_locally(SpaceId) ->
     case provider_logic:supports_space(SpaceId) of
         true -> ok;
-        false -> throw(?ERROR_SPACE_NOT_SUPPORTED)
+        false -> throw(?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>))
     end.
 
 

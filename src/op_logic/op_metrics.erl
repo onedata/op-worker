@@ -245,7 +245,7 @@ get_metric(SessionId, SpaceId, UserId, Metric, Step) ->
                 end
             end, Providers),
             {ok, Json};
-        Error ->
+        {error, _} = Error ->
             Error
     end.
 

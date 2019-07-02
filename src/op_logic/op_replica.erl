@@ -386,5 +386,5 @@ ensure_index_exists_on_provider(SpaceId, IndexName, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_INDEX_NOT_SUPPORTED_BY(ProviderId))
+            throw(?ERROR_INDEX_NOT_EXISTS_ON(ProviderId))
     end.
