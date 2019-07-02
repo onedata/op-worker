@@ -89,9 +89,9 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 %% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:entity_id()) ->
+-spec fetch_entity(op_logic:req()) ->
     {ok, op_logic:entity()} | entity_logic:error().
-fetch_entity(TransferId) ->
+fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
     case transfer:get(TransferId) of
         {ok, #document{value = Transfer}} ->
             % Transfer doc is synchronized only with providers supporting space

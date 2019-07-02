@@ -20,9 +20,15 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 -export([op_logic_plugin/0]).
--export([operation_supported/3]).
+-export([
+    operation_supported/3,
+    data_spec/1,
+    fetch_entity/1,
+    exists/2,
+    authorize/2,
+    validate/2
+]).
 -export([create/1, get/2, update/1, delete/1]).
--export([authorize/2, data_signature/1]).
 
 %%%===================================================================
 %%% API
@@ -62,113 +68,85 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a resource (aspect of entity) based on op logic request.
+%% Returns data signature for given request.
+%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
+%% Under each of them, there is a map:
+%%      Key => {type_constraint, value_constraint}
+%% Which means how value of given Key should be validated.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    ensure_space_supported(Req),
-    Name = maps:get(<<"name">>, Req#op_req.data),
-    case logical_file_manager:create_share(Cl#client.id, {guid, DirGuid}, Name) of
-        {ok, {ShareId, _ShareGuid}} ->
-            {ok, value, ShareId};
-        {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_DIRECTORY;
-        {error, ?EEXIST} ->
-            ?ERROR_ALREADY_EXISTS;
-        Error ->
-            Error
-    end;
+-spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) -> #{
+    required => #{<<"name">> => {binary, non_empty}}
+};
 
-create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
+    undefined;
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) ->
+    #{required => #{<<"name">> => {binary, non_empty}}};
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
+    #{required => #{<<"name">> => {binary, non_empty}}};
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
+    undefined;
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
+    undefined.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves a resource (aspect of entity) based on op logic request and
-%% prefetched entity.
+%% Retrieves an entity from datastore based on its EntityId.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, Entity) ->
-    case get_share_id(Cl#client.id, DirGuid) of
-        {ok, ShareId} ->
-            get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Entity);
-        Error ->
-            Error
-    end;
+-spec fetch_entity(op_logic:req()) ->
+    {ok, op_logic:entity()} | entity_logic:error().
+fetch_entity(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) ->
+    {ok, undefined};
 
-get(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}, _) ->
-    case share_logic:get(Cl#client.id, ShareId) of
-        {ok, #document{value = Share}} ->
-            ensure_space_supported(Share#od_share.space),
+fetch_entity(#op_req{operation = get, client = Client, gri = #gri{
+    id = ShareId,
+    aspect = instance
+}}) ->
+    fetch_share(Client, ShareId);
 
-            {ok, ObjectId} = file_id:guid_to_objectid(Share#od_share.root_file),
-            HandleId = utils:ensure_defined(Share#od_share.handle, undefined, null),
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
+    {ok, undefined};
 
-            {ok, #{
-                <<"shareId">> => ShareId,
-                <<"name">> => Share#od_share.name,
-                <<"publicUrl">> => Share#od_share.public_url,
-                <<"rootFileId">> => ObjectId,
-                <<"spaceId">> => Share#od_share.space,
-                <<"handleId">> => HandleId
-            }};
-        Error->
-            Error
-    end;
+fetch_entity(#op_req{operation = update, client = Client, gri = #gri{
+    id = ShareId,
+    aspect = instance
+}}) ->
+    fetch_share(Client, ShareId);
 
-get(_, _) ->
-    ?ERROR_NOT_SUPPORTED.
+fetch_entity(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
+    {ok, undefined};
+
+fetch_entity(#op_req{operation = delete, client = Client, gri = #gri{
+    id = ShareId,
+    aspect = instance
+}}) ->
+    fetch_share(Client, ShareId);
+
+fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
+    {ok, undefined}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates a resource (aspect of entity) based on op logic request.
+%% Determines if given resource (aspect of entity) exists, based on
+%% op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
-update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    ensure_space_supported(Req),
-    case get_share_id(Cl#client.id, DirGuid) of
-        {ok, ShareId} ->
-            NewName = maps:get(<<"name">>, Req#op_req.data),
-            share_logic:update_name(Cl#client.id, ShareId, NewName);
-        Error ->
-            Error
-    end;
-
-update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}, data = Data} = Req) ->
-    ensure_space_supported(Req),
-    NewName = maps:get(<<"name">>, Data),
-    share_logic:update_name(Cl#client.id, ShareId, NewName);
-
-update(_) ->
-    ?ERROR_NOT_SUPPORTED.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes a resource (aspect of entity) based on op logic request.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    ensure_space_supported(Req),
-    case get_share_id(Cl#client.id, DirGuid) of
-        {ok, ShareId} ->
-            logical_file_manager:remove_share(Cl#client.id, ShareId);
-        Error ->
-            Error
-    end;
-
-delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
-    ensure_space_supported(Req),
-    logical_file_manager:remove_share(Cl#client.id, ShareId);
-
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+-spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
+exists(_, _) ->
+    true.
 
 
 %%--------------------------------------------------------------------
@@ -180,27 +158,177 @@ delete(_) ->
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
-authorize(_, _) ->
-    true.
+authorize(#op_req{operation = create, client = Client, gri = #gri{
+    id = DirGuid,
+    aspect = shared_dir
+}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = get, client = Client, gri = #gri{aspect = instance}},
+    #od_share{space = SpaceId}
+) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = get, client = Client, gri = #gri{
+    id = DirGuid,
+    aspect = shared_dir
+}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = update, client = Client, gri = #gri{aspect = instance}},
+    #od_share{space = SpaceId}
+) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = update, client = Client, gri = #gri{
+    id = DirGuid,
+    aspect = shared_dir
+}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = delete, client = Client, gri = #gri{aspect = instance}},
+    #od_share{space = SpaceId}
+) ->
+    op_logic_utils:is_eff_space_member(Client, SpaceId);
+
+authorize(#op_req{operation = delete, client = Client, gri = #gri{
+    id = DirGuid,
+    aspect = instance
+}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:is_eff_space_member(Client, SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
+%% Determines if given request can be further processed
+%% (e.g. checks whether space is supported locally).
+%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
--spec data_signature(op_logic:req()) -> op_validator:data_signature().
-data_signature(#op_req{operation = create}) -> #{
-    required => #{<<"name">> => {binary, name}}
-};
-data_signature(#op_req{operation = update}) -> #{
-    required => #{<<"name">> => {binary, name}}
-};
-data_signature(_) -> #{}.
+-spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = shared_dir}}, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #od_share{
+    space = SpaceId
+}) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = update, gri = #gri{aspect = instance}}, #od_share{
+    space = SpaceId
+}) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = update, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #od_share{
+    space = SpaceId
+}) ->
+    op_logic_utils:ensure_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = instance}}, _) ->
+    SpaceId = file_id:guid_to_space_id(DirGuid),
+    op_logic_utils:ensure_space_supported_locally(SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(op_logic:req()) -> op_logic:create_result().
+create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
+    SessionId = Cl#client.session_id,
+    Name = maps:get(<<"name">>, Req#op_req.data),
+    case logical_file_manager:create_share(SessionId, {guid, DirGuid}, Name) of
+        {ok, {ShareId, _ShareGuid}} ->
+            {ok, value, ShareId};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves a resource (aspect of entity) based on op logic request and
+%% prefetched entity.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+get(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
+    ShareId = get_share_id(Cl, DirGuid),
+    case fetch_share(Cl, ShareId) of
+        {ok, Share} ->
+            get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
+    end;
+
+get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
+    space = SpaceId,
+    root_file = RootFile,
+    name = ShareName,
+    public_url = SharePublicUrl,
+    handle = Handle
+}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(RootFile),
+
+    {ok, #{
+        <<"shareId">> => ShareId,
+        <<"name">> => ShareName,
+        <<"publicUrl">> => SharePublicUrl,
+        <<"rootFileId">> => ObjectId,
+        <<"spaceId">> => SpaceId,
+        <<"handleId">> => utils:ensure_defined(Handle, undefined, null)
+    }}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(op_logic:req()) -> op_logic:update_result().
+update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
+    ShareId = get_share_id(Cl, DirGuid),
+    NewName = maps:get(<<"name">>, Req#op_req.data),
+    share_logic:update_name(Cl#client.id, ShareId, NewName);
+
+update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
+    NewName = maps:get(<<"name">>, Req#op_req.data),
+    share_logic:update_name(Cl#client.session_id, ShareId, NewName).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a resource (aspect of entity) based on op logic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(op_logic:req()) -> op_logic:delete_result().
+delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
+    SessionId = Cl#client.session_id,
+    ShareId = get_share_id(Cl, DirGuid),
+    case logical_file_manager:remove_share(SessionId, ShareId) of
+        ok -> ok;
+        {error, Errno} -> ?ERROR_POSIX(Errno)
+    end;
+
+delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
+    case logical_file_manager:remove_share(Cl#client.id, ShareId) of
+        ok -> ok;
+        {error, Errno} -> ?ERROR_POSIX(Errno)
+    end.
 
 
 %%%===================================================================
@@ -209,34 +337,24 @@ data_signature(_) -> #{}.
 
 
 %% @private
--spec ensure_space_supported(od_space:id() | op_logic:req()) -> ok | no_return().
-ensure_space_supported(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
-    case op_logic_utils:is_eff_space_member(Cl, SpaceId) of
-        true -> ensure_space_supported(SpaceId);
-        false -> throw(?ERROR_FORBIDDEN)
-    end;
-ensure_space_supported(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
-    case share_logic:get(Cl#client.id, ShareId) of
-        {ok, #document{value = #od_share{space = SpaceId}}} ->
-            ensure_space_supported(SpaceId);
+-spec fetch_share(op_logic:client(), od_space:id()) ->
+    {ok, #od_share{}} | ?ERROR_NOT_FOUND.
+fetch_share(#client{session_id = SessionId}, ShareId) ->
+    case share_logic:get(SessionId, ShareId) of
+        {ok, #document{value = Share}} ->
+            {ok, Share};
         _ ->
-            throw(?ERROR_NOT_FOUND)
-    end;
-ensure_space_supported(SpaceId) when is_binary(SpaceId) ->
-    case provider_logic:supports_space(SpaceId) of
-        true -> ok;
-        false -> throw(?ERROR_SPACE_NOT_SUPPORTED)
+            ?ERROR_NOT_FOUND
     end.
 
 
 %% @private
--spec get_share_id(session:id(), file_id:file_guid()) ->
+-spec get_share_id(op_logic:client(), file_id:file_guid()) ->
     od_share:id() | ?ERROR_NOT_FOUND.
-get_share_id(SessionId, DirGuid) ->
+get_share_id(#client{session_id = SessionId}, DirGuid) ->
     case logical_file_manager:stat(SessionId, {guid, DirGuid}) of
         {ok, #file_attr{shares = [ShareId]}} ->
-            {ok, ShareId};
+            ShareId;
         _ ->
-            ?ERROR_NOT_FOUND
+            throw(?ERROR_NOT_FOUND)
     end.

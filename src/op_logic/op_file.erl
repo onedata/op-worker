@@ -172,7 +172,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
 %% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:entity_id()) ->
+-spec fetch_entity(op_logic:req()) ->
     {ok, op_logic:entity()} | entity_logic:error().
 fetch_entity(_) ->
     {ok, undefined}.

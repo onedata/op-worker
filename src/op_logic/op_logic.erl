@@ -30,8 +30,8 @@
 -type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
--type entity_id() :: undefined | transfer:id().
--type entity() :: undefined | #transfer{}.
+-type entity_id() :: undefined | od_share:id() | transfer:id().
+-type entity() :: undefined | #od_share{} | #transfer{}.
 -type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
@@ -205,10 +205,8 @@ maybe_fetch_entity(#req_ctx{entity = Entity} = ReqCtx) when Entity /= undefined 
     ReqCtx;
 maybe_fetch_entity(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = ReqCtx) ->
     ReqCtx;
-maybe_fetch_entity(#req_ctx{plugin = Plugin, req = #op_req{
-    gri = #gri{id = Id}
-}} = ReqCtx) ->
-    case Plugin:fetch_entity(Id) of
+maybe_fetch_entity(#req_ctx{plugin = Plugin, req = Req} = ReqCtx) ->
+    case Plugin:fetch_entity(Req) of
         {ok, Entity} ->
             ReqCtx#req_ctx{entity = Entity};
         ?ERROR_NOT_FOUND ->

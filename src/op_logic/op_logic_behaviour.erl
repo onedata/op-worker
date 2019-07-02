@@ -46,7 +46,7 @@
 %% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
--callback fetch_entity(op_logic:entity_id()) ->
+-callback fetch_entity(op_logic:req()) ->
     {ok, op_logic:entity()} | op_logic:error().
 
 

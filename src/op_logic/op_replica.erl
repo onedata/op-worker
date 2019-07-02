@@ -143,7 +143,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}}) -> #
 %% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:entity_id()) ->
+-spec fetch_entity(op_logic:req()) ->
     {ok, op_logic:entity()} | entity_logic:error().
 fetch_entity(_) ->
     {ok, undefined}.
