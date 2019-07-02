@@ -33,18 +33,11 @@ routes() -> [
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = list}
     }},
-    %% Get file attributes
-    {<<"/attributes/[...]">>, rest_handler, #rest_req{
+    %% List files and folders by Id
+    {<<"/files-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = attributes}
-    }},
-    %% Set file attribute
-    {<<"/attributes/[...]">>, rest_handler, #rest_req{
-        method = 'PUT',
-        parse_body = as_is,
-        consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = attributes}
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = list}
     }},
     %% Get file attributes
     {<<"/metadata/attrs/[...]">>, rest_handler, #rest_req{
@@ -97,5 +90,57 @@ routes() -> [
         parse_body = as_is,
         consumes = [<<"application/rdf+xml">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = rdf_metadata}
+    }},
+    %% Get file attributes by Id
+    {<<"/metadata-id/attrs/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = attrs}
+    }},
+    %% Set file attribute by Id
+    {<<"/metadata-id/attrs/:id">>, rest_handler, #rest_req{
+        method = 'PUT',
+        parse_body = as_is,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = attrs}
+    }},
+    %% Get file extended attributes by Id
+    {<<"/metadata-id/xattrs/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = xattrs}
+    }},
+    %% Set file extended attribute by Id
+    {<<"/metadata-id/xattrs/:id">>, rest_handler, #rest_req{
+        method = 'PUT',
+        parse_body = as_is,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = xattrs}
+    }},
+    %% Get file json metadata by Id
+    {<<"/metadata-id/json/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = json_metadata}
+    }},
+    %% Set file json metadata by Id
+    {<<"/metadata-id/json/:id">>, rest_handler, #rest_req{
+        method = 'PUT',
+        parse_body = as_is,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = json_metadata}
+    }},
+    %% Get file rdf metadata by Id
+    {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/rdf+xml">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = rdf_metadata}
+    }},
+    %% Set file rdf metadata by ID
+    {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
+        method = 'PUT',
+        parse_body = as_is,
+        consumes = [<<"application/rdf+xml">>],
+        b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = rdf_metadata}
     }}
 ].

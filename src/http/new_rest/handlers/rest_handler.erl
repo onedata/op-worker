@@ -405,13 +405,15 @@ get_data(Req, as_is, Consumes) ->
             {Type, Subtype, _} = cowboy_req:parse_header(<<"content-type">>, Req2),
             <<Type/binary, "/", Subtype/binary>>
     end,
-    ParsedBody = try
-        case ContentType of
-            <<"application/json">> -> json_utils:decode(Body);
-            _ -> Body
-        end
-    catch _:_ ->
-        throw(?ERROR_MALFORMED_DATA)
+    ParsedBody = case ContentType of
+        <<"application/json">> ->
+            try
+                json_utils:decode(Body)
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_JSON(<<"request body">>))
+            end;
+        _ ->
+            Body
     end,
     {QueryParams#{ContentType => ParsedBody}, Req2}.
 

@@ -125,7 +125,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = xattrs}}) -> #{
 };
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = json_metadata}}) -> #{
-    required => #{<<"application/json">> => {json, any}},
+    required => #{<<"application/json">> => {any, any}},
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any}
@@ -188,7 +188,6 @@ fetch_entity(_) ->
 exists(_, _) ->
     true.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Determines if requesting client is authorized to perform given operation,
@@ -206,7 +205,7 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadta
+    As =:= rdf_metadata
 ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
@@ -225,7 +224,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadta
+    As =:= rdf_metadata
 ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
@@ -243,7 +242,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}}, _) whe
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadta
+    As =:= rdf_metadata
 ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:ensure_space_supported_locally(SpaceId);
@@ -262,7 +261,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadta
+    As =:= rdf_metadata
 ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:ensure_space_supported_locally(SpaceId).
@@ -363,7 +362,10 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
                 Acc#{XattrName => Value}
             end, #{}, Xattrs)};
         XattrName ->
-            ?call_lfm(get_xattr(SessionId, {guid, FileGuid}, XattrName, Inherited))
+            {ok, #xattr{value = Val}} = ?call_lfm(get_xattr(
+                SessionId, {guid, FileGuid}, XattrName, Inherited
+            )),
+            {ok, #{XattrName => Val}}
     end;
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
@@ -385,7 +387,7 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     ?call_lfm(get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
 
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?call_lfm(get_metadata(Cl#client.id, {guid, FileGuid}, rdf, [], false)).
+    ?call_lfm(get_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, [], false)).
 
 
 %%--------------------------------------------------------------------
@@ -415,6 +417,7 @@ delete(_) ->
 
 -spec extract_lfm_res({ok, term()} | {error, term()}) ->
     {ok, term()} | no_return().
+extract_lfm_res(ok) -> ok;
 extract_lfm_res({ok, _} = Res) -> Res;
 extract_lfm_res({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 

@@ -201,7 +201,7 @@ translate_error({error, ?EACCES}) ->
 
 translate_error(?ERROR_POSIX(Errno)) ->
     {?HTTP_400_BAD_REQUEST,
-        {<<"Operation failed with: ~p">>, [Errno]}
+        {<<"Operation failed with: ~p (POSIX)">>, [Errno]}
     };
 
 % Errors connected with macaroons

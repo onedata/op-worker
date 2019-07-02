@@ -196,7 +196,7 @@ authorize(#op_req{operation = delete, client = Client, gri = #gri{aspect = insta
 
 authorize(#op_req{operation = delete, client = Client, gri = #gri{
     id = DirGuid,
-    aspect = instance
+    aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
     op_logic_utils:is_eff_space_member(Client, SpaceId).
@@ -237,7 +237,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #od_share{
 }) ->
     op_logic_utils:ensure_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = instance}}, _) ->
+validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
     op_logic_utils:ensure_space_supported_locally(SpaceId).
 
@@ -303,7 +303,7 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
 update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
     ShareId = fetch_share_id(Cl, DirGuid),
     NewName = maps:get(<<"name">>, Req#op_req.data),
-    share_logic:update_name(Cl#client.id, ShareId, NewName);
+    share_logic:update_name(Cl#client.session_id, ShareId, NewName);
 
 update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
     NewName = maps:get(<<"name">>, Req#op_req.data),
@@ -325,7 +325,7 @@ delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
     end;
 
 delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
-    case logical_file_manager:remove_share(Cl#client.id, ShareId) of
+    case logical_file_manager:remove_share(Cl#client.session_id, ShareId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
