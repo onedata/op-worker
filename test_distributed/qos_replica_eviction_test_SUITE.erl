@@ -11,13 +11,7 @@
 -module(qos_replica_eviction_test_SUITE).
 -author("Michal Stanisz").
 
--include("global_definitions.hrl").
 -include("transfers_test_mechanism.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
