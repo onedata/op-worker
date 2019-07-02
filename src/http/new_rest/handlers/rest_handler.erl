@@ -244,18 +244,18 @@ rest_routes() ->
     {stop, cowboy_req:req(), state()}.
 process_request(Req, State) ->
     try
-        #state{client = Client, rest_req = #rest_req{
+        #state{client = Cl, rest_req = #rest_req{
             method = Method,
             parse_body = ParseBody,
             consumes = Consumes,
             b_gri = GriWithBindings
         }} = State,
         Operation = method_to_operation(Method),
-        GRI = resolve_gri_bindings(Client#client.id, GriWithBindings, Req),
+        GRI = resolve_gri_bindings(Cl#client.session_id, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody, Consumes),
         OpReq = #op_req{
             operation = Operation,
-            client = Client,
+            client = Cl,
             gri = GRI,
             data = Data
         },
@@ -360,7 +360,7 @@ resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
         {guid, Guid} ->
             Guid;
         _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"file_path">>))
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(Path))
     end;
 resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
     {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};
