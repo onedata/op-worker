@@ -30,7 +30,8 @@
     op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, TransferId) ->
-    rest_translator:created_reply([<<"transfers">>, TransferId]).
+    Path = [<<"transfers">>, TransferId],
+    rest_translator:created_reply(Path, [<<"transfers">>, TransferId]).
 
 
 %%--------------------------------------------------------------------

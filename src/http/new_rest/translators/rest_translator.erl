@@ -27,7 +27,7 @@
 
 %% Convenience functions for rest translators
 -export([
-    created_reply/1,
+    created_reply/2,
     ok_no_content_reply/0,
     ok_body_reply/1,
     updated_reply/0,
@@ -111,16 +111,17 @@ ok_no_content_reply() ->
 %% Returns 201 CREATED with proper location headers.
 %% @end
 %%--------------------------------------------------------------------
--spec created_reply(PathTokens :: [binary()]) -> #rest_resp{}.
+-spec created_reply(PathTokens :: [binary()], json_utils:json_term()) ->
+    #rest_resp{}.
 % Make sure there is no leading slash (so filename can be used for joining path)
-created_reply([<<"/", Path/binary>> | Tail]) ->
-    created_reply([Path | Tail]);
-created_reply(PathTokens) ->
+created_reply([<<"/", Path/binary>> | Tail], Body) ->
+    created_reply([Path | Tail], Body);
+created_reply(PathTokens, Body) ->
     <<"/", Path/binary>> = filename:join([<<"/">> | PathTokens]),
     LocationHeader = #{
         <<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(Path))
     },
-    #rest_resp{code = ?HTTP_201_CREATED, headers = LocationHeader}.
+    #rest_resp{code = ?HTTP_200_OK, headers = LocationHeader, body = Body}.
 
 
 %%--------------------------------------------------------------------

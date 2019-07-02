@@ -32,9 +32,11 @@
     op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, TransferId) ->
-    rest_translator:ok_body_reply(#{<<"transferId">> => TransferId});
+    Path = [<<"transfers">>, TransferId],
+    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId});
 create_response(#gri{aspect = replicate_by_index}, _, value, TransferId) ->
-    rest_translator:ok_body_reply(#{<<"transferId">> => TransferId}).
+    Path = [<<"transfers">>, TransferId],
+    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId}).
 
 
 %%--------------------------------------------------------------------
@@ -56,6 +58,8 @@ get_response(_, ReplicaData) ->
     Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 delete_response(#gri{aspect = instance}, value, TransferId) ->
-    rest_translator:ok_body_reply(#{<<"transferId">> => TransferId});
+    Path = [<<"transfers">>, TransferId],
+    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId});
 delete_response(#gri{aspect = evict_by_index}, value, TransferId) ->
-    rest_translator:ok_body_reply(#{<<"transferId">> => TransferId}).
+    Path = [<<"transfers">>, TransferId],
+    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId}).
