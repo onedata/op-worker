@@ -47,12 +47,18 @@
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined()
+    local_links_tree_id => oneprovider:get_id_or_undefined(),
+    fold_enabled => true
 }).
+
+-export([list/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+list() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% Functions operating on record using datastore_model API

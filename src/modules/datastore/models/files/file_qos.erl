@@ -54,8 +54,11 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
-    mutator => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined(),
+    fold_enabled => true
 }).
+
+-export([list/0]).
 
 %%%===================================================================
 %%% API
@@ -64,6 +67,9 @@
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
+
+list() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -145,7 +151,7 @@ add_to_target_storages(FileGuid, StoragesList, QosId) ->
     DocToCreate = #document{
         key = FileGuid,
         scope = file_id:guid_to_space_id(FileGuid),
-        value = #file_qos{target_storages = NewTargetStorages}
+        value = #file_qos{qos_list = [QosId], target_storages = NewTargetStorages}
     },
 
     create_or_update(DocToCreate, Diff).

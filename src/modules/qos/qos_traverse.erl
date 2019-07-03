@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([remove_qos/2, fulfill_qos/6, init_pool/0, get_space_storages/2,

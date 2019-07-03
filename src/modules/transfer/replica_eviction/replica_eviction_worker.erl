@@ -126,30 +126,40 @@ transfer_regular_file(FileCtx, #transfer_params{
     transfer_id = TransferId,
     supporting_provider = SupportingProvider
 }) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    ProviderId = oneprovider:get_id_or_undefined(),
-    QosStorages = case file_qos:get(Uuid) of
+    Guid = file_ctx:get_guid_const(FileCtx),
+    % TODO: use actual storage id
+    EvictingStorage = oneprovider:get_id_or_undefined(),
+    SupportingStorage = SupportingProvider,
+    QosStorages = case file_qos:get_effective(Guid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS
     end,
 
     EquivalentStorages =
-        providers_qos:get_provider_qos(ProviderId)
+        providers_qos:get_provider_qos(EvictingStorage)
             ==
-        providers_qos:get_provider_qos(SupportingProvider),
+        providers_qos:get_provider_qos(SupportingStorage),
 
-    case {maps:is_key(ProviderId, QosStorages), EquivalentStorages andalso
-        not maps:is_key(SupportingProvider, QosStorages)} of
+    case {maps:is_key(EvictingStorage, QosStorages), EquivalentStorages andalso
+        not maps:is_key(SupportingStorage, QosStorages)} of
         {true, true} ->
-            file_qos:update(Uuid,
-                fun(#file_qos{target_storages = TS}) ->
-                    QosList = maps:get(ProviderId, TS, []),
-                    NewQosList = maps:get(SupportingProvider, TS, []),
-                    {ok, #file_qos{target_storages = (maps:remove(ProviderId, TS))#{
-                        SupportingProvider => NewQosList ++ QosList}
-                    }}
-                end
-            ),
+            Diff = fun(#file_qos{target_storages = TS}) ->
+                PrevStorageQosList = maps:get(EvictingStorage, TS, []),
+                NewStorageQosList = maps:get(SupportingStorage, TS, []),
+                {ok, #file_qos{target_storages = (maps:remove(EvictingStorage, TS))#{
+                    SupportingStorage => NewStorageQosList ++ PrevStorageQosList}
+                }}
+            end,
+            QosList = maps:get(EvictingStorage, QosStorages),
+            NewFileDoc = #document{
+                key = Guid,
+                scope = file_ctx:get_space_id_const(FileCtx),
+                value = #file_qos{
+                    qos_list = QosList,
+                    target_storages = #{SupportingStorage => QosList}
+                }
+            },
+            file_qos:create_or_update(NewFileDoc, Diff),
             schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider);
         {true, false} ->
             transfer:increment_files_processed_counter(TransferId),
