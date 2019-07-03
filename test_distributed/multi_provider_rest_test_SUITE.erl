@@ -1190,7 +1190,7 @@ set_get_xattr_inherited(Config) ->
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"matadata/xattrs/space2/dir_test/child?inherited=true">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(#{
