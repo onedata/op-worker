@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([send/2, forward/1, broadcast/4]).
@@ -111,7 +112,12 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
             message_body = Msg
         }),
         case Result of
-            ok -> ok;
+            ok ->
+                ok;
+            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER ->
+                % Do not logs anything if sending failed due to no connection
+                % to peer provider (it is expected situation).
+                ok;
             {error, Reason} ->
                 ?warning("Cannot broadcast changes batch to provider ~p "
                 "due to: ~p", [ProviderId, Reason])
