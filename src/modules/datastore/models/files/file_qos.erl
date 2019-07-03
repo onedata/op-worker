@@ -139,10 +139,10 @@ get_effective(FileGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
-delete(FileUuid) ->
-    case datastore_model:delete(?CTX, FileUuid) of
+delete(FileGuid) ->
+    case datastore_model:delete(?CTX, FileGuid) of
         ok -> ok;
-        {error, ?ENOENT} -> ok;
+        {error, not_found} -> ok;
         {error, _} = Error -> Error
     end.
 

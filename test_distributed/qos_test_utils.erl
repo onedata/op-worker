@@ -275,7 +275,7 @@ assert_qos_invalidated(Worker, SessId, QosToCheckList, QosDescList, GuidsAndPath
 
 wait_for_qos_fulfilment_in_parallel(Worker, SessId, QosPathToId) ->
     utils:pforeach(fun({QosName, QosId, _Path}) ->
-        {ok, QosRecord} = ?assertMatch({ok, _}, lfm_proxy:get_qos(Worker, SessId, QosId)),
+        {ok, QosRecord} = ?assertMatch({ok, _}, lfm_proxy:get_qos_details(Worker, SessId, QosId)),
         ct:pal("Waiting for fulfilment of qos ~p: ~n"
         "    Expression:          ~p~n",
             [QosName, QosRecord#qos_entry.expression]

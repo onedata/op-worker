@@ -91,22 +91,22 @@ remove_qos(SessId, QosId) ->
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | list(qos_entry:id())) -> boolean().
 check_qos_fulfilled(SessId, QosList) ->
-    check_qos_fulfilled(SessId, QosList, {guid, undefined}).
-
+    check_qos_fulfilled(SessId, QosList, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Check if given qos is fulfilled for given file.
 %% @end
 %%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id() | list(qos_entry:id()),
+    logical_file_manager:file_key()) -> boolean().
 check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
     lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
+check_qos_fulfilled(SessId, QosId, undefined) ->
+    {ok, #qos_entry{file_guid = QosOriginFileGuid}} = get_qos_details(SessId, QosId),
+    check_qos_fulfilled(SessId, QosId, {guid, QosOriginFileGuid});
 check_qos_fulfilled(SessId, QosId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    case get_qos_details(SessId, QosId) of
-        {ok, QosItem} ->
-            qos_entry:check_fulfilment(QosId, FileGuid, QosItem);
-        {error, ?ENOENT} ->
-            false
-    end.
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #check_qos_fulfillment{qos_id = QosId},
+        fun(#qos_fulfillment{fulfilled = FulfillmentStatus}) -> FulfillmentStatus end).
 

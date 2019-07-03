@@ -19,12 +19,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([remove_qos/2, fulfill_qos/4, init_pool/0, get_space_storages/2]).
+-export([remove_qos/2, fulfill_qos/4, init_pool/0]).
 
 %% Pool callbacks
 -export([do_master_job/1, do_slave_job/1, task_finished/1, get_job/1,
-    get_sync_info/1, get_target_storages/4, list_ongoing_jobs/0,
-    update_job_progress/5]).
+    get_sync_info/1, list_ongoing_jobs/0, update_job_progress/5]).
 
 -record(add_qos_traverse_args, {
     session_id :: session:id(),
@@ -39,8 +38,7 @@
 }).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)
-end).
+-define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
 
 %%%===================================================================
 %%% API
@@ -98,9 +96,9 @@ remove_qos(FileCtx, QosId) ->
 -spec init_pool() -> ok.
 init_pool() ->
     % Get pool limits from app.config
-    {ok, MasterJobsLimit} = application:get_env(?APP_NAME, qos_taverse_master_jobs_limit),
-    {ok, SlaveJobsLimit} = application:get_env(?APP_NAME, qos_taverse_slave_jobs_limit),
-    {ok, ParallelismLimit} = application:get_env(?APP_NAME, qos_traverse_parallelism_limit),
+    MasterJobsLimit = application:get_env(?APP_NAME, qos_taverse_master_jobs_limit, 10),
+    SlaveJobsLimit = application:get_env(?APP_NAME, qos_taverse_slave_jobs_limit, 20),
+    ParallelismLimit = application:get_env(?APP_NAME, qos_traverse_parallelism_limit, 20),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -152,65 +150,27 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, #remove_qos_traverse_a
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get list of storage id, on which file should be present according to
-%% qos requirements and available storage.
-%% @end
-%%--------------------------------------------------------------------
--spec get_target_storages(session:id(), logical_file_manager:file_key(),
-    qos_expression:expression(), pos_integer()) -> [storage:id()].
-get_target_storages(SessId, FileKey, Expression, ReplicasNum) ->
-    {ok, FileLocations} = lfm:get_file_distribution(SessId, FileKey),
-
-    % TODO: VFS-5574 add check if storage has enough free space
-    SpaceStorages = qos_traverse:get_space_storages(SessId, FileKey),
-    qos_expression:get_target_storage(Expression, ReplicasNum, SpaceStorages, FileLocations).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get list of storage id supporting space in which given file is stored.
-%% @end
-%%--------------------------------------------------------------------
--spec get_space_storages(session:id(), logical_file_manager:file_key()) ->
-    [storage:id()].
-get_space_storages(Auth, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(Auth, FileKey),
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-
-    % TODO: VFS-5573 use storage qos
-    {ok, ProvidersId} = space_logic:get_provider_ids(Auth, SpaceId),
-    ProvidersId.
-
-
-% TODO: VFS-5572 use transfers callback
-wait_for_transfers_completion([] ,_ ,_ ,_) ->
-    ok;
-wait_for_transfers_completion(TransfersPropList, QosId, Scope, RelativePath) ->
-    receive
-        {completed, TransferId} ->
-            qos_entry:delete_status_link(QosId, Scope, RelativePath,
-                proplists:get_value(TransferId, TransfersPropList)),
-            wait_for_transfers_completion(proplists:delete(TransferId, TransfersPropList),
-                QosId, Scope, RelativePath)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Creates file replicas on given storages.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_qos_replicas(file_meta:uuid(), datastore_doc:scope(), file_qos:target_storages(),
     #add_qos_traverse_args{}) -> ok.
-create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs) ->
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
-    RelativePath = fslogic_path:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
-
+create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    RelativePath = qos_status:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
     SessId = TraverseArgs#add_qos_traverse_args.session_id,
     QosId = TraverseArgs#add_qos_traverse_args.qos_id,
     % TODO: add space check and optionally choose other storage
-    TransfersList = schedule_transfers(SessId, FileGuid, TargetStorages, QosId, Scope, RelativePath),
-    wait_for_transfers_completion(TransfersList, QosId, Scope, RelativePath).
+
+    OnTransferScheduledFun = fun(TransferId, StorageId) ->
+        qos_status:add_status_link(QosId, SpaceId, RelativePath, StorageId, TransferId)
+    end,
+    OnTransferFinishedFun = fun(StorageId) ->
+        qos_status:delete_status_link(QosId, SpaceId, RelativePath, StorageId)
+    end,
+
+    TransfersList = schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
+    wait_for_transfers_completion(TransfersList, OnTransferFinishedFun).
 
 
 %%--------------------------------------------------------------------
@@ -219,15 +179,25 @@ create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs) ->
 %% Adds appropriate status link.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_transfers(session:id(), fslogic_worker:file_guid(), [storage:id()],
-    qos:id(), datastore_doc:scope(), binary()) -> [transfer:id()].
-schedule_transfers(SessId, FileGuid, TargetStorages, QosId, Scope, RelativePath) ->
+-spec schedule_transfers(session:id(), fslogic_worker:file_guid(), [storage:id()],  OnTransferScheduledFun) ->
+    [transfer:id()] when  OnTransferScheduledFun :: fun((transfer:id(), storage:id()) -> ok).
+schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun) ->
     lists:map(fun(StorageId) ->
         % TODO: VFS-5573 use storage qos
         {ok, TransferId} = lfm:schedule_file_replication(
             SessId, {guid, FileGuid}, StorageId, undefined, self()),
-        qos_entry:add_status_link(QosId, Scope, RelativePath, StorageId, TransferId),
+        OnTransferScheduledFun(TransferId, StorageId),
         {TransferId, StorageId}
     end, TargetStorages).
 
 
+% TODO: implement properly when transfer callback will be available
+wait_for_transfers_completion([] , _) ->
+    ok;
+wait_for_transfers_completion(TransfersPropList, OnTransferFinishedFun) ->
+    receive
+        {completed, TransferId} ->
+            OnTransferFinishedFun(proplists:get_value(TransferId, TransfersPropList)),
+            wait_for_transfers_completion(proplists:delete(TransferId, TransfersPropList),
+                OnTransferFinishedFun)
+    end.
