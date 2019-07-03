@@ -463,16 +463,14 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 -spec stream_loop(req(), maps:map()) -> ok.
 stream_loop(Req, State = #{
     timeout := Timeout,
-    ref := Ref,
-    space_id := SpaceId,
-    changes_reqs := ChangesReqs
+    ref := Ref
 }) ->
     receive
         {Ref, stream_ended} ->
             ok;
         {Ref, #document{} = ChangedDoc} ->
             try
-                send_change(Req, SpaceId, ChangesReqs, ChangedDoc)
+                send_change(Req, ChangedDoc, State)
             catch
                 _:E ->
                     % Can appear when document connected with deleted file_meta appears
@@ -493,47 +491,47 @@ stream_loop(Req, State = #{
 %% Parse and send change received from db stream, to the client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_change(req(), od_space:id(), [change_req()], datastore:doc()) -> ok.
-send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
+-spec send_change(req(), datastore:doc(), map()) -> ok.
+send_change(Req, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
     value = #custom_metadata{}
-}) ->
-    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs);
+}, State) ->
+    send_changes(Req, Seq, FileUuid, ChangedDoc, State);
 
-send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
+send_change(Req, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
     value = #times{}
-}) ->
-    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs);
+}, State) ->
+    send_changes(Req, Seq, FileUuid, ChangedDoc, State);
 
-send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
+send_change(Req, ChangedDoc = #document{
     seq = Seq,
     value = #file_location{uuid = FileUuid}
-}) ->
-    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs);
+}, State) ->
+    send_changes(Req, Seq, FileUuid, ChangedDoc, State);
 
-send_change(Req, SpaceId, ChangesReqs, ChangedDoc = #document{
+send_change(Req, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
     value = #file_meta{}
-}) ->
-    send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs).
+}, State) ->
+    send_changes(Req, Seq, FileUuid, ChangedDoc, State).
 
 
 %% @private
 -spec send_changes(req(), datastore_doc:seq(), file_meta:uuid(),
-    od_space:id(), datastore:doc(), [change_req()]) -> ok.
-send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs) ->
-    case get_all_docs_changes(ChangesReqs, FileUuid, ChangedDoc) of
+    datastore:doc(), map()) -> ok.
+send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
+    case get_all_docs_changes(FileUuid, ChangedDoc, State) of
         Changes when map_size(Changes) == 0 ->
             ok;
         Changes ->
             FileId =
                 try
                     {ok, Val} = file_id:guid_to_objectid(file_id:pack_guid(
-                        FileUuid, SpaceId
+                        FileUuid, maps:get(space_id, State)
                     )),
                     Val
                 catch
@@ -566,112 +564,112 @@ send_changes(Req, Seq, FileUuid, SpaceId, ChangedDoc, ChangesReqs) ->
 %% and other documents for which user set `always` flag.
 %% @end
 %%--------------------------------------------------------------------
--spec get_all_docs_changes([change_req()], file_meta:uuid(), datastore:doc()) ->
+-spec get_all_docs_changes(file_meta:uuid(), datastore:doc(), map()) ->
     maps:map().
-get_all_docs_changes(ChangesRequests, FileUuid, ChangedDoc) ->
+get_all_docs_changes(FileUuid, ChangedDoc, State) ->
     lists:foldl(fun(ChangesReq, Acc) ->
-        maps:merge(Acc, get_requested_changes(ChangesReq, FileUuid, ChangedDoc))
-    end, #{}, ChangesRequests).
+        maps:merge(Acc, get_requested_changes(ChangesReq, FileUuid, ChangedDoc, State))
+    end, #{}, maps:get(changes_reqs, State)).
 
 
 %% @private
--spec get_requested_changes(change_req(), file_meta:uuid(), datastore:doc()) ->
+-spec get_requested_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
     maps:map().
-get_requested_changes(#change_req{record = times} = Req, FileUuid, ChangedDoc) ->
-    get_times_changes(Req, FileUuid, ChangedDoc);
-get_requested_changes(#change_req{record = file_meta} = Req, FileUuid, ChangedDoc) ->
-    get_file_meta_changes(Req, FileUuid, ChangedDoc);
-get_requested_changes(#change_req{record = file_location} = Req, FileUuid, ChangedDoc) ->
-    get_file_location_changes(Req, FileUuid, ChangedDoc);
-get_requested_changes(#change_req{record = custom_metadata} = Req, FileUuid, ChangedDoc) ->
-    get_custom_meta_changes(Req, FileUuid, ChangedDoc).
+get_requested_changes(#change_req{record = times} = Req, FileUuid, ChangedDoc, State) ->
+    get_times_changes(Req, FileUuid, ChangedDoc, State);
+get_requested_changes(#change_req{record = file_meta} = Req, FileUuid, ChangedDoc, State) ->
+    get_file_meta_changes(Req, FileUuid, ChangedDoc, State);
+get_requested_changes(#change_req{record = file_location} = Req, FileUuid, ChangedDoc, State) ->
+    get_file_location_changes(Req, FileUuid, ChangedDoc, State);
+get_requested_changes(#change_req{record = custom_metadata} = Req, FileUuid, ChangedDoc, State) ->
+    get_custom_meta_changes(Req, FileUuid, ChangedDoc, State).
 
 
 %% @private
--spec get_times_changes(change_req(), file_meta:uuid(), datastore:doc()) ->
+-spec get_times_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
     maps:map().
 get_times_changes(#change_req{
     fields = Fields,
     exists = Exists
-}, _, Doc = #document{value = #times{}}) ->
-    #{<<"times">> => get_record_changes(true, Fields, Exists, Doc)};
+}, _, Doc = #document{value = #times{}}, State) ->
+    #{<<"times">> => get_record_changes(true, Fields, Exists, Doc, State)};
 get_times_changes(#change_req{
     always = true,
     fields = Fields,
     exists = Exists
-}, FileUuid, _) ->
+}, FileUuid, _, State) ->
     {ok, Doc} = times:get(FileUuid),
-    #{<<"times">> => get_record_changes(false, Fields, Exists, Doc)};
-get_times_changes(_, _, _) ->
+    #{<<"times">> => get_record_changes(false, Fields, Exists, Doc, State)};
+get_times_changes(_, _, _, _) ->
     #{}.
 
 
 %% @private
--spec get_custom_meta_changes(change_req(), file_meta:uuid(), datastore:doc()) ->
+-spec get_custom_meta_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
     maps:map().
 get_custom_meta_changes(#change_req{
     fields = Fields,
     exists = Exists
-}, _, Doc = #document{value = #custom_metadata{}}) ->
-    #{<<"customMetadata">> => get_record_changes(true, Fields, Exists, Doc)};
+}, _, Doc = #document{value = #custom_metadata{}}, State) ->
+    #{<<"customMetadata">> => get_record_changes(true, Fields, Exists, Doc, State)};
 get_custom_meta_changes(#change_req{
     always = true,
     fields = Fields,
     exists = Exists
-}, FileUuid, _) ->
+}, FileUuid, _, State) ->
     {ok, Doc} = custom_metadata:get(FileUuid),
-    #{<<"customMetadata">> => get_record_changes(false, Fields, Exists, Doc)};
-get_custom_meta_changes(_, _, _) ->
+    #{<<"customMetadata">> => get_record_changes(false, Fields, Exists, Doc, State)};
+get_custom_meta_changes(_, _, _, _) ->
     #{}.
 
 
 %% @private
--spec get_file_meta_changes(change_req(), file_meta:uuid(), datastore:doc()) ->
+-spec get_file_meta_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
     maps:map().
 get_file_meta_changes(#change_req{
     fields = Fields,
     exists = Exists
-}, _, Doc = #document{value = #file_meta{}}) ->
-    #{<<"fileMeta">> => get_record_changes(true, Fields, Exists, Doc)};
+}, _, Doc = #document{value = #file_meta{}}, State) ->
+    #{<<"fileMeta">> => get_record_changes(true, Fields, Exists, Doc, State)};
 get_file_meta_changes(#change_req{
     always = true,
     fields = Fields,
     exists = Exists
-}, FileUuid, _) ->
+}, FileUuid, _, State) ->
     {ok, Doc} = file_meta:get({uuid, FileUuid}),
-    #{<<"fileMeta">> => get_record_changes(false, Fields, Exists, Doc)};
-get_file_meta_changes(_, _, _) ->
+    #{<<"fileMeta">> => get_record_changes(false, Fields, Exists, Doc, State)};
+get_file_meta_changes(_, _, _, _) ->
     #{}.
 
 
 %% @private
--spec get_file_location_changes(change_req(), file_meta:uuid(), datastore:doc()) ->
+-spec get_file_location_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
     maps:map().
 get_file_location_changes(#change_req{
     fields = Fields,
     exists = Exists
-}, _, Doc = #document{value = #file_location{}}) ->
-    #{<<"fileLocation">> => get_record_changes(true, Fields, Exists, Doc)};
+}, _, Doc = #document{value = #file_location{}}, State) ->
+    #{<<"fileLocation">> => get_record_changes(true, Fields, Exists, Doc, State)};
 get_file_location_changes(#change_req{
     always = true,
     fields = Fields,
     exists = Exists
-}, FileUuid, _) ->
+}, FileUuid, _, State) ->
     {ok, Doc} = file_location:get(FileUuid, oneprovider:get_id()),
-    #{<<"fileLocation">> => get_record_changes(false, Fields, Exists, Doc)};
-get_file_location_changes(_, _, _) ->
+    #{<<"fileLocation">> => get_record_changes(false, Fields, Exists, Doc, State)};
+get_file_location_changes(_, _, _, _) ->
     #{}.
 
 
 %% @private
--spec get_record_changes(boolean(), [term()], [term()], datastore:doc()) ->
+-spec get_record_changes(boolean(), [term()], [term()], datastore:doc(), map()) ->
     maps:map().
 get_record_changes(Changed, FieldsNames, ExistsNames, #document{
     revs = [Rev | _],
     mutators = Mutators,
     deleted = Deleted,
     value = #custom_metadata{value = Metadata}
-}) ->
+}, _State) ->
     Fields = lists:foldl(fun
         (<<"onedata_keyvalue">>, Acc) ->
             KeyValues = case maps:without(?ONEDATA_SPECIAL_XATTRS, Metadata) of
@@ -707,12 +705,12 @@ get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
     mutators = Mutators,
     deleted = Deleted,
     value = #file_meta{} = Record
-}) ->
+}, State) ->
     Fields = lists:foldl(
         fun
             ({<<"name">>, _FieldIndex}, Acc) ->
-                Auth = get(auth),
-                SpaceId = get(space_id),
+                Auth = maps:get(auth, State),
+                SpaceId = maps:get(space_id, State),
                 SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 Name = case FileUuid =:= SpaceUuid of
                     true ->
@@ -739,7 +737,7 @@ get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
     mutators = Mutators,
     deleted = Deleted,
     value = Record
-}) ->
+}, _State) ->
     Fields = lists:foldl(fun({FieldName, FieldIndex}, Acc) ->
         Acc#{FieldName => element(FieldIndex, Record)}
     end, #{}, FieldsNamesAndIndexes),
