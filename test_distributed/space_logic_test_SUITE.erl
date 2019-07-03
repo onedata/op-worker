@@ -344,17 +344,17 @@ convenience_functions_test(Config) ->
     % mocked users only have SPACE_VIEW privileges
     ?assertMatch(
         true,
-        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_VIEW])
+        rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_1, ?SPACE_VIEW])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
     ?assertMatch(
         false,
-        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_3, ?SPACE_VIEW])
+        rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_3, ?SPACE_VIEW])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
     ?assertMatch(
         false,
-        rpc:call(Node, space_logic, has_eff_privilege, [User1Sess, ?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
+        rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

@@ -75,7 +75,6 @@ find_record(<<"space">>, SpaceId) ->
     end;
 
 find_record(RecordType, RecordId) ->
-    SessionId = op_gui_session:get_session_id(),
     SpaceId = case RecordType of
         <<"space-user-list">> ->
             RecordId;
@@ -100,10 +99,7 @@ find_record(RecordType, RecordId) ->
     UserId = op_gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
-    Authorized = space_logic:has_eff_privilege(
-        SessionId, SpaceId, UserId, ?SPACE_VIEW
-    ),
-    case Authorized of
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
         false ->
             op_gui_error:unauthorized();
         true ->
@@ -205,10 +201,9 @@ delete_record(<<"space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
-    SessionId = op_gui_session:get_session_id(),
     % Check if that user has view privileges in that space
     HasViewPrivileges = space_logic:has_eff_privilege(
-        SessionId, SpaceId, op_gui_session:get_user_id(), ?SPACE_VIEW
+        SpaceId, op_gui_session:get_user_id(), ?SPACE_VIEW
     ),
     space_record(SpaceId, HasViewPrivileges).
 

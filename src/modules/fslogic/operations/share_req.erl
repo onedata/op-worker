@@ -148,8 +148,8 @@ check_is_dir(FileCtx) ->
 %% @private
 -spec assert_has_space_privilege(session:id(), od_space:id(), od_user:id(),
     privileges:space_privilege()) -> ok | no_return().
-assert_has_space_privilege(SessionId, SpaceId, UserId, Privilege) ->
-    case space_logic:has_eff_privilege(SessionId, SpaceId, UserId, Privilege) of
+assert_has_space_privilege(_SessionId, SpaceId, UserId, Privilege) ->
+    case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
         true ->
             ok;
         false ->

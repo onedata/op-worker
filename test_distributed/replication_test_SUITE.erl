@@ -1345,7 +1345,7 @@ override_space_providers_mock(Workers, SpaceId, Providers) ->
             SpId =:= SpaceId andalso UsId =:= <<"user1">>
         end),
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege,
-        fun(_Client, SpId, UsId, Privilege) ->
+        fun(SpId, UsId, Privilege) ->
             SpId =:= SpaceId andalso UsId =:= <<"user1">> andalso lists:member(Privilege, privileges:space_privileges())
         end),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids,
