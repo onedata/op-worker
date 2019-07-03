@@ -121,7 +121,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | entity_logic:error().
+    {ok, op_logic:entity()} | op_logic:error().
 fetch_entity(_) ->
     {ok, undefined}.
 
@@ -132,7 +132,7 @@ fetch_entity(_) ->
 %% op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
+-spec exists(op_logic:req(), op_logic:entity()) -> boolean().
 exists(_, _) ->
     true.
 
@@ -143,7 +143,7 @@ exists(_, _) ->
 %% based on op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+-spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
 authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     true.
 
@@ -155,7 +155,7 @@ authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
 %% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
+-spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     ok.
 

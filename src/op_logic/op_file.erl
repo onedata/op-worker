@@ -40,6 +40,7 @@
 
 -define(call_lfm(__FunctionCall), extract_lfm_res(logical_file_manager:__FunctionCall)).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -173,7 +174,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | entity_logic:error().
+    {ok, op_logic:entity()} | op_logic:error().
 fetch_entity(_) ->
     {ok, undefined}.
 
@@ -184,7 +185,7 @@ fetch_entity(_) ->
 %% op logic request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(op_logic:req(), entity_logic:entity()) -> boolean().
+-spec exists(op_logic:req(), op_logic:entity()) -> boolean().
 exists(_, _) ->
     true.
 
@@ -197,7 +198,7 @@ exists(_, _) ->
 %% are checked later by logical_file_manager.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), entity_logic:entity()) -> boolean().
+-spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
@@ -237,7 +238,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
 %% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), entity_logic:entity()) -> ok | no_return().
+-spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
     As =:= xattrs;
@@ -273,16 +274,16 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}) ->
+create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
     #{<<"mode">> := Mode} = maps:get(<<"application/json">>, Data),
-    ?call_lfm(set_perms(Cl#client.session_id, {guid, FileGuid}, Mode));
+    ?call_lfm(set_perms(Cl#client.session_id, {guid, Guid}, Mode));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
+create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
     [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
     Xattr = #xattr{name = Name, value = Value},
-    ?call_lfm(set_xattr(Cl#client.session_id, {guid, FileGuid}, Xattr, false, false));
+    ?call_lfm(set_xattr(Cl#client.session_id, {guid, Guid}, Xattr, false, false));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
+create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
     JSON = maps:get(<<"application/json">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -295,11 +296,11 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json
             binary:split(Filter, <<".">>, [global])
      end,
 
-    ?call_lfm(set_metadata(Cl#client.session_id, {guid, FileGuid}, json, JSON, FilterList));
+    ?call_lfm(set_metadata(Cl#client.session_id, {guid, Guid}, json, JSON, FilterList));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
+create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?call_lfm(set_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, Rdf, [])).
+    ?call_lfm(set_metadata(Cl#client.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%--------------------------------------------------------------------
@@ -415,8 +416,8 @@ delete(_) ->
 %%%===================================================================
 
 
--spec extract_lfm_res({ok, term()} | {error, term()}) ->
-    {ok, term()} | no_return().
+-spec extract_lfm_res(ok | {ok, term()} | {error, term()}) ->
+    ok | {ok, term()} | no_return().
 extract_lfm_res(ok) -> ok;
 extract_lfm_res({ok, _} = Res) -> Res;
 extract_lfm_res({error, Errno}) -> throw(?ERROR_POSIX(Errno)).

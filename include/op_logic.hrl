@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(ENTITY_LOGIC_HRL).
--define(ENTITY_LOGIC_HRL, 1).
+-ifndef(OP_LOGIC_HRL).
+-define(OP_LOGIC_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
