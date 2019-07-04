@@ -18,9 +18,9 @@
 
 -export([
     is_eff_space_member/2,
-    ensure_space_supported_locally/1, ensure_space_supported_by/2,
+    assert_space_supported_locally/1, assert_space_supported_by/2,
 
-    ensure_file_exists/2
+    assert_file_exists/2
 ]).
 
 
@@ -36,14 +36,14 @@ is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->
     user_logic:has_eff_space(SessionId, UserId, SpaceId).
 
 
--spec ensure_space_supported_locally(od_space:id()) -> ok | no_return().
-ensure_space_supported_locally(SpaceId) ->
-    ensure_space_supported_by(SpaceId, oneprovider:get_id()).
+-spec assert_space_supported_locally(od_space:id()) -> ok | no_return().
+assert_space_supported_locally(SpaceId) ->
+    assert_space_supported_by(SpaceId, oneprovider:get_id()).
 
 
--spec ensure_space_supported_by(od_space:id(), od_provider:id()) ->
+-spec assert_space_supported_by(od_space:id(), od_provider:id()) ->
     ok | no_return().
-ensure_space_supported_by(SpaceId, ProviderId) ->
+assert_space_supported_by(SpaceId, ProviderId) ->
     case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
         true ->
             ok;
@@ -52,9 +52,9 @@ ensure_space_supported_by(SpaceId, ProviderId) ->
     end.
 
 
--spec ensure_file_exists(op_logic:client(), file_id:file_guid()) ->
+-spec assert_file_exists(op_logic:client(), file_id:file_guid()) ->
     ok | no_return().
-ensure_file_exists(#client{session_id = SessionId}, FileGuid) ->
+assert_file_exists(#client{session_id = SessionId}, FileGuid) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, _} ->
             ok;

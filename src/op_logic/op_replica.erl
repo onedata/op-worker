@@ -191,78 +191,78 @@ authorize(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}} = Req
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
+    op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    op_logic_utils:ensure_file_exists(Req#op_req.client, Guid),
+    op_logic_utils:assert_file_exists(Req#op_req.client, Guid),
 
     % In case of undefined `provider_id` local provider is chosen instead
     case maps:get(<<"provider_id">>, Req#op_req.data, undefined) of
         undefined ->
             ok;
         ReplicatingProvider ->
-            op_logic_utils:ensure_space_supported_by(SpaceId, ReplicatingProvider)
+            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider)
     end;
 
 validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by_index}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
+    op_logic_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `provider_id` local provider is chosen instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
-            ensure_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
+            assert_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
         ReplicatingProvider ->
-            op_logic_utils:ensure_space_supported_by(SpaceId, ReplicatingProvider),
-            ensure_index_exists_on_provider(SpaceId, Name, ReplicatingProvider)
+            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider),
+            assert_index_exists_on_provider(SpaceId, Name, ReplicatingProvider)
     end;
 
 validate(#op_req{operation = get, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
+    op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    op_logic_utils:ensure_file_exists(Req#op_req.client, Guid),
+    op_logic_utils:assert_file_exists(Req#op_req.client, Guid),
 
     % In case of undefined `provider_id` local provider is chosen instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
             ok;
         EvictingProvider ->
-            op_logic_utils:ensure_space_supported_by(SpaceId, EvictingProvider)
+            op_logic_utils:assert_space_supported_by(SpaceId, EvictingProvider)
     end,
 
     case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined ->
             ok;
         ReplicatingProvider ->
-            op_logic_utils:ensure_space_supported_by(SpaceId, ReplicatingProvider)
+            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider)
     end;
 
 validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_index}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
+    op_logic_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `provider_id` local provider is chosen instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
-            ensure_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
+            assert_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
         EvictingProvider ->
-            op_logic_utils:ensure_space_supported_by(SpaceId, EvictingProvider),
-            ensure_index_exists_on_provider(SpaceId, Name, EvictingProvider)
+            op_logic_utils:assert_space_supported_by(SpaceId, EvictingProvider),
+            assert_index_exists_on_provider(SpaceId, Name, EvictingProvider)
     end,
 
     case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined ->
             ok;
         ReplicatingProvider ->
-            op_logic_utils:ensure_space_supported_by(SpaceId, ReplicatingProvider),
-            ensure_index_exists_on_provider(SpaceId, Name, ReplicatingProvider)
+            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider),
+            assert_index_exists_on_provider(SpaceId, Name, ReplicatingProvider)
     end.
 
 
@@ -368,9 +368,9 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evi
 
 
 %% @private
--spec ensure_index_exists_on_provider(od_space:id(), index:name(),
+-spec assert_index_exists_on_provider(od_space:id(), index:name(),
     od_provider:id()) -> ok | no_return().
-ensure_index_exists_on_provider(SpaceId, IndexName, ProviderId) ->
+assert_index_exists_on_provider(SpaceId, IndexName, ProviderId) ->
     case index:exists_on_provider(SpaceId, IndexName, ProviderId) of
         true ->
             ok;

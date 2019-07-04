@@ -206,34 +206,34 @@ authorize(#op_req{operation = delete, client = Client, gri = #gri{
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = shared_dir}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #od_share{
     space = SpaceId
 }) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{aspect = instance}}, #od_share{
     space = SpaceId
 }) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #od_share{
     space = SpaceId
 }) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId).
+    op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------

@@ -236,7 +236,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}}, _) whe
     As =:= rdf_metadata
 ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
     Client = Req#op_req.client,
@@ -245,7 +245,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _
             ok;
         _ ->
             SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:ensure_space_supported_locally(SpaceId)
+            op_logic_utils:assert_space_supported_locally(SpaceId)
     end;
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
@@ -255,7 +255,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= rdf_metadata
 ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:ensure_space_supported_locally(SpaceId).
+    op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------

@@ -154,10 +154,10 @@ authorize(#op_req{operation = get, client = Client, gri = #gri{
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = space}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId).
+    op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------

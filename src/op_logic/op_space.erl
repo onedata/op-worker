@@ -278,7 +278,7 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
+    op_logic_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
     case maps:get(<<"providers[]">>, Data, undefined) of
@@ -286,7 +286,7 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
             ok;
         Providers ->
             lists:foreach(fun(ProviderId) ->
-                op_logic_utils:ensure_space_supported_by(SpaceId, ProviderId)
+                op_logic_utils:assert_space_supported_by(SpaceId, ProviderId)
             end, Providers)
     end;
 
@@ -294,7 +294,7 @@ validate(#op_req{operation = create, gri = #gri{
     id = SpaceId,
     aspect = {index_reduce_function, _}
 }}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User spaces are listed by fetching information from zone,
@@ -302,25 +302,25 @@ validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     ok;
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {index, _}}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_index, _}}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }} = Req, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId),
+    op_logic_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
     case maps:get(<<"providers[]">>, Req#op_req.data, undefined) of
@@ -328,18 +328,18 @@ validate(#op_req{operation = update, gri = #gri{
             ok;
         Providers ->
             lists:foreach(fun(ProviderId) ->
-                op_logic_utils:ensure_space_supported_by(SpaceId, ProviderId)
+                op_logic_utils:assert_space_supported_by(SpaceId, ProviderId)
         end, Providers)
     end;
 
 validate(#op_req{operation = delete, gri = #gri{id = SpaceId, aspect = {index, _}}}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId);
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
     id = SpaceId,
     aspect = {index_reduce_function, _}
 }}, _) ->
-    op_logic_utils:ensure_space_supported_locally(SpaceId).
+    op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
