@@ -95,7 +95,7 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     check_is_dir(FileCtx),
-    assert_has_space_privilege(SessionId, SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
         {ok, _} ->
@@ -126,7 +126,7 @@ remove_share_insecure(UserCtx, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     check_is_dir(FileCtx),
-    assert_has_space_privilege(SessionId, SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case file_meta:remove_share(FileCtx, ShareId) of
         {error, not_found} ->
@@ -146,9 +146,9 @@ check_is_dir(FileCtx) ->
     end.
 
 %% @private
--spec assert_has_space_privilege(session:id(), od_space:id(), od_user:id(),
+-spec assert_has_space_privilege(od_space:id(), od_user:id(),
     privileges:space_privilege()) -> ok | no_return().
-assert_has_space_privilege(_SessionId, SpaceId, UserId, Privilege) ->
+assert_has_space_privilege(SpaceId, UserId, Privilege) ->
     case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
         true ->
             ok;

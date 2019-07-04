@@ -38,10 +38,7 @@ is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->
 
 -spec ensure_space_supported_locally(od_space:id()) -> ok | no_return().
 ensure_space_supported_locally(SpaceId) ->
-    case provider_logic:supports_space(SpaceId) of
-        true -> ok;
-        false -> throw(?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>))
-    end.
+    ensure_space_supported_by(SpaceId, oneprovider:get_id()).
 
 
 -spec ensure_space_supported_by(od_space:id(), od_provider:id()) ->

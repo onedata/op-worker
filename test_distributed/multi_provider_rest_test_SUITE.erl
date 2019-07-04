@@ -612,7 +612,7 @@ create_share_base(Config, RestPathType) ->
 
     % creating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, post, Headers, Payload}
     )),
 
@@ -700,7 +700,7 @@ get_file_share_base(Config, RestPathType) ->
 
     % getting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, get, Headers, <<>>}
     )),
 
@@ -766,7 +766,7 @@ get_share_public_id(Config) ->
 
     % getting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, RestPath, get, Headers, <<>>}
     )),
 
@@ -850,7 +850,7 @@ delete_file_share_base(Config, RestPathType) ->
 
     % deleting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, delete, Headers, <<>>}
     )),
 
@@ -900,7 +900,7 @@ delete_share_public_id(Config) ->
 
     % deleting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, RestPath, delete, Headers, <<>>}
     )),
 
@@ -981,7 +981,7 @@ update_share_name_base(Config, RestPathType) ->
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, patch, Headers, Payload}
     )),
 
@@ -1035,7 +1035,7 @@ update_share_name_public_id(Config) ->
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"local">>),
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, RestPath, patch, Headers, Payload}
     )),
 
