@@ -6,14 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions and records connected with harvesting metadata.
+%%% Macros used in stress tests of harvesting.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(HARVEST_HRL).
--define(HARVEST_HRL, 1).
+-ifndef(HARVESTING_STRESS_TEST_UTILS_HRL).
+-define(HARVESTING_STRESS_TEST_UTILS_HRL, 1).
 
--define(HARVEST_MANAGER, harvest_manager).
--define(HARVEST_STREAM_SUP, harvest_stream_sup).
+-define(SPACE_ID, <<"space1">>).
+-define(HARVESTER_ID, <<"harvester1">>).
+-define(INDEX_ID, <<"index1">>).
+
+-define(HARVEST_METADATA(BatchSize), {harvest_metadata, BatchSize}).
+
+-define(TIMEOUT, timer:minutes(15)).
 
 -endif.

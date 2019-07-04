@@ -43,7 +43,13 @@
     resolve_guid_of_space_should_return_space_guid/1,
     resolve_guid_of_dir_should_return_dir_guid/1,
     custom_metadata_doc_should_contain_file_objectid/1,
-    create_and_query_view_mapping_one_file_to_many_rows/1]).
+    create_and_query_view_mapping_one_file_to_many_rows/1,
+    effective_value_test/1,
+    traverse_test/1,
+    file_traverse_job_test/1]).
+
+%% Pool callbacks
+-export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
 
 all() ->
     ?ALL([
@@ -62,12 +68,131 @@ all() ->
         resolve_guid_of_root_should_return_root_guid,
         resolve_guid_of_space_should_return_space_guid,
         resolve_guid_of_dir_should_return_dir_guid,
-        custom_metadata_doc_should_contain_file_objectid
+        custom_metadata_doc_should_contain_file_objectid,
+        effective_value_test,
+        traverse_test,
+        file_traverse_job_test
     ]).
+
+-define(CACHE, test_cache).
+-define(CALL_CACHE(Worker, Op, Args), rpc:call(Worker, effective_value, Op, [?CACHE | Args])).
 
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+traverse_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    Dir1 = <<"/", SpaceName/binary, "/1">>,
+    {ok, Guid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
+    build_traverse_tree(Worker, SessId, Dir1, 1),
+
+    RunOptions = #{
+        batch_size => 1,
+        traverse_info => self()
+    },
+    {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
+
+    Expected = [2,3,4,
+        11,12,13,16,17,18,
+        101,102,103,106,107,108,
+        151,152,153,156,157,158,
+        1001,1002,1003,1006,1007,1008,
+        1051,1052,1053,1056,1057,1058,
+        1501,1502, 1503,1506,1507,1508,
+        1551,1552,1553,1556,1557, 1558],
+    Ans = get_slave_ans(),
+
+    SJobsNum = length(Expected),
+    MJobsNum = SJobsNum * 4 div 3 - 1,
+    Description = #{
+        slave_jobs_delegated => SJobsNum,
+        slave_jobs_done => SJobsNum,
+        slave_jobs_failed => 0,
+        master_jobs_delegated => MJobsNum,
+        master_jobs_done => MJobsNum
+    },
+
+    ?assertEqual(Expected, lists:sort(Ans)),
+    ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
+        rpc:call(Worker, tree_traverse, get_task, [?MODULE, ID])),
+    ok.
+
+file_traverse_job_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    File = <<"/", SpaceName/binary, "/1000000">>,
+    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#600)),
+
+    RunOptions = #{
+        traverse_info => self()
+    },
+    {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid), RunOptions])),
+
+    Expected = [1000000],
+    Ans = get_slave_ans(),
+    Description = #{
+        slave_jobs_delegated => 1,
+        slave_jobs_done => 1,
+        slave_jobs_failed => 0,
+        master_jobs_delegated => 1,
+        master_jobs_done => 1
+    },
+
+    ?assertEqual(Expected, Ans),
+    ?assertMatch({ok, #document{value = #traverse_task{description = Description}}},
+        rpc:call(Worker, tree_traverse, get_task, [?MODULE, ID])),
+    ok.
+
+effective_value_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Dir1 = <<"/", SpaceName/binary, "/dir1">>,
+    Dir2 = <<Dir1/binary, "/dir2">>,
+    Dir3 = <<Dir2/binary, "/dir3">>,
+
+    {ok, Guid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir2)),
+    {ok, Guid3} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir3)),
+
+    Uid1 = file_id:guid_to_uuid(Guid1),
+    Uid3 = file_id:guid_to_uuid(Guid3),
+
+    {ok, Doc1} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, Uid1}])),
+    {ok, Doc3} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, Uid3}])),
+
+    Callback = fun([#document{value = #file_meta{name = Name}}, ParentValue, CalculationInfo]) ->
+        {ok, Name, [{Name, ParentValue} | CalculationInfo]}
+    end,
+
+    ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
+        {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
+    ?assertEqual({ok, <<"dir3">>, []},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
+
+    ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
+    ?assertEqual({ok, <<"dir1">>, [{<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc1, Callback, [], []])),
+    ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>}]},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
+
+    Timestamp = bounded_cache:get_timestamp(),
+    ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
+    ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
+        {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], [], Timestamp])),
+    ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
+        {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
+
+    ok.
 
 empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -470,12 +595,34 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(effective_value_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    CachePid = spawn(Worker, fun() -> cache_proc(
+        #{check_frequency => timer:minutes(5), size => 100}) end),
+    init_per_testcase(?DEFAULT_CASE(Case), [{cache_pid, CachePid} | Config]);
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [atom_to_binary(?MODULE, utf8)])),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(effective_value_test = Case, Config) ->
+    CachePid = ?config(cache_pid, Config),
+    CachePid ! {finish, self()},
+    ok = receive
+             finished -> ok
+         after
+             1000 -> timeout
+         end,
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
@@ -495,3 +642,71 @@ extract_query_values(QueryResult) ->
         {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
         Value
     end, Rows).
+
+cache_proc(Options) ->
+    bounded_cache:init_cache(?CACHE, Options),
+    cache_proc().
+
+cache_proc() ->
+    receive
+        {bounded_cache_timer, Options} ->
+            bounded_cache:check_cache_size(Options),
+            cache_proc();
+        {finish, Pid} ->
+            bounded_cache:terminate_cache(?CACHE),
+            Pid ! finished
+    end.
+
+get_slave_ans() ->
+    receive
+        {slave, Num} ->
+            [Num | get_slave_ans()]
+    after
+        10000 ->
+            []
+    end.
+
+build_traverse_tree(Worker, SessId, Dir, Num) ->
+    NumBin = integer_to_binary(Num),
+    Dirs = case Num < 1000 of
+        true -> [10 * Num, 10 * Num + 5];
+        _ -> []
+    end,
+    Files = [Num + 1, Num + 2, Num + 3],
+
+    DirsPaths = lists:map(fun(DirNum) ->
+        DirNumBin = integer_to_binary(DirNum),
+        NewDir = <<Dir/binary, "/", DirNumBin/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, NewDir)),
+        {NewDir, DirNum}
+    end, Dirs),
+
+    lists:foreach(fun(FileNum) ->
+        FileNumBin = integer_to_binary(FileNum),
+        NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
+    end, Files),
+
+    NumBin = integer_to_binary(Num),
+    Files ++ lists:flatten(lists:map(fun({D, N}) ->
+        build_traverse_tree(Worker, SessId, D, N) end, DirsPaths)).
+
+%%%===================================================================
+%%% Pool callbacks
+%%%===================================================================
+
+do_master_job(Job) ->
+    tree_traverse:do_master_job(Job).
+
+do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}) ->
+    TraverseInfo ! {slave, binary_to_integer(Name)},
+    ok.
+
+update_job_progress(ID, Job, Pool, TaskID, Status) ->
+    tree_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
+
+get_job(DocOrID) ->
+    tree_traverse:get_job(DocOrID).
+
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).

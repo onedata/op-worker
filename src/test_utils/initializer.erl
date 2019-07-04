@@ -668,28 +668,21 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
-    SpacesProviders = lists:map(fun({SpaceId, SpaceSupports}) ->
-        {SpaceId, maps:keys(SpaceSupports)}
-    end, SpacesSupports),
-
-    EffHarvestersSetup = maps:to_list(lists:foldl(
-        fun({HarvesterId, HarvesterConfig}, EffHarvestersMap0) ->
+    SpacesHarvesters = maps:to_list(lists:foldl(
+        fun({HarvesterId, HarvesterConfig}, SpacesHarvestersMap0) ->
             HarvesterSpaces = proplists:get_value(<<"spaces">>, HarvesterConfig),
-            HarvesterProviders = lists:usort(lists:flatmap(fun(SpaceId) ->
-                proplists:get_value(SpaceId, SpacesProviders, [])
-            end, HarvesterSpaces)),
-            lists:foldl(fun(ProviderId, EffHarvestersMap00) ->
-                maps:update_with(ProviderId, fun(Harvesters) ->
-                    [HarvesterId | Harvesters]
-                end, [HarvesterId], EffHarvestersMap00)
-            end, EffHarvestersMap0, HarvesterProviders)
+            lists:foldl(fun(SpaceId, SpacesHarvestersMap00) ->
+                maps:update_with(SpaceId, fun(SpaceHarvesters0) ->
+                    lists:usort([HarvesterId | SpaceHarvesters0])
+                end, [HarvesterId], SpacesHarvestersMap00)
+            end, SpacesHarvestersMap0, HarvesterSpaces)
         end, #{}, HarvestersSetup
     )),
 
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, EffHarvestersSetup),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports),
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
@@ -926,8 +919,8 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}],
-    [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
-space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
+    [{binary(), [{binary(), non_neg_integer()}]}], [{binary(), [binary()]}]) -> ok.
+space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesHarvesters) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, space_logic),
 
@@ -940,6 +933,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
         {ok, #document{key = SpaceId, value = #od_space{
             name = SpaceName,
             providers = proplists:get_value(SpaceId, SpacesToProviders, maps:from_list([{domain_to_provider_id(D), 1000000000} || D <- Domains])),
+            harvesters = proplists:get_value(SpaceId, SpacesHarvesters, []),
             eff_users = EffUsers,
             eff_groups = #{}
         }}}
@@ -970,6 +964,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
         Providers = proplists:get_value(SpaceId, SpacesToProviders),
         lists:member(ProviderId, maps:keys(Providers))
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
+        {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
     end).
 
 %%--------------------------------------------------------------------
@@ -981,9 +979,9 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist(),
-    [{binary(), [{binary(), non_neg_integer()}]}], proplists:proplist()) -> ok.
+    [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.
 provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
-    SpacesToProviders, EffHarvestersSetup
+    SpacesToProviders
 ) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     test_utils:mock_new(AllWorkers, provider_logic),
@@ -1015,8 +1013,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                         {SpaceId, maps:get(PID, ProvidersSupp)}
                     end, Spaces)),
                     longitude = 0.0,
-                    latitude = 0.0,
-                    eff_harvesters = proplists:get_value(PID, EffHarvestersSetup, [])
+                    latitude = 0.0
                 }}}
         end
     end,
@@ -1233,8 +1230,8 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
         Doc = #document{
             key = HarvesterId,
             value = #od_harvester{
-                spaces = proplists:get_value(<<"spaces">>, Setup),
-                indices = proplists:get_value(<<"indices">>, Setup)
+                spaces = proplists:get_value(<<"spaces">>, Setup, []),
+                indices = proplists:get_value(<<"indices">>, Setup, [])
             }},
         od_harvester:save_to_cache(Doc),
         {ok, Doc}

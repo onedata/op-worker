@@ -22,7 +22,8 @@
     get_protected_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
-    convenience_functions_test/1
+    convenience_functions_test/1,
+    harvest_metadata_test/1
 ]).
 
 all() -> ?ALL([
@@ -30,7 +31,8 @@ all() -> ?ALL([
     get_protected_data_test,
     mixed_get_test,
     subscribe_test,
-    convenience_functions_test
+    convenience_functions_test,
+    harvest_metadata_test
 ]).
 
 %%%===================================================================
@@ -391,8 +393,30 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
+    ?assertMatch(
+        {ok, ?SPACE_HARVESTERS(?SPACE_1)},
+        rpc:call(Node, space_logic, get_harvesters, [?SPACE_1])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+
     ok.
 
+
+harvest_metadata_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    ?assertMatch(ok, rpc:call(Node, space_logic, harvest_metadata,
+        [?SPACE_1, #{}, [], 100, 100])),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ?assertMatch(ok, rpc:call(Node, space_logic, harvest_metadata,
+        [?SPACE_1, #{}, [], 100, 100])),
+
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+
+    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -406,9 +430,15 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
 init_per_testcase(_, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, main_harvesting_stream),
+    test_utils:mock_expect(Nodes, main_harvesting_stream, revise_space_harvesters,
+        fun(_, _) -> ok end),
     logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(_, _Config) ->
+end_per_testcase(_, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, main_harvesting_stream),
     ok.
 
 end_per_suite(Config) ->

@@ -32,7 +32,7 @@
 % Metadata types
 -type type() :: json | rdf.
 -type name() :: binary().
--type value() :: rdf() | jiffy:json_value().
+-type value() :: rdf() | json_utils:json_term().
 -type names() :: [name()].
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
