@@ -14,18 +14,6 @@
 -ifndef(REST_ERRORS_HRL).
 -define(REST_ERRORS_HRL, 1).
 
--define(ERROR_POSIX(__ERRNO), {error, {posix, __ERRNO}}).
-
--define(ERROR_ALREADY_EXISTS, {error, already_exists}).
-
--define(ERROR_BAD_VALUE_AMBIGUOUS_ID(__Key), {error, {ambiguous_id, __Key}}).
-
--define(ERROR_SPACE_NOT_SUPPORTED_BY(__ProviderId), {error, {space_not_supported_by, __ProviderId}}).
--define(ERROR_INDEX_NOT_EXISTS_ON(__ProviderId), {error, {index_not_exists_on, __ProviderId}}).
-
--define(ERROR_TRANSFER_ALREADY_ENDED, {error, transfer_already_ended}).
--define(ERROR_TRANSFER_NOT_ENDED, {error, transfer_not_ended}).
-
 -define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
     <<"error">> => Error,
     <<"error_description">> => ErrorDescription

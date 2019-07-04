@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 -export([

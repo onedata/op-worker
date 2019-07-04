@@ -16,7 +16,7 @@
 
 -include("op_logic.hrl").
 -include("modules/datastore/transfer.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 -export([op_logic_plugin/0]).
