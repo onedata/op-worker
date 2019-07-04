@@ -445,7 +445,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Ref = make_ref(),
     Pid = self(),
 
-    % todo limit to admin only (when we will have admin users)
+    % TODO VFS-5570
     Node = consistent_hashing:get_node({dbsync_out_stream, SpaceId}),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->

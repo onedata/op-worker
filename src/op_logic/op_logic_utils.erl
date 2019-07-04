@@ -58,6 +58,6 @@ ensure_file_exists(#client{session_id = SessionId}, FileGuid) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, _} ->
             ok;
-        _ ->
-            throw(?ERROR_NOT_FOUND)
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
     end.

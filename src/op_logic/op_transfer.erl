@@ -128,22 +128,20 @@ authorize(#op_req{operation = delete, gri = #gri{aspect = instance}} = Req, Tran
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link op_logic_behaviour} callback validate/2.
+%%
+%% Does not check if space is locally supported because if it wasn't
+%% it would not be possible to fetch transfer doc (it is synchronized
+%% only between providers supporting given space).
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
-    % It would not be possible to fetch transfer doc if space
-    % wasn't locally supported so there is no need to check this.
     ok;
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
-    % It would not be possible to fetch transfer doc if space
-    % wasn't locally supported so there is no need to check this.
     ok;
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
-    % It would not be possible to fetch transfer doc if space
-    % wasn't locally supported so there is no need to check this.
     ok.
 
 
