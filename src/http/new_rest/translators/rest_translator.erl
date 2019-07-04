@@ -389,7 +389,7 @@ translate_error(?ERROR_BAD_VALUE_EMAIL) ->
     {?HTTP_400_BAD_REQUEST, <<"Bad value: provided e-mail is not a valid e-mail.">>};
 translate_error(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
-        <<"The space of requested resource is not supported by ~s provider.">>, [ProviderId]
+        <<"The space of requested resource is not supported by provider ~p.">>, [ProviderId]
     }};
 translate_error(?ERROR_INDEX_NOT_EXISTS_ON(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {

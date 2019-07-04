@@ -410,6 +410,7 @@ call_onezone(ConnRef, Client, Request) ->
     catch
         exit:{timeout, _} -> ?ERROR_NO_CONNECTION_TO_OZ;
         exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_OZ;
+        throw:{error, _} = Error -> Error;
         Type:Reason ->
             ?error_stacktrace("Unexpected error during call to gs_client_worker - ~p:~p", [
                 Type, Reason
@@ -522,7 +523,15 @@ resolve_authorization(#macaroon_auth{} = Auth) ->
     #macaroon_auth{
         macaroon = MacaroonBin, disch_macaroons = DischargeMacaroonsBin
     } = Auth,
-    {ok, Macaroon} = onedata_macaroons:deserialize(MacaroonBin),
+    Macaroon = case onedata_macaroons:deserialize(MacaroonBin) of
+        {ok, M} ->
+            M;
+        {error, _} = Error ->
+            ?debug("Declining auth macaroon as it cannot be deserialized (~w): ~p", [
+                Error, Auth
+            ]),
+            throw(?ERROR_UNAUTHORIZED)
+    end,
     BoundMacaroons = lists:map(
         fun(DischargeMacaroonBin) ->
             {ok, DM} = onedata_macaroons:deserialize(DischargeMacaroonBin),
