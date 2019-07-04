@@ -58,7 +58,7 @@ ensure_space_supported_by(SpaceId, ProviderId) ->
 -spec ensure_file_exists(op_logic:client(), file_id:file_guid()) ->
     ok | no_return().
 ensure_file_exists(#client{session_id = SessionId}, FileGuid) ->
-    case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
+    case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, _} ->
             ok;
         _ ->

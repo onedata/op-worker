@@ -38,7 +38,7 @@
     <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
 ]).
 
--define(call_lfm(__FunctionCall), extract_lfm_res(logical_file_manager:__FunctionCall)).
+-define(run(__FunctionCall), check_result(__FunctionCall)).
 
 
 %%%===================================================================
@@ -187,7 +187,7 @@ exists(_, _) ->
 %% {@link op_logic_behaviour} callback authorize/2.
 %%
 %% Checks only if user is in space in which file exists. File permissions
-%% are checked later by logical_file_manager.
+%% are checked later by logical_file_manager (lfm).
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
@@ -266,12 +266,12 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
     #{<<"mode">> := Mode} = maps:get(<<"application/json">>, Data),
-    ?call_lfm(set_perms(Cl#client.session_id, {guid, Guid}, Mode));
+    ?run(lfm:set_perms(Cl#client.session_id, {guid, Guid}, Mode));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
     [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
     Xattr = #xattr{name = Name, value = Value},
-    ?call_lfm(set_xattr(Cl#client.session_id, {guid, Guid}, Xattr, false, false));
+    ?run(lfm:set_xattr(Cl#client.session_id, {guid, Guid}, Xattr, false, false));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
     JSON = maps:get(<<"application/json">>, Data),
@@ -285,12 +285,11 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_met
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
      end,
-
-    ?call_lfm(set_metadata(Cl#client.session_id, {guid, Guid}, json, JSON, FilterList));
+    ?run(lfm:set_metadata(Cl#client.session_id, {guid, Guid}, json, JSON, FilterList));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?call_lfm(set_metadata(Cl#client.session_id, {guid, Guid}, rdf, Rdf, [])).
+    ?run(lfm:set_metadata(Cl#client.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%--------------------------------------------------------------------
@@ -303,11 +302,11 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}},
     SessionId = Cl#client.session_id,
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-    {ok, Path} = ?call_lfm(get_file_path(SessionId, FileGuid)),
+    {ok, Path} = ?run(lfm:get_file_path(SessionId, FileGuid)),
 
-    case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
+    case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children} = ?call_lfm(ls(SessionId, {guid, Guid}, Offset, Limit)),
+            {ok, Children} = ?run(lfm:ls(SessionId, {guid, Guid}, Offset, Limit)),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
                     #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
@@ -325,13 +324,8 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}
         undefined -> ?ALL_BASIC_ATTRIBUTES;
         Attr -> [Attr]
     end,
-
-    case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
-        {ok, Attrs} ->
-            {ok, gather_attributes(#{}, Attributes, Attrs)};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, Attrs} = ?run(lfm:stat(SessionId, {guid, FileGuid})),
+    {ok, gather_attributes(#{}, Attributes, Attrs)};
 
 get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Cl#client.session_id,
@@ -339,11 +333,11 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
-            {ok, Xattrs} = ?call_lfm(list_xattr(
+            {ok, Xattrs} = ?run(lfm:list_xattr(
                 SessionId, {guid, FileGuid}, Inherited, true
             )),
             {ok, lists:foldl(fun(XattrName, Acc) ->
-                {ok, #xattr{value = Value}} = ?call_lfm(get_xattr(
+                {ok, #xattr{value = Value}} = ?run(lfm:get_xattr(
                     SessionId,
                     {guid, FileGuid},
                     XattrName,
@@ -352,7 +346,7 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
                 Acc#{XattrName => Value}
             end, #{}, Xattrs)};
         XattrName ->
-            {ok, #xattr{value = Val}} = ?call_lfm(get_xattr(
+            {ok, #xattr{value = Val}} = ?run(lfm:get_xattr(
                 SessionId, {guid, FileGuid}, XattrName, Inherited
             )),
             {ok, #{XattrName => Val}}
@@ -374,10 +368,10 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_me
              binary:split(Filter, <<".">>, [global])
      end,
 
-    ?call_lfm(get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
+    ?run(lfm:get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
 
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?call_lfm(get_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, [], false)).
+    ?run(lfm:get_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, [], false)).
 
 
 %%--------------------------------------------------------------------
@@ -405,11 +399,11 @@ delete(_) ->
 %%%===================================================================
 
 
--spec extract_lfm_res(ok | {ok, term()} | {error, term()}) ->
+-spec check_result(ok | {ok, term()} | {error, term()}) ->
     ok | {ok, term()} | no_return().
-extract_lfm_res(ok) -> ok;
-extract_lfm_res({ok, _} = Res) -> Res;
-extract_lfm_res({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
+check_result(ok) -> ok;
+check_result({ok, _} = Res) -> Res;
+check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 
 
 %%--------------------------------------------------------------------

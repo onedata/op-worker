@@ -138,11 +138,11 @@ create_record(<<"transfer">>, Data) ->
 
     Result = case TransferType of
         replication ->
-            logical_file_manager:schedule_file_replication(
+            lfm:schedule_file_replication(
                 SessionId, {guid, FileGuid}, ReplicatingProvider
             );
         Type when Type == eviction orelse Type == migration ->
-            logical_file_manager:schedule_replica_eviction(
+            lfm:schedule_replica_eviction(
                 SessionId, {guid, FileGuid},
                 EvictingProvider, ReplicatingProvider
             )
@@ -313,7 +313,7 @@ transfer_record(StateAndTransferId) ->
     {DataSourceType, DataSourceIdentifier, DataSourceName} = case IndexName of
         undefined ->
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-            FileType = case logical_file_manager:stat(SessionId, {guid, FileGuid}) of
+            FileType = case lfm:stat(SessionId, {guid, FileGuid}) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
                 {ok, _} -> <<"file">>;
                 {error, ?ENOENT} -> <<"deleted">>;

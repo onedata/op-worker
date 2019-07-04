@@ -263,7 +263,7 @@ add_objectid_path_to_state(Req, State) ->
                 {proplists:get_value(Id, ?CapabilityPathById), Req2_1};
             {false, Req2_1} ->
                 Auth = try_authenticate(Req2_1),
-                {ok, NewPath} = logical_file_manager:get_file_path(Auth, Guid),
+                {ok, NewPath} = lfm:get_file_path(Auth, Guid),
                 {NewPath, Req2_1}
         end,
 

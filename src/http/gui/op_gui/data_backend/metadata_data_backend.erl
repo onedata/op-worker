@@ -153,14 +153,14 @@ update_record(ModelType, ResourceId, Data) ->
         NewXattrs ->
             NewXattrsKeys = proplists:get_keys(NewXattrs),
             % Get current xattrs
-            {ok, CurrentXattrs} = logical_file_manager:list_xattr(
+            {ok, CurrentXattrs} = lfm:list_xattr(
                 SessionId, {guid, FileId}, false, false
             ),
             KeysToBeRemoved = CurrentXattrs -- NewXattrsKeys,
             % Remove xattrs that no longer exist
             lists:foreach(
                 fun(Key) ->
-                    ok = logical_file_manager:remove_xattr(
+                    ok = lfm:remove_xattr(
                         SessionId, {guid, FileId}, Key
                     )
                 end, KeysToBeRemoved),
@@ -172,7 +172,7 @@ update_record(ModelType, ResourceId, Data) ->
                     catch _:_ ->
                         V
                     end,
-                    ok = logical_file_manager:set_xattr(
+                    ok = lfm:set_xattr(
                         SessionId, {guid, FileId}, #xattr{name = K, value = EncodedValue}
                     )
                 end, NewXattrs)
@@ -181,7 +181,7 @@ update_record(ModelType, ResourceId, Data) ->
         undefined ->
             ok;
         null ->
-            ok = logical_file_manager:remove_metadata(
+            ok = lfm:remove_metadata(
                 SessionId, {guid, FileId}, json
             );
         JSON ->
@@ -189,7 +189,7 @@ update_record(ModelType, ResourceId, Data) ->
                 [] -> #{};
                 _ -> json_utils:list_to_map(JSON)
             end,
-            ok = logical_file_manager:set_metadata(
+            ok = lfm:set_metadata(
                 SessionId, {guid, FileId}, json, JSONMap, []
             )
     end,
@@ -197,11 +197,11 @@ update_record(ModelType, ResourceId, Data) ->
         undefined ->
             ok;
         null ->
-            ok = logical_file_manager:remove_metadata(
+            ok = lfm:remove_metadata(
                 SessionId, {guid, FileId}, rdf
             );
         RDF ->
-            ok = logical_file_manager:set_metadata(
+            ok = lfm:set_metadata(
                 SessionId, {guid, FileId}, rdf, RDF, []
             )
     end,
@@ -228,19 +228,19 @@ delete_record(ModelType, ResourceId) ->
             FId
     end,
     SessionId = op_gui_session:get_session_id(),
-    {ok, XattrKeys} = logical_file_manager:list_xattr(
+    {ok, XattrKeys} = lfm:list_xattr(
         SessionId, {guid, FileId}, false, false
     ),
     lists:foreach(
         fun(Key) ->
-            ok = logical_file_manager:remove_xattr(
+            ok = lfm:remove_xattr(
                 SessionId, {guid, FileId}, Key
             )
         end, XattrKeys),
-    ok = logical_file_manager:remove_metadata(
+    ok = lfm:remove_metadata(
         SessionId, {guid, FileId}, json
     ),
-    ok = logical_file_manager:remove_metadata(
+    ok = lfm:remove_metadata(
         SessionId, {guid, FileId}, rdf
     ),
     ok.
@@ -278,12 +278,12 @@ metadata_record(ModelType, SessionId, ResId) ->
             {_ShareId, FId} = op_gui_utils:association_to_ids(ResId),
             FId
     end,
-    {ok, XattrKeys} = logical_file_manager:list_xattr(
+    {ok, XattrKeys} = lfm:list_xattr(
         SessionId, {guid, FileId}, false, false
     ),
     Basic = lists:map(
         fun(Key) ->
-            {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(
+            {ok, #xattr{value = Value}} = lfm:get_xattr(
                 SessionId, {guid, FileId}, Key, false
             ),
             EncodedValue = case Value of
@@ -296,7 +296,7 @@ metadata_record(ModelType, SessionId, ResId) ->
         [] -> null;
         _ -> Basic
     end,
-    GetJSONResult = logical_file_manager:get_metadata(
+    GetJSONResult = lfm:get_metadata(
         SessionId, {guid, FileId}, json, [], false
     ),
     JSONVal = case GetJSONResult of
@@ -304,7 +304,7 @@ metadata_record(ModelType, SessionId, ResId) ->
         {ok, Map} when map_size(Map) =:= 0 -> <<"{}">>;
         {ok, JSON} -> json_utils:map_to_list(JSON)
     end,
-    GetRDFResult = logical_file_manager:get_metadata(
+    GetRDFResult = lfm:get_metadata(
         SessionId, {guid, FileId}, rdf, [], false
     ),
     RDFVal = case GetRDFResult of

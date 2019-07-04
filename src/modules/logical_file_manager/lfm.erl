@@ -15,7 +15,7 @@
 %%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(logical_file_manager).
+-module(lfm).
 
 -define(run(F),
     try
@@ -134,7 +134,7 @@ ls(SessId, FileKey, Offset, Limit, Token) ->
 %%--------------------------------------------------------------------
 -spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
-    {ok, [#file_attr{}]} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}]} | lfm:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit) ->
     ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit) end).
 
@@ -147,7 +147,7 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
 -spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
     {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
-    logical_file_manager:error_reply().
+    lfm:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
 
@@ -398,7 +398,7 @@ create(SessId, ParentGuid, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec create_and_open(session:id(), Path :: file_meta:path(),
     Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
     | error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->
     ?run(fun() -> lfm_files:create_and_open(SessId, Path, Mode, OpenFlag) end).
@@ -406,7 +406,7 @@ create_and_open(SessId, Path, Mode, OpenFlag) ->
 -spec create_and_open(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions(),
     fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
     | error_reply().
 create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
     ?run(fun() -> lfm_files:create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) end).

@@ -514,7 +514,7 @@ create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
         {T, A} = measure_execution_time(fun() ->
             N2 = integer_to_binary(N),
             File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
-            logical_file_manager:create(SessId, File)
+            lfm:create(SessId, File)
         end),
         case A of
             {ok, _} ->

@@ -42,8 +42,8 @@ handle(<<"fileUploadSuccess">>, Props) ->
     ParentId = proplists:get_value(<<"parentId">>, Props),
     {FileId, FileHandle} = page_file_upload:wait_for_file_new_file_id(SessionId, UploadId),
     page_file_upload:upload_map_delete(SessionId, UploadId),
-    ok = logical_file_manager:fsync(FileHandle),
-    ok = logical_file_manager:release(FileHandle),
+    ok = lfm:fsync(FileHandle),
+    ok = lfm:release(FileHandle),
     file_data_backend:report_file_upload(FileId, ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
@@ -104,7 +104,7 @@ handle(<<"createFileShare">>, Props) ->
     UserId = op_gui_session:get_user_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
-    case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
+    case lfm:create_share(SessionId, {guid, FileId}, Name) of
         {ok, {ShareId, _}} ->
             op_gui_async:push_updated(
                 <<"user">>,

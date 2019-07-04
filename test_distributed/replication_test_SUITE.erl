@@ -1122,8 +1122,8 @@ replica_invalidate_should_migrate_unique_data(Config) ->
 
     override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
-    test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
-    test_utils:mock_expect(Workers, logical_file_manager, schedule_file_replication,
+    test_utils:mock_new(Workers, lfm, [passthrough]),
+    test_utils:mock_expect(Workers, lfm, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
@@ -1133,14 +1133,14 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     ok = lfm_proxy:close(W1, Handle2),
 
     % then
-    test_utils:mock_assert_num_calls(W1, logical_file_manager, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+    test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
 
     % when
     ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, FileGuid}, LocalProviderId, undefined),
 
     % then
-    test_utils:mock_assert_num_calls(W1, logical_file_manager, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
-    test_utils:mock_validate_and_unload(Workers, [od_space, logical_file_manager]).
+    test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+    test_utils:mock_validate_and_unload(Workers, [od_space, lfm]).
 
 replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -1183,8 +1183,8 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
 
     override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
-    test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
-    test_utils:mock_expect(Workers, logical_file_manager, schedule_file_replication,
+    test_utils:mock_new(Workers, lfm, [passthrough]),
+    test_utils:mock_expect(Workers, lfm, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
@@ -1194,7 +1194,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     % then
     ?assertMatch({undefined, _}, rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])),
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
-    test_utils:mock_validate_and_unload(W1, [logical_file_manager]).
+    test_utils:mock_validate_and_unload(W1, [lfm]).
 
 dir_replica_invalidate_should_invalidate_all_children(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -1265,8 +1265,8 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
 
     override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
-    test_utils:mock_new(Workers, logical_file_manager, [passthrough]),
-    test_utils:mock_expect(Workers, logical_file_manager, schedule_file_replication,
+    test_utils:mock_new(Workers, lfm, [passthrough]),
+    test_utils:mock_expect(Workers, lfm, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
@@ -1277,7 +1277,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     % then
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
-    test_utils:mock_validate_and_unload(W1, [logical_file_manager]).
+    test_utils:mock_validate_and_unload(W1, [lfm]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

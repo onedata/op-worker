@@ -245,7 +245,7 @@ validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = shared_di
 create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
     SessionId = Cl#client.session_id,
     Name = maps:get(<<"name">>, Req#op_req.data),
-    case logical_file_manager:create_share(SessionId, {guid, DirGuid}, Name) of
+    case lfm:create_share(SessionId, {guid, DirGuid}, Name) of
         {ok, {ShareId, _ShareGuid}} ->
             {ok, value, ShareId};
         {error, Errno} ->
@@ -312,13 +312,13 @@ update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
     SessionId = Cl#client.session_id,
     ShareId = resolve_share_id(Cl, DirGuid),
-    case logical_file_manager:remove_share(SessionId, ShareId) of
+    case lfm:remove_share(SessionId, ShareId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end;
 
 delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
-    case logical_file_manager:remove_share(Cl#client.session_id, ShareId) of
+    case lfm:remove_share(Cl#client.session_id, ShareId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
@@ -345,7 +345,7 @@ fetch_share(#client{session_id = SessionId}, ShareId) ->
 -spec resolve_share_id(op_logic:client(), file_id:file_guid()) ->
     od_share:id() | ?ERROR_NOT_FOUND.
 resolve_share_id(#client{session_id = SessionId}, DirGuid) ->
-    case logical_file_manager:stat(SessionId, {guid, DirGuid}) of
+    case lfm:stat(SessionId, {guid, DirGuid}) of
         {ok, #file_attr{shares = [ShareId]}} ->
             ShareId;
         _ ->

@@ -165,12 +165,12 @@ update_record(<<"file-public">>, _Id, _Data) ->
 update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
     try
         SessionId = op_gui_session:get_session_id(),
-        {ok, OldPath} = logical_file_manager:get_file_path(
+        {ok, OldPath} = lfm:get_file_path(
             SessionId, FileId
         ),
         DirPathTokens = fslogic_path:split(filename:dirname(OldPath)),
         NewPath = fslogic_path:join(DirPathTokens ++ [NewName]),
-        case logical_file_manager:mv(SessionId, {guid, FileId}, NewPath) of
+        case lfm:mv(SessionId, {guid, FileId}, NewPath) of
             {ok, _} ->
                 ok;
             {error, ?EPERM} ->
@@ -204,8 +204,8 @@ delete_record(<<"file-public">>, _Id) ->
     op_gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file">>, FileId) ->
     SessionId = op_gui_session:get_session_id(),
-    {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
-    case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
+    {ok, ParentId} = lfm:get_parent(SessionId, {guid, FileId}),
+    case lfm:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
             modify_ls_cache(remove, FileId, ParentId),
             ok;
@@ -308,7 +308,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
         <<"file-", _/binary>> -> % Covers file-shared and file-public
             op_gui_utils:association_to_ids(ResId)
     end,
-    case logical_file_manager:stat(SessionId, {guid, FileId}) of
+    case lfm:stat(SessionId, {guid, FileId}) of
         {error, ?ENOENT} ->
             op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, FileAttr} ->
@@ -321,7 +321,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 provider_id = ProviderId
             } = FileAttr,
 
-            {ok, ParentGuid} = logical_file_manager:get_parent(
+            {ok, ParentGuid} = lfm:get_parent(
                 SessionId, {guid, FileId}
             ),
             Parent = case ModelType of
@@ -387,7 +387,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 _ ->
                     null
             end,
-            {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
+            {ok, HasCustomMetadata} = lfm:has_custom_metadata(
                 SessionId, {guid, FileId}
             ),
             Metadata = case HasCustomMetadata of
@@ -426,14 +426,14 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 create_file(SessionId, Name, ParentId, Type) ->
     try
-        {ok, ParentPath} = logical_file_manager:get_file_path(
+        {ok, ParentPath} = lfm:get_file_path(
             SessionId, ParentId),
         Path = filename:join([ParentPath, Name]),
         Result = case Type of
             <<"file">> ->
-                logical_file_manager:create(SessionId, Path);
+                lfm:create(SessionId, Path);
             <<"dir">> ->
-                logical_file_manager:mkdir(SessionId, Path)
+                lfm:mkdir(SessionId, Path)
         end,
         case Result of
             {ok, FileId} ->
@@ -586,7 +586,7 @@ ls_dir(SessionId, DirId) ->
     Limit :: non_neg_integer(), Result :: [fslogic_worker:file_guid()]) ->
     [{fslogic_worker:file_guid(), file_meta:name()}].
 ls_dir_chunked(SessionId, DirId, Offset, Limit, Result) ->
-    {ok, LS} = logical_file_manager:ls(SessionId, {guid, DirId}, Offset, Limit),
+    {ok, LS} = lfm:ls(SessionId, {guid, DirId}, Offset, Limit),
     NewResult = Result ++ LS,
     case length(LS) =:= Limit of
         true ->

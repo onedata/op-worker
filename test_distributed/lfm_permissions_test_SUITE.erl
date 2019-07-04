@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This test suite verifies correct behaviour of posix and acl 
-%%% permissions with corresponding logical_file_manager functions
+%%% permissions with corresponding lfm (logical_file_manager) functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_permissions_test_SUITE).

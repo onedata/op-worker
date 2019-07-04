@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains base functions for tests of logical_file_manager API.
+%%% This file contains base functions for tests of lfm API.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files_test_base).

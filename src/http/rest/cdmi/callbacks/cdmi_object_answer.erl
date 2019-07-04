@@ -45,7 +45,7 @@ prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     (prepare(Tail, State))#{<<"parentID">> => <<>>};
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, #file_attr{guid = Guid}} =
-        logical_file_manager:stat(Auth, {path, filename:dirname(Path)}),
+        lfm:stat(Auth, {path, filename:dirname(Path)}),
     {ok, Id} = file_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"parentID">> => Id};
 prepare([<<"capabilitiesURI">> | Tail], State) ->

@@ -136,7 +136,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, #{path := Path, auth := Auth} = State) ->
-    ok = logical_file_manager:unlink(Auth, {path, Path}, false),
+    ok = lfm:unlink(Auth, {path, Path}, false),
     {true, Req, State}.
 
 
@@ -208,16 +208,16 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
     CdmiPartialFlag = cowboy_req:header(<<"x-cdmi-partial">>, Req),
     {Mimetype, Encoding} = cdmi_arg_parser:parse_content(Content),
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-    case logical_file_manager:stat(Auth, {path, Path}) of
+    case lfm:stat(Auth, {path, Path}) of
         {error, ?ENOENT} ->
-            {ok, FileGuid} = logical_file_manager:create(Auth, Path, DefaultMode),
+            {ok, FileGuid} = lfm:create(Auth, Path, DefaultMode),
             cdmi_metadata:update_mimetype(Auth, {guid, FileGuid}, Mimetype),
             cdmi_metadata:update_encoding(Auth, {guid, FileGuid}, Encoding),
-            {ok, FileHandle} = logical_file_manager:open(Auth, {path, Path}, write),
+            {ok, FileHandle} = lfm:open(Auth, {path, Path}, write),
             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
             {ok, Req1} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
-            logical_file_manager:fsync(FileHandle),
-            logical_file_manager:release(FileHandle),
+            lfm:fsync(FileHandle),
+            lfm:release(FileHandle),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                 Auth, {path, Path}, CdmiPartialFlag
             ),
@@ -228,12 +228,12 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
             RawRange = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    {ok, FileHandle} = logical_file_manager:open(Auth, {guid, FileGuid}, write),
+                    {ok, FileHandle} = lfm:open(Auth, {guid, FileGuid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
-                    ok = logical_file_manager:truncate(Auth, {guid, FileGuid}, 0),
+                    ok = lfm:truncate(Auth, {guid, FileGuid}, 0),
                     {ok, Req2} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
-                    logical_file_manager:fsync(FileHandle),
-                    logical_file_manager:release(FileHandle),
+                    lfm:fsync(FileHandle),
+                    lfm:release(FileHandle),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                         Auth, {guid, FileGuid}, CdmiPartialFlag
                     ),
@@ -242,11 +242,11 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
                     Length = cowboy_req:body_length(Req),
                     case cdmi_arg_parser:parse_content_range(RawRange, Size) of
                         {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            {ok, FileHandle} = logical_file_manager:open(Auth, {guid, FileGuid}, write),
+                            {ok, FileHandle} = lfm:open(Auth, {guid, FileGuid}, write),
                             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
                             {ok, Req3} = cdmi_streamer:write_body_to_file(Req, From, FileHandle),
-                            logical_file_manager:fsync(FileHandle),
-                            logical_file_manager:release(FileHandle),
+                            lfm:fsync(FileHandle),
+                            lfm:release(FileHandle),
                             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                                 Auth, {guid, FileGuid}, CdmiPartialFlag
                             ),
@@ -286,26 +286,26 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
     {ok, OperationPerformed, Guid} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, NewGuid} = logical_file_manager:create(Auth, Path, DefaultMode),
+                {ok, NewGuid} = lfm:create(Auth, Path, DefaultMode),
                 {ok, created, NewGuid};
             {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
-                {ok, NewGuid} = logical_file_manager:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
+                {ok, NewGuid} = lfm:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
                 {ok, copied, NewGuid};
             {undefined, undefined, MoveURI} ->
-                {ok, NewGuid} = logical_file_manager:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
+                {ok, NewGuid} = lfm:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
                 {ok, moved, NewGuid}
         end,
 
     % update value and metadata depending on creation type
     case OperationPerformed of
         created ->
-            {ok, FileHandler} = logical_file_manager:open(Auth, {guid, Guid}, write),
+            {ok, FileHandler} = lfm:open(Auth, {guid, Guid}, write),
             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-            {ok, _, RawValueSize} = logical_file_manager:write(FileHandler, 0, RawValue),
-            logical_file_manager:fsync(FileHandler),
-            logical_file_manager:release(FileHandler),
+            {ok, _, RawValueSize} = lfm:write(FileHandler, 0, RawValue),
+            lfm:fsync(FileHandler),
+            lfm:release(FileHandler),
 
             % return response
             cdmi_metadata:update_encoding(Auth, {guid, Guid}, utils:ensure_defined(
@@ -332,20 +332,20 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                    {ok, FileHandler} = logical_file_manager:open(Auth, {guid, Guid}, write),
+                    {ok, FileHandler} = lfm:open(Auth, {guid, Guid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-                    {ok, _, RawValueSize} = logical_file_manager:write(FileHandler, From, RawValue),
-                    logical_file_manager:fsync(FileHandler),
-                    logical_file_manager:release(FileHandler),
+                    {ok, _, RawValueSize} = lfm:write(FileHandler, From, RawValue),
+                    lfm:fsync(FileHandler),
+                    lfm:release(FileHandler),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, Guid}, CdmiPartialFlag),
                     {true, Req0, State};
                 undefined when is_binary(Value) ->
-                    {ok, FileHandler} = logical_file_manager:open(Auth, {guid, Guid}, write),
+                    {ok, FileHandler} = lfm:open(Auth, {guid, Guid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-                    ok = logical_file_manager:truncate(Auth, {guid, Guid}, 0),
-                    {ok, _, RawValueSize} = logical_file_manager:write(FileHandler, 0, RawValue),
-                    logical_file_manager:fsync(FileHandler),
-                    logical_file_manager:release(FileHandler),
+                    ok = lfm:truncate(Auth, {guid, Guid}, 0),
+                    {ok, _, RawValueSize} = lfm:write(FileHandler, 0, RawValue),
+                    lfm:fsync(FileHandler),
+                    lfm:release(FileHandler),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, Guid}, CdmiPartialFlag),
                     {true, Req0, State};
                 undefined ->
@@ -397,7 +397,7 @@ get_range(Opts) ->
 %%--------------------------------------------------------------------
 -spec get_attr(rest_auth:auth(), file_meta:path()) -> #file_attr{} | undefined.
 get_attr(Auth, Path) ->
-    case logical_file_manager:stat(Auth, {path, Path}) of
+    case lfm:stat(Auth, {path, Path}) of
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.

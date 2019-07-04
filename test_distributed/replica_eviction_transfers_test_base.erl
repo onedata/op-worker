@@ -809,10 +809,10 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config, Type, 
     SessionId2 = ?USER_SESSION(WorkerP2, ?DEFAULT_USER, Config2),
     ok = test_utils:mock_new(WorkerP2, replica_deletion_req),
     ok = test_utils:mock_expect(WorkerP2, replica_deletion_req, delete_blocks, fun(FileCtx, Blocks, AllowedVV) ->
-        {ok, Handle} = logical_file_manager:open(SessionId2, {guid, FileGuid}, write),
-        {ok, _, 1} = logical_file_manager:write(Handle, 1, <<"#">>),
-        ok = logical_file_manager:fsync(Handle),
-        ok = logical_file_manager:release(Handle),
+        {ok, Handle} = lfm:open(SessionId2, {guid, FileGuid}, write),
+        {ok, _, 1} = lfm:write(Handle, 1, <<"#">>),
+        ok = lfm:fsync(Handle),
+        ok = lfm:release(Handle),
         % meck:passthrough does not work for functions that use other mocked functions inside
         erlang:apply(meck_util:original_name(replica_deletion_req), delete_blocks, [FileCtx, Blocks, AllowedVV])
     end),

@@ -28,13 +28,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path()) ->
-    {ok, DirGuid :: fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, DirGuid :: fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(SessId, Path) ->
     mkdir(SessId, Path, undefined).
 
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions() | undefined) ->
-    {ok, DirGuid :: fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, DirGuid :: fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = ParentPath},
@@ -44,7 +44,7 @@ mkdir(SessId, Path, Mode) ->
 
 -spec mkdir(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions() | undefined) ->
-    {ok, DirGuid :: fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, DirGuid :: fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(SessId, ParentGuid, Name, undefined) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, ParentGuid, Name, Mode);
@@ -63,7 +63,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec ls(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -81,7 +81,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 -spec ls(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], Token :: binary(),
-        IsLast :: boolean()} | logical_file_manager:error_reply().
+        IsLast :: boolean()} | lfm:error_reply().
 ls(SessId, FileKey, Offset, Limit, Token) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -99,7 +99,7 @@ ls(SessId, FileKey, Offset, Limit, Token) ->
 %%--------------------------------------------------------------------
 -spec read_dir_plus(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
-    {ok, [#file_attr{}]} | logical_file_manager:error_reply().
+    {ok, [#file_attr{}]} | lfm:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -117,7 +117,7 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
 -spec read_dir_plus(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
     {ok, [#file_attr{}], Token :: binary(), IsLast :: boolean()} |
-    logical_file_manager:error_reply().
+    lfm:error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -133,7 +133,7 @@ read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
 %%--------------------------------------------------------------------
 -spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     ChildName :: file_meta:name()) ->
-    {ok, #file_attr{}} | logical_file_manager:error_reply().
+    {ok, #file_attr{}} | lfm:error_reply().
 get_child_attr(SessId, ParentGuid, ChildName)  ->
     remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #get_child_attr{name = ChildName},
@@ -148,7 +148,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %%--------------------------------------------------------------------
 -spec get_children_count(session:id(),
     FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, integer()} | logical_file_manager:error_reply().
+    {ok, integer()} | lfm:error_reply().
 get_children_count(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     case count_children(SessId, FileGuid, 0) of
@@ -169,7 +169,7 @@ get_children_count(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec count_children(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid(),
     Acc :: non_neg_integer()) ->
-    non_neg_integer() | logical_file_manager:error_reply().
+    non_neg_integer() | lfm:error_reply().
 count_children(SessId, FileGuid, Acc) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case ls(SessId, {guid, FileGuid}, Acc, Chunk) of

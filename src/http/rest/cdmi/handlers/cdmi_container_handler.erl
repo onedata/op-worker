@@ -115,7 +115,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, State = #{auth := Auth, path := Path}) ->
-    ok = logical_file_manager:rm_recursive(Auth, {path, Path}),
+    ok = lfm:rm_recursive(Auth, {path, Path}),
     {true, Req, State}.
 
 %%%===================================================================
@@ -153,15 +153,15 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, OperationPerformed, Guid} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, NewGuid} = logical_file_manager:mkdir(Auth, Path),
+                {ok, NewGuid} = lfm:mkdir(Auth, Path),
                 {ok, created, NewGuid};
             {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
-                {ok, NewGuid} = logical_file_manager:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
+                {ok, NewGuid} = lfm:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
                 {ok, copied, NewGuid};
             {undefined, undefined, MoveURI} ->
-                {ok, NewGuid} = logical_file_manager:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
+                {ok, NewGuid} = lfm:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
                 {ok, moved, NewGuid}
         end,
 
@@ -187,7 +187,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
 %%--------------------------------------------------------------------
 -spec put_binary(req(), maps:map()) -> {term(), req(), maps:map()}.
 put_binary(Req, State = #{auth := Auth, path := Path}) ->
-    {ok, _} = logical_file_manager:mkdir(Auth, Path),
+    {ok, _} = lfm:mkdir(Auth, Path),
     {true, Req, State}.
 
 %%--------------------------------------------------------------------
@@ -220,7 +220,7 @@ error_no_version(_Req, _State) ->
 %%--------------------------------------------------------------------
 -spec get_attr(rest_auth:auth(), file_meta:path()) -> #file_attr{} | undefined.
 get_attr(Auth, Path) ->
-    case logical_file_manager:stat(Auth, {path, Path}) of
+    case lfm:stat(Auth, {path, Path}) of
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.

@@ -273,7 +273,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_ind
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    case logical_file_manager:schedule_file_replication(
+    case lfm:schedule_file_replication(
         Cl#client.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
@@ -286,7 +286,7 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
     end;
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_index}}) ->
-    case logical_file_manager:schedule_replication_by_index(
+    case lfm:schedule_replication_by_index(
         Cl#client.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined),
@@ -309,7 +309,7 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     SessionId = Cl#client.session_id,
-    case logical_file_manager:get_file_distribution(SessionId, {guid, FileGuid}) of
+    case lfm:get_file_distribution(SessionId, {guid, FileGuid}) of
         {ok, _Blocks} = Res ->
             Res;
         {error, Errno} ->
@@ -334,7 +334,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    case logical_file_manager:schedule_replica_eviction(
+    case lfm:schedule_replica_eviction(
         Cl#client.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
@@ -347,7 +347,7 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
     end;
 
 delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evict_by_index}}) ->
-    case logical_file_manager:schedule_replica_eviction_by_index(
+    case lfm:schedule_replica_eviction_by_index(
         Cl#client.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined),
