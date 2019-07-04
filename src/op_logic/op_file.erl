@@ -191,18 +191,10 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+    check_space_membership(Req#op_req.client, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    Client = Req#op_req.client,
-    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
-        Guid ->
-            true;
-        _ ->
-            SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:is_eff_space_member(Client, SpaceId)
-    end;
+    check_space_membership(Req#op_req.client, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
@@ -210,8 +202,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+    check_space_membership(Req#op_req.client, Guid).
 
 
 %%--------------------------------------------------------------------
@@ -220,33 +211,24 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}}, _) when
+validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    assert_space_supported_locally(Req#op_req.client, Guid);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    Client = Req#op_req.client,
-    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
-        Guid ->
-            ok;
-        _ ->
-            SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:assert_space_supported_locally(SpaceId)
-    end;
+    assert_space_supported_locally(Req#op_req.client, Guid);
 
-validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
+validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    assert_space_supported_locally(Req#op_req.client, Guid).
 
 
 %%--------------------------------------------------------------------
@@ -388,6 +370,44 @@ delete(_) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks user membership in space containing specified file. Returns true
+%% in case of user root dir since it doesn't belong to any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_space_membership(op_logic:client(), file_id:file_guid()) -> boolean().
+check_space_membership(Client, Guid) ->
+    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
+        Guid ->
+            true;
+        _ ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            op_logic_utils:is_eff_space_member(Client, SpaceId)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Asserts that space containing specified file is supported by this provider.
+%% Omit this check in case of user root dir which doesn't belong to any space
+%% and can be reached from any provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_space_supported_locally(op_logic:client(), file_id:file_guid()) ->
+    ok | no_return().
+assert_space_supported_locally(#client{id = UserId}, Guid) ->
+    case fslogic_uuid:user_root_dir_guid(UserId) of
+        Guid ->
+            ok;
+        _ ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            op_logic_utils:assert_space_supported_locally(SpaceId)
+    end.
 
 
 -spec check_result(ok | {ok, term()} | {error, term()}) ->

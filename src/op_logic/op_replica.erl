@@ -195,7 +195,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} =
 
     op_logic_utils:assert_file_exists(Req#op_req.client, Guid),
 
-    % In case of undefined `provider_id` local provider is chosen instead
+    % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Req#op_req.data, undefined) of
         undefined ->
             ok;
@@ -208,7 +208,7 @@ validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by
     SpaceId = maps:get(<<"space_id">>, Data),
     op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    % In case of undefined `provider_id` local provider is chosen instead
+    % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
             assert_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
@@ -228,7 +228,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} =
 
     op_logic_utils:assert_file_exists(Req#op_req.client, Guid),
 
-    % In case of undefined `provider_id` local provider is chosen instead
+    % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
             ok;
@@ -248,7 +248,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_ind
     SpaceId = maps:get(<<"space_id">>, Data),
     op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    % In case of undefined `provider_id` local provider is chosen instead
+    % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
             assert_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
