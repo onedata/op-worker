@@ -115,9 +115,8 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
             ok ->
                 ok;
             ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER ->
-                % Do not logs anything if sending failed due to no connection
-                % to peer provider (it is expected situation).
-                ok;
+                ?debug("Cannot broadcast changes batch to provider ~p due to "
+                       "no available connection", [ProviderId]);
             {error, Reason} ->
                 ?warning("Cannot broadcast changes batch to provider ~p "
                 "due to: ~p", [ProviderId, Reason])

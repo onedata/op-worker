@@ -110,7 +110,7 @@ sanitize_at_least_one_params(Data, AtLeastOneParamsSpec) ->
         fun(Key, {DataAcc, HasAtLeastOneAcc}) ->
             case transform_and_check_value(Key, DataAcc, AtLeastOneParamsSpec) of
                 false ->
-                    {DataAcc, HasAtLeastOneAcc orelse false};
+                    {DataAcc, HasAtLeastOneAcc};
                 {true, NewData} ->
                     {NewData, true}
             end

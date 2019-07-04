@@ -48,8 +48,7 @@ op_logic_plugin() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given operation is supported based on operation, aspect and
-%% scope (entity type is known based on the plugin itself).
+%% {@link op_logic_behaviour} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
@@ -65,11 +64,7 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns data signature for given request.
-%% Returns a map with 'required', 'optional' and 'at_least_one' keys.
-%% Under each of them, there is a map:
-%%      Key => {type_constraint, value_constraint}
-%% Which means how value of given Key should be validated.
+%% {@link op_logic_behaviour} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
@@ -85,8 +80,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves an entity from datastore based on its EntityId.
-%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
+%% {@link op_logic_behaviour} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
@@ -104,8 +98,7 @@ fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given resource (aspect of entity) exists, based on
-%% op logic request and prefetched entity.
+%% {@link op_logic_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(op_logic:req(), op_logic:entity()) -> boolean().
@@ -115,8 +108,7 @@ exists(_, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
+%% {@link op_logic_behaviour} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
@@ -135,9 +127,7 @@ authorize(#op_req{operation = delete, gri = #gri{aspect = instance}} = Req, Tran
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given request can be further processed
-%% (e.g. checks whether space is supported locally).
-%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% {@link op_logic_behaviour} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
@@ -159,7 +149,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a resource (aspect of entity) based on op logic request.
+%% {@link op_logic_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
@@ -176,8 +166,7 @@ create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves a resource (aspect of entity) based on op logic request and
-%% prefetched entity.
+%% {@link op_logic_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
@@ -187,7 +176,7 @@ get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates a resource (aspect of entity) based on op logic request.
+%% {@link op_logic_behaviour} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
@@ -197,7 +186,7 @@ update(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes a resource (aspect of entity) based on op logic request.
+%% {@link op_logic_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().

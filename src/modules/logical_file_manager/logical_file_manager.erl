@@ -284,7 +284,7 @@ schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
     % Scheduling and target providers must support given space
     HasAccess = provider_logic:supports_space(SpaceId)
         andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, TargetProviderId),
-    IndexSupported = index:is_supported(SpaceId, IndexName, TargetProviderId),
+    IndexSupported = index:exists_on_provider(SpaceId, IndexName, TargetProviderId),
     case HasAccess and IndexSupported of
         false ->
             {error, ?EACCES};
@@ -351,11 +351,11 @@ schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProvid
         andalso provider_logic:supports_space(SpaceId)
         andalso space_logic:is_supported(?ROOT_SESS_ID, SpaceId, EvictingProviderId),
 
-    IndexSupported = index:is_supported(SpaceId, IndexName, EvictingProviderId)
+    IndexSupported = index:exists_on_provider(SpaceId, IndexName, EvictingProviderId)
         andalso (
             (ReplicatingProviderId == undefined)
             or
-            (index:is_supported(SpaceId, IndexName, ReplicatingProviderId))
+            (index:exists_on_provider(SpaceId, IndexName, ReplicatingProviderId))
         ),
 
     case HasAccess and IndexSupported of
