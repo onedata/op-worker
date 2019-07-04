@@ -384,14 +384,5 @@ validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
         false ->
             throw(?EACCES)
     end;
-validate_scope_privs(read, FileCtx, UserCtx, _ShareId) ->
-    UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_READ_DATA) of
-        true ->
-            {ok, FileCtx};
-        false ->
-            throw(?EACCES)
-    end;
 validate_scope_privs(_, FileCtx, _, _) ->
     {ok, FileCtx}.

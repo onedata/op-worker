@@ -48,7 +48,7 @@ routes() -> [
     %% Set file attribute
     {<<"/metadata/attrs/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?PATH_BINDING, aspect = attrs}
     }},
@@ -100,7 +100,7 @@ routes() -> [
     %% Set file attribute by Id
     {<<"/metadata-id/attrs/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{type = op_file, id = ?OBJECTID_BINDING(id), aspect = attrs}
     }},

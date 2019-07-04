@@ -83,22 +83,13 @@ operation_supported(_, _, _) -> false.
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
-    required => #{<<"application/json">> => {json,
-        % Currently only file mode can be changed
-        fun(JSON) ->
-            case maps:to_list(JSON) of
-                [{<<"mode">>, Value}] ->
-                    try binary_to_integer(Value, 8) of
-                        Val ->
-                            {true, #{<<"mode">> => Val}}
-                    catch
-                        _:_ ->
-                            throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
-                    end;
-                [{_Attr, _Value}] ->
-                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, [<<"mode">>]));
-                _ ->
-                    false
+    required => #{<<"mode">> => {binary,
+        fun(Mode) ->
+            try
+                {true, binary_to_integer(Mode, 8)}
+            catch
+                _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
         end
     }}
@@ -265,7 +256,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
-    #{<<"mode">> := Mode} = maps:get(<<"application/json">>, Data),
+    Mode = maps:get(<<"mode">>, Data),
     ?run(lfm:set_perms(Cl#client.session_id, {guid, Guid}, Mode));
 
 create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
