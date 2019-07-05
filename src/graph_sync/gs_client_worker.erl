@@ -20,6 +20,7 @@
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("http/gui_paths.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -158,9 +159,9 @@ invalidate_cache(Type, Id) ->
 init([]) ->
     process_flag(trap_exit, true),
     case start_gs_connection() of
-        {ok, _ClientRef, #gs_resp_handshake{identity = nobody}} ->
+        {ok, _ClientRef, #gs_resp_handshake{identity = ?SUB(nobody)}} ->
             {stop, normal};
-        {ok, ClientRef, #gs_resp_handshake{identity = {provider, _}}} ->
+        {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
             ?info("Started connection to Onezone: ~p, running post-init procedures", [
                 ClientRef
@@ -522,12 +523,12 @@ resolve_authorization(#macaroon_auth{} = Auth) ->
     #macaroon_auth{
         macaroon = MacaroonBin, disch_macaroons = DischargeMacaroonsBin
     } = Auth,
-    {ok, Macaroon} = onedata_macaroons:deserialize(MacaroonBin),
+    {ok, Macaroon} = macaroons:deserialize(MacaroonBin),
     BoundMacaroons = lists:map(
         fun(DischargeMacaroonBin) ->
-            {ok, DM} = onedata_macaroons:deserialize(DischargeMacaroonBin),
+            {ok, DM} = macaroons:deserialize(DischargeMacaroonBin),
             BDM = macaroon:prepare_for_request(Macaroon, DM),
-            {ok, SerializedBDM} = onedata_macaroons:serialize(BDM),
+            {ok, SerializedBDM} = macaroons:serialize(BDM),
             SerializedBDM
         end, DischargeMacaroonsBin),
     {macaroon, MacaroonBin, BoundMacaroons}.
