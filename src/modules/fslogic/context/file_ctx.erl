@@ -737,9 +737,9 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
             end,
 
             case file_meta:list_children(FileDoc, Offset, Limit, Token) of
-                {ok, ChildrenLinks, Token2} ->
+                {ok, ChildrenLinks, #{token := Token2}} ->
                     {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
-                {ok, ChildrenLinks} ->
+                {ok, ChildrenLinks, _} ->
                     {lists:map(MapFun, ChildrenLinks), FileCtx2}
             end
     end.

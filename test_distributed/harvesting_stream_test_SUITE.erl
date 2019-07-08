@@ -1406,7 +1406,7 @@ count_active_children(Nodes, Ref) ->
     lists:foldl(fun(Node, Sum) ->
         Result = rpc:call(Node, supervisor, count_children, [Ref]),
         Sum + proplists:get_value(active, Result)
-    end, 0, Nodes).
+    end, 0, utils:ensure_list(Nodes)).
 
 whereis(Node, Name) ->
     rpc:call(Node, erlang, whereis, [Name]).
