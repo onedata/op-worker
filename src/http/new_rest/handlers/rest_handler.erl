@@ -236,7 +236,7 @@ rest_routes() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes a REST request (of any type) by calling entity logic.
+%% Processes a REST request (of any type) by calling op logic.
 %% Return new Req and State (after setting cowboy response).
 %% @end
 %%--------------------------------------------------------------------

@@ -65,7 +65,7 @@ response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Translates an entity logic error into REST response.
+%% Translates an op logic error into REST response.
 %% @end
 %%--------------------------------------------------------------------
 -spec error_response({error, term()}) -> #rest_resp{}.
@@ -163,7 +163,7 @@ entity_type_to_translator(op_transfer) -> transfer_rest_translator.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Translates an entity logic error into HTTP code, headers and body.
+%% Translates an op logic error into HTTP code, headers and body.
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_error({error, term()}) ->

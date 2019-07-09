@@ -9,10 +9,16 @@
 %%% @doc
 %%% This module encapsulates all common logic available in provider.
 %%% It is used to process requests in a standardized way, i.e.:
-%%%     # checks existence of given entity
-%%%     # checks authorization of client to perform certain action
-%%%     # checks validity of data provided in the request
-%%%     # handles all errors in a uniform way
+%%%     1) assert operation is supported.
+%%%     2) sanitize request data.
+%%%     3) fetch resource the request refers to.
+%%%     4) check existence of relations.
+%%%     5) check authorization.
+%%%     6) check validity of request (e.g. whether space is locally supported).
+%%%     7) process request.
+%%% All this operations are carried out by op_logic plugins (modules
+%%% implementing `op_logic_behaviour`). Each such module is responsible
+%%% for handling all request pointing to the same entity type (#gri.type field).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_logic).
@@ -30,8 +36,9 @@
 -type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
--type entity_id() :: undefined | od_share:id() | transfer:id().
+% The resource the request refers to.
 -type entity() :: undefined | #od_share{} | #transfer{}.
+-type entity_id() :: undefined | od_share:id() | transfer:id().
 -type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
@@ -95,7 +102,7 @@ handle(OpReq) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an entity logic request expressed by a #op_req{} record.
+%% Handles an op logic request expressed by a #op_req{} record.
 %% Entity can be provided if it was prefetched.
 %% @end
 %%--------------------------------------------------------------------
@@ -155,16 +162,13 @@ ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
     operation = Op,
     gri = #gri{aspect = Asp, scope = Scp}
 }}) ->
-    Result = try
-        Plugin:operation_supported(Op, Asp, Scp)
+    try Plugin:operation_supported(Op, Asp, Scp) of
+        true -> ok;
+        false -> throw(?ERROR_NOT_SUPPORTED)
     catch _:_ ->
         % No need for log here, 'operation_supported' may crash depending on
         % what the request contains and this is expected.
-        false
-    end,
-    case Result of
-        true -> ok;
-        false -> throw(?ERROR_NOT_SUPPORTED)
+        throw(?ERROR_NOT_SUPPORTED)
     end.
 
 
@@ -228,16 +232,13 @@ ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
     % Aspects where entity id is undefined always exist.
     ok;
 ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
-    Result = try
-        Plugin:exists(OpReq, Entity)
+    try Plugin:exists(OpReq, Entity) of
+        true -> ok;
+        false -> throw(?ERROR_NOT_FOUND)
     catch _:_ ->
         % No need for log here, 'exists' may crash depending on what the
         % request contains and this is expected.
-        false
-    end,
-    case Result of
-        true -> ok;
-        false -> throw(?ERROR_NOT_FOUND)
+        throw(?ERROR_NOT_FOUND)
     end.
 
 
@@ -290,22 +291,16 @@ validate_request(#req_ctx{plugin = Plugin, entity = Entity, req = Req}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an entity logic request based on operation,
+%% Handles an op logic request based on operation,
 %% should be wrapped in a try-catch.
 %% @end
 %%--------------------------------------------------------------------
 -spec process_request(req_ctx()) -> result().
 process_request(#req_ctx{
     plugin = Plugin,
-    req = #op_req{operation = create} = Req,
-    entity = Entity
+    req = #op_req{operation = create} = Req
 }) ->
-    Result = case Plugin:create(Req) of
-        Fun when is_function(Fun, 1) ->
-            Fun(Entity);
-        Res ->
-            Res
-    end,
+    Result = Plugin:create(Req),
     case {Result, Req} of
         {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, client = Cl}} ->
             % If an entity instance is created, log an information about it

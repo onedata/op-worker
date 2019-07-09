@@ -7,7 +7,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions concerning entity logic.
+%%% Common definitions concerning op logic.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -17,7 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
-% Record expressing entity logic request client (REST and Graph Sync).
+% Record expressing op logic request client (REST and Graph Sync).
 -record(client, {
     % root is allowed to do anything, it must be used with caution
     % (should not be used in any kind of external API!)
@@ -26,7 +26,7 @@
     session_id :: session:id()
 }).
 
-% Record expressing entity logic request
+% Record expressing op logic request
 -record(op_req, {
     client = #client{} :: op_logic:client(),
     gri :: op_logic:gri(),
