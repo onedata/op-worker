@@ -33,7 +33,7 @@
 -export([
     mark_dequeued/1, set_controller_process/1,
 
-    is_replication/1, is_eviction/1, is_migration/1,
+    is_replication/1, is_eviction/1, is_migration/1, type/1,
     is_ongoing/1, is_replication_ongoing/1, is_eviction_ongoing/1,
     is_ended/1, is_replication_ended/1, is_eviction_ended/1,
 
@@ -67,6 +67,7 @@
     failed | cancelled | skipped.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
+-type type() :: replication | eviction | migration.
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
 -type list_limit() :: non_neg_integer() | all.
@@ -74,7 +75,7 @@
 -type query_view_params() :: undefined | index:query_options() .
 
 -export_type([
-    id/0, transfer/0, status/0, callback/0, doc/0,
+    id/0, transfer/0, type/0, status/0, callback/0, doc/0,
     timestamp/0, list_limit/0, index_name/0, query_view_params/0
 ]).
 
@@ -342,6 +343,17 @@ is_eviction(#transfer{}) ->
 is_migration(#transfer{replicating_provider = undefined}) -> false;
 is_migration(#transfer{evicting_provider = undefined}) -> false;
 is_migration(_) -> true.
+
+
+-spec type(transfer()) -> undefined | type().
+type(#transfer{replicating_provider = undefined, evicting_provider = undefined}) ->
+    undefined;
+type(#transfer{replicating_provider = <<_/binary>>, evicting_provider = undefined}) ->
+    replication;
+type(#transfer{replicating_provider = undefined, evicting_provider = <<_/binary>>}) ->
+    eviction;
+type(#transfer{}) ->
+    migration.
 
 
 -spec is_ongoing(doc() | transfer() | id() | undefined) -> boolean().

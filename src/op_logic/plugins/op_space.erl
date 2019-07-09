@@ -18,6 +18,7 @@
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -203,17 +204,17 @@ exists(_, _) ->
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, client = Client, gri = #gri{
+authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDEXES);
 
-authorize(#op_req{operation = create, client = Client, gri = #gri{
+authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index_reduce_function, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDEXES);
 
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User is always authorized to list his spaces
@@ -221,51 +222,51 @@ authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
 
 authorize(#op_req{operation = get, client = Client, gri = #gri{
     id = SpaceId,
-    aspect = instance}
-}, _) ->
+    aspect = instance
+}}, _) ->
     op_logic_utils:is_eff_space_member(Client, SpaceId);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = indices
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {query_index, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_QUERY_INDEXES);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = transfers
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = update, client = Client, gri = #gri{
+authorize(#op_req{operation = update, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDEXES);
 
-authorize(#op_req{operation = delete, client = Client, gri = #gri{
+authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDEXES);
 
-authorize(#op_req{operation = delete, client = Client, gri = #gri{
+authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index_reduce_function, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDEXES).
 
 
 %%--------------------------------------------------------------------

@@ -18,6 +18,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -114,14 +115,49 @@ exists(_, _) ->
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, gri = #gri{aspect = rerun}} = Req, Transfer) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
+authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
+    aspect = rerun
+}}, #transfer{space_id = SpaceId} = Transfer) ->
+    case transfer:type(Transfer) of
+        undefined ->
+            ?ERROR_FORBIDDEN;
+        replication ->
+            space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_REPLICATION);
+        eviction ->
+            space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_EVICTION);
+        migration ->
+            space_logic:has_eff_privileges(
+                SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+            )
+    end;
 
-authorize(#op_req{operation = get, gri = #gri{aspect = instance}} = Req, Transfer) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id);
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+    aspect = instance
+}}, #transfer{space_id = SpaceId}) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = delete, gri = #gri{aspect = instance}} = Req, Transfer) ->
-    op_logic_utils:is_eff_space_member(Req#op_req.client, Transfer#transfer.space_id).
+authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
+    aspect = instance
+}} = Req, #transfer{space_id = SpaceId} = Transfer) ->
+    case Transfer#transfer.user_id of
+        UserId ->
+            % User doesn't need cancel privileges to cancel his transfer but
+            % must still be member of space.
+            op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+        _ ->
+            case transfer:type(Transfer) of
+                undefined ->
+                    ?ERROR_FORBIDDEN;
+                replication ->
+                    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_CANCEL_REPLICATION);
+                eviction ->
+                    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_CANCEL_EVICTION);
+                migration ->
+                    space_logic:has_eff_privileges(
+                        SpaceId, UserId, [?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION]
+                    )
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
