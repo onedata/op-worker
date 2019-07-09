@@ -132,7 +132,7 @@ validate_user_ctx(StorageType = ?WEBDAV_HELPER_NAME, UserCtx) ->
     FieldsBase = expected_user_ctx_params(StorageType),
     Fields = case UserCtx of
         #{<<"credentialsType">> := <<"none">>} ->
-            remove_field(<<"credentials">>, FieldsBase);
+            FieldsBase;
         #{<<"credentialsType">> := _} ->
             % make "credentials" required rather than optional
             [<<"credentials">> | remove_field(<<"credentials">>, FieldsBase)];
