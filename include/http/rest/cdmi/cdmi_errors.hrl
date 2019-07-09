@@ -9,7 +9,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 
--include("http/rest/rest.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
 -ifndef(CDMI_ERRORS_HRL).
