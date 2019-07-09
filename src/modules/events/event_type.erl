@@ -107,8 +107,8 @@ get_aggregation_key(#file_renamed_event{top_entry = Entry}) ->
     Entry#file_renamed_entry.old_guid;
 get_aggregation_key(#quota_exceeded_event{}) ->
     <<>>;
-get_aggregation_key(#helper_params_changed_event{}) ->
-    <<>>;
+get_aggregation_key(#helper_params_changed_event{storage_id = StorageId}) ->
+    StorageId;
 get_aggregation_key(#monitoring_event{type = #storage_used_updated{} = Type}) ->
     #storage_used_updated{space_id = SpaceId, user_id = UserId} = Type,
     {SpaceId, UserId, <<"storage_used_updated">>};

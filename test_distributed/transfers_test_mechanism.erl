@@ -15,6 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include("rest_test_utils.hrl").
@@ -33,6 +34,7 @@
     replicate_root_directory/2,
     replicate_each_file_separately/2,
     error_on_replicating_files/2,
+    change_storage_params/2,
     cancel_replication_on_target_nodes/2,
     replicate_files_from_index/2,
     fail_to_replicate_files_from_index/2,
@@ -172,6 +174,38 @@ error_on_replicating_files(Config, #scenario{
         end, FilesGuidsAndPaths)
     end, ReplicatingNodes),
     Config.
+
+%% modify storage during a running transfer
+%% to verify that transfer completes successfully despite
+%% helper reload (rtransfer restart).
+change_storage_params(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    SpaceId = ?config(?SPACE_ID_KEY, Config),
+
+    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
+    FileKey = file_key(Guid, Path, FileKeyType),
+    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId,
+            User, FileKey, Config, Type),
+        await_replication_starts(TargetNode, Tid),
+        {TargetNode, Tid, Guid, Path}
+    end, ReplicatingNodes),
+
+    lists:foreach(fun(Node) ->
+        [StorageId | _] = rpc:call(Node, space_storage, get_storage_ids, [SpaceId]),
+        modify_storage_timeout(Node, StorageId, <<"100000">>)
+    end, ReplicatingNodes),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
 
 cancel_replication_on_target_nodes(Config, #scenario{
     user = User,
@@ -1176,6 +1210,24 @@ cancel_transfer_by_lfm(_Worker, _Tid, _Config) ->
 cancel_transfer_by_rest(Worker, Tid, Config) ->
     rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, delete,
         ?DEFAULT_USER_TOKEN_HEADERS(Config), []).
+
+
+%% Modifies storage timeout twice in order to
+%% trigger helper reload and restore previous value.
+-spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
+modify_storage_timeout(Node, StorageId, NewValue) ->
+    {ok, Doc} = rpc:call(Node, storage, get, [StorageId]),
+    [Helper] = storage:get_helpers(Doc),
+    HelperName = helper:get_name(Helper),
+    OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),
+        integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
+
+    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
+        [StorageId, HelperName, #{<<"timeout">> => NewValue}])),
+    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
+        [StorageId, HelperName, #{<<"timeout">> => OldValue}])),
+    ok.
+
 
 file_key(Guid, _Path, guid) ->
     {guid, Guid};

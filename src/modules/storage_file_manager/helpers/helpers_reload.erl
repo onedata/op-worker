@@ -49,12 +49,14 @@ refresh_helpers_by_storage(StorageId) ->
 -spec refresh_handle_params(helpers:helper_handle() | helpers:file_handle(),
     session:id(), od_space:id(), storage:doc()) -> ok.
 refresh_handle_params(Handle, SessionId, SpaceId, StorageDoc) ->
+    % gather information
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined,
         SpaceId, StorageDoc, HelperName),
     {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
+    % do the refresh
     helpers:refresh_params(Handle, ArgsWithUserCtx).
 
 

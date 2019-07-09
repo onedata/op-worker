@@ -57,7 +57,7 @@
     schedule_node :: node(),
     replicating_nodes :: [node()],
     evicting_nodes :: [node()],
-    function :: function,
+    function :: function(),
     index_name :: binary(),
     query_view_params :: list(),
     space_id :: od_space:id()
