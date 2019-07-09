@@ -33,7 +33,7 @@
 choose_object_or_container_handler(#{path := Path} = Req) ->
     Handler = choose_object_or_container_handler_module(Path),
     {#{handler => Handler,
-        exception_handler => fun cdmi_exception_handler:handle/4
+        exception_handler => fun request_exception_handler:handle/4
     }, Req}.
 
 %%%===================================================================

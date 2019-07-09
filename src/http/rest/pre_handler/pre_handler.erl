@@ -44,7 +44,7 @@ init(Req, Description) when is_function(Description) ->
     init(Req2, HandlerDesc);
 init(Req, Description)
     when map_size(Description) < ?HANDLER_DESCRIPTION_REQUIRED_PROPERTIES ->
-    init(Req, plugin_properties:fill_with_default(Description));
+    init(Req, fill_with_default_properties(Description));
 init(Req, #{
     handler := Handler,
     handler_initial_opts := HandlerInitialOpts,
@@ -279,3 +279,27 @@ to_html(Req, State) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Fills missing properties of given handler description with default values.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_with_default_properties(protocol_plugin_behaviour:handler_description()) ->
+    protocol_plugin_behaviour:handler_description().
+fill_with_default_properties(Desc0) ->
+    Desc1 = fill_if_empty(handler_initial_opts, Desc0, #{}),
+    fill_if_empty(exception_handler, Desc1, fun request_exception_handler:handle/4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets key to default value in map if it's not present there.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_if_empty(term(), maps:map(), term()) -> maps:map().
+fill_if_empty(Key, Map, Default) ->
+    case maps:is_key(Key, Map) of
+        false ->
+            maps:put(Key, Default, Map);
+        true ->
+            Map
+    end.
