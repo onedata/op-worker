@@ -15,6 +15,7 @@
 
 -include("logic_tests_common.hrl").
 -include("http/gui_paths.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 
 %% API
 -export([
@@ -52,7 +53,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, macaroon, [passthrough]),
-    ok = test_utils:mock_new(Nodes, onedata_macaroons, [passthrough]),
+    ok = test_utils:mock_new(Nodes, macaroons, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, sync_request, fun mock_sync_request/2),
@@ -81,10 +82,10 @@ mock_gs_client(Config) ->
     end),
 
     % Mock macaroons handling
-    ok = test_utils:mock_expect(Nodes, onedata_macaroons, serialize, fun(M) ->
+    ok = test_utils:mock_expect(Nodes, macaroons, serialize, fun(M) ->
         {ok, M}
     end),
-    ok = test_utils:mock_expect(Nodes, onedata_macaroons, deserialize, fun(M) ->
+    ok = test_utils:mock_expect(Nodes, macaroons, deserialize, fun(M) ->
         {ok, M}
     end),
     ok = test_utils:mock_expect(Nodes, macaroon, prepare_for_request, fun(_, DM) ->
@@ -99,7 +100,7 @@ mock_gs_client(Config) ->
 
 unmock_gs_client(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Nodes, [gs_client, provider_logic, macaroon, onedata_macaroons, oneprovider]),
+    test_utils:mock_unload(Nodes, [gs_client, provider_logic, macaroon, macaroons, oneprovider]),
     initializer:unmock_provider_ids(Nodes),
     ok.
 
@@ -184,7 +185,7 @@ mock_start_link(Address, _, _, _, _) ->
                     Pid = spawn(fun() ->
                         die_instantly % simulates gen_server getting {stop, normal}
                     end),
-                    {ok, Pid, #gs_resp_handshake{identity = nobody}};
+                    {ok, Pid, #gs_resp_handshake{identity = ?SUB(nobody)}};
                 false ->
                     true = lists:suffix(?PATH_CAUSING_CORRECT_CONNECTION, Address),
                     Pid = spawn_link(fun() ->
@@ -193,7 +194,7 @@ mock_start_link(Address, _, _, _, _) ->
                         global:register_name(gs_client_mock, self()),
                         receive just_wait_infinitely -> ok end
                     end),
-                    {ok, Pid, #gs_resp_handshake{identity = {provider, <<"mockProvId">>}}}
+                    {ok, Pid, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER, <<"mockProvId">>)}}
             end
     end.
 
