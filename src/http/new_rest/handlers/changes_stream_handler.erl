@@ -697,7 +697,7 @@ get_record_changes(Changed, FieldsNames, ExistsNames, #document{
         <<"exists">> => Exists
     };
 
-get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
+get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
     key = FileUuid,
     revs = [Rev | _],
     mutators = Mutators,
@@ -720,7 +720,7 @@ get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
                 Acc#{<<"name">> => Name};
             ({FieldName, FieldIndex}, Acc) ->
                 Acc#{FieldName => element(FieldIndex, Record)}
-        end, #{}, FieldsNamesAndIndexes),
+        end, #{}, FieldsNamesAndIndices),
 
     #{
         <<"rev">> => Rev,
@@ -730,7 +730,7 @@ get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
         <<"fields">> => Fields
     };
 
-get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
+get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
     revs = [Rev | _],
     mutators = Mutators,
     deleted = Deleted,
@@ -738,7 +738,7 @@ get_record_changes(Changed, FieldsNamesAndIndexes, _Exists, #document{
 }, _State) ->
     Fields = lists:foldl(fun({FieldName, FieldIndex}, Acc) ->
         Acc#{FieldName => element(FieldIndex, Record)}
-    end, #{}, FieldsNamesAndIndexes),
+    end, #{}, FieldsNamesAndIndices),
 
     #{
         <<"rev">> => Rev,
