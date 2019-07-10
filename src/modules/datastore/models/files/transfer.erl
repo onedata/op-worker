@@ -345,14 +345,12 @@ is_migration(#transfer{evicting_provider = undefined}) -> false;
 is_migration(_) -> true.
 
 
--spec type(transfer()) -> undefined | type().
-type(#transfer{replicating_provider = undefined, evicting_provider = undefined}) ->
-    undefined;
+-spec type(transfer()) -> type().
 type(#transfer{replicating_provider = <<_/binary>>, evicting_provider = undefined}) ->
     replication;
 type(#transfer{replicating_provider = undefined, evicting_provider = <<_/binary>>}) ->
     eviction;
-type(#transfer{}) ->
+type(#transfer{replicating_provider = <<_/binary>>, evicting_provider = <<_/binary>>}) ->
     migration.
 
 

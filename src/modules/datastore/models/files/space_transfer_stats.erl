@@ -80,13 +80,9 @@ key(ProviderId, TransferType, SpaceId) ->
 %% Returns space transfers stats for specified transfer stats id.
 %% @end
 %%-------------------------------------------------------------------
--spec get(TransferStatsId :: binary()) ->
-    space_transfer_stats() | {error, term()}.
+-spec get(TransferStatsId :: binary()) -> doc() | {error, term()}.
 get(TransferStatsId) ->
-    case datastore_model:get(?CTX, TransferStatsId) of
-        {ok, Doc} -> {ok, Doc#document.value};
-        Error -> Error
-    end.
+    datastore_model:get(?CTX, TransferStatsId).
 
 
 %%-------------------------------------------------------------------

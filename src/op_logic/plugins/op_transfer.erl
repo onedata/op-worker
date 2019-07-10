@@ -119,8 +119,6 @@ authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
     case transfer:type(Transfer) of
-        undefined ->
-            ?ERROR_FORBIDDEN;
         replication ->
             space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_REPLICATION);
         eviction ->
@@ -146,8 +144,6 @@ authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
             op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
         _ ->
             case transfer:type(Transfer) of
-                undefined ->
-                    ?ERROR_FORBIDDEN;
                 replication ->
                     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_CANCEL_REPLICATION);
                 eviction ->
