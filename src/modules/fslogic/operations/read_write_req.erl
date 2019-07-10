@@ -91,7 +91,7 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
-            ?warning("Hanlde not found, session id: ~p, handle id: ~p",
+            ?warning("Handle not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
             create_handle(UserCtx, FileCtx, HandleId, Operation),
             session_handles:get(SessId, HandleId);

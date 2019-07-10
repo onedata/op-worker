@@ -44,6 +44,7 @@
     replicate_to_not_supporting_provider_by_path/1,
     schedule_replication_on_not_supporting_provider_by_guid/1,
     schedule_replication_on_not_supporting_provider_by_path/1,
+    transfer_continues_on_modified_storage/1,
     file_replication_failures_should_fail_whole_transfer/1,
     many_simultaneous_failed_transfers/1,
     rerun_file_replication/1,
@@ -87,6 +88,7 @@ all() -> [
     replicate_to_not_supporting_provider_by_path,
     schedule_replication_on_not_supporting_provider_by_guid,
     schedule_replication_on_not_supporting_provider_by_path,
+    transfer_continues_on_modified_storage,
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers,
     rerun_file_replication,
@@ -177,6 +179,9 @@ schedule_replication_on_not_supporting_provider_by_guid(Config) ->
 
 schedule_replication_on_not_supporting_provider_by_path(Config) ->
     replication_transfers_test_base:schedule_replication_on_not_supporting_provider(Config, lfm, path).
+
+transfer_continues_on_modified_storage(Config) ->
+    replication_transfers_test_base:transfer_continues_on_modified_storage(Config, lfm, path).
 
 file_replication_failures_should_fail_whole_transfer(Config) ->
     replication_transfers_test_base:file_replication_failures_should_fail_whole_transfer(Config, lfm, guid).

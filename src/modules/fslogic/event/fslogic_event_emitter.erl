@@ -22,7 +22,8 @@
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_locations_changed/2,
     emit_file_perm_changed/1, emit_file_removed/2,
-    emit_file_renamed_to_client/3, emit_quota_exceeded/0]).
+    emit_file_renamed_to_client/3, emit_quota_exceeded/0,
+    emit_helper_params_changed/1]).
 
 %%%===================================================================
 %%% API
@@ -180,6 +181,18 @@ emit_quota_exceeded() ->
         {error, _} = Error ->
             ?debug("Cannot send disabled spaces event due to ~p", [Error])
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends event indicating storage helper params have changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_helper_params_changed(StorageId :: storage:id()) ->
+    ok | {error, Reason :: term()}.
+emit_helper_params_changed(StorageId) ->
+    event:emit(#helper_params_changed_event{
+        storage_id = StorageId
+    }).
 
 %%%===================================================================
 %%% Internal functions

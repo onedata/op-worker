@@ -14,8 +14,9 @@
 -define(LUMA_TEST_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 
--define(STRIP_OK(Result), element(2, Result)).
+-define(STRIP_OK(Result), begin {ok, _} = Result, element(2, Result) end).
 
 %%%===================================================================
 %%% Users and spaces macros
@@ -53,19 +54,20 @@ end).
 %%% Posix helper and storage macros
 %%%===================================================================
 
--define(POSIX_ADMIN_CTX, ?STRIP_OK(helper:new_posix_user_ctx(0, 0))).
--define(POSIX_USER_CTX, ?STRIP_OK(helper:new_posix_user_ctx(?UID1, ?GID1))).
--define(GENERATED_POSIX_USER_CTX, ?STRIP_OK(helper:new_posix_user_ctx(
+-define(POSIX_ADMIN_CTX, luma_test_utils:new_posix_user_ctx(0, 0)).
+-define(POSIX_USER_CTX, luma_test_utils:new_posix_user_ctx(?UID1, ?GID1)).
+-define(GENERATED_POSIX_USER_CTX, luma_test_utils:new_posix_user_ctx(
     luma_test_SUITE:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
     luma_test_SUITE:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
-))).
+)).
 
 
 -define(POSIX_STORAGE_ID, <<"posixStorageId">>).
 
 -define(POSIX_HELPER,
-    ?STRIP_OK(helper:new_posix_helper(
-    <<"mountPoint">>, #{}, ?POSIX_ADMIN_CTX, ?CANONICAL_STORAGE_PATH))
+    ?STRIP_OK(helper:new_helper(?POSIX_HELPER_NAME,
+    #{<<"mountPoint">> => <<"mountPoint">>}, ?POSIX_ADMIN_CTX, false,
+    ?CANONICAL_STORAGE_PATH))
 ).
 
 -define(POSIX_STORAGE_DOC(LumaConfig),
@@ -78,13 +80,15 @@ end).
 %%% CEPH helper and storage macros
 %%%===================================================================
 
--define(CEPH_ADMIN_CTX, ?STRIP_OK(helper:new_ceph_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>))).
--define(CEPH_USER_CTX, ?STRIP_OK(helper:new_ceph_user_ctx(<<"USER">>, <<"USER_KEY">>))).
+-define(CEPH_ADMIN_CTX, luma_test_utils:new_ceph_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>)).
+-define(CEPH_USER_CTX, luma_test_utils:new_ceph_user_ctx(<<"USER">>, <<"USER_KEY">>)).
 
 -define(CEPH_STORAGE_ID, <<"cephStorageId">>).
 
--define(CEPH_HELPER(Insecure), ?STRIP_OK(helper:new_ceph_helper(
-    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>, #{},
+-define(CEPH_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?CEPH_HELPER_NAME,
+    #{<<"monitorHostname">> => <<"monitorHostname">>,
+        <<"clusterName">> => <<"clusterName">>,
+        <<"poolName">> => <<"poolName">>},
     ?CEPH_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH)
 )).
 
@@ -102,14 +106,16 @@ end).
 %%%===================================================================
 
 -define(S3_ADMIN_CTX,
-     ?STRIP_OK(helper:new_s3_user_ctx(<<"ADMIN_ACCESS_KEY">>, <<"ADMIN_SECRET_KEY">>))).
+     luma_test_utils:new_s3_user_ctx(<<"ADMIN_ACCESS_KEY">>, <<"ADMIN_SECRET_KEY">>)).
 -define(S3_USER_CTX,
-     ?STRIP_OK(helper:new_s3_user_ctx(<<"USER_ACCESS_KEY">>, <<"USER_SECRET_KEY">>))).
+     luma_test_utils:new_s3_user_ctx(<<"USER_ACCESS_KEY">>, <<"USER_SECRET_KEY">>)).
 
 -define(S3_STORAGE_ID, <<"s3StorageId">>).
 
--define(S3_HELPER(Insecure), ?STRIP_OK(helper:new_s3_helper(
-    <<"hostname">>, <<"bucketname">>, true, #{},
+% are passed through translater_helper_args
+-define(S3_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
+    #{<<"scheme">> => <<"https">>, <<"hostname">> => <<"hostname">>,
+        <<"bucketName">> => <<"bucketName">>},
     ?S3_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH)
 )).
 
@@ -126,14 +132,16 @@ end).
 %%%===================================================================
 
 -define(SWIFT_ADMIN_CTX,
-     ?STRIP_OK(helper:new_swift_user_ctx(<<"ADMIN">>, <<"ADMIN_PASSWD">>))).
+     luma_test_utils:new_swift_user_ctx(<<"ADMIN">>, <<"ADMIN_PASSWD">>)).
 -define(SWIFT_USER_CTX,
-     ?STRIP_OK(helper:new_swift_user_ctx(<<"USER">>, <<"USER_PASSWD">>))).
+     luma_test_utils:new_swift_user_ctx(<<"USER">>, <<"USER_PASSWD">>)).
 
 -define(SWIFT_STORAGE_ID, <<"swiftStorageId">>).
 
--define(SWIFT_HELPER(Insecure), ?STRIP_OK(helper:new_swift_helper(
-    <<"authUrl">>, <<"containerName">>, <<"tenantName">>, #{},
+-define(SWIFT_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
+    #{<<"authUrl">> => <<"authUrl">>,
+        <<"containerName">> => <<"containerName">>,
+        <<"tenantName">> => <<"tenantName">>},
     ?SWIFT_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH)
 )).
 
@@ -150,14 +158,16 @@ end).
 %%%===================================================================
 
 -define(CEPHRADOS_ADMIN_CTX,
-     ?STRIP_OK(helper:new_cephrados_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>))).
+     luma_test_utils:new_cephrados_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>)).
 -define(CEPHRADOS_USER_CTX,
-     ?STRIP_OK(helper:new_cephrados_user_ctx(<<"USER">>, <<"USER_KEY">>))).
+     luma_test_utils:new_cephrados_user_ctx(<<"USER">>, <<"USER_KEY">>)).
 
 -define(CEPHRADOS_STORAGE_ID, <<"cephradosStorageId">>).
 
--define(CEPHRADOS_HELPER(Insecure), ?STRIP_OK(helper:new_cephrados_helper(
-    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>, #{},
+-define(CEPHRADOS_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?CEPHRADOS_HELPER_NAME,
+    #{<<"monitorHostname">> => <<"monitorHostname">>,
+        <<"clusterName">> => <<"clusterName">>,
+        <<"poolName">> => <<"poolName">>},
     ?CEPHRADOS_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH)
 )).
 
@@ -174,14 +184,15 @@ end).
 %%% GLUSTERFS helper and storage macros
 %%%===================================================================
 
--define(GLUSTERFS_ADMIN_CTX, ?STRIP_OK(helper:new_glusterfs_user_ctx(0, 0))).
--define(GLUSTERFS_USER_CTX, ?STRIP_OK(helper:new_glusterfs_user_ctx(?UID1, ?GID1))).
+-define(GLUSTERFS_ADMIN_CTX, luma_test_utils:new_glusterfs_user_ctx(0, 0)).
+-define(GLUSTERFS_USER_CTX, luma_test_utils:new_glusterfs_user_ctx(?UID1, ?GID1)).
 
 -define(GLUSTERFS_STORAGE_ID, <<"glusterfsStorageId">>).
 
--define(GLUSTERFS_HELPER(Insecure), ?STRIP_OK(helper:new_glusterfs_helper(
-    <<"volume">>, <<"hostname">>, #{}, ?GLUSTERFS_ADMIN_CTX,
-    Insecure, ?FLAT_STORAGE_PATH)
+-define(GLUSTERFS_HELPER(Insecure), ?STRIP_OK(helper:new_helper(
+    ?GLUSTERFS_HELPER_NAME,
+    #{<<"volume">> => <<"volume">>, <<"hostname">> => <<"hostname">>},
+    ?GLUSTERFS_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH)
 )).
 
 -define(GLUSTERFS_STORAGE_DOC(Insecure, LumaConfig),
@@ -197,13 +208,14 @@ end).
 %%% NULLDEVICE helper and storage macros
 %%%===================================================================
 
--define(NULLDEVICE_ADMIN_CTX, ?STRIP_OK(helper:new_nulldevice_user_ctx(0, 0))).
--define(NULLDEVICE_USER_CTX, ?STRIP_OK(helper:new_nulldevice_user_ctx(?UID1, ?GID1))).
+-define(NULLDEVICE_ADMIN_CTX, luma_test_utils:new_nulldevice_user_ctx(0, 0)).
+-define(NULLDEVICE_USER_CTX, luma_test_utils:new_nulldevice_user_ctx(?UID1, ?GID1)).
 
 -define(NULLDEVICE_STORAGE_ID, <<"nulldeviceStorageId">>).
 
--define(NULLDEVICE_HELPER(Insecure), ?STRIP_OK(helper:new_nulldevice_helper(
-    #{}, ?NULLDEVICE_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH))).
+-define(NULLDEVICE_HELPER(Insecure), ?STRIP_OK(helper:new_helper(
+    ?NULL_DEVICE_HELPER_NAME, #{},
+    ?NULLDEVICE_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH))).
 
 -define(NULLDEVICE_STORAGE_DOC(Insecure, LumaConfig),
     ?STORAGE_DOC(?NULLDEVICE_STORAGE_ID, <<"NULLDEVICE">>,
@@ -230,7 +242,7 @@ end).
 -define(WEBDAV_BASIC_ADMIN_CREDENTIALS, <<"admin:password">>).
 -define(WEBDAV_BASIC_USER_CREDENTIALS, <<"token:password">>).
 -define(WEBDAV_BASIC_CTX(Credentials),
-     ?STRIP_OK(helper:new_webdav_user_ctx(?WEBDAV_BASIC_CREDENTIALS_TYPE, Credentials))).
+     luma_test_utils:new_webdav_user_ctx(?WEBDAV_BASIC_CREDENTIALS_TYPE, Credentials)).
 -define(WEBDAV_BASIC_ADMIN_CTX, ?WEBDAV_BASIC_CTX(?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
 -define(WEBDAV_BASIC_USER_CTX, ?WEBDAV_BASIC_CTX(?WEBDAV_BASIC_USER_CREDENTIALS)).
 
@@ -238,32 +250,32 @@ end).
 -define(WEBDAV_TOKEN_ADMIN_CREDENTIALS, <<"ADMIN_TOKEN">>).
 -define(WEBDAV_TOKEN_USER_CREDENTIALS, <<"USER_TOKEN">>).
 -define(WEBDAV_TOKEN_CTX(Credentials),
-     ?STRIP_OK(helper:new_webdav_user_ctx(?WEBDAV_TOKEN_CREDENTIALS_TYPE, Credentials))).
+     luma_test_utils:new_webdav_user_ctx(?WEBDAV_TOKEN_CREDENTIALS_TYPE, Credentials)).
 -define(WEBDAV_TOKEN_ADMIN_CTX, ?WEBDAV_TOKEN_CTX(?WEBDAV_TOKEN_ADMIN_CREDENTIALS)).
 -define(WEBDAV_TOKEN_USER_CTX, ?WEBDAV_TOKEN_CTX(?WEBDAV_TOKEN_USER_CREDENTIALS)).
 
 -define(WEBDAV_NONE_CREDENTIALS_TYPE, <<"none">>).
 -define(WEBDAV_NONE_CTX,
-     ?STRIP_OK(helper:new_webdav_user_ctx(?WEBDAV_NONE_CREDENTIALS_TYPE, <<"">>))).
+     luma_test_utils:new_webdav_user_ctx(?WEBDAV_NONE_CREDENTIALS_TYPE, <<"">>)).
 
 -define(WEBDAV_OAUTH2_CREDENTIALS_TYPE, <<"oauth2">>).
 -define(WEBDAV_OAUTH2_ADMIN_CREDENTIALS, <<"ADMIN_OAUTH2">>).
 -define(WEBDAV_OAUTH2_USER_CREDENTIALS, <<"USER_OAUTH2">>).
 
 -define(WEBDAV_OAUTH2_ADMIN_CTX,
-    (?STRIP_OK(helper:new_webdav_user_ctx(
+    (luma_test_utils:new_webdav_user_ctx(
         ?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS
-    )))#{
+    ))#{
         <<"onedataAccessToken">> => ?OD_ACCESS_TOKEN,
         <<"adminId">> => ?ADMIN_ID
     }
 ).
 -define(EXPECTED_WEBDAV_OAUTH2_ADMIN_CTX,
-    (?STRIP_OK(helper:new_webdav_user_ctx(
+    (luma_test_utils:new_webdav_user_ctx(
         ?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS
-    )))#{
+    ))#{
         <<"accessToken">> => ?IDP_ADMIN_TOKEN,
         <<"accessTokenTTL">> => integer_to_binary(?TTL),
         <<"adminId">> => ?ADMIN_ID
@@ -271,9 +283,9 @@ end).
 ).
 
 -define(WEBDAV_OAUTH2_USER_CTX,
-    ?STRIP_OK(helper:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
+    luma_test_utils:new_webdav_user_ctx(?WEBDAV_OAUTH2_CREDENTIALS_TYPE,
         ?WEBDAV_OAUTH2_USER_CREDENTIALS)
-    )).
+    ).
 
 -define(EXPECTED_WEBDAV_OAUTH2_USER_CTX,
     (?WEBDAV_OAUTH2_USER_CTX)#{
@@ -284,9 +296,10 @@ end).
 
 -define(WEBDAV_STORAGE_ID, <<"webdavStorageId">>).
 
--define(WEBDAV_HELPER(Insecure, AdminCtx), ?STRIP_OK(helper:new_webdav_helper(
-    <<"endpoint">>, #{<<"oauth2IdP">> => ?OAUTH2_IDP}, AdminCtx, Insecure,
-    ?FLAT_STORAGE_PATH)
+-define(WEBDAV_HELPER(Insecure, AdminCtx), ?STRIP_OK(helper:new_helper(
+    ?WEBDAV_HELPER_NAME,
+    #{<<"endpoint">> => <<"endpoint">>, <<"oauth2IdP">> => ?OAUTH2_IDP},
+    AdminCtx, Insecure, ?FLAT_STORAGE_PATH)
 )).
 -define(WEBDAV_BASIC_HELPER(Insecure),
     ?WEBDAV_HELPER(Insecure, ?WEBDAV_BASIC_ADMIN_CTX)).

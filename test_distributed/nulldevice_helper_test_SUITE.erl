@@ -377,8 +377,9 @@ fsync_test(Config) ->
 new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
-    {ok, UserCtx} = helper:new_nulldevice_user_ctx(0, 0),
-    {ok, Helper} = helper:new_nulldevice_helper(
+    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    {ok, Helper} = helper:new_helper(
+        ?NULL_DEVICE_HELPER_NAME,
         #{
             <<"latencyMin">> => <<"0">>,
             <<"latencyMax">> => <<"0">>,

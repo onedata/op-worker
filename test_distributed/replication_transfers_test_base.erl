@@ -38,6 +38,7 @@
     replicate_to_missing_provider/3,
     replicate_to_not_supporting_provider/3,
     schedule_replication_on_not_supporting_provider/3,
+    transfer_continues_on_modified_storage/3,
     cancel_replication_on_target_nodes/2,
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3,
@@ -710,6 +711,57 @@ schedule_replication_on_not_supporting_provider(Config, Type, FileKeyType) ->
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ).
+
+transfer_continues_on_modified_storage(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    FilesNum = 100,
+    TotalTransferredBytes = FilesNum * ?DEFAULT_SIZE,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 600,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:change_storage_params/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    files_replicated => FilesNum,
+                    bytes_replicated => TotalTransferredBytes,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => TotalTransferredBytes}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => TotalTransferredBytes}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => TotalTransferredBytes})
+                },
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP2],
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).

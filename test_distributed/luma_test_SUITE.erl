@@ -395,13 +395,13 @@ insecure_get_server_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_ba
 
     test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
         ['_'], 1),
-    
+
     % 2nd call should be served from cache
     Result = rpc:call(Worker, luma, get_server_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
     test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
         ['_'], 1),
-    
+
     ?assertEqual({ok, AdminCtx}, Result).
 
 insecure_get_server_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_invalidate_cache_base(Config, StorageConfig) ->
@@ -488,19 +488,19 @@ insecure_get_client_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_ba
     HelperName = maps:get(helper_name, StorageConfig),
     AdminCtx = maps:get(admin_ctx, StorageConfig),
     test_utils:mock_new(Worker, [luma], [passthrough]),
-    
+
     % 1st call should call get_insecure_user_ctx
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
     test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
         ['_'], 1),
-    
+
     % 2nd call should be served from cache
     Result = rpc:call(Worker, luma, get_client_user_ctx, [
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
     test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
         ['_'], 1),
-    
+
     ?assertEqual({ok, AdminCtx}, Result).
 
 insecure_get_client_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_invalidate_cache_base(Config, StorageConfig) ->
@@ -524,7 +524,7 @@ insecure_get_client_user_ctx_returns_admin_ctx_on_posix_incompatible_storages_in
         ?SESS_ID, ?USER_ID, ?SPACE_ID, StorageDoc, HelperName]),
     test_utils:mock_assert_num_calls(Worker, luma, get_insecure_user_ctx,
         ['_'], 2),
-    
+
     ?assertEqual({ok, AdminCtx}, Result).
 
 get_client_user_ctx_generates_user_ctx_on_posix_compatible_storages_and_caches_reverse_mapping_base(Config, StorageConfig) ->

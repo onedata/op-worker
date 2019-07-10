@@ -32,8 +32,8 @@
 -type type() :: #file_read_event{} | #file_written_event{} |
                 #file_attr_changed_event{} | #file_location_changed_event{} |
                 #file_perm_changed_event{} | #file_removed_event{} |
-                #quota_exceeded_event{} | #file_renamed_event{} |
-                #monitoring_event{}.
+                #quota_exceeded_event{} | #helper_params_changed_event{} |
+                #file_renamed_event{} | #monitoring_event{}.
 -type stream() :: #event_stream{}.
 -type manager_ref() :: pid() | session:id() | [pid() | session:id()] |
 % reference all event managers except one provided
