@@ -174,7 +174,7 @@ authorize(#op_req{operation = create, client = ?USER(UserId), data = Data, gri =
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
     space_logic:has_eff_privileges(
-        SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDEXES]
+        SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES]
     );
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
@@ -193,7 +193,7 @@ authorize(#op_req{operation = delete, client = ?USER(UserId), data = Data, gri =
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
     space_logic:has_eff_privileges(
-        SpaceId, UserId, [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDEXES]
+        SpaceId, UserId, [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]
     ).
 
 

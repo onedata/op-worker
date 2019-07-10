@@ -375,6 +375,7 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 -spec validate_scope_privs(check_permissions:access_definition(), file_ctx:ctx(),
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
+% TODO VFS-5603
 validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),

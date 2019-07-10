@@ -106,6 +106,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
@@ -261,15 +262,12 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
-parse_params(Req, #{user_id := UserId, auth := SessionId} = State0) ->
+parse_params(Req, #{user_id := UserId} = State0) ->
     SpaceId = cowboy_req:binding(sid, Req),
-    case op_logic_utils:is_eff_space_member(?USER(UserId, SessionId), SpaceId) of
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
         true -> ok;
         false -> throw(?ERROR_FORBIDDEN)
     end,
-
-    put(auth, SessionId),
-    put(space_id, SpaceId),
 
     QueryParams = maps:from_list(cowboy_req:parse_qs(Req)),
     State1 = State0#{
