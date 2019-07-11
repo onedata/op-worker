@@ -138,10 +138,9 @@ handle(<<"getSpaceTransfers">>, Props) ->
     );
 
 handle(<<"getTransfersForFile">>, Props) ->
-    SessionId = op_gui_session:get_session_id(),
     FileGuid = proplists:get_value(<<"fileId">>, Props),
     EndedInfo = proplists:get_value(<<"endedInfo">>, Props, <<"count">>),
-    case transfer_data_backend:get_transfers_for_file(SessionId, FileGuid) of
+    case transfer_data_backend:get_transfers_for_file(FileGuid) of
         {ok, Result} ->
             case EndedInfo of
                 <<"count">> ->

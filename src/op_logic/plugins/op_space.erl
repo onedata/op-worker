@@ -423,7 +423,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
                 _ -> #{}
             end,
             {ok, maps:merge(#{
-                <<"indexes">> => Indices,   % TODO deprecated field
+                <<"indexes">> => Indices,   % TODO VFS-5608
                 <<"indices">> => Indices
             }, NextPageToken)};
         {error, _} = Error ->

@@ -62,7 +62,7 @@ find_record(<<"db-index">>, RecordId) ->
     {ok, IndexPropList} = Result = db_index_record(RecordId),
     SpaceId = proplists:get_value(<<"space">>, IndexPropList),
 
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_INDICES) of
         true ->
             Result;
         false ->

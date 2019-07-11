@@ -32,7 +32,7 @@
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 -export([
-    list_transfers/6, get_transfers_for_file/2,
+    list_transfers/6, get_transfers_for_file/1,
     rerun_transfer/2, cancel_transfer/2
 ]).
 
@@ -349,12 +349,11 @@ list_transfers(SessionId, SpaceId, State, StartFromIndex, Offset, Limit) ->
 %% show any transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec get_transfers_for_file(session:id(), fslogic_worker:file_guid()) ->
+-spec get_transfers_for_file(fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
-get_transfers_for_file(SessionId, FileGuid) ->
+get_transfers_for_file(FileGuid) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, UserId} = session:get_user_id(SessionId),
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS) of
+    case has_transfers_view_privilege(SpaceId) of
         true ->
             {ok, #{
                 ongoing := Ongoing,
