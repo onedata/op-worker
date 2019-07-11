@@ -141,13 +141,17 @@ handle(<<"getTransfersForFile">>, Props) ->
     SessionId = op_gui_session:get_session_id(),
     FileGuid = proplists:get_value(<<"fileId">>, Props),
     EndedInfo = proplists:get_value(<<"endedInfo">>, Props, <<"count">>),
-    {ok, Result} = transfer_data_backend:get_transfers_for_file(SessionId, FileGuid),
-    case EndedInfo of
-        <<"count">> ->
-            EndedCount = length(proplists:get_value(ended, Result)),
-            {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
-        <<"ids">> ->
-            {ok, Result}
+    case transfer_data_backend:get_transfers_for_file(SessionId, FileGuid) of
+        {ok, Result} ->
+            case EndedInfo of
+                <<"count">> ->
+                    EndedCount = length(proplists:get_value(ended, Result)),
+                    {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
+                <<"ids">> ->
+                    {ok, Result}
+            end;
+        Error ->
+            Error
     end;
 
 handle(<<"cancelTransfer">>, Props) ->

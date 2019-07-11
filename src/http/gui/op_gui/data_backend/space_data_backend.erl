@@ -75,31 +75,31 @@ find_record(<<"space">>, SpaceId) ->
     end;
 
 find_record(RecordType, RecordId) ->
-    SpaceId = case RecordType of
+    {SpaceId, AdditionalPrivs} = case RecordType of
         <<"space-user-list">> ->
-            RecordId;
+            {RecordId, []};
         <<"space-group-list">> ->
-            RecordId;
+            {RecordId, []};
         <<"space-provider-list">> ->
-            RecordId;
+            {RecordId, []};
         <<"space-transfer-link-state">> ->
-            RecordId;
+            {RecordId, [?SPACE_VIEW_TRANSFERS]};
         <<"space-on-the-fly-transfer-list">> ->
-            RecordId;
+            {RecordId, [?SPACE_VIEW_TRANSFERS]};
         <<"space-transfer-stat">> ->
             {_, _, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id;
+            {Id, [?SPACE_VIEW_TRANSFERS]};
         <<"space-transfer-time-stat">> ->
             {_, _, _, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id;
+            {Id, [?SPACE_VIEW_TRANSFERS]};
         <<"space-transfer-list">> ->
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id
+            {Id, [?SPACE_VIEW_TRANSFERS]}
     end,
     UserId = op_gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
+    case space_logic:has_eff_privileges(SpaceId, UserId, [?SPACE_VIEW | AdditionalPrivs]) of
         false ->
             op_gui_error:unauthorized();
         true ->

@@ -92,7 +92,7 @@ get(TransferStatsId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get(TransferType :: binary(), SpaceId :: od_space:id()) ->
-    space_transfer_stats() | {error, term()}.
+    doc() | {error, term()}.
 get(TransferType, SpaceId) ->
     ?MODULE:get(key(TransferType, SpaceId)).
 
@@ -102,8 +102,8 @@ get(TransferType, SpaceId) ->
 %% Returns space transfers stats for given transfer type, provider and space.
 %% @end
 %%-------------------------------------------------------------------
--spec get(ProviderId :: od_provider:id(), TransferType :: binary(),
-    SpaceId :: od_space:id()) -> space_transfer_stats() | {error, term()}.
+-spec get(od_provider:id(), TransferType :: binary(), od_space:id()) ->
+    doc() | {error, term()}.
 get(ProviderId, TransferType, SpaceId) ->
     ?MODULE:get(key(ProviderId, TransferType, SpaceId)).
 

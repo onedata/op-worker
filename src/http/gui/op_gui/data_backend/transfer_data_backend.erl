@@ -170,21 +170,21 @@ create_record(<<"transfer">>, Data) ->
             op_logic:handle(#op_req{
                 operation = create,
                 client = #client{type = user, id = UserId, session_id = SessionId},
-                gri = #gri{id = FileGuid, aspect = instance},
+                gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => ReplicatingProvider}
             });
         eviction ->
             op_logic:handle(#op_req{
                 operation = delete,
                 client = #client{type = user, id = UserId, session_id = SessionId},
-                gri = #gri{id = FileGuid, aspect = instance},
+                gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => EvictingProvider}
             });
         migration ->
             op_logic:handle(#op_req{
                 operation = delete,
                 client = #client{type = user, id = UserId, session_id = SessionId},
-                gri = #gri{id = FileGuid, aspect = instance},
+                gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{
                     <<"provider_id">> => EvictingProvider,
                     <<"migration_provider_id">> => ReplicatingProvider
@@ -251,7 +251,7 @@ cancel_transfer(SessionId, StateAndTransferId) ->
     Result = op_logic:handle(#op_req{
         operation = delete,
         client = #client{type = user, id = UserId, session_id = SessionId},
-        gri = #gri{id = TransferId, aspect = instance}
+        gri = #gri{type = op_transfer, id = TransferId, aspect = instance}
     }),
 
     case Result of
@@ -286,7 +286,7 @@ rerun_transfer(SessionId, StateAndTransferId) ->
     Result = op_logic:handle(#op_req{
         operation = create,
         client = #client{type = user, id = UserId, session_id = SessionId},
-        gri = #gri{id = TransferId, aspect = rerun}
+        gri = #gri{type = op_transfer, id = TransferId, aspect = rerun}
     }),
 
     case Result of
@@ -527,7 +527,7 @@ transfer_time_stat_record(RecordId) ->
                     Window = transfer_histograms:type_to_time_window(StatsType),
                     CurrentTime = provider_logic:zone_time_seconds(),
                     Timestamp = transfer_histograms:trim_timestamp(CurrentTime),
-                    {#{}, Timestamp, Window};
+                    {#{}, 0, Timestamp, Window};
                 {error, Reason} ->
                     ?error("Failed to retrieve Space Transfer Stats Document "
                            "of ID ~p due to: ~p", [Id, Reason]),
