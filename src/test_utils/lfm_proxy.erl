@@ -28,7 +28,8 @@
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
-    schedule_replication_by_index/6, schedule_replica_eviction_by_index/7]).
+    schedule_replication_by_index/6, schedule_replica_eviction_by_index/7,
+    get_file_qos/3, add_qos/5, get_qos_details/3, remove_qos/3]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -80,6 +81,26 @@ teardown(Config) ->
         fun(Pid) ->
             Pid ! exit
         end, ?config(servers, Config)).
+
+-spec add_qos(node(), session:id(), logical_file_manager:file_key(), binary(),
+    qos_item:replicas_num()) -> {ok, qos_item:id()} | logical_file_manager:error_reply().
+add_qos(Worker, SessId, FileKey, Expression, ReplicasNum) ->
+    ?EXEC(Worker, logical_file_manager:add_qos(SessId, FileKey, Expression, ReplicasNum)).
+
+-spec get_file_qos(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | logical_file_manager:error_reply().
+get_file_qos(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, logical_file_manager:get_file_qos(SessId, FileKey)).
+
+-spec get_qos_details(node(), session:id(), qos_item:id()) ->
+    {ok, #qos_item{}} | logical_file_manager:error_reply().
+get_qos_details(Worker, SessId, QosId) ->
+    ?EXEC(Worker, logical_file_manager:get_qos_details(SessId, QosId)).
+
+-spec remove_qos(node(), session:id(), qos_item:id()) ->
+    ok | logical_file_manager:error_reply().
+remove_qos(Worker, SessId, QosId) ->
+    ?EXEC(Worker, logical_file_manager:remove_qos(SessId, QosId)).
 
 -spec stat(node(), session:id(), logical_file_manager:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:file_attributes()} | logical_file_manager:error_reply().

@@ -317,6 +317,40 @@ get_record_struct(10) ->
         {mth_hist, #{string => [integer]}},
         {index_name, string},
         {query_view_params, [{term, term}]}
+    ]};
+get_record_struct(11) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {rerun_id, string},
+        {path, string},
+        {callback, string},
+        {enqueued, atom},
+        {cancel, atom},
+        {replication_status, atom},
+        {eviction_status, atom},
+        {scheduling_provider, string},
+        {replicating_provider, string},
+        {evicting_provider, string},
+        {pid, string}, %todo VFS-3657
+        {files_to_process, integer},
+        {files_processed, integer},
+        {failed_files, integer},
+        {files_replicated, integer},
+        {bytes_replicated, integer},
+        {files_evicted, integer},
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}},
+        {index_name, string},
+        {query_view_params, [{term, term}]},
+        {qos_job_pid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -463,4 +497,19 @@ upgrade_record(9, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, Ca
         FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist, undefined, []
+    }};
+upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+    Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+    ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
+    FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+    FilesEvicted, ScheduleTime, StartTime, FinishTime,
+    LastUpdate, MinHist, HrHist, DyHist, MthHist, IndexName, QueryViewParams
+}) ->
+    {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+        Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+        ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
+        FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+        FilesEvicted, ScheduleTime, StartTime, FinishTime,
+        LastUpdate, MinHist, HrHist, DyHist, MthHist, IndexName, QueryViewParams,
+        undefined
     }}.

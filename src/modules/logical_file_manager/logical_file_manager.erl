@@ -46,7 +46,7 @@
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
--export([schedule_file_replication/3, schedule_file_replication/4,
+-export([schedule_file_replication/3, schedule_file_replication/4, schedule_file_replication/5,
     schedule_replica_eviction/4, schedule_replication_by_index/6, schedule_replica_eviction_by_index/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
@@ -64,6 +64,8 @@
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
+%% Functions concerning qos
+-export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2]).
 
 %%%===================================================================
 %%% API
@@ -235,7 +237,7 @@ unlink(SessId, FileEntry, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, undefined)
+%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, undefined, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
@@ -246,13 +248,25 @@ schedule_file_replication(SessId, FileKey, TargetProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules file replication to given provider.
+%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
     TargetProviderId :: oneprovider:id(), transfer:callback()) ->
     {ok, transfer:id()} | error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
+    schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file replication to given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
+    TargetProviderId :: oneprovider:id(), transfer:callback(), pid() | undefined) ->
+    {ok, transfer:id()} | error_reply().
+schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
@@ -266,7 +280,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
         true ->
             ?run(fun() ->
                 lfm_files:schedule_file_replication(SessId, FileKey,
-                    TargetProviderId, Callback)
+                    TargetProviderId, Callback, QosJobPID)
             end)
     end.
 
@@ -754,3 +768,42 @@ has_custom_metadata(SessId, FileKey) ->
     ok | error_reply().
 remove_metadata(SessId, FileKey, Type) ->
     ?run(fun() -> lfm_attrs:remove_metadata(SessId, FileKey, Type) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add new QoS for file or directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_qos(session:id(), file_key(), binary(), qos_item:replicas_num()) ->
+    {ok, qos_item:id()} | error_reply().
+add_qos(SessId, FileKey, Expression, ReplicasNum) ->
+    ?run(fun() -> lfm_qos:add_qos(SessId, FileKey, Expression, ReplicasNum) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get effective QoS for file or directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_qos(session:id(), file_key()) ->
+    {ok, file_qos:qos_list(), file_qos:traget_storages()} | error_reply().
+get_file_qos(SessId, FileKey) ->
+    ?run(fun() -> lfm_qos:get_file_qos(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get details of specific QoS.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_details(session:id(), qos_item:id()) ->
+    {ok, qos_item:record()} | error_reply().
+get_qos_details(SessId, QosId) ->
+    ?run(fun() -> lfm_qos:get_qos_details(SessId, QosId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove single QoS.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_qos(session:id(), qos_item:id()) -> ok | error_reply().
+remove_qos(SessId, QosId) ->
+    ?run(fun() -> lfm_qos:remove_qos(SessId, QosId) end).

@@ -105,6 +105,23 @@ handle(Doc = #document{
 ->
     handle_finished_migration(Doc);
 
+handle(#document{
+    key = TransferId,
+    value = #transfer{
+        replication_status = ReplicationStatus,
+        qos_job_pid = QosJobPID,
+        scheduling_provider = ReplicatingProviderId
+    }
+}) when (ReplicationStatus == completed orelse ReplicationStatus == skipped) andalso QosJobPID =/= undefined ->
+    case provider_auth:get_provider_id() of
+        {ok, ReplicatingProviderId} ->
+            DecodedPid = transfer_utils:decode_pid(QosJobPID),
+            DecodedPid ! {completed, TransferId},
+            ok;
+        _ ->
+            ok
+    end;
+
 handle(_Doc) ->
     ok.
 

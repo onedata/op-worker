@@ -26,7 +26,7 @@
 %% API
 -export([
     init/0, cleanup/0,
-    start/8, get/1, update/2, update_and_run/3, delete/1,
+    start/9, get/1, update/2, update_and_run/3, delete/1,
     cancel/1, rerun_ended/2
 ]).
 
@@ -115,13 +115,14 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     undefined | od_provider:id(), undefined | od_provider:id(), binary(),
-    index_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
+    index_name(), query_view_params(), pid() | undefined) ->
+    {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
-    Callback, IndexName, QueryViewParams
+    Callback, IndexName, QueryViewParams, QosJobPID
 ) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
-        TargetProviderId, Callback, IndexName, QueryViewParams
+        TargetProviderId, Callback, IndexName, QueryViewParams, QosJobPID
     ).
 
 %%--------------------------------------------------------------------
@@ -131,10 +132,10 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%--------------------------------------------------------------------
 -spec start_for_user(od_user:id(), fslogic_worker:file_uuid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
-    callback(), index_name(), query_view_params()) ->
+    callback(), index_name(), query_view_params(), pid() | undefined) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
-    ReplicatingProviderId, Callback, IndexName, QueryViewParams
+    ReplicatingProviderId, Callback, IndexName, QueryViewParams, QosJobPID
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
@@ -168,7 +169,8 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             dy_hist = #{},
             mth_hist = #{},
             index_name = IndexName,
-            query_view_params = QueryViewParams
+            query_view_params = QueryViewParams,
+            qos_job_pid = transfer_utils:encode_pid(QosJobPID)
         }},
 
     {ok, Doc = #document{key = TransferId}} = create(ToCreate),
@@ -236,7 +238,8 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback,
                 index_name = IndexName,
-                query_view_params = QueryViewParams
+                query_view_params = QueryViewParams,
+                qos_job_pid = QosJobPID
             } = Transfer,
 
             NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
@@ -244,7 +247,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
                 EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
-                QueryViewParams
+                QueryViewParams, QosJobPID
             ),
             update(TransferId, fun(OldTransfer) ->
                 {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
@@ -840,7 +843,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    10.
+    11.
 
 %%--------------------------------------------------------------------
 %% @doc

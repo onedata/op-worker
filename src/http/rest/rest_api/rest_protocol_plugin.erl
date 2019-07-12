@@ -59,7 +59,10 @@ routes() ->
             handler_initial_opts => #{resource_type => share_id}}},
 
         {"/api/v3/oneprovider/transfers/:id", #{handler => transfer_by_id}},
-        {"/api/v3/oneprovider/transfers/:id/rerun", #{handler => transfer_by_id}}
+        {"/api/v3/oneprovider/transfers/:id/rerun", #{handler => transfer_by_id}},
+        {"/api/v3/oneprovider/qos/[...]", #{handler => qos}},
+        {"/api/v3/oneprovider/qos-id/:id", #{handler => qos}},
+        {"/api/v3/oneprovider/qos-public-id/:qid", #{handler => qos_by_public_id}}
 ].
 
 

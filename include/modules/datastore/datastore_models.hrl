@@ -253,6 +253,30 @@
     last_stat :: undefined | non_neg_integer()
 }).
 
+% This model holds information about QoS defined for given file. Each file
+% can be related with at most one such record. The value of file_qos for
+% particular file should be calculated using effective value (see file_qos.erl)
+-record(file_qos, {
+    % List containing QoS Ids defined for given file.
+    qos_list = [] :: file_qos:qos_list(),
+    % Mapping storage ID -> List containing QoS Ids that requires file replica
+    % on this storage
+    target_storages = #{} :: file_qos:target_storages()
+}).
+
+% This model holds information about single QoS, that is QoS requirement
+% defined by the user for file or directory through QoS expression and
+% number of required replicas. Each such requirement creates new qos_item
+% document even if expressions are exactly the same. For each file / directory
+% multiple qos_item can be defined.
+-record(qos_item, {
+    file_guid :: file_id:guid(),
+    expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
+    replicas_num = 1 :: qos_item:replicas_num(), % Required number of file replicas.
+    status = undefined :: qos_item:status(),
+    traverse_task_status = undefined :: qos_item:traverse_task_status()
+}).
+
 -record(file_meta, {
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
@@ -621,7 +645,11 @@
     index_name :: transfer:index_name(),
     % query_view_params are directly passed to couchbase
     % if index_id is undefined query_view_params are ignored
-    query_view_params = [] :: transfer:query_view_params()
+    query_view_params = [] :: transfer:query_view_params(),
+
+    % PID of process that created this transfer and waits for its completion
+    % to fulfill QoS
+    qos_job_pid = undefined :: binary() | undefined
 }).
 
 %% Model that tracks what files are currently transferred

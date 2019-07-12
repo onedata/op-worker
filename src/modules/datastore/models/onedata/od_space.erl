@@ -87,6 +87,7 @@ run_after(update, [_, _, _, _], Result = {ok, SpaceDoc = #document{key = SpaceId
 run_after(save, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
+    ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
     emit_monitoring_event(SpaceDoc),
     maybe_revise_space_harvesters(SpaceDoc),
     Result;

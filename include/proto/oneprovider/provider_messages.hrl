@@ -67,7 +67,8 @@
     block :: undefined | #file_block{},
     callback :: transfer:callback(),
     index_name :: transfer:index_name(),
-    query_view_params :: transfer:query_view_params()
+    query_view_params :: transfer:query_view_params(),
+    qos_job_pid :: undefined | pid()
 }).
 
 -record(schedule_replica_invalidation, {
@@ -109,6 +110,23 @@
 -record(remove_share, {
 }).
 
+% messages for adding, listing, getting and removing qos
+-record(add_qos, {
+    expression :: binary(),
+    replicas_num :: qos_item:replicas_num()
+}).
+
+-record(get_effective_file_qos, {
+}).
+
+-record(get_qos, {
+    id :: qos_item:id()
+}).
+
+-record(remove_qos, {
+    id :: qos_item:id()
+}).
+
 -type provider_request_type() ::
 #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
 #get_transfer_encoding{} | #set_transfer_encoding{} |
@@ -116,7 +134,8 @@
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
 #get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
 #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
-#create_share{} | #remove_share{}.
+#create_share{} | #remove_share{} |
+#add_qos{} | #get_effective_file_qos{} | #get_qos{} | #remove_qos{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -157,10 +176,26 @@
     transfer_id :: transfer:id()
 }).
 
+-record(qos_id, {
+    id :: qos_item:id()
+}).
+
+-record(get_qos_resp, {
+    file_guid :: file_meta:uuid(),
+    expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
+    replicas_num = 1 :: qos_item:replicas_num(), % Number of required file replicas.
+    status = undefined :: qos_item:status()
+}).
+
+-record(effective_file_qos, {
+    qos_list = [] :: file_qos:qos_list(),
+    target_storages = #{} :: file_qos:target_storages()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | undefined.
+    #scheduled_transfer{} | #qos_id{} | #get_qos_resp{} | #effective_file_qos{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

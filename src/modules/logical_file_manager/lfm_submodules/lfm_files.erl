@@ -19,7 +19,7 @@
 %% API
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2,
-    get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4,
+    get_file_guid/2, schedule_file_replication/5, schedule_replica_eviction/4,
     schedule_replication_by_index/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
@@ -146,14 +146,15 @@ get_file_guid(SessId, FilePath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id(), transfer:callback()) ->
+    ProviderId :: oneprovider:id(), transfer:callback(), pid() | undefined) ->
     {ok, transfer:id()} | logical_file_manager:error_reply().
-schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
+schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #schedule_file_replication{
             target_provider_id = TargetProviderId,
-            callback = Callback
+            callback = Callback,
+            qos_job_pid = QosJobPID
         },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->
             {ok, TransferId}

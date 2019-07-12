@@ -288,6 +288,17 @@
     <<"error_ambiguous_index_name">>,
     <<"Given index could not be found.">>)
 ).
+-define(ERROR_INVALID_REPLICAS_NUM, ?ERROR_REPLY(
+    ?HTTP_400_BAD_REQUEST,
+    <<"error_invalid_replicas_num">>,
+    <<"Replicas number must be positive integer.">>)
+).
+-define(ERROR_INVALID_QOS_EXPRESSION, ?ERROR_REPLY(
+    ?HTTP_400_BAD_REQUEST,
+    <<"error_invalid_qos_expression">>,
+    <<"Given qos expression is not valid.">>)
+).
+
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, ?ERROR_REPLY(

@@ -14,6 +14,7 @@
 -module(fslogic_worker).
 -behaviour(worker_plugin_behaviour).
 
+-include("modules/datastore/qos.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -22,7 +23,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
--export([init/1, handle/1, cleanup/0]).
+-export([init/1, handle/1, cleanup/0, schedule_init_qos_cache_for_space/1]).
 -export([init_counters/0, init_report/0]).
 
 %%%===================================================================
@@ -54,6 +55,8 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
+-define(INIT_QOS_CACHE, init_qos_cache).
+-define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
@@ -93,8 +96,12 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     transfer:init(),
+    qos_traverse:init_pool(),
+    qos_bounded_cache:init_group(),
+
     clproto_serializer:load_msg_defs(),
 
+    schedule_init_qos_cache_for_all_spaces(),
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
@@ -155,6 +162,12 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
             ok
     end,
     schedule_periodical_spaces_autocleaning_check();
+handle(?INIT_QOS_CACHE) ->
+    ?debug("Initializing qos bounded cache for all spaces"),
+    init_qos_cache_for_all_spaces();
+handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
+    ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
+    init_qos_cache_for_space(SpaceId);
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -446,10 +459,10 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    index_name = IndexName, query_view_params = QueryViewParams
+    index_name = IndexName, query_view_params = QueryViewParams, qos_job_pid = QosJobPID
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, IndexName, QueryViewParams
+        Callback, IndexName, QueryViewParams, QosJobPID
     );
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
@@ -498,7 +511,15 @@ handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
 handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
 handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx).
+    share_req:remove_share(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #add_qos{expression = Expression, replicas_num = ReplicasNum}, FileCtx) ->
+    qos_req:add_qos(UserCtx, FileCtx, Expression, ReplicasNum);
+handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
+    qos_req:get_file_qos(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #get_qos{id = QosId}, FileCtx) ->
+    qos_req:get_qos_details(UserCtx, FileCtx, QosId);
+handle_provider_request(UserCtx, #remove_qos{id = QosId}, FileCtx) ->
+    qos_req:remove_qos(UserCtx, FileCtx, QosId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -603,6 +624,15 @@ schedule_restart_autocleaning_runs() ->
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL).
 
+-spec schedule_init_qos_cache_for_all_spaces() -> ok.
+schedule_init_qos_cache_for_all_spaces() ->
+    schedule(?INIT_QOS_CACHE, 0).
+
+-spec schedule_init_qos_cache_for_space(od_space:id()) -> ok.
+schedule_init_qos_cache_for_space(SpaceId) ->
+    erlang:send_after(0, fslogic_worker, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
+    ok.
+
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
     erlang:send_after(Timeout, self(), {sync_timer, Request}),
@@ -668,4 +698,31 @@ restart_autocleaning_runs() ->
     catch
         Error2:Reason ->
             ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+    end.
+
+-spec init_qos_cache_for_all_spaces() -> ok.
+init_qos_cache_for_all_spaces() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) ->
+                qos_bounded_cache:init(SpaceId)
+            end, SpaceIds);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            schedule_init_qos_cache_for_all_spaces();
+        ?ERROR_NO_CONNECTION_TO_OZ ->
+            schedule_init_qos_cache_for_all_spaces();
+        Error = {error, _} ->
+            ?error("Unable to initialize qos bounded cache due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+    end.
+
+-spec init_qos_cache_for_space(od_space:id()) -> ok.
+init_qos_cache_for_space(SpaceId) ->
+    try
+        qos_bounded_cache:init(SpaceId)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error, Reason}])
     end.

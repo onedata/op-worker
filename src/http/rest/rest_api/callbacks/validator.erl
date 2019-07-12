@@ -42,7 +42,9 @@
 
     parse_index_name/2, parse_update_min_changes/2,
     parse_replica_update_min_changes/2,
-    parse_index_providers/2, parse_index_providers/3
+    parse_index_providers/2, parse_index_providers/3,
+
+    parse_add_qos_body/2, parse_qos_id/2
 ]).
 
 %% TODO VFS-2574 Make validation of result map
@@ -610,6 +612,44 @@ parse_start_range(Req, State) ->
 parse_end_range(Req, State) ->
     {Val, NewReq} = qs_val(<<"end_range">>, Req),
     {State#{end_range => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's qos expression and replicas num params and
+%% adds them to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_add_qos_body(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_add_qos_body(Req, State) ->
+    {ok, Body, NewReq} = cowboy_req:read_body(Req),
+    Json = json_utils:decode(Body),
+    case Json of
+        #{<<"qos_expression">> := QosExpression, <<"replicas_num">> := Value} ->
+            try binary_to_integer(Value) of
+                ReplicasNum when ReplicasNum > 0 ->
+                    {State#{qos_expression => QosExpression, replicas_num => ReplicasNum}, NewReq};
+                _ ->
+                    throw(?ERROR_INVALID_REPLICAS_NUM)
+            catch
+                _:_ ->
+                    throw(?ERROR_INVALID_REPLICAS_NUM)
+            end;
+        #{<<"qos_expression">> := QosExpression} ->
+            {State#{qos_expression => QosExpression, replicas_num => 1}, NewReq};
+        _ ->
+            throw(?ERROR_INVALID_QOS_EXPRESSION)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's qos_id and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_qos_id(cowboy_req:req(), maps:map()) ->
+    {parse_result(), cowboy_req:req()}.
+parse_qos_id(Req, State) ->
+    {State#{qos_id => cowboy_req:binding(qid, Req)}, Req}.
 
 %%--------------------------------------------------------------------
 %% @doc

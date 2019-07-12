@@ -1219,7 +1219,7 @@ out_of_range(Config) ->
     %%------------------------------
 
     %%------ writing at random -------- (should return zero bytes in any gaps)
-%%     RequestBody3 = json_utils:encode(#{<<"value">> => base64:encode(<<"data">>)}), todo fix https://jira.plgrid.pl/jira/browse/VFS-1443 and uncomment
+%%     RequestBody3 = json_utils:encode(#{<<"value">> => base64:encode(<<"data">>)}), todo fix https://jira.onedata.org/jira/browse/VFS-1443 and uncomment
 %%     {ok, Code3, _Headers3, _Response3} = do_request(Workers, FileName ++ "?value:10-13", put, RequestHeaders2, RequestBody3),
 %%     ?assertEqual(204, Code3),
 %%
