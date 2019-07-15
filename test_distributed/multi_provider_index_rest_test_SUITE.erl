@@ -28,6 +28,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 
 %% API
@@ -137,9 +138,11 @@ end).
 -define(INDEX@(IndexName, ProviderId),
     <<IndexName/binary, "@", (ProviderId)/binary >>).
 
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
 
 create_get_update_delete_index(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -147,17 +150,41 @@ create_get_update_delete_index(Config) ->
     Provider2 = ?PROVIDER_ID(WorkerP2),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
+    UserId = <<"user1">>,
 
-    % create index
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    AllPrivs = privileges:space_privileges(),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    %% CREATE
+
     Options1 = #{<<"update_min_changes">> => 10000},
+
+    % creating index without SPACE_MANAGE_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    ?assertMatch(ErrorForbidden, create_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
+    )),
+    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+
+    % creating index with SPACE_MANAGE_INDICES privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
     )),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    % get on both
+    %% GET
+
+    % viewing index without SPACE_VIEW_INDICES should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_VIEW_INDICES]),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch(ErrorForbidden, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % viewing index with SPACE_VIEW_INDICES should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_VIEW_INDICES]),
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
@@ -169,8 +196,32 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % update index without overriding map function
+    %% UPDATE
+
     Options2 = #{<<"replica_update_min_changes">> => 100},
+
+    % updating index without SPACE_MANAGE_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    ?assertMatch(ErrorForbidden, update_index_via_rest(
+        Config, WorkerP1, ?SPACE_ID, IndexName,
+        <<>>, Options2#{providers => [Provider2]}
+    )),
+    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % assert nothing was changed
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := Options1,
+            <<"providers">> := [Provider1],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % updating index (without overriding map function) with SPACE_MANAGE_INDICES privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
         <<>>, Options2#{providers => [Provider2]}
@@ -189,7 +240,7 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % update index with overriding map function
+    % updating index (with overriding map function) with SPACE_MANAGE_INDICES privilege should succeed
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName, ?GEOSPATIAL_MAP_FUNCTION, #{}
     )),
@@ -208,10 +259,20 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % delete on other provider
+    %% DELETE
+
+    % deleting index without SPACE_MANAGE_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    ?assertMatch(ErrorForbidden, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
+    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % deleting index with SPACE_MANAGE_INDICES privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
     ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+
 
 creating_index_with_invalid_params_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -245,6 +306,7 @@ creating_index_with_invalid_params_should_fail(Config) ->
         {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ok">>)},
         {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ASD">>)}
     ]).
+
 
 updating_index_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1 | _] = ?config(op_worker_nodes, Config),
@@ -297,6 +359,7 @@ updating_index_with_invalid_params_should_fail(Config) ->
         {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ok">>)},
         {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ASD">>)}
     ]).
+
 
 overwriting_index_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -353,11 +416,16 @@ overwriting_index_should_fail(Config) ->
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
+
 create_get_delete_reduce_fun(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
+    UserId = <<"user1">>,
+
+    AllPrivs = privileges:space_privileges(),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
     % create on one provider
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
@@ -379,7 +447,29 @@ create_get_delete_reduce_fun(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % add reduce function on other provider
+    %% CREATE
+
+    % adding index reduce fun without SPACE_MANAGE_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    ?assertMatch(ErrorForbidden, add_reduce_fun_via_rest(
+        Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
+    )),
+    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+
+    % index should not change
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := null,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % adding index reduce fun with SPACE_MANAGE_INDICES privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
     ?assertMatch(ok, add_reduce_fun_via_rest(
         Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
     )),
@@ -398,7 +488,25 @@ create_get_delete_reduce_fun(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % remove reduce function
+    %% DELETE
+
+    % deleting index reduce fun without SPACE_MANAGE_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    ?assertMatch(ErrorForbidden, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
+
+    % reduce fun should stay
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, #{
+            <<"indexOptions">> := #{},
+            <<"providers">> := [Provider1],
+            <<"mapFunction">> := ExpMapFun,
+            <<"reduceFunction">> := ExpReduceFun,
+            <<"spatial">> := false
+        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+    end, Workers),
+
+    % deleting index reduce fun with SPACE_MANAGE_INDICES privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
     ?assertMatch(ok, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -419,6 +527,7 @@ create_get_delete_reduce_fun(Config) ->
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
+
 getting_nonexistent_index_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
@@ -429,6 +538,7 @@ getting_nonexistent_index_should_fail(Config) ->
             Config, Worker, ?SPACE_ID, IndexName
         ))
     end, Workers).
+
 
 getting_index_of_not_supported_space_should_fail(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -457,10 +567,14 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         Config, WorkerP1, SpaceId, IndexName
     )).
 
+
 list_indices(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     IndexNum = 20,
     Chunk = rand:uniform(IndexNum),
+
+    AllPrivs = privileges:space_privileges(),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk)),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk)),
@@ -476,19 +590,28 @@ list_indices(Config) ->
     end, lists:seq(1, IndexNum))),
 
     ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
-    ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
+    ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS),
+
+    % listing indices without SPACE_VIEW_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, <<"user1">>, AllPrivs -- [?SPACE_VIEW_INDICES]),
+    ?assertMatch(ErrorForbidden, list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
+    ?assertMatch(ErrorForbidden, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
+
 
 query_index(Config) ->
-    [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
+    UserId = <<"user1">>,
 
+    AllPrivs = privileges:space_privileges(),
     Query = query_filter(Config, SpaceId, IndexName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
-    ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
+    ErrorNotFound = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
     ExpGuids = lists:sort(Guids),
 
     % support index only by one provider; other should return error on query
@@ -496,7 +619,7 @@ query_index(Config) ->
         Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP2)], #{}
     )),
-    ?assertMatch(ExpError, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertMatch(ErrorNotFound, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
     % support index on both providers and check that they returns correct results
@@ -513,17 +636,23 @@ query_index(Config) ->
         Config, WorkerP2, SpaceId, IndexName, <<>>,
         #{providers => [?PROVIDER_ID(WorkerP2)]}
     )),
-    ?assertEqual(ExpError, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual(ErrorNotFound, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertMatch(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % lastly add index again on both providers and check that they
+    % add index again on both providers and check that they
     % returns correct results
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName, <<>>,
         #{providers => [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
-    ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS).
+    ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
+
+    % querying index without SPACE_QUERY_INDICES privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_QUERY_INDICES]),
+    ?assertEqual(ErrorForbidden, Query(WorkerP1, #{}), ?ATTEMPTS),
+    ?assertEqual(ErrorForbidden, Query(WorkerP2, #{}), ?ATTEMPTS).
+
 
 quering_index_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -585,6 +714,7 @@ quering_index_with_invalid_params_should_fail(Config) ->
         {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)}
     ]).
 
+
 create_geospatial_index(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     IndexName = ?INDEX_NAME(?FUNCTION_NAME),
@@ -604,6 +734,7 @@ create_geospatial_index(Config) ->
             <<"spatial">> := true
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers).
+
 
 query_geospatial_index(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
@@ -642,6 +773,7 @@ query_geospatial_index(Config) ->
         ?assertEqual(lists:sort([Guid1, Guid2]), Query(Worker, QueryOptions2), ?ATTEMPTS)
     end, Workers).
 
+
 query_file_popularity_index(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -651,6 +783,7 @@ query_file_popularity_index(Config) ->
         stale => false
     },
     ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, Options)).
+
 
 spatial_flag_test(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
@@ -666,6 +799,7 @@ spatial_flag_test(Config) ->
     ?assertMatch({404, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [])),
     ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
     ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [{spatial, true}])).
+
 
 file_removal_test(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -693,6 +827,7 @@ file_removal_test(Config) ->
     % they should not be included in query results any more
     ?assertEqual([], Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual([], Query(WorkerP1, #{}), ?ATTEMPTS).
+
 
 create_duplicated_indices_on_remote_providers(Config) ->
     [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
@@ -851,9 +986,11 @@ create_duplicated_indices_on_remote_providers(Config) ->
     ?assertEqual(ExpError, Query@P1Short(WorkerP3, #{}), ?ATTEMPTS),
     ?assertEqual(ExpError, Query@P2Short(WorkerP3, #{}), ?ATTEMPTS).
 
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
@@ -888,6 +1025,16 @@ end_per_suite(Config) ->
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
+init_per_testcase(Case, Config) when
+    Case =:= create_get_update_delete_index;
+    Case =:= create_get_delete_reduce_fun;
+    Case =:= list_indices;
+    Case =:= query_index
+->
+    [WorkerP1, _| _] = ?config(op_worker_nodes, Config),
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [?SPACE_ID, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
+
 init_per_testcase(query_file_popularity_index, Config) ->
     Config2 = sort_workers(Config),
     [WorkerP1, WorkerP2| _] = ?config(op_worker_nodes, Config2),
@@ -898,6 +1045,18 @@ init_per_testcase(query_file_popularity_index, Config) ->
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     lfm_proxy:init(sort_workers(Config)).
+
+end_per_testcase(Case, Config) when
+    Case =:= create_get_update_delete_index;
+    Case =:= create_get_delete_reduce_fun;
+    Case =:= list_indices;
+    Case =:= query_index
+->
+    UserId = <<"user1">>,
+    Workers = ?config(op_worker_nodes, Config),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, OldPrivs),
+    end_per_testcase(all, Config);
 
 end_per_testcase(query_file_popularity_index, Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
@@ -1017,19 +1176,27 @@ query_index_via_rest(Config, Worker, SpaceId, IndexName, Options) ->
     end.
 
 list_indices_via_rest(Config, Worker, Space, ChunkSize) ->
-    Result = list_indices_via_rest(Config, Worker, Space, ChunkSize, <<"null">>, []),
-    % Make sure there are no duplicates
-    ?assertEqual(lists:sort(Result), lists:usort(Result)),
-    Result.
+    case list_indices_via_rest(Config, Worker, Space, ChunkSize, <<"null">>, []) of
+        Result when is_list(Result) ->
+            % Make sure there are no duplicates
+            ?assertEqual(lists:sort(Result), lists:usort(Result)),
+            Result;
+        Error ->
+            Error
+    end.
 
 list_indices_via_rest(Config, Worker, Space, ChunkSize, StartId, Acc) ->
-    {Indices, NextPageToken} = list_indices_via_rest(Config, Worker, Space, StartId, ChunkSize),
-    case NextPageToken of
-        <<"null">> ->
-            Acc ++ Indices;
-        _ ->
-            ?assertMatch(ChunkSize, length(Indices)),
-            list_indices_via_rest(Config, Worker, Space, ChunkSize, NextPageToken, Acc ++ Indices)
+    case list_indices_via_rest(Config, Worker, Space, StartId, ChunkSize) of
+        {ok, {Indices, NextPageToken}} ->
+            case NextPageToken of
+                <<"null">> ->
+                    Acc ++ Indices;
+                _ ->
+                    ?assertMatch(ChunkSize, length(Indices)),
+                    list_indices_via_rest(Config, Worker, Space, ChunkSize, NextPageToken, Acc ++ Indices)
+            end;
+        Error ->
+            Error
     end.
 
 list_indices_via_rest(Config, Worker, Space, StartId, LimitOrUndef) ->
@@ -1046,13 +1213,15 @@ list_indices_via_rest(Config, Worker, Space, StartId, LimitOrUndef) ->
     Url = str_utils:format_bin("spaces/~s/indices?~s~s", [
         Space, TokenParam, LimitParam
     ]),
-    {ok, _, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
-        Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>
-    )),
-    ParsedBody = json_utils:decode(Body),
-    Indices = maps:get(<<"indices">>, ParsedBody),
-    NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
-    {Indices, NextPageToken}.
+    case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of
+        {ok, 200, _, Body} ->
+            ParsedBody = json_utils:decode(Body),
+            Indices = maps:get(<<"indices">>, ParsedBody),
+            NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
+            {ok, {Indices, NextPageToken}};
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
 
 remove_all_indices(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
