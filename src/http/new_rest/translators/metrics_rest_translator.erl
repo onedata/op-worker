@@ -29,4 +29,4 @@
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, Metrics) ->
-    rest_translator:ok_body_reply(Metrics).
+    ?OK_REPLY(Metrics).

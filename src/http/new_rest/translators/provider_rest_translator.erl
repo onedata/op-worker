@@ -29,4 +29,4 @@
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, Configuration) ->
-    rest_translator:ok_body_reply(Configuration).
+    ?OK_REPLY(Configuration).

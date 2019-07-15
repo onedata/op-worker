@@ -69,4 +69,15 @@
 -define(HTTP_501_NOT_IMPLEMENTED, 501).
 -define(HTTP_503_SERVICE_UNAVAILABLE, 503).
 
+% Convenience macros used for constructing REST replies
+-define(OK_REPLY(__Body), #rest_resp{code = ?HTTP_200_OK, body = __Body}).
+-define(NO_CONTENT_REPLY, #rest_resp{code = ?HTTP_204_NO_CONTENT}).
+-define(CREATED_REPLY(__PathTokens, __Body), #rest_resp{
+    code = ?HTTP_200_OK,
+    headers = #{<<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(
+        string:trim(filename:join([<<"/">> | __PathTokens]), leading, [$/])
+    ))},
+    body = __Body
+}).
+
 -endif.

@@ -7,6 +7,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-5621
 %%% This module handles translation of request results to REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -15,9 +16,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include("http/rest/rest.hrl").
--include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -25,14 +24,6 @@
 %% API
 -export([response/2, error_response/1]).
 
-%% Convenience functions for rest translators
--export([
-    created_reply/2,
-    ok_no_content_reply/0,
-    ok_body_reply/1,
-    updated_reply/0,
-    deleted_reply/0
-]).
 
 %%%===================================================================
 %%% API
@@ -44,7 +35,7 @@ response(_, {error, _} = Err) ->
     error_response(Err);
 response(#op_req{operation = create}, ok) ->
     % No need for translation, 'ok' means success with no response data
-    rest_translator:ok_no_content_reply();
+    ?NO_CONTENT_REPLY;
 response(#op_req{operation = create} = OpReq, {ok, DataFormat, Result}) ->
     #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = OpReq,
     Translator = entity_type_to_translator(Model),
@@ -54,9 +45,9 @@ response(#op_req{operation = get} = OpReq, {ok, Data}) ->
     Translator = entity_type_to_translator(Model),
     Translator:get_response(GRI, Data);
 response(#op_req{operation = update}, ok) ->
-    updated_reply();
+    ?NO_CONTENT_REPLY;
 response(#op_req{operation = delete}, ok) ->
-    deleted_reply();
+    ?NO_CONTENT_REPLY;
 response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
     #op_req{gri = GRI = #gri{type = Model}} = OpReq,
     Translator = entity_type_to_translator(Model),
@@ -81,67 +72,6 @@ error_response({error, Type}) ->
         {Code, MessageBinary} ->
             #rest_resp{code = Code, body = #{<<"error">> =>  MessageBinary}}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% REST reply that should be used for successful REST operations that send
-%% a body in response.
-%% @end
-%%--------------------------------------------------------------------
--spec ok_body_reply(json_utils:json_term()) -> #rest_resp{}.
-ok_body_reply(Body) ->
-    #rest_resp{code = ?HTTP_200_OK, body = Body}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% REST reply that should be used for successful REST operations that do not
-%% send any body in response.
-%% @end
-%%--------------------------------------------------------------------
--spec ok_no_content_reply() -> #rest_resp{}.
-ok_no_content_reply() ->
-    #rest_resp{code = ?HTTP_204_NO_CONTENT}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% REST reply that should be used for successful create REST calls.
-%% Returns 201 CREATED with proper location headers.
-%% @end
-%%--------------------------------------------------------------------
--spec created_reply(PathTokens :: [binary()], json_utils:json_term()) ->
-    #rest_resp{}.
-% Make sure there is no leading slash (so filename can be used for joining path)
-created_reply([<<"/", Path/binary>> | Tail], Body) ->
-    created_reply([Path | Tail], Body);
-created_reply(PathTokens, Body) ->
-    <<"/", Path/binary>> = filename:join([<<"/">> | PathTokens]),
-    LocationHeader = #{
-        <<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(Path))
-    },
-    #rest_resp{code = ?HTTP_200_OK, headers = LocationHeader, body = Body}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% REST reply that should be used for successful REST updates.
-%% @end
-%%--------------------------------------------------------------------
--spec updated_reply() -> #rest_resp{}.
-updated_reply() ->
-    #rest_resp{code = ?HTTP_204_NO_CONTENT}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% REST reply that should be used for successful REST deletions.
-%% @end
-%%--------------------------------------------------------------------
--spec deleted_reply() -> #rest_resp{}.
-deleted_reply() ->
-    #rest_resp{code = ?HTTP_204_NO_CONTENT}.
 
 
 %%%===================================================================

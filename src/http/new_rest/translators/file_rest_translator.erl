@@ -30,6 +30,6 @@
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = rdf_metadata}, Metadata) ->
-    rest_translator:ok_body_reply({binary, Metadata});
+    ?OK_REPLY({binary, Metadata});
 get_response(_, Metadata) ->
-    rest_translator:ok_body_reply(Metadata).
+    ?OK_REPLY(Metadata).

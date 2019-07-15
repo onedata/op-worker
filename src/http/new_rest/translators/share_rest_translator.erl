@@ -30,8 +30,8 @@
     op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = shared_dir}, _, value, ShareId) ->
-    Path = [<<"shares-id">>, ShareId],
-    rest_translator:created_reply(Path, #{<<"shareId">> => ShareId}).
+    PathTokens = [<<"shares-id">>, ShareId],
+    ?CREATED_REPLY(PathTokens, #{<<"shareId">> => ShareId}).
 
 
 %%--------------------------------------------------------------------
@@ -41,4 +41,4 @@ create_response(#gri{aspect = shared_dir}, _, value, ShareId) ->
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, ShareData) ->
-    rest_translator:ok_body_reply(ShareData).
+    ?OK_REPLY(ShareData).

@@ -32,11 +32,11 @@
     op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, TransferId) ->
-    Path = [<<"transfers">>, TransferId],
-    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId});
+    PathTokens = [<<"transfers">>, TransferId],
+    ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});
 create_response(#gri{aspect = replicate_by_index}, _, value, TransferId) ->
-    Path = [<<"transfers">>, TransferId],
-    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId}).
+    PathTokens = [<<"transfers">>, TransferId],
+    ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
 
 
 %%--------------------------------------------------------------------
@@ -46,7 +46,7 @@ create_response(#gri{aspect = replicate_by_index}, _, value, TransferId) ->
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, ReplicaData) ->
-    rest_translator:ok_body_reply(ReplicaData).
+    ?OK_REPLY(ReplicaData).
 
 
 %%--------------------------------------------------------------------
@@ -58,8 +58,8 @@ get_response(_, ReplicaData) ->
     Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 delete_response(#gri{aspect = instance}, value, TransferId) ->
-    Path = [<<"transfers">>, TransferId],
-    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId});
+    PathTokens = [<<"transfers">>, TransferId],
+    ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});
 delete_response(#gri{aspect = evict_by_index}, value, TransferId) ->
-    Path = [<<"transfers">>, TransferId],
-    rest_translator:created_reply(Path, #{<<"transferId">> => TransferId}).
+    PathTokens = [<<"transfers">>, TransferId],
+    ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
