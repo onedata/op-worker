@@ -18,10 +18,13 @@
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include("op_logic.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 
 %% API
@@ -29,8 +32,8 @@
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 -export([
-    list_transfers/5, get_transfers_for_file/1,
-    rerun_transfer/2, cancel_transfer/1
+    list_transfers/6, get_transfers_for_file/1,
+    rerun_transfer/2, cancel_transfer/2
 ]).
 
 %%%===================================================================
@@ -65,16 +68,42 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"transfer">>, StateAndTransferId) ->
-    transfer_record(StateAndTransferId);
+    {ok, TransferPropList} = Result = transfer_record(StateAndTransferId),
+    SpaceId = proplists:get_value(<<"space">>, TransferPropList),
+    case has_transfers_view_privilege(SpaceId) of
+        true ->
+            Result;
+        false ->
+            op_gui_error:unauthorized()
+    end;
 
-find_record(<<"on-the-fly-transfer">>, TransferId) ->
-    on_the_fly_transfer_record(TransferId);
+find_record(<<"on-the-fly-transfer">>, RecordId) ->
+    {_, SpaceId} = op_gui_utils:association_to_ids(RecordId),
+    case has_transfers_view_privilege(SpaceId) of
+        true ->
+            on_the_fly_transfer_record(RecordId);
+        false ->
+            op_gui_error:unauthorized()
+    end;
 
 find_record(<<"transfer-time-stat">>, StatId) ->
     transfer_time_stat_record(StatId);
 
 find_record(<<"transfer-current-stat">>, TransferId) ->
-    transfer_current_stat_record(TransferId).
+    case transfer:get(TransferId) of
+        {ok, #document{value = #transfer{space_id = SpaceId}} = Doc} ->
+            case has_transfers_view_privilege(SpaceId) of
+                true ->
+                    transfer_current_stat_record(Doc);
+                false ->
+                    op_gui_error:unauthorized()
+            end;
+        {error, Reason} ->
+            ?error("Failed to fetch transfer rec ~p due to: ~p", [
+                TransferId, Reason
+            ]),
+            op_gui_error:internal_server_error()
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -119,12 +148,12 @@ query_record(_ResourceType, _Data) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
 create_record(<<"transfer">>, Data) ->
     SessionId = op_gui_session:get_session_id(),
+    {ok, UserId} = session:get_user_id(SessionId),
+
     FileGuid = proplists:get_value(<<"dataSourceIdentifier">>, Data),
     ReplicatingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"replicatingProvider">>, Data
     )),
-
-        
 
     EvictingProvider = gs_protocol:null_to_undefined(proplists:get_value(
         <<"evictingProvider">>, Data
@@ -138,22 +167,37 @@ create_record(<<"transfer">>, Data) ->
 
     Result = case TransferType of
         replication ->
-            lfm:schedule_file_replication(
-                SessionId, {guid, FileGuid}, ReplicatingProvider
-            );
-        Type when Type == eviction orelse Type == migration ->
-            lfm:schedule_replica_eviction(
-                SessionId, {guid, FileGuid},
-                EvictingProvider, ReplicatingProvider
-            )
+            op_logic:handle(#op_req{
+                operation = create,
+                client = #client{type = user, id = UserId, session_id = SessionId},
+                gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
+                data = #{<<"provider_id">> => ReplicatingProvider}
+            });
+        eviction ->
+            op_logic:handle(#op_req{
+                operation = delete,
+                client = #client{type = user, id = UserId, session_id = SessionId},
+                gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
+                data = #{<<"provider_id">> => EvictingProvider}
+            });
+        migration ->
+            op_logic:handle(#op_req{
+                operation = delete,
+                client = #client{type = user, id = UserId, session_id = SessionId},
+                gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
+                data = #{
+                    <<"provider_id">> => EvictingProvider,
+                    <<"migration_provider_id">> => ReplicatingProvider
+                }
+            })
     end,
 
     case Result of
-        {ok, TransferId} ->
+        {ok, value, TransferId} ->
             transfer_record(op_gui_utils:ids_to_association(
                 ?WAITING_TRANSFERS_STATE, TransferId
             ));
-        {error, ?EACCES} ->
+        ?ERROR_FORBIDDEN ->
             op_gui_error:unauthorized();
         {error, Error} ->
             ?error("Failed to schedule transfer{"
@@ -198,17 +242,33 @@ delete_record(_ResourceType, _Id) ->
 %% Cancel transfer of given id.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_transfer(binary()) -> ok | op_gui_error:error_result().
-cancel_transfer(StateAndTransferId) ->
+-spec cancel_transfer(session:id(), binary()) ->
+    ok | op_gui_error:error_result().
+cancel_transfer(SessionId, StateAndTransferId) ->
     {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
-    case transfer:cancel(TransferId) of
+    {ok, UserId} = session:get_user_id(SessionId),
+
+    Result = op_logic:handle(#op_req{
+        operation = delete,
+        client = #client{type = user, id = UserId, session_id = SessionId},
+        gri = #gri{type = op_transfer, id = TransferId, aspect = instance}
+    }),
+
+    case Result of
         ok ->
             ok;
+        ?ERROR_FORBIDDEN ->
+            op_gui_error:unauthorized();
         {error, already_ended} ->
             op_gui_error:report_error(<<
                 "Given transfer could not be cancelled "
                 "because it has already ended."
-            >>)
+            >>);
+        {error, Reason} ->
+            ?error("User ~p failed to cancel transfer ~p due to: ~p", [
+                UserId, TransferId, Reason
+            ]),
+            op_gui_error:internal_server_error()
     end.
 
 
@@ -222,18 +282,32 @@ cancel_transfer(StateAndTransferId) ->
 rerun_transfer(SessionId, StateAndTransferId) ->
     {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     {ok, UserId} = session:get_user_id(SessionId),
-    case transfer:rerun_ended(UserId, TransferId) of
-        {ok, NewTransferId} ->
+
+    Result = op_logic:handle(#op_req{
+        operation = create,
+        client = #client{type = user, id = UserId, session_id = SessionId},
+        gri = #gri{type = op_transfer, id = TransferId, aspect = rerun}
+    }),
+
+    case Result of
+        {ok, value, NewTransferId} ->
             {ok, [
                 {<<"id">>, op_gui_utils:ids_to_association(
                     ?WAITING_TRANSFERS_STATE, NewTransferId
                 )}
             ]};
+        ?ERROR_FORBIDDEN ->
+            op_gui_error:unauthorized();
         {error, not_ended} ->
             op_gui_error:report_error(<<
                 "Given transfer could not be rerun "
                 "because it has not ended yet."
-            >>)
+            >>);
+        {error, Reason} ->
+            ?error("User ~p failed to rerun transfer ~p due to: ~p", [
+                UserId, TransferId, Reason
+            ]),
+            op_gui_error:internal_server_error()
     end.
 
 
@@ -243,23 +317,29 @@ rerun_transfer(SessionId, StateAndTransferId) ->
 %% can be provided.
 %% @end
 %%--------------------------------------------------------------------
--spec list_transfers(od_space:id(), State :: binary(),
+-spec list_transfers(session:id(), od_space:id(), State :: binary(),
     StartFromIndex :: null | transfer_links:link_key(),
     Offset :: integer(), Limit :: transfer:list_limit()) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
-list_transfers(SpaceId, State, StartFromIndex, Offset, Limit) ->
-    StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
-    {ok, TransferIds} = case State of
-        ?WAITING_TRANSFERS_STATE ->
-            transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
-        ?ONGOING_TRANSFERS_STATE ->
-            transfer:list_ongoing_transfers(SpaceId, StartFromLink, Offset, Limit);
-        ?ENDED_TRANSFERS_STATE ->
-            transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
-    end,
-    {ok, [
-        {<<"list">>, [op_gui_utils:ids_to_association(State, TId) || TId <- TransferIds]}
-    ]}.
+list_transfers(SessionId, SpaceId, State, StartFromIndex, Offset, Limit) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS) of
+        true ->
+            StartFromLink = gs_protocol:null_to_undefined(StartFromIndex),
+            {ok, TransferIds} = case State of
+                ?WAITING_TRANSFERS_STATE ->
+                    transfer:list_waiting_transfers(SpaceId, StartFromLink, Offset, Limit);
+                ?ONGOING_TRANSFERS_STATE ->
+                    transfer:list_ongoing_transfers(SpaceId, StartFromLink, Offset, Limit);
+                ?ENDED_TRANSFERS_STATE ->
+                    transfer:list_ended_transfers(SpaceId, StartFromLink, Offset, Limit)
+            end,
+            {ok, [
+                {<<"list">>, [op_gui_utils:ids_to_association(State, TId) || TId <- TransferIds]}
+            ]};
+        false ->
+            op_gui_error:unauthorized()
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -272,21 +352,35 @@ list_transfers(SpaceId, State, StartFromIndex, Offset, Limit) ->
 -spec get_transfers_for_file(fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
 get_transfers_for_file(FileGuid) ->
-    {ok, #{
-        ongoing := Ongoing,
-        ended := Ended
-    }} = transferred_file:get_transfers(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    case has_transfers_view_privilege(SpaceId) of
+        true ->
+            {ok, #{
+                ongoing := Ongoing,
+                ended := Ended
+            }} = transferred_file:get_transfers(FileGuid),
 
-    ResultMap = #{
-        ongoing => [op_gui_utils:ids_to_association(?ONGOING_TRANSFERS_STATE, TId) || TId <- Ongoing],
-        ended => [op_gui_utils:ids_to_association(?ENDED_TRANSFERS_STATE, TId) || TId <- Ended]
-    },
-    {ok, maps:to_list(ResultMap)}.
+            ResultMap = #{
+                ongoing => [op_gui_utils:ids_to_association(?ONGOING_TRANSFERS_STATE, TId) || TId <- Ongoing],
+                ended => [op_gui_utils:ids_to_association(?ENDED_TRANSFERS_STATE, TId) || TId <- Ended]
+            },
+            {ok, maps:to_list(ResultMap)};
+        false ->
+            op_gui_error:unauthorized()
+    end.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+-spec has_transfers_view_privilege(od_space:id()) -> boolean().
+has_transfers_view_privilege(SpaceId) ->
+    SessionId = op_gui_session:get_session_id(),
+    {ok, UserId} = session:get_user_id(SessionId),
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -409,20 +503,52 @@ on_the_fly_transfer_record(RecordId) ->
     {ok, proplists:proplist()}.
 transfer_time_stat_record(RecordId) ->
     {TransferType, StatsType, Id} = op_gui_utils:association_to_ids(RecordId),
-    {Histograms, StartTime, LastUpdate, TimeWindow} = prepare_histograms(
-        TransferType, StatsType, Id
-    ),
+    Result = case TransferType of
+        ?JOB_TRANSFERS_TYPE ->
+            {ok, #document{value = #transfer{space_id = SpaceId} = T}} = transfer:get(Id),
+            case has_transfers_view_privilege(SpaceId) of
+                true ->
+                    prepare_histograms(TransferType, StatsType, T);
+                false ->
+                    op_gui_error:unauthorized()
+            end;
+        ?ON_THE_FLY_TRANSFERS_TYPE ->
+            case space_transfer_stats:get(Id) of
+                {ok, #document{scope = SpaceId, value = SpaceTransferStats}} ->
+                    case has_transfers_view_privilege(SpaceId) of
+                        true ->
+                            prepare_histograms(TransferType, StatsType, SpaceTransferStats);
+                        false ->
+                            op_gui_error:unauthorized()
+                    end;
+                {error, not_found} ->
+                    % Return empty stats in case transfer stats document does not exist
+                    Window = transfer_histograms:type_to_time_window(StatsType),
+                    CurrentTime = provider_logic:zone_time_seconds(),
+                    Timestamp = transfer_histograms:trim_timestamp(CurrentTime),
+                    {#{}, 0, Timestamp, Window};
+                {error, Reason} ->
+                    ?error("Failed to retrieve Space Transfer Stats Document "
+                           "of ID ~p due to: ~p", [Id, Reason]),
+                    error(Reason)
+            end
+    end,
 
-    SpeedCharts = transfer_histograms:to_speed_charts(
-        Histograms, StartTime, LastUpdate, TimeWindow
-    ),
+    case Result of
+        {Histograms, StartTime, LastUpdate, TimeWindow} ->
+            SpeedCharts = transfer_histograms:to_speed_charts(
+                Histograms, StartTime, LastUpdate, TimeWindow
+            ),
 
-    {ok, [
-        {<<"id">>, RecordId},
-        {<<"timestamp">>, LastUpdate},
-        {<<"type">>, StatsType},
-        {<<"stats">>, maps:to_list(SpeedCharts)}
-    ]}.
+            {ok, [
+                {<<"id">>, RecordId},
+                {<<"timestamp">>, LastUpdate},
+                {<<"type">>, StatsType},
+                {<<"stats">>, maps:to_list(SpeedCharts)}
+            ]};
+        Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -433,50 +559,36 @@ transfer_time_stat_record(RecordId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_histograms(TransferType :: binary(), HistogramsType :: binary(),
-    Id :: binary()
+    TransferOrSpaceTransferStats :: transfer:transfer() | space_transfer_stats:space_transfer_stats()
 ) -> {transfer_histograms:histograms(), StartTime :: non_neg_integer(),
     LastUpdate :: non_neg_integer(), TimeWindow :: non_neg_integer()}.
-prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, TransferId) ->
-    {ok, #document{value = T}} = transfer:get(TransferId),
-    StartTime = T#transfer.start_time,
+prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, Transfer) ->
+    StartTime = Transfer#transfer.start_time,
 
     % Return historical statistics of finished transfers intact. As for active
     % ones, pad them with zeroes to current time and erase recent n-seconds to
     % avoid fluctuations on charts
-    {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(T) of
+    {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
         false ->
-            RequestedHistograms = get_histograms(T, HistogramsType),
+            RequestedHistograms = get_histograms(Transfer, HistogramsType),
             Window = transfer_histograms:type_to_time_window(HistogramsType),
-            {RequestedHistograms, get_last_update(T), Window};
+            {RequestedHistograms, get_last_update(Transfer), Window};
         true ->
-            LastUpdates = T#transfer.last_update,
+            LastUpdates = Transfer#transfer.last_update,
             CurrentTime = provider_logic:zone_time_seconds(),
-            prepare_histograms(T, HistogramsType, CurrentTime, LastUpdates)
+            prepare_histograms(Transfer, HistogramsType, CurrentTime, LastUpdates)
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
-prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, TransferStatsId) ->
+prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, SpaceTransferStats) ->
     % Some functions from transfer_histograms module require specifying
     % start time parameter. But there is no conception of start time for
     % space_transfer_stats doc. So a long past value like 0 (year 1970) is used.
     StartTime = 0,
     CurrentTime = provider_logic:zone_time_seconds(),
-    Fetched = space_transfer_stats:get(TransferStatsId),
-    {Histograms, LastUpdate, TimeWindow} = case Fetched of
-        {ok, TransferStats} ->
-            LastUpdates = TransferStats#space_transfer_stats.last_update,
-            prepare_histograms(
-                TransferStats, HistogramsType, CurrentTime, LastUpdates
-            );
-        {error, not_found} ->
-            % Return empty stats in case transfer stats document does not exist
-            Window = transfer_histograms:type_to_time_window(HistogramsType),
-            Timestamp = transfer_histograms:trim_timestamp(CurrentTime),
-            {#{}, Timestamp, Window};
-        {error, Error} ->
-            ?error("Failed to retrieve Space Transfer Stats Document
-                   of ID ~p due to: ~p", [TransferStatsId, Error]),
-            error(Error)
-    end,
+    LastUpdates = SpaceTransferStats#space_transfer_stats.last_update,
+    {Histograms, LastUpdate, TimeWindow} = prepare_histograms(
+        SpaceTransferStats, HistogramsType, CurrentTime, LastUpdates
+    ),
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     {maps:filter(Pred, Histograms), StartTime, LastUpdate, TimeWindow}.
 
@@ -532,18 +644,17 @@ prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
 %% Returns a client-compliant transfer-current-stat record based on transfer id.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_current_stat_record(transfer:id()) -> {ok, proplists:proplist()}.
-transfer_current_stat_record(TransferId) ->
-    {ok, #document{value = Transfer = #transfer{
-        bytes_replicated = BytesReplicated,
-        files_replicated = FilesReplicated,
-        files_evicted = FilesEvicted
-    }}} = transfer:get(TransferId),
-    LastUpdate = get_last_update(Transfer),
+-spec transfer_current_stat_record(transfer:doc()) ->
+    {ok, proplists:proplist()}.
+transfer_current_stat_record(#document{key = TransferId, value = #transfer{
+    bytes_replicated = BytesReplicated,
+    files_replicated = FilesReplicated,
+    files_evicted = FilesEvicted
+} = Transfer}) ->
     {ok, [
         {<<"id">>, TransferId},
         {<<"status">>, get_status(Transfer)},
-        {<<"timestamp">>, LastUpdate},
+        {<<"timestamp">>, get_last_update(Transfer)},
         {<<"replicatedBytes">>, BytesReplicated},
         {<<"replicatedFiles">>, FilesReplicated},
         {<<"evictedFiles">>, FilesEvicted}

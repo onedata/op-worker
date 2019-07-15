@@ -18,6 +18,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -133,17 +134,17 @@ exists(_, _) ->
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = space
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_STATISTICS);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {user, _}
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_STATISTICS).
 
 
 %%--------------------------------------------------------------------

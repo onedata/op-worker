@@ -1628,7 +1628,7 @@ transfer_files_to_source_provider(Config0) ->
     utils:pforeach(fun(Num) ->
         {ok, [{_, List}]} = 
             rpc:call(Worker, transfer_data_backend, list_transfers, 
-                [SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+                [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
     EndGui = erlang:monotonic_time(millisecond),

@@ -133,7 +133,7 @@ end).
         ListResult = rpc:call(Worker, index, list, [SpaceId]),
         GetResult = rpc:call(Worker, index, get, [IndexName, SpaceId]),
         case {ListResult, GetResult} of
-            {{ok, Indexes}, {ok, __Doc}} -> lists:member(IndexName, Indexes);
+            {{ok, Indices}, {ok, __Doc}} -> lists:member(IndexName, Indices);
             Other -> Other
         end
     end, Attempts)).

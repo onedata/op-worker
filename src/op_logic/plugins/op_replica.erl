@@ -16,6 +16,7 @@
 
 -include("op_logic.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -161,25 +162,59 @@ exists(_, _) ->
 authorize(#op_req{client = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
+authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
+    id = Guid,
+    aspect = instance
+}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_REPLICATION);
 
-authorize(#op_req{operation = create, gri = #gri{aspect = replicate_by_index}} = Req, _) ->
-    SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+authorize(#op_req{operation = create, client = ?USER(UserId), data = Data, gri = #gri{
+    aspect = replicate_by_index
+}}, _) ->
+    SpaceId = maps:get(<<"space_id">>, Data),
+    space_logic:has_eff_privileges(
+        SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES]
+    );
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
 
-authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
+authorize(#op_req{operation = delete, client = ?USER(UserId), data = Data, gri = #gri{
+    id = Guid,
+    aspect = instance
+}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+    case maps:get(<<"migration_provider_id">>, Data, undefined) of
+        undefined ->
+            % only eviction
+            space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_EVICTION);
+        _ ->
+            % migration (eviction preceded by replication)
+            space_logic:has_eff_privileges(
+                SpaceId, UserId,
+                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+            )
+    end;
 
-authorize(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}} = Req, _) ->
-    SpaceId = maps:get(<<"space_id">>, Req#op_req.data),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId).
+authorize(#op_req{operation = delete, client = ?USER(UserId), data = Data, gri = #gri{
+    aspect = evict_by_index
+}}, _) ->
+    SpaceId = maps:get(<<"space_id">>, Data),
+    case maps:get(<<"migration_provider_id">>, Data, undefined) of
+        undefined ->
+            % only eviction
+            space_logic:has_eff_privileges(SpaceId, UserId, [
+                ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES
+            ]);
+        _ ->
+            % migration (eviction preceded by replication)
+            space_logic:has_eff_privileges(SpaceId, UserId, [
+                ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION,
+                ?SPACE_QUERY_INDICES
+            ])
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -16,6 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 
 %% API
@@ -55,7 +56,18 @@ terminate() ->
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
 find_record(<<"db-index">>, RecordId) ->
-    db_index_record(RecordId).
+    SessionId = op_gui_session:get_session_id(),
+    {ok, UserId} = session:get_user_id(SessionId),
+
+    {ok, IndexPropList} = Result = db_index_record(RecordId),
+    SpaceId = proplists:get_value(<<"space">>, IndexPropList),
+
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_INDICES) of
+        true ->
+            Result;
+        false ->
+            op_gui_error:unauthorized()
+    end.
 
 
 %%--------------------------------------------------------------------

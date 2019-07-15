@@ -65,12 +65,12 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
         {ok, URL} ->
             {ok, [{<<"fileUrl">>, URL}]};
         ?ERROR_FORBIDDEN ->
-            gui_error:report_error(<<"Permission denied">>);
+            op_gui_error:report_error(<<"Permission denied">>);
         {error, ?ENOENT} ->
-            gui_error:report_error(<<"File does not exist or was deleted - try refreshing the page.">>);
+            op_gui_error:report_error(<<"File does not exist or was deleted - try refreshing the page.">>);
         Error ->
             ?debug("Cannot resolve file download url for file ~p - ~p", [FileId, Error]),
-            gui_error:report_error(<<"Cannot resolve file download url - try refreshing the page.">>)
+            op_gui_error:report_error(<<"Cannot resolve file download url - try refreshing the page.">>)
     end;
 
 % Checks if file that is displayed in shares view can be downloaded
@@ -127,28 +127,36 @@ handle(<<"createFileShare">>, Props) ->
 %%--------------------------------------------------------------------
 
 handle(<<"getSpaceTransfers">>, Props) ->
+    SessionId = op_gui_session:get_session_id(),
     SpaceId = proplists:get_value(<<"spaceId">>, Props),
     Type = proplists:get_value(<<"type">>, Props),
     StartFromIndex = proplists:get_value(<<"startFromIndex">>, Props, null),
     Offset = proplists:get_value(<<"offset">>, Props, 0),
     Limit = proplists:get_value(<<"size">>, Props, all),
-    transfer_data_backend:list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit);
+    transfer_data_backend:list_transfers(
+        SessionId, SpaceId, Type, StartFromIndex, Offset, Limit
+    );
 
 handle(<<"getTransfersForFile">>, Props) ->
     FileGuid = proplists:get_value(<<"fileId">>, Props),
     EndedInfo = proplists:get_value(<<"endedInfo">>, Props, <<"count">>),
-    {ok, Result} = transfer_data_backend:get_transfers_for_file(FileGuid),
-    case EndedInfo of
-        <<"count">> ->
-            EndedCount = length(proplists:get_value(ended, Result)),
-            {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
-        <<"ids">> ->
-            {ok, Result}
+    case transfer_data_backend:get_transfers_for_file(FileGuid) of
+        {ok, Result} ->
+            case EndedInfo of
+                <<"count">> ->
+                    EndedCount = length(proplists:get_value(ended, Result)),
+                    {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
+                <<"ids">> ->
+                    {ok, Result}
+            end;
+        Error ->
+            Error
     end;
 
 handle(<<"cancelTransfer">>, Props) ->
+    SessionId = op_gui_session:get_session_id(),
     TransferId = proplists:get_value(<<"transferId">>, Props),
-    transfer_data_backend:cancel_transfer(TransferId);
+    transfer_data_backend:cancel_transfer(SessionId, TransferId);
 
 handle(<<"rerunTransfer">>, Props) ->
     SessionId = op_gui_session:get_session_id(),

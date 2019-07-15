@@ -28,7 +28,7 @@
 -export([get/2, get_protected_data/2]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
--export([has_eff_privilege/3]).
+-export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([get_eff_groups/2, get_shares/2]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
@@ -111,12 +111,21 @@ has_eff_user(SessionId, SpaceId, UserId) ->
 
 -spec has_eff_privilege(od_space:doc() | od_space:id(), od_user:id(),
     privileges:space_privilege()) -> boolean().
-has_eff_privilege(#document{value = #od_space{eff_users = EffUsers}}, UserId, Privilege) ->
-    lists:member(Privilege, maps:get(UserId, EffUsers, []));
-has_eff_privilege(SpaceId, UserId, Privilege) ->
+has_eff_privilege(SpaceDocOrId, UserId, Privilege) ->
+    has_eff_privileges(SpaceDocOrId, UserId, [Privilege]).
+
+
+-spec has_eff_privileges(od_space:doc() | od_space:id(), od_user:id(),
+    [privileges:space_privilege()]) -> boolean().
+has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}}, UserId, Privileges) ->
+    UserPrivileges = maps:get(UserId, EffUsers, []),
+    lists:all(fun(Privilege) ->
+        lists:member(Privilege, UserPrivileges)
+    end, Privileges);
+has_eff_privileges(SpaceId, UserId, Privileges) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{} = SpaceDoc} ->
-            has_eff_privilege(SpaceDoc, UserId, Privilege);
+            has_eff_privileges(SpaceDoc, UserId, Privileges);
         _ ->
             false
     end.

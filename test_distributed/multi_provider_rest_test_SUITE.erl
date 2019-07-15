@@ -28,6 +28,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([
@@ -426,19 +427,21 @@ xattr_list(Config) ->
     }, DecodedBody).
 
 metric_get(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space2">>,
+    UserId = <<"user1">>,
 
     Prov1ID = rpc:call(WorkerP1, oneprovider, get_id, []),
     Prov2ID = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     MonitoringId = #monitoring_id{
         main_subject_type = space,
-        main_subject_id = <<"space2">>,
+        main_subject_id = SpaceId,
         metric_type = storage_quota,
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space2">>, MonitoringId, time_utils:system_time_seconds()])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [SpaceId, MonitoringId, time_utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
         #document{
@@ -449,8 +452,21 @@ metric_get(Config) ->
         }
     ])),
 
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    AllPrivs = privileges:space_privileges(),
+
+    % viewing metrics without SPACE_VIEW_STATISTICS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, AllPrivs -- [?SPACE_VIEW_STATISTICS]),
+    ?assertMatch(
+        {ok, 403, _, _},
+        rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), [])
+    ),
+
+    % viewing metrics with SPACE_VIEW_STATISTICS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, [?SPACE_VIEW_STATISTICS]),
+    {ok, 200, _, Body} = ?assertMatch(
+        {ok, 200, _, _},
+        rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), [])
+    ),
     DecodedBody = json_utils:decode(Body),
 
     % then
@@ -1271,7 +1287,7 @@ empty_metadata_invalid_json_test(Config) ->
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
-    [P2, P1] = ?config(op_worker_nodes, Config),
+    Workers = [P2, P1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P2)}}, Config),
     Space = <<"space4">>,
@@ -1340,7 +1356,15 @@ list_transfers(Config) ->
     ?assertMatch(true, length(Ended(P2)) =:= FilesNum, ?ATTEMPTS),
 
     ?assertMatch(AllTransfers, lists:sort(Ended(P1)), ?ATTEMPTS),
-    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS).
+    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS),
+
+    AllPrivs = privileges:space_privileges(),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    % listing transfers without SPACE_VIEW_TRANSFERS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space4">>, <<"user1">>, AllPrivs -- [?SPACE_VIEW_TRANSFERS]),
+    ?assertMatch(ErrorForbidden, Ended(P1), ?ATTEMPTS),
+    ?assertMatch(ErrorForbidden, Ended(P2), ?ATTEMPTS).
 
 track_transferred_files(Config) ->
     [Provider1, Provider2] = ?config(op_worker_nodes, Config),
@@ -1470,7 +1494,13 @@ init_per_testcase(metric_get, Config) ->
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
     end),
-    init_per_testcase(all, Config);
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space2">>, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
+
+init_per_testcase(list_transfers, Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
 init_per_testcase(Case, Config) when Case =:= create_share orelse
         Case =:= create_share_id orelse
@@ -1493,8 +1523,16 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config2).
 
 end_per_testcase(metric_get = Case, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(list_transfers = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
@@ -1698,18 +1736,26 @@ get_ended_transfers_for_file(Worker, FileGuid) ->
     Transfers.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize) ->
-    Result = list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []),
-    % Make sure there are no duplicates
-    ?assertEqual(lists:sort(Result), lists:usort(Result)),
-    Result.
+    case list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []) of
+        Result when is_list(Result) ->
+            % Make sure there are no duplicates
+            ?assertEqual(lists:sort(Result), lists:usort(Result)),
+            Result;
+        Error ->
+            Error
+    end.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, StartId, Acc) ->
-    {Transfers, NextPageToken} = list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize),
-    case NextPageToken of
-        <<"null">> ->
-            Acc ++ Transfers;
-        _ ->
-            list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)
+    case list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize) of
+        {ok, {Transfers, NextPageToken}} ->
+            case NextPageToken of
+                <<"null">> ->
+                    Acc ++ Transfers;
+                _ ->
+                    list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)
+            end;
+        Error ->
+            Error
     end.
 
 list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
@@ -1725,13 +1771,15 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
     Url = str_utils:format_bin("spaces/~s/transfers?state=~s~s~s", [
         Space, State, TokenParam, LimitParam
     ]),
-    {ok, _, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
-        Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>
-    )),
-    ParsedBody = json_utils:decode(Body),
-    Transfers = maps:get(<<"transfers">>, ParsedBody),
-    NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
-    {Transfers, NextPageToken}.
+    case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of
+        {ok, 200, _, Body} ->
+            ParsedBody = json_utils:decode(Body),
+            Transfers = maps:get(<<"transfers">>, ParsedBody),
+            NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
+            {ok, {Transfers, NextPageToken}};
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
 
 mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessId, ShareId) ->
     case OtherProviderNode =/= SupportingProviderNode of

@@ -21,6 +21,7 @@
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
+% TODO VFS-5617
 %% API
 -export([
     evict_empty_dir/3,
@@ -1595,7 +1596,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
+    transfers_test_utils:remove_all_indices(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->
