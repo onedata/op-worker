@@ -250,15 +250,17 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     CephConfig = ?config(cephrados, ?config(cephrados, ?config(storages, Config))),
 
-    {ok, UserCtx} = helper:new_cephrados_user_ctx(
-        atom_to_binary(?config(username, CephConfig), utf8),
-        atom_to_binary(?config(key, CephConfig), utf8)
-    ),
-    {ok, Helper} = helper:new_cephrados_helper(
-        atom_to_binary(?config(host_name, CephConfig), utf8),
-        ?CEPH_CLUSTER_NAME,
-        ?CEPH_POOL_NAME,
-        #{},
+    UserCtx = #{
+        <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
+        <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
+    },
+    {ok, Helper} = helper:new_helper(
+        ?CEPHRADOS_HELPER_NAME,
+        #{
+            <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
+            <<"clusterName">> => ?CEPH_CLUSTER_NAME,
+            <<"poolName">> => ?CEPH_POOL_NAME
+        },
         UserCtx,
         false,
         ?FLAT_STORAGE_PATH

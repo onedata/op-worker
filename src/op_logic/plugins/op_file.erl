@@ -171,6 +171,9 @@ fetch_entity(_) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link op_logic_behaviour} callback exists/2.
+%%
+%% File existence is checked later by fslogic_worker as to not increase
+%% overhead.
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(op_logic:req(), op_logic:entity()) -> boolean().

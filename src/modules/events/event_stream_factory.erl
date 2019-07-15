@@ -92,6 +92,11 @@ create(#quota_exceeded_subscription{}) ->
         event_handler = make_send_events_handler()
     };
 
+create(#helper_params_changed_subscription{}) ->
+    #event_stream{
+        event_handler = make_send_events_handler()
+    };
+
 create(#monitoring_subscription{time_threshold = TimeThr}) ->
     #event_stream{
         event_handler = fun monitoring_event_handler:handle_monitoring_events/2,

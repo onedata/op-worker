@@ -233,16 +233,18 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
 
-    {ok, UserCtx} = helper:new_swift_user_ctx(
-        atom_to_binary(?config(user_name, SwiftConfig), utf8),
-        atom_to_binary(?config(password, SwiftConfig), utf8)
-    ),
-    {ok, Helper} = helper:new_swift_helper(
-        <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
+    UserCtx = #{
+        <<"username">> => atom_to_binary(?config(user_name, SwiftConfig), utf8),
+        <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8)
+    },
+    {ok, Helper} = helper:new_helper(
+        ?SWIFT_HELPER_NAME,
+        #{
+            <<"authUrl">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v2.0/tokens">>,
-        ?SWIFT_CONTAINER_NAME,
-        atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
-        #{},
+        <<"containerName">> => ?SWIFT_CONTAINER_NAME,
+        <<"tenantName">> => atom_to_binary(?config(tenant_name, SwiftConfig), utf8)
+        },
         UserCtx,
         false,
         ?FLAT_STORAGE_PATH

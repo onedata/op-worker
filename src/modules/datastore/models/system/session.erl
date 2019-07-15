@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, update/2, delete/1]).
+-export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1]).
 %% API - link functions
 -export([add_links/4, get_link/3, fold_links/3, delete_links/3]).
 -export([add_local_links/4, get_local_link/3, fold_local_links/3,
@@ -111,6 +111,15 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the list of all sessions.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [doc()]} | {error, term()}.
+list() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Updates session.
 %% @end
 %%--------------------------------------------------------------------
@@ -183,8 +192,9 @@ fold_links(SessId, TreeID, Fun) ->
 %% Deletes link from a tree.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
+-spec delete_links
+    (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
+    (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
 delete_links(SessId, TreeID, HandleId) ->
     datastore_model:delete_links(?CTX, SessId, TreeID, HandleId).
 
@@ -227,8 +237,9 @@ fold_local_links(SessId, TreeID, Fun) ->
 %% Deletes local link from a tree.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_local_links(id(), datastore:tree_id(), datastore:link_name()) ->
-    ok | {error, term()}.
+-spec delete_local_links
+    (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
+    (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
 delete_local_links(SessId, TreeID, HandleId) ->
     datastore_model:delete_links(?CTX#{routing => local},
         SessId, TreeID, HandleId).

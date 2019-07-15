@@ -318,11 +318,17 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, UserCtx} = helper:new_posix_user_ctx(0, 0),
-    {ok, Helper} = helper:new_posix_helper(list_to_binary(TmpDir), #{}, UserCtx,
-        ?CANONICAL_STORAGE_PATH),
+    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    Args = #{<<"mountPoint">> => list_to_binary(TmpDir)},
+    {ok, Helper} = helper:new_helper(
+        ?POSIX_HELPER_NAME,
+        Args,
+        UserCtx,
+        false,
+        ?CANONICAL_STORAGE_PATH
+    ),
     StorageDoc = storage:new(
-        <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
+        <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
         [Helper]),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
