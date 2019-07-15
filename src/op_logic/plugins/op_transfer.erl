@@ -6,7 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_transfer model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to transfer aspects such as:
+%%% - viewing,
+%%% - cancelling,
+%%% - rerunning.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_transfer).

@@ -11,6 +11,7 @@
 %%% operations. Every op logic plugin serves as a middleware between
 %%% API and op internals (e.g. lfm) in the context of specific
 %%% entity type (op_xxx records).
+%%% TODO VFS-5620
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_logic_behaviour).

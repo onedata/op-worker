@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_metrics model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to metrics/statistic gathering.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_metrics).

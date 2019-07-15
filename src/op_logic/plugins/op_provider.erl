@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_provider model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to provider aspects such as:
+%%% - configuration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_provider).

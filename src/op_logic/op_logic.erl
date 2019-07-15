@@ -7,6 +7,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-5621
 %%% This module encapsulates all common logic available in provider.
 %%% It is used to process requests in a standardized way, i.e.:
 %%%     1) assert operation is supported.
@@ -32,11 +33,12 @@
 
 % Some of the types are just aliases for types from gs_protocol, this is
 % for better readability of logic modules.
+% TODO VFS-5621
 -type req() :: #op_req{}.
 -type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
-% The resource the request refers to.
+% The resource the request operates on (creates, gets, updates or deletes).
 -type entity() :: undefined | #od_share{} | #transfer{}.
 -type entity_id() :: undefined | od_share:id() | transfer:id().
 -type aspect() :: gs_protocol:aspect().
@@ -118,14 +120,20 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
         ReqCtx1 = sanitize_request(ReqCtx0),
         ReqCtx2 = maybe_fetch_entity(ReqCtx1),
 
+        % TODO VFS-5621 exists callback is used only in entity_logic,
+        % here is left for compatibility
         ensure_exists(ReqCtx2),
         ensure_authorized(ReqCtx2),
         validate_request(ReqCtx2),
 
         process_request(ReqCtx2)
     catch
+        % Intentional errors (throws) are be returned to client as is
+        % (e.g. unauthorized, forbidden, space not supported, etc.)
         throw:Error ->
             Error;
+        % Unexpected errors are logged and internal server error is returned
+        % to client instead
         Type:Reason ->
             ?error_stacktrace("Unexpected error in op_logic - ~p:~p", [
                 Type, Reason

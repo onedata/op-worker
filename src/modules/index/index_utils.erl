@@ -69,16 +69,11 @@ sanitize_query_options([{<<"bbox">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"bbox">>, Val} | Rest], Options) ->
     Bbox = try
-        case Val of
-            undefined ->
-                ok;
-            _ ->
-                [W, S, E, N] = binary:split(Val, <<",">>, [global]),
-                true = is_float(catch binary_to_float(W)) orelse is_integer(catch binary_to_integer(W)),
-                true = is_float(catch binary_to_float(S)) orelse is_integer(catch binary_to_integer(S)),
-                true = is_float(catch binary_to_float(E)) orelse is_integer(catch binary_to_integer(E)),
-                true = is_float(catch binary_to_float(N)) orelse is_integer(catch binary_to_integer(N))
-        end
+        [W, S, E, N] = binary:split(Val, <<",">>, [global]),
+        true = is_float(catch binary_to_float(W)) orelse is_integer(catch binary_to_integer(W)),
+        true = is_float(catch binary_to_float(S)) orelse is_integer(catch binary_to_integer(S)),
+        true = is_float(catch binary_to_float(E)) orelse is_integer(catch binary_to_integer(E)),
+        true = is_float(catch binary_to_float(N)) orelse is_integer(catch binary_to_integer(N))
     catch
         _:_ ->
             throw(?ERROR_BAD_DATA(<<"bbox">>))

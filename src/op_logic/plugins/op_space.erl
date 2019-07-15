@@ -6,7 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_space model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to space aspects such as:
+%%% - space,
+%%% - indices,
+%%% - transfers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_space).

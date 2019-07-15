@@ -6,7 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_file model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to file aspects such as:
+%%% - attributes,
+%%% - extended attributes,
+%%% - json metadata,
+%%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_file).

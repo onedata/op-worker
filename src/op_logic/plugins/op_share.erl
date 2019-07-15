@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_share model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to directory sharing.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_share).

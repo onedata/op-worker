@@ -262,6 +262,7 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
+-spec parse_params(cowboy_req:req(), map()) -> {cowboy_req:req(), map()}.
 parse_params(Req, #{user_id := UserId} = State0) ->
     SpaceId = cowboy_req:binding(sid, Req),
     case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of

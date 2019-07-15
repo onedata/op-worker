@@ -6,7 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations corresponding to op_replica model.
+%%% This module handles op logic operations (create, get, update, delete)
+%%% corresponding to file aspects such as:
+%%% - distribution,
+%%% - replication,
+%%% - eviction,
+%%% - migration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_replica).
