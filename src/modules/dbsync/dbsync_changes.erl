@@ -355,6 +355,10 @@ get_ctx(Model) ->
                 mutator => oneprovider:get_id_or_undefined(),
                 local_links_tree_id => oneprovider:get_id_or_undefined()
             };
+        tree_traverse_job ->
+            Ctx#{sync_enabled => true,
+                mutator => oneprovider:get_id_or_undefined()
+            };
         _ ->
             Ctx
     end,
