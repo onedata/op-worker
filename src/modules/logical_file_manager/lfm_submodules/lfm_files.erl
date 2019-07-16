@@ -46,7 +46,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 unlink(SessId, FileEntry, Silent) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
     remote_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
@@ -56,7 +56,7 @@ unlink(SessId, FileEntry, Silent) ->
 %% @equiv remove_utils:rm(SessId, FileKey).
 %%--------------------------------------------------------------------
 -spec rm(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 rm(SessId, FileKey) ->
     remove_utils:rm(SessId, FileKey).
 
@@ -67,7 +67,7 @@ rm(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec mv(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     TargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mv(SessId, FileKey, TargetPath) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
@@ -85,7 +85,7 @@ mv(SessId, FileKey, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec cp(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     TargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {TargetName, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
@@ -106,7 +106,7 @@ cp(SessId, FileKey, TargetPath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 get_parent(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -147,7 +147,7 @@ get_file_guid(SessId, FilePath) ->
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
     ProviderId :: oneprovider:id(), transfer:callback(), pid() | undefined) ->
-    {ok, transfer:id()} | logical_file_manager:error_reply().
+    {ok, transfer:id()} | lfm:error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -167,7 +167,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_index(session:id(), ProviderId :: oneprovider:id(),
     transfer:callback(), od_space:id(), transfer:index_name(),
-    transfer:query_view_params()) -> {ok, transfer:id()} | logical_file_manager:error_reply().
+    transfer:query_view_params()) -> {ok, transfer:id()} | lfm:error_reply().
 schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
@@ -190,7 +190,7 @@ schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, Index
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
     ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
-    {ok, transfer:id()} | logical_file_manager:error_reply().
+    {ok, transfer:id()} | lfm:error_reply().
 schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -212,7 +212,7 @@ schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
 -spec schedule_replica_eviction_by_index(session:id(), ProviderId :: oneprovider:id(),
     MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
     transfer:index_name(), transfer:query_view_params()) ->
-    {ok, transfer:id()} | logical_file_manager:error_reply().
+    {ok, transfer:id()} | lfm:error_reply().
 schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId,
     SpaceId, IndexName, QueryViewParams
 ) ->
@@ -234,13 +234,13 @@ schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId,
 %% @end
 %%--------------------------------------------------------------------
 -spec create(session:id(), Path :: file_meta:path()) ->
-    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
+    {ok, file_meta:uuid()} | lfm:error_reply().
 create(SessId, Path) ->
     create(SessId, Path, undefined).
 
 -spec create(session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions() | undefined) ->
-    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     remote_utils:call_fslogic(SessId, fuse_request,
@@ -251,7 +251,7 @@ create(SessId, Path, Mode) ->
 
 -spec create(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
-    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(SessId, ParentGuid, Name, undefined) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create(SessId, ParentGuid, Name, DefaultMode);
@@ -270,8 +270,8 @@ create(SessId, ParentGuid, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec create_and_open(session:id(), Path :: file_meta:path(),
     Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
-    | logical_file_manager:error_reply().
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
+    | lfm:error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     remote_utils:call_fslogic(SessId, fuse_request,
@@ -283,8 +283,8 @@ create_and_open(SessId, Path, Mode, OpenFlag) ->
 -spec create_and_open(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions(),
     fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
-    | logical_file_manager:error_reply().
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
+    | lfm:error_reply().
 create_and_open(SessId, ParentGuid, Name, undefined, OpenFlag) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create_and_open(SessId, ParentGuid, Name, DefaultMode, OpenFlag);
@@ -322,7 +322,7 @@ create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
 %%--------------------------------------------------------------------
 -spec open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Flag :: fslogic_worker:open_flag()) ->
-    {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
+    {ok, lfm:handle()} | lfm:error_reply().
 open(SessId, FileKey, Flag) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -346,8 +346,8 @@ open(SessId, FileKey, Flag) ->
 %% Releases previously opened  file.
 %% @end
 %%--------------------------------------------------------------------
--spec release(logical_file_manager:handle()) ->
-    ok | logical_file_manager:error_reply().
+-spec release(lfm:handle()) ->
+    ok | lfm:error_reply().
 release(Handle) ->
     case lfm_context:get_handle_id(Handle) of
         undefined ->
@@ -365,8 +365,8 @@ release(Handle) ->
 %% Gets necessary data from handle and executes fsync/3
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(FileHandle :: logical_file_manager:handle()) ->
-    ok | logical_file_manager:error_reply().
+-spec fsync(FileHandle :: lfm:handle()) ->
+    ok | lfm:error_reply().
 fsync(Handle) ->
     SessionId = lfm_context:get_session_id(Handle),
     FileGuid = lfm_context:get_guid(Handle),
@@ -379,7 +379,7 @@ fsync(Handle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(session:id(), fslogic_worker:file_guid_or_path(), oneprovider:id()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 fsync(SessId, FileKey, ProviderId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     case oneprovider:is_self(ProviderId) of
@@ -395,20 +395,20 @@ fsync(SessId, FileKey, ProviderId) ->
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)
 %%--------------------------------------------------------------------
--spec write(FileHandle :: logical_file_manager:handle(),
+-spec write(FileHandle :: lfm:handle(),
     Offset :: integer(), Buffer :: binary()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), integer()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), integer()} |
+    lfm:error_reply().
 write(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, true).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, false)
 %%--------------------------------------------------------------------
--spec write_without_events(FileHandle :: logical_file_manager:handle(),
+-spec write_without_events(FileHandle :: lfm:handle(),
     Offset :: integer(), Buffer :: binary()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), integer()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), integer()} |
+    lfm:error_reply().
 write_without_events(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, false).
 
@@ -416,10 +416,10 @@ write_without_events(FileHandle, Offset, Buffer) ->
 %% @equiv read(FileHandle, Offset, MaxSize, true, true,
 %% {priority, ?DEFAULT_SYNC_PRIORITY})
 %%--------------------------------------------------------------------
--spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+-spec read(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
         {priority, ?DEFAULT_SYNC_PRIORITY}).
@@ -427,10 +427,10 @@ read(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true, SyncOptions)
 %%--------------------------------------------------------------------
--spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+-spec read(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer(), SyncOptions :: sync_options()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 read(FileHandle, Offset, MaxSize, SyncOptions) ->
     read(FileHandle, Offset, MaxSize, true, true, SyncOptions).
 
@@ -438,10 +438,10 @@ read(FileHandle, Offset, MaxSize, SyncOptions) ->
 %% @equiv read(FileHandle, Offset, MaxSize, false, true,
 %% {priority, ?DEFAULT_SYNC_PRIORITY)}
 %%--------------------------------------------------------------------
--spec read_without_events(FileHandle :: logical_file_manager:handle(),
+-spec read_without_events(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 read_without_events(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, true,
         {priority, ?DEFAULT_SYNC_PRIORITY}).
@@ -449,10 +449,10 @@ read_without_events(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, true, SyncOptions)
 %%--------------------------------------------------------------------
--spec read_without_events(FileHandle :: logical_file_manager:handle(),
+-spec read_without_events(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer(), SyncOptions :: sync_options()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
     read(FileHandle, Offset, MaxSize, false, true, SyncOptions).
 
@@ -460,10 +460,10 @@ read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
 %% @equiv read(FileHandle, Offset, MaxSize, false, false,
 %% {priority, ?DEFAULT_SYNC_PRIORITY)}
 %%--------------------------------------------------------------------
--spec silent_read(FileHandle :: logical_file_manager:handle(),
+-spec silent_read(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false,
         {priority, ?DEFAULT_SYNC_PRIORITY}).
@@ -471,10 +471,10 @@ silent_read(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, false, SyncOptions)
 %%--------------------------------------------------------------------
--spec silent_read(FileHandle :: logical_file_manager:handle(),
+-spec silent_read(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer(), SyncOptions :: sync_options()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 silent_read(FileHandle, Offset, MaxSize, SyncOptions) ->
     read(FileHandle, Offset, MaxSize, false, false, SyncOptions).
 
@@ -485,7 +485,7 @@ silent_read(FileHandle, Offset, MaxSize, SyncOptions) ->
 %%--------------------------------------------------------------------
 -spec truncate(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Size :: non_neg_integer()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 truncate(SessId, FileKey, Size) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -500,7 +500,7 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | logical_file_manager:error_reply().
+    {ok, Blocks :: [[non_neg_integer()]]} | lfm:error_reply().
 get_file_distribution(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -528,10 +528,10 @@ get_file_distribution(SessId, FileKey) ->
 %% Writes data to a file. Returns number of written bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+-spec write(FileHandle :: lfm:handle(), Offset :: integer(),
     Buffer :: binary(), GenerateEvents :: boolean()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), integer()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), integer()} |
+    lfm:error_reply().
 write(FileHandle, Offset, Buffer, GenerateEvents) ->
     Size = size(Buffer),
     case write_internal(FileHandle, Offset, Buffer, GenerateEvents) of
@@ -560,9 +560,9 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
 %% Writes one portion of data in write/3
 %% @end
 %%--------------------------------------------------------------------
--spec write_internal(FileHandle :: logical_file_manager:handle(),
+-spec write_internal(FileHandle :: lfm:handle(),
     Offset :: non_neg_integer(), Buffer :: binary(), GenerateEvents :: boolean()) ->
-    {ok, non_neg_integer()} |logical_file_manager:error_reply().
+    {ok, non_neg_integer()} |lfm:error_reply().
 write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
     FileGuid = lfm_context:get_guid(LfmCtx),
     SessId = lfm_context:get_session_id(LfmCtx),
@@ -596,11 +596,11 @@ write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
 %% Reads requested part of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+-spec read(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean(),
     SyncOptions :: sync_options()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
-    logical_file_manager:error_reply().
+    {ok, NewHandle :: lfm:handle(), binary()} |
+    lfm:error_reply().
 read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
     case read_internal(FileHandle, Offset, MaxSize, GenerateEvents,
         PrefetchData, SyncOptions) of
@@ -630,10 +630,10 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
 %% Reads one portion of data in read/3
 %% @end
 %%--------------------------------------------------------------------
--spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+-spec read_internal(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean(),
     SyncOptions :: sync_options()) ->
-    {ok, binary()} | logical_file_manager:error_reply().
+    {ok, binary()} | lfm:error_reply().
 read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
     FileGuid = lfm_context:get_guid(LfmCtx),
     SessId = lfm_context:get_session_id(LfmCtx),

@@ -1039,7 +1039,7 @@ update_config(Key, UpdateFun, Config, DefaultValue) ->
         OldValue ->
             lists:keyreplace(Key, 1, Config, {Key, UpdateFun(OldValue)})
     end.
-    
+
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->

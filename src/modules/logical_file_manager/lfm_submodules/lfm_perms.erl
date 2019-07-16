@@ -29,9 +29,9 @@
 %% Changes the permissions of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_perms(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
+-spec set_perms(SessId :: session:id(), FileKey :: lfm:file_key(),
     NewPerms :: file_meta:posix_permissions()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, Guid,
@@ -43,8 +43,8 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% Checks if current user has given permissions for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(session:id(), logical_file_manager:file_key(), fslogic_worker:open_flag()) ->
-    {ok, boolean()} | logical_file_manager:error_reply().
+-spec check_perms(session:id(), lfm:file_key(), fslogic_worker:open_flag()) ->
+    {ok, boolean()} | lfm:error_reply().
 check_perms(SessId, FileKey, Flag) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     case remote_utils:call_fslogic(SessId, provider_request, Guid,
@@ -66,7 +66,7 @@ check_perms(SessId, FileKey, Flag) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [access_control_entity()]} | logical_file_manager:error_reply().
+    {ok, [access_control_entity()]} | lfm:error_reply().
 get_acl(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_acl{},
@@ -81,7 +81,7 @@ get_acl(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     EntityList :: [access_control_entity()]) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 set_acl(SessId, FileKey, Acl) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
@@ -94,7 +94,7 @@ set_acl(SessId, FileKey, Acl) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 remove_acl(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #remove_acl{},

@@ -30,7 +30,7 @@
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
     mock_prolonged_replica_eviction/3, unmock_prolonged_replica_eviction/1,
     mock_replica_eviction_failure/1, unmock_replica_eviction_failure/1,
-    unmock_replica_synchronizer_failure/1, remove_all_indexes/2, random_job_name/1,
+    unmock_replica_synchronizer_failure/1, remove_all_indices/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
     create_index/7, create_index/6, random_index_name/1]).
 
@@ -196,7 +196,7 @@ mock_replica_eviction_failure(Node) ->
 unmock_replica_eviction_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_deletion_req).
 
-remove_all_indexes(Nodes, SpaceId) ->
+remove_all_indices(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
         {ok, IndexNames} = rpc:call(Node, index, list, [SpaceId]),
         lists:foreach(fun(IndexName) ->

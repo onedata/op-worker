@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -83,7 +83,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @equiv pre_handler:resource_exists/2
@@ -136,7 +136,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, #{path := Path, auth := Auth} = State) ->
-    ok = onedata_file_api:unlink(Auth, {path, Path}),
+    ok = lfm:unlink(Auth, {path, Path}, false),
     {true, Req, State}.
 
 
@@ -208,16 +208,16 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
     CdmiPartialFlag = cowboy_req:header(<<"x-cdmi-partial">>, Req),
     {Mimetype, Encoding} = cdmi_arg_parser:parse_content(Content),
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-    case onedata_file_api:stat(Auth, {path, Path}) of
+    case lfm:stat(Auth, {path, Path}) of
         {error, ?ENOENT} ->
-            {ok, FileGuid} = onedata_file_api:create(Auth, Path, DefaultMode),
+            {ok, FileGuid} = lfm:create(Auth, Path, DefaultMode),
             cdmi_metadata:update_mimetype(Auth, {guid, FileGuid}, Mimetype),
             cdmi_metadata:update_encoding(Auth, {guid, FileGuid}, Encoding),
-            {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
+            {ok, FileHandle} = lfm:open(Auth, {path, Path}, write),
             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
             {ok, Req1} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
-            onedata_file_api:fsync(FileHandle),
-            onedata_file_api:release(FileHandle),
+            lfm:fsync(FileHandle),
+            lfm:release(FileHandle),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                 Auth, {path, Path}, CdmiPartialFlag
             ),
@@ -228,12 +228,12 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
             RawRange = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGuid}, write),
+                    {ok, FileHandle} = lfm:open(Auth, {guid, FileGuid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
-                    ok = onedata_file_api:truncate(Auth, {guid, FileGuid}, 0),
+                    ok = lfm:truncate(Auth, {guid, FileGuid}, 0),
                     {ok, Req2} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
-                    onedata_file_api:fsync(FileHandle),
-                    onedata_file_api:release(FileHandle),
+                    lfm:fsync(FileHandle),
+                    lfm:release(FileHandle),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                         Auth, {guid, FileGuid}, CdmiPartialFlag
                     ),
@@ -242,11 +242,11 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
                     Length = cowboy_req:body_length(Req),
                     case cdmi_arg_parser:parse_content_range(RawRange, Size) of
                         {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGuid}, write),
+                            {ok, FileHandle} = lfm:open(Auth, {guid, FileGuid}, write),
                             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGuid}, <<"Processing">>),
                             {ok, Req3} = cdmi_streamer:write_body_to_file(Req, From, FileHandle),
-                            onedata_file_api:fsync(FileHandle),
-                            onedata_file_api:release(FileHandle),
+                            lfm:fsync(FileHandle),
+                            lfm:release(FileHandle),
                             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                                 Auth, {guid, FileGuid}, CdmiPartialFlag
                             ),
@@ -286,26 +286,26 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
     {ok, OperationPerformed, Guid} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, NewGuid} = onedata_file_api:create(Auth, Path, DefaultMode),
+                {ok, NewGuid} = lfm:create(Auth, Path, DefaultMode),
                 {ok, created, NewGuid};
             {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
-                {ok, NewGuid} = onedata_file_api:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
+                {ok, NewGuid} = lfm:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
                 {ok, copied, NewGuid};
             {undefined, undefined, MoveURI} ->
-                {ok, NewGuid} = onedata_file_api:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
+                {ok, NewGuid} = lfm:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
                 {ok, moved, NewGuid}
         end,
 
     % update value and metadata depending on creation type
     case OperationPerformed of
         created ->
-            {ok, FileHandler} = onedata_file_api:open(Auth, {guid, Guid}, write),
+            {ok, FileHandler} = lfm:open(Auth, {guid, Guid}, write),
             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-            {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
-            onedata_file_api:fsync(FileHandler),
-            onedata_file_api:release(FileHandler),
+            {ok, _, RawValueSize} = lfm:write(FileHandler, 0, RawValue),
+            lfm:fsync(FileHandler),
+            lfm:release(FileHandler),
 
             % return response
             cdmi_metadata:update_encoding(Auth, {guid, Guid}, utils:ensure_defined(
@@ -332,20 +332,20 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                    {ok, FileHandler} = onedata_file_api:open(Auth, {guid, Guid}, write),
+                    {ok, FileHandler} = lfm:open(Auth, {guid, Guid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, From, RawValue),
-                    onedata_file_api:fsync(FileHandler),
-                    onedata_file_api:release(FileHandler),
+                    {ok, _, RawValueSize} = lfm:write(FileHandler, From, RawValue),
+                    lfm:fsync(FileHandler),
+                    lfm:release(FileHandler),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, Guid}, CdmiPartialFlag),
                     {true, Req0, State};
                 undefined when is_binary(Value) ->
-                    {ok, FileHandler} = onedata_file_api:open(Auth, {guid, Guid}, write),
+                    {ok, FileHandler} = lfm:open(Auth, {guid, Guid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-                    ok = onedata_file_api:truncate(Auth, {guid, Guid}, 0),
-                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
-                    onedata_file_api:fsync(FileHandler),
-                    onedata_file_api:release(FileHandler),
+                    ok = lfm:truncate(Auth, {guid, Guid}, 0),
+                    {ok, _, RawValueSize} = lfm:write(FileHandler, 0, RawValue),
+                    lfm:fsync(FileHandler),
+                    lfm:release(FileHandler),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, Guid}, CdmiPartialFlag),
                     {true, Req0, State};
                 undefined ->
@@ -395,10 +395,9 @@ get_range(Opts) ->
 %% Gets attributes of file, returns undefined when file does not exist
 %% @end
 %%--------------------------------------------------------------------
--spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
-    onedata_file_api:file_attributes() | undefined.
+-spec get_attr(rest_auth:auth(), file_meta:path()) -> #file_attr{} | undefined.
 get_attr(Auth, Path) ->
-    case onedata_file_api:stat(Auth, {path, Path}) of
+    case lfm:stat(Auth, {path, Path}) of
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.

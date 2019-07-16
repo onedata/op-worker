@@ -27,7 +27,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | logical_file_manager:error_reply().
+    {ok, {od_share:id(), od_share:root_file_guid()}} | lfm:error_reply().
 create_share(SessId, FileKey, Name) ->
     {guid, GUID} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, GUID,
@@ -41,7 +41,7 @@ create_share(SessId, FileKey, Name) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(session:id(), od_share:id()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 remove_share(SessId, ShareID) ->
     case share_logic:get(SessId, ShareID) of
         {ok, #document{value = #od_share{root_file = ShareGuid}}} ->
@@ -56,7 +56,7 @@ remove_share(SessId, ShareID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share_by_guid(session:id(), od_share:root_file_guid()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
     remote_utils:call_fslogic(SessId, provider_request, ShareGuid,
         #remove_share{},

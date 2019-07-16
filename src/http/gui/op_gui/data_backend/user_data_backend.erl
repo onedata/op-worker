@@ -158,10 +158,7 @@ user_record(SessionId, UserId) ->
     Shares = lists:foldl(
         fun(SpaceId, Acc) ->
             % Make sure that user is allowed to view shares in this space
-            Authorized = space_logic:has_eff_privilege(
-                SessionId, SpaceId, UserId, ?SPACE_VIEW
-            ),
-            case Authorized of
+            case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
                 true ->
                     {ok, ShareIds} = space_logic:get_shares(SessionId, SpaceId),
                     ShareIds ++ Acc;

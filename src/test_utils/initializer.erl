@@ -962,9 +962,15 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesHarveste
         {ok, maps:keys(Providers)}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(Client, SpaceId, UserId, Privilege) ->
-        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(Client, SpaceId),
+    test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(SpaceId, UserId, Privilege) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
         lists:member(Privilege, maps:get(UserId, EffUsers, []))
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, has_eff_privileges, fun(SpaceId, UserId, Privileges) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
+        UserPrivileges = maps:get(UserId, EffUsers, []),
+        lists:all(fun(Privilege) -> lists:member(Privilege, UserPrivileges) end, Privileges)
     end),
 
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->

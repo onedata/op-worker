@@ -22,7 +22,7 @@
 -export([
     save/7, update/6, update/7, get/1, get/2,
     delete/2, list/1, list/4, save_db_view/6, delete_db_view/1,
-    query/3, get_json/2, is_supported/3, update_reduce_function/3,
+    query/3, get_json/2, exists_on_provider/3, update_reduce_function/3,
     build_cdmi_object_id_in_js/0]).
 
 %% datastore_model callbacks
@@ -163,8 +163,8 @@ update_reduce_function(SpaceId, Name, ReduceFunction) ->
             Error
     end.
 
--spec is_supported(od_space:id(), binary(), od_provider:id()) -> boolean().
-is_supported(SpaceId, IndexName, ProviderId) ->
+-spec exists_on_provider(od_space:id(), binary(), od_provider:id()) -> boolean().
+exists_on_provider(SpaceId, IndexName, ProviderId) ->
     case index:get(IndexName, SpaceId) of
         {ok, #document{value = #index{providers = ProviderIds}}} ->
             lists:member(ProviderId, ProviderIds);

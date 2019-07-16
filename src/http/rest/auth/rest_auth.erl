@@ -12,6 +12,8 @@
 -module(rest_auth).
 -author("Tomasz Lichon").
 
+-include("op_logic.hrl").
+-include("http/rest/rest.hrl").
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -19,6 +21,11 @@
 
 %% API
 -export([is_authorized/2, authenticate/1]).
+
+% opaque type of auth token that is necessary to perform operations on files.
+-type auth() :: any().
+
+-export_type([auth/0]).
 
 %%%===================================================================
 %%% API
@@ -33,10 +40,16 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, Auth} ->
-            {true, Req, State#{auth => Auth}};
+        {ok, ?USER(UserId, SessionId)} ->
+            {true, Req, State#{
+                user_id => UserId,
+                auth => SessionId
+            }};
+        {ok, ?NOBODY} ->
+            NewReq = cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req),
+            {stop, NewReq, State};
         {error, not_found} ->
-            NewReq = cowboy_req:reply(401, Req),
+            NewReq = cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req),
             {stop, NewReq, State};
         {error, Error} ->
             ?debug("Authentication error ~p", [Error]),
@@ -49,17 +62,17 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(req()) -> {ok, session:id()} | {error, term()}.
+-spec authenticate(req()) -> op_logic:client() | {error, term()}.
 authenticate(Req) ->
     case resolve_auth(Req) of
-        {error, Reason} ->
-            {error, Reason};
+        {error, not_found} ->
+            {ok, ?NOBODY};
         Auth ->
             case user_identity:get_or_fetch(Auth) of
-                {ok, #document{value = Iden}} ->
+                {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
                     case session_manager:reuse_or_create_rest_session(Iden, Auth) of
                         {ok, SessId} ->
-                            {ok, SessId};
+                            {ok, ?USER(UserId, SessId)};
                         {error, {invalid_identity, _}} ->
                             user_identity:delete(Auth),
                             authenticate(Req)
@@ -73,13 +86,14 @@ authenticate(Req) ->
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Resolves authorization carried by request (if any).
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(req()) -> user_identity:credentials() | {error, term()}.
+-spec resolve_auth(req()) -> user_identity:credentials() | {error, not_found}.
 resolve_auth(Req) ->
     case parse_macaroon_from_header(Req) of
         undefined -> {error, not_found};
@@ -109,4 +123,3 @@ parse_macaroon_from_header(Req) ->
                     Value
             end
     end.
-

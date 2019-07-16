@@ -20,7 +20,7 @@
 
 -export_type([content_type_callback/0, content_type_params/0]).
 
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 
 %% API
 -export([select_accept_callback/1, select_provide_callback/1,

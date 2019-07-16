@@ -42,15 +42,15 @@
 %% without "cdmi_" prefix.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
+-spec get_user_metadata(rest_auth:auth(), lfm:file_key()) ->
     maps:map().
 get_user_metadata(Auth, FileKey) ->
-    {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey, false, true),
+    {ok, Names} = lfm:list_xattr(Auth, FileKey, false, true),
     Metadata = lists:filtermap(
         fun
             (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>) -> false;
             (Name) ->
-                case onedata_file_api:get_xattr(Auth, FileKey, Name, false) of
+                case lfm:get_xattr(Auth, FileKey, Name, false) of
                     {ok, #xattr{value = XattrValue}} ->
                         {true, {Name, XattrValue}};
                     {error, ?ENOATTR} ->
@@ -62,7 +62,7 @@ get_user_metadata(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @equiv update_user_metadata(Auth, FileKey, UserMetadata, []).
 %%--------------------------------------------------------------------
--spec update_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(),
+-spec update_user_metadata(rest_auth:auth(), lfm:file_key(),
     maps:map()) -> ok.
 update_user_metadata(Auth, FileKey, UserMetadata) ->
     update_user_metadata(Auth, FileKey, UserMetadata, []).
@@ -73,7 +73,7 @@ update_user_metadata(Auth, FileKey, UserMetadata) ->
 %% entry in UserMetadata, entry is removed from user metadata associated with a file.
 %% @end
 %%--------------------------------------------------------------------
--spec update_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(),
+-spec update_user_metadata(rest_auth:auth(), lfm:file_key(),
     UserMetadata :: maps:map() | undefined, URIMetadataNames :: [Name :: binary()]) ->
     ok | no_return().
 update_user_metadata(_Auth, _FileKey, undefined, []) ->
@@ -86,9 +86,9 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     DeleteAttributeFunction =
         fun
             (?ACL_XATTR_NAME) ->
-                ok = onedata_file_api:remove_acl(Auth, FileKey);
+                ok = lfm:remove_acl(Auth, FileKey);
             (Name) ->
-                ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
+                ok = lfm:remove_xattr(Auth, FileKey, Name)
         end,
     ReplaceAttributeFunction =
         fun
@@ -98,9 +98,13 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
                     ?warning_stacktrace("Acl conversion error ~p", [Error]),
                     throw(?ERROR_INVALID_ACL)
                 end,
-                ok = onedata_file_api:set_acl(Auth, FileKey, ACL);
+                ok = lfm:set_acl(Auth, FileKey, ACL);
             ({Name, Value}) ->
-                ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = Name, value = Value})
+                ok = lfm:set_xattr(
+                    Auth, FileKey,
+                    #xattr{name = Name, value = Value},
+                    false, false
+                )
         end,
     case AllURIMetadataNames of
         [] ->
@@ -115,7 +119,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
 %%--------------------------------------------------------------------
 %% @equiv prepare_metadata(Auth, FileKey, <<>>).
 %%--------------------------------------------------------------------
--spec prepare_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
+-spec prepare_metadata(rest_auth:auth(), lfm:file_key()) ->
     maps:map().
 prepare_metadata(Auth, FileKey) ->
     prepare_metadata(Auth, FileKey, <<>>).
@@ -123,16 +127,16 @@ prepare_metadata(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata.
 %%--------------------------------------------------------------------
--spec prepare_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
+-spec prepare_metadata(rest_auth:auth(), lfm:file_key(), binary()) ->
     maps:map().
 prepare_metadata(Auth, FileKey, Prefix) ->
-    {ok, Attrs} = onedata_file_api:stat(Auth, FileKey),
+    {ok, Attrs} = lfm:stat(Auth, FileKey),
     prepare_metadata(Auth, FileKey, Prefix, Attrs).
 
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata with given prefix.
 %%--------------------------------------------------------------------
--spec prepare_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(),
+-spec prepare_metadata(Auth :: rest_auth:auth(), FileKey :: lfm:file_key(),
     Prefix :: binary(), #file_attr{}) -> maps:map().
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
@@ -145,9 +149,9 @@ prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
 %% could be found
 %% @end
 %%--------------------------------------------------------------------
--spec get_mimetype(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
+-spec get_mimetype(rest_auth:auth(), lfm:file_key()) -> binary().
 get_mimetype(Auth, FileKey) ->
-    case onedata_file_api:get_mimetype(Auth, FileKey) of
+    case lfm:get_mimetype(Auth, FileKey) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -159,9 +163,9 @@ get_mimetype(Auth, FileKey) ->
 %% if no valuetransferencoding could be found
 %% @end
 %%--------------------------------------------------------------------
--spec get_encoding(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
+-spec get_encoding(rest_auth:auth(), lfm:file_key()) -> binary().
 get_encoding(Auth, FileKey) ->
-    case onedata_file_api:get_transfer_encoding(Auth, FileKey) of
+    case lfm:get_transfer_encoding(Auth, FileKey) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -174,9 +178,9 @@ get_encoding(Auth, FileKey) ->
 %% binary("Complete") | binary("Processing") | binary("Error")
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
+-spec get_cdmi_completion_status(rest_auth:auth(), lfm:file_key()) -> binary().
 get_cdmi_completion_status(Auth, FileKey) ->
-    case onedata_file_api:get_cdmi_completion_status(Auth, FileKey) of
+    case lfm:get_cdmi_completion_status(Auth, FileKey) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -186,36 +190,36 @@ get_cdmi_completion_status(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Updates mimetype associated with file
 %%--------------------------------------------------------------------
--spec update_mimetype(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) -> ok | no_return().
+-spec update_mimetype(rest_auth:auth(), lfm:file_key(), binary()) -> ok | no_return().
 update_mimetype(_Auth, _FileKey, undefined) -> ok;
 update_mimetype(Auth, FileKey, Mimetype) ->
-    ok = onedata_file_api:set_mimetype(Auth, FileKey, Mimetype).
+    ok = lfm:set_mimetype(Auth, FileKey, Mimetype).
 
 %%--------------------------------------------------------------------
 %% @doc Updates valuetransferencoding associated with file
 %%--------------------------------------------------------------------
--spec update_encoding(onedata_auth_api:auth(), onedata_file_api:file_key(), binary() | undefined) -> ok | no_return().
+-spec update_encoding(rest_auth:auth(), lfm:file_key(), binary() | undefined) -> ok | no_return().
 update_encoding(_Auth, _FileKey, undefined) -> ok;
 update_encoding(Auth, FileKey, Encoding) ->
-    ok = onedata_file_api:set_transfer_encoding(Auth, FileKey, Encoding).
+    ok = lfm:set_transfer_encoding(Auth, FileKey, Encoding).
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %%--------------------------------------------------------------------
--spec update_cdmi_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
+-spec update_cdmi_completion_status(rest_auth:auth(), lfm:file_key(), binary()) ->
     ok | no_return().
 update_cdmi_completion_status(_Auth, _FileKey, undefined) -> ok;
 update_cdmi_completion_status(Auth, FileKey, CompletionStatus)
     when CompletionStatus =:= <<"Complete">>
     orelse CompletionStatus =:= <<"Processing">>
     orelse CompletionStatus =:= <<"Error">> ->
-    ok = onedata_file_api:set_cdmi_completion_status(Auth, FileKey, CompletionStatus).
+    ok = lfm:set_cdmi_completion_status(Auth, FileKey, CompletionStatus).
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %% according to X-CDMI-Partial flag
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status_according_to_partial_flag(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
+-spec set_cdmi_completion_status_according_to_partial_flag(rest_auth:auth(), lfm:file_key(), binary()) ->
     ok | no_return().
 set_cdmi_completion_status_according_to_partial_flag(_Auth, _FileKey, <<"true">>) ->
     ok;
@@ -267,8 +271,8 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %%--------------------------------------------------------------------
 %% @doc Returns system metadata with given prefix, in mochijson parser format
 %%--------------------------------------------------------------------
--spec prepare_cdmi_metadata(MetadataNames :: [binary()], onedata_file_api:file_key(),
-    onedata_auth_api:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
+-spec prepare_cdmi_metadata(MetadataNames :: [binary()], lfm:file_key(),
+    rest_auth:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
 prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) ->
     #{};
 prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
@@ -296,7 +300,7 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                         <<"cdmi_owner">> => Attrs#file_attr.owner_id
                     };
                 ?ACL_XATTR_NAME ->
-                    case onedata_file_api:get_acl(Auth, FileKey) of
+                    case lfm:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
                             (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
                                 ?ACL_XATTR_NAME => acl_logic:from_acl_to_json_format(Acl)

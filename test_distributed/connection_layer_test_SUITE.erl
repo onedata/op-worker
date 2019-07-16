@@ -90,6 +90,7 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
     timeout :: timeout()
 }).
 
+-define(ATTEMPTS, 90).
 
 %%%===================================================================
 %%% Test functions
@@ -308,6 +309,13 @@ communicate_test(Config) ->
     },
 
     {ok, {Sock, SessionId}} = spawn_ssl_echo_client(Worker1),
+
+    % await until connection is added to session or timeout
+    ?assertMatch(
+        {ok, [_]},
+        rpc:call(Worker1, session_connections, list, [SessionId]),
+        ?ATTEMPTS
+    ),
 
     % when sending msg with id to peer
     ?assertMatch(ok, send_msg(Worker1, SessionId, ServerMsgInternal)),

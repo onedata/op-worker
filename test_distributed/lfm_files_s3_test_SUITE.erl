@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%% @doc
-%%% This file contains tests of logical_file_manager API on s3 storage.
+%%% This file contains tests of lfm API on s3 storage.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files_s3_test_SUITE).

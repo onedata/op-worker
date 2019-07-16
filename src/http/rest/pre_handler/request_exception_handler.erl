@@ -21,7 +21,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/logging.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
@@ -43,21 +43,21 @@ handle(Req, State, error, {badmatch, Badmatch}) ->
 handle(Req, State, error, {case_clause, CaseClause}) ->
     handle(Req, State, error, CaseClause);
 handle(Req, State, error, {error, not_found}) ->
-    handle(Req, State, error, ?ERROR_NOT_FOUND);
+    handle(Req, State, error, ?ERROR_NOT_FOUND_REST);
 handle(Req, State, error, {error, {<<"not_found">>, _}}) ->
-    handle(Req, State, error, ?ERROR_NOT_FOUND);
+    handle(Req, State, error, ?ERROR_NOT_FOUND_REST);
 handle(Req, State, _, {error, {_, invalid_json}}) ->
     handle(Req, State, error, invalid_json);
 handle(Req, State, _, invalid_json) ->
     handle(Req, State, error, ?ERROR_INVALID_JSON);
 handle(Req, State, error, {error, ?ENOENT}) ->
-    handle(Req, State, error, ?ERROR_NOT_FOUND);
+    handle(Req, State, error, ?ERROR_NOT_FOUND_REST);
 handle(Req, State, error, {error, ?ENOATTR}) ->
     handle(Req, State, error, ?ERROR_ATTRIBUTE_NOT_FOUND);
 handle(Req, State, error, {error, ?EACCES}) ->
     handle(Req, State, error, ?ERROR_PERMISSION_DENIED);
 handle(Req, State, error, {error, ?EPERM}) ->
-    handle(Req, State, error, ?ERROR_FORBIDDEN);
+    handle(Req, State, error, ?ERROR_FORBIDDEN_REST);
 handle(Req, State, error, {error, ?EEXIST}) ->
     handle(Req, State, error, ?ERROR_EXISTS);
 handle(Req, State, _Type, Status) when is_integer(Status) ->

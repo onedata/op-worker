@@ -13,6 +13,7 @@
 -module(cdmi_arg_parser).
 -author("Piotr Ociepka").
 
+-include("op_logic.hrl").
 -include("http/http_common.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
@@ -75,7 +76,7 @@ malformed_objectid_request(Req, State) ->
     {State4, Req4} = add_opts_to_state(Req3, State3),
 
     {Handler, Req5} = choose_handler(Req4, Path),
-    onedata_handler_management_api:set_handler(Handler),
+    request_context:set_handler(Handler),
     {false, Req5, State4}.
 
 %%--------------------------------------------------------------------
@@ -194,7 +195,7 @@ parse_content(Content) ->
 %%%===================================================================
 
 -type result_state() :: #{options => list(), cdmi_version => binary(),
-path => onedata_file_api:file_path()}.
+path => file_meta:path()}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -262,7 +263,7 @@ add_objectid_path_to_state(Req, State) ->
                 {proplists:get_value(Id, ?CapabilityPathById), Req2_1};
             {false, Req2_1} ->
                 Auth = try_authenticate(Req2_1),
-                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Guid),
+                {ok, NewPath} = lfm:get_file_path(Auth, Guid),
                 {NewPath, Req2_1}
         end,
 
@@ -338,7 +339,7 @@ validate_body(Body) ->
 %% Chooses adequate handler for objectid request, on basis of filepath.
 %% @end
 %%--------------------------------------------------------------------
--spec choose_handler(req(), onedata_file_api:file_path()) ->
+-spec choose_handler(req(), file_meta:path()) ->
     {module(), req()}.
 choose_handler(Req, Path) ->
     case filepath_utils:ends_with_slash(Path) of
@@ -377,11 +378,11 @@ is_capability_object(#{path := Path} = Req) ->
 %%--------------------------------------------------------------------
 %% @doc Authenticate user or throw ERROR_UNAUTHORIZED in case of error
 %%--------------------------------------------------------------------
--spec try_authenticate(req()) -> onedata_auth_api:auth().
+-spec try_authenticate(req()) -> rest_auth:auth().
 try_authenticate(Req) ->
-    case onedata_auth_api:authenticate(Req) of
-        {ok, Auth} ->
-            Auth;
+    case rest_auth:authenticate(Req) of
+        {ok, ?USER(_UserId, SessionId)} ->
+            SessionId;
         _ ->
-            throw(?ERROR_UNAUTHORIZED)
+            throw(?ERROR_UNAUTHORIZED_REST)
     end.

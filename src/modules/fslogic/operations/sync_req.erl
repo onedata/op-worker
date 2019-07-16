@@ -109,10 +109,10 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
         Prefetch, undefined, Priority),
 
     %todo do not use lfm, operate on fslogic directly
-    {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read),
+    {ok, Handle} = lfm:open(SessId, {guid, FileGuid}, read),
     % does sync internally
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
-    lfm_files:release(Handle),
+    lfm:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
     #fuse_response{

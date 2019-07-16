@@ -552,7 +552,7 @@ get_transfer_stats(RequestedTransferType, SpaceId) ->
     lists:foldl(fun(TransferType, TransferStatsMap) ->
         TransferStats = lists:foldl(fun(Provider, OldTransferStats) ->
             case space_transfer_stats:get(Provider, TransferType, SpaceId) of
-                {ok, TransferStat} ->
+                {ok, #document{value = TransferStat}} ->
                     OldTransferStats#{Provider => TransferStat};
                 {error, not_found} ->
                     OldTransferStats;

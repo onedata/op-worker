@@ -375,14 +375,11 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 -spec validate_scope_privs(check_permissions:access_definition(), file_ctx:ctx(),
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
+% TODO VFS-5603
 validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    HasPrivilege = space_logic:has_eff_privilege(
-        SessionId, SpaceId, UserId, ?SPACE_WRITE_DATA
-    ),
-    case HasPrivilege of
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_WRITE_DATA) of
         true ->
             {ok, FileCtx};
         false ->

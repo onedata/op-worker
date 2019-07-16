@@ -27,7 +27,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_guid(session:id(), fslogic_worker:file_guid_or_path()) ->
-    {guid, fslogic_worker:file_guid()}.
+    {guid, fslogic_worker:file_guid()} | {error, term()}.
 ensure_guid(_, {guid, FileGuid}) ->
     {guid, FileGuid};
 ensure_guid(SessionId, {path, Path}) ->
