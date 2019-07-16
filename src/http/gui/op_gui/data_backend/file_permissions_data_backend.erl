@@ -120,7 +120,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
             <<"acl">> ->
                 AclJson = proplists:get_value(<<"aclValue">>, Data, <<"[]">>),
                 Acl = gui_acl_parser:json_to_acl(AclJson),
-                case logical_file_manager:set_acl(SessId, {guid, FileId}, Acl) of
+                case lfm:set_acl(SessId, {guid, FileId}, Acl) of
                     ok ->
                         ok;
                     {error, ?EACCES} ->
@@ -133,7 +133,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
                     undefined ->
                         {ok, #file_attr{
                             mode = PermissionsAttr
-                        }} = logical_file_manager:stat(SessId, {guid, FileId}),
+                        }} = lfm:stat(SessId, {guid, FileId}),
                         PermissionsAttr rem 8#1000;
                     Val ->
                         case is_integer(Val) of
@@ -145,7 +145,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
                 end,
                 case PosixValue >= 0 andalso PosixValue =< 8#777 of
                     true ->
-                        case logical_file_manager:set_perms(
+                        case lfm:set_perms(
                             SessId, {guid, FileId}, PosixValue) of
                             {error, ?EACCES} ->
                                 op_gui_error:report_warning(<<"Cannot set "
@@ -198,12 +198,12 @@ delete_record(<<"file-permission">>, _FileId) ->
 -spec file_permissions_record(SessionId :: session:id(),
     fslogic_worker:file_guid()) -> {ok, proplists:proplist()}.
 file_permissions_record(SessId, FileId) ->
-    case logical_file_manager:stat(SessId, {guid, FileId}) of
+    case lfm:stat(SessId, {guid, FileId}) of
         {error, ?ENOENT} ->
             op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, #file_attr{mode = PermissionsAttr}} ->
             PosixValue = integer_to_binary((PermissionsAttr rem 8#1000), 8),
-            GetAclResult = logical_file_manager:get_acl(SessId, {guid, FileId}),
+            GetAclResult = lfm:get_acl(SessId, {guid, FileId}),
             {Type, AclValue} = case GetAclResult of
                 {error, ?ENOATTR} ->
                     {<<"posix">>, null};

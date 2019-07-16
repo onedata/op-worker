@@ -64,7 +64,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    onedata_auth_api:is_authorized(Req, State).
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @equiv pre_handler:resource_exists/2
@@ -115,7 +115,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, State = #{auth := Auth, path := Path}) ->
-    ok = onedata_file_api:rm_recursive(Auth, {path, Path}),
+    ok = lfm:rm_recursive(Auth, {path, Path}),
     {true, Req, State}.
 
 %%%===================================================================
@@ -153,15 +153,15 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, OperationPerformed, Guid} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, NewGuid} = onedata_file_api:mkdir(Auth, Path),
+                {ok, NewGuid} = lfm:mkdir(Auth, Path),
                 {ok, created, NewGuid};
             {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
-                {ok, NewGuid} = onedata_file_api:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
+                {ok, NewGuid} = lfm:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
                 {ok, copied, NewGuid};
             {undefined, undefined, MoveURI} ->
-                {ok, NewGuid} = onedata_file_api:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
+                {ok, NewGuid} = lfm:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
                 {ok, moved, NewGuid}
         end,
 
@@ -187,7 +187,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
 %%--------------------------------------------------------------------
 -spec put_binary(req(), maps:map()) -> {term(), req(), maps:map()}.
 put_binary(Req, State = #{auth := Auth, path := Path}) ->
-    {ok, _} = onedata_file_api:mkdir(Auth, Path),
+    {ok, _} = lfm:mkdir(Auth, Path),
     {true, Req, State}.
 
 %%--------------------------------------------------------------------
@@ -218,10 +218,9 @@ error_no_version(_Req, _State) ->
 %% Gets attributes of file, returns undefined when file does not exist
 %% @end
 %%--------------------------------------------------------------------
--spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
-    onedata_file_api:file_attributes() | undefined.
+-spec get_attr(rest_auth:auth(), file_meta:path()) -> #file_attr{} | undefined.
 get_attr(Auth, Path) ->
-    case onedata_file_api:stat(Auth, {path, Path}) of
+    case lfm:stat(Auth, {path, Path}) of
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.

@@ -42,8 +42,8 @@ handle(<<"fileUploadSuccess">>, Props) ->
     ParentId = proplists:get_value(<<"parentId">>, Props),
     {FileId, FileHandle} = page_file_upload:wait_for_file_new_file_id(SessionId, UploadId),
     page_file_upload:upload_map_delete(SessionId, UploadId),
-    ok = logical_file_manager:fsync(FileHandle),
-    ok = logical_file_manager:release(FileHandle),
+    ok = lfm:fsync(FileHandle),
+    ok = lfm:release(FileHandle),
     file_data_backend:report_file_upload(FileId, ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
@@ -65,12 +65,12 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
         {ok, URL} ->
             {ok, [{<<"fileUrl">>, URL}]};
         ?ERROR_FORBIDDEN ->
-            gui_error:report_error(<<"Permission denied">>);
+            op_gui_error:report_error(<<"Permission denied">>);
         {error, ?ENOENT} ->
-            gui_error:report_error(<<"File does not exist or was deleted - try refreshing the page.">>);
+            op_gui_error:report_error(<<"File does not exist or was deleted - try refreshing the page.">>);
         Error ->
             ?debug("Cannot resolve file download url for file ~p - ~p", [FileId, Error]),
-            gui_error:report_error(<<"Cannot resolve file download url - try refreshing the page.">>)
+            op_gui_error:report_error(<<"Cannot resolve file download url - try refreshing the page.">>)
     end;
 
 % Checks if file that is displayed in shares view can be downloaded
@@ -104,7 +104,7 @@ handle(<<"createFileShare">>, Props) ->
     UserId = op_gui_session:get_user_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
-    case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
+    case lfm:create_share(SessionId, {guid, FileId}, Name) of
         {ok, {ShareId, _}} ->
             op_gui_async:push_updated(
                 <<"user">>,
@@ -127,28 +127,36 @@ handle(<<"createFileShare">>, Props) ->
 %%--------------------------------------------------------------------
 
 handle(<<"getSpaceTransfers">>, Props) ->
+    SessionId = op_gui_session:get_session_id(),
     SpaceId = proplists:get_value(<<"spaceId">>, Props),
     Type = proplists:get_value(<<"type">>, Props),
     StartFromIndex = proplists:get_value(<<"startFromIndex">>, Props, null),
     Offset = proplists:get_value(<<"offset">>, Props, 0),
     Limit = proplists:get_value(<<"size">>, Props, all),
-    transfer_data_backend:list_transfers(SpaceId, Type, StartFromIndex, Offset, Limit);
+    transfer_data_backend:list_transfers(
+        SessionId, SpaceId, Type, StartFromIndex, Offset, Limit
+    );
 
 handle(<<"getTransfersForFile">>, Props) ->
     FileGuid = proplists:get_value(<<"fileId">>, Props),
     EndedInfo = proplists:get_value(<<"endedInfo">>, Props, <<"count">>),
-    {ok, Result} = transfer_data_backend:get_transfers_for_file(FileGuid),
-    case EndedInfo of
-        <<"count">> ->
-            EndedCount = length(proplists:get_value(ended, Result)),
-            {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
-        <<"ids">> ->
-            {ok, Result}
+    case transfer_data_backend:get_transfers_for_file(FileGuid) of
+        {ok, Result} ->
+            case EndedInfo of
+                <<"count">> ->
+                    EndedCount = length(proplists:get_value(ended, Result)),
+                    {ok, [{ended, EndedCount} | proplists:delete(ended, Result)]};
+                <<"ids">> ->
+                    {ok, Result}
+            end;
+        Error ->
+            Error
     end;
 
 handle(<<"cancelTransfer">>, Props) ->
+    SessionId = op_gui_session:get_session_id(),
     TransferId = proplists:get_value(<<"transferId">>, Props),
-    transfer_data_backend:cancel_transfer(TransferId);
+    transfer_data_backend:cancel_transfer(SessionId, TransferId);
 
 handle(<<"rerunTransfer">>, Props) ->
     SessionId = op_gui_session:get_session_id(),

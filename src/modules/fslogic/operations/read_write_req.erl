@@ -86,7 +86,7 @@ get_proxyio_node(Uuid) ->
 %%--------------------------------------------------------------------
 -spec get_handle(user_ctx:ctx(), file_ctx:ctx(),
     HandleId :: storage_file_manager:handle_id(), operation()) ->
-    {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
+    {ok, storage_file_manager:handle()} | lfm:error_reply().
 get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of

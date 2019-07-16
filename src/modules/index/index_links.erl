@@ -103,8 +103,8 @@ list(SpaceId, StartId, Offset, Limit) ->
         fun(Link, Acc) -> {ok, [Link | Acc]} end, [], Opts3),
 
     case Result of
-        {ok, Indexes} ->
-            {ok, tag_indexes(lists:reverse(Indexes))};
+        {ok, Indices} ->
+            {ok, tag_indices(lists:reverse(Indices))};
         Error ->
             Error
     end.
@@ -142,13 +142,13 @@ link_root(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds links tree ID suffix to indexes with ambiguous names.
+%% Adds links tree ID suffix to indices with ambiguous names.
 %% @end
 %%--------------------------------------------------------------------
--spec tag_indexes([datastore_links:link()]) -> [index:name()].
-tag_indexes([]) ->
+-spec tag_indices([datastore_links:link()]) -> [index:name()].
+tag_indices([]) ->
     [];
-tag_indexes(Links) ->
+tag_indices(Links) ->
     {Group2, Groups2} = lists:foldl(fun
         (Link = #link{}, {[], Groups}) ->
             {[Link], Groups};

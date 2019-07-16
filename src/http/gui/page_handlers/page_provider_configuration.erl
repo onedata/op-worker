@@ -36,6 +36,7 @@
 handle(<<"GET">>, Req) ->
     cowboy_req:reply(200,
         #{<<"content-type">> => <<"application/json">>},
-        json_utils:encode(configuration:gather_configuration()),
+        % TODO VFS-5622
+        json_utils:encode(op_provider:gather_configuration()),
         Req
     ).

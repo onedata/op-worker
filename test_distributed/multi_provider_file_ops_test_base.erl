@@ -1628,7 +1628,7 @@ transfer_files_to_source_provider(Config0) ->
     utils:pforeach(fun(Num) ->
         {ok, [{_, List}]} = 
             rpc:call(Worker, transfer_data_backend, list_transfers, 
-                [SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+                [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
     EndGui = erlang:monotonic_time(millisecond),
@@ -1998,19 +1998,19 @@ read_big_file_loop(_FileSize, _File, _Worker, _SessId, _, {{ok, _Time, true}, ok
 read_big_file_loop(_FileSize, _File, _Worker, _SessId, 0, LastAns, _TimeSum) ->
     LastAns;
 read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) ->
-    Ans = case logical_file_manager:open(SessId(Worker), {path, File}, rdwr) of
+    Ans = case lfm:open(SessId(Worker), {path, File}, rdwr) of
         {ok, Handle} ->
             ReadAns = try
                 Start = os:timestamp(),
-                {ok, _, Bytes} = logical_file_manager:read(Handle, 0, FileSize),
+                {ok, _, Bytes} = lfm:read(Handle, 0, FileSize),
                 {ok, timer:now_diff(os:timestamp(), Start), FileSize == size(Bytes)}
             catch
                 E1:E2 ->
                     {read, E1, E2}
             end,
 
-            {ReadAns, logical_file_manager:fsync(Handle),
-                logical_file_manager:release(Handle)};
+            {ReadAns, lfm:fsync(Handle),
+                lfm:release(Handle)};
         OpenError ->
             {open_error, OpenError}
     end,

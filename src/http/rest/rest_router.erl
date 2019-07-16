@@ -18,24 +18,6 @@
 -export([top_level_routing/0]).
 
 -define(HANDLERS, [
-    attributes,
-    configuration,
-    changes,
-    files,
-    index_by_name,
-    index_collection,
-    index_reduce,
-    metadata,
-    onedata_metrics,
-    query_index,
-    replicas,
-    replicas_index,
-    spaces,
-    space_by_id,
-    shares,
-    transfers,
-    transfer_by_id,
-    transfers_mock,
     cdmi_capabilities_handler,
     cdmi_container_capabilities_handler,
     cdmi_container_handler,
@@ -64,9 +46,3 @@ top_level_routing() ->
     PluginRoutes = [Plugin:routes() || Plugin <- Plugins],
     FlattenPluginRoutes = lists:flatten(PluginRoutes),
     [{Path, pre_handler, PluginDescription} || {Path, PluginDescription} <- FlattenPluginRoutes].
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-

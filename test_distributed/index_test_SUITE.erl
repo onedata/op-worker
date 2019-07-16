@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Basic tests of couchbase indexes
+%%% Basic tests of couchbase indices
 %%% @end
 %%%-------------------------------------------------------------------
 -module(index_test_SUITE).
@@ -94,9 +94,9 @@ create_and_delete_simple_index_test(Config) ->
         }
     ">>,
     create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    ?assertMatch({ok, [IndexName]}, list_indexes(Worker, SpaceId)),
+    ?assertMatch({ok, [IndexName]}, list_indices(Worker, SpaceId)),
     delete_index(Worker, SpaceId, IndexName),
-    ?assertMatch({ok, []}, list_indexes(Worker, SpaceId)).
+    ?assertMatch({ok, []}, list_indices(Worker, SpaceId)).
 
 query_simple_empty_index_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -340,7 +340,7 @@ delete_index(Worker, SpaceId, IndexName) ->
 query_index(Worker, SpaceId, ViewName, Options) ->
     rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).
 
-list_indexes(Worker, SpaceId) ->
+list_indices(Worker, SpaceId) ->
     rpc:call(Worker, index, list, [SpaceId]).
 
 query_result_to_map(QueryResult) ->

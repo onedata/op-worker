@@ -9,7 +9,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 
--include("http/rest/http_status.hrl").
+-include("http/rest/rest.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
 -ifndef(CDMI_ERRORS_HRL).

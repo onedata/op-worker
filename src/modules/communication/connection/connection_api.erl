@@ -19,8 +19,6 @@
 %% API
 -export([send/2, send/3, send/4, send_via_any/2]).
 
--type message() :: #client_message{} | #server_message{}.
-
 
 %%%===================================================================
 %%% API
@@ -32,7 +30,7 @@
 %% @equiv send(SessionId, Msg, []).
 %% @end
 %%--------------------------------------------------------------------
--spec send(session:id(), message()) ->
+-spec send(session:id(), communicator:message()) ->
     ok | {error, Reason :: term()}.
 send(SessionId, Msg) ->
     send(SessionId, Msg, []).
@@ -43,7 +41,7 @@ send(SessionId, Msg) ->
 %% @equiv send(SessionId, Msg, ExcludedCons, false).
 %% @end
 %%--------------------------------------------------------------------
--spec send(session:id(), message(), ExcludedCons :: [pid()]) ->
+-spec send(session:id(), communicator:message(), ExcludedCons :: [pid()]) ->
     ok | {error, Reason :: term()}.
 send(SessionId, Msg, ExcludedCons) ->
     send(SessionId, Msg, ExcludedCons, false).
@@ -58,8 +56,8 @@ send(SessionId, Msg, ExcludedCons) ->
 %% Additionally logs eventual errors if LogErrors is set to true.
 %% @end
 %%--------------------------------------------------------------------
--spec send(session:id(), message(), ExcludedCons :: [pid()], boolean()) ->
-    ok | {error, Reason :: term()}.
+-spec send(session:id(), communicator:message(), ExcludedCons :: [pid()],
+    boolean()) -> ok | {error, Reason :: term()}.
 send(SessionId, Msg, ExcludedCons, LogErrors) ->
     case send_msg_excluding_connections(SessionId, Msg, ExcludedCons) of
         ok ->
@@ -75,7 +73,7 @@ send(SessionId, Msg, ExcludedCons, LogErrors) ->
 %% Tries to send given message via any of specified connections.
 %% @end
 %%--------------------------------------------------------------------
--spec send_via_any(message(), [pid()]) -> ok | {error, term()}.
+-spec send_via_any(communicator:message(), [pid()]) -> ok | {error, term()}.
 send_via_any(_Msg, []) ->
     {error, no_connections};
 send_via_any(Msg, [Conn]) ->
@@ -99,7 +97,7 @@ send_via_any(Msg, [Conn | Cons]) ->
 
 
 %% @private
--spec send_msg_excluding_connections(session:id(), message(),
+-spec send_msg_excluding_connections(session:id(), communicator:message(),
     ExcludedCons :: [pid()]) -> ok | {error, term()}.
 send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
     case session_connections:list(SessionId) of
@@ -112,6 +110,8 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
 
 
 %% @private
+-spec log_sending_msg_error(session:id(), communicator:message(),
+    {error, term()}) -> ok.
 log_sending_msg_error(SessionId, _Msg, {error, no_connections}) ->
     ?debug("Failed to send msg to ~p due to lack of available "
            "connections", [SessionId]);

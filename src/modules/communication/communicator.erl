@@ -42,6 +42,8 @@
 
 -type error() :: {error, Reason :: term()}.
 
+-export_type([client_message/0, server_message/0, message/0]).
+
 -define(RESPONSE_AWAITING_PERIOD, 3 * ?WORKERS_STATUS_CHECK_INTERVAL).
 
 %%%===================================================================

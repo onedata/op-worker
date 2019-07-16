@@ -88,7 +88,7 @@ find_all(<<"file-distribution">>) ->
     {ok, [proplists:proplist()]} | op_gui_error:error_result().
 query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
     SessionId = op_gui_session:get_session_id(),
-    {ok, Distributions} = logical_file_manager:get_file_distribution(
+    {ok, Distributions} = lfm:get_file_distribution(
         SessionId, {guid, FileId}
     ),
     SpaceId = file_id:guid_to_space_id(FileId),

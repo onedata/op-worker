@@ -157,7 +157,7 @@ upload_map_delete(SessionId, UploadId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec wait_for_file_new_file_id(session:id(), UploadId :: binary()) ->
-    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
+    {fslogic_worker:file_guid(), lfm:handle()}.
 wait_for_file_new_file_id(SessionId, UploadId) ->
     wait_for_file_new_file_id(SessionId, UploadId, ?MAX_WAIT_FOR_FILE_HANDLE).
 wait_for_file_new_file_id(_SessionId, _, Timeout) when Timeout < 0 ->
@@ -170,7 +170,7 @@ wait_for_file_new_file_id(SessionId, UploadId, Timeout) ->
                 SessionId, UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE
             );
         FileId ->
-            {ok, FileHandle} = logical_file_manager:open(
+            {ok, FileHandle} = lfm:open(
                 SessionId, {guid, FileId}, write),
             {FileId, FileHandle}
     end.
@@ -241,8 +241,8 @@ multipart(Req, SessionId, Params) ->
                         ?error_stacktrace("Error while streaming file upload "
                         "from user ~p - ~p:~p",
                             [UserId, Type, Message]),
-                        logical_file_manager:release(FileHandle), % release if possible
-                        logical_file_manager:unlink(SessionId, {guid, FileId}, false),
+                        lfm:release(FileHandle), % release if possible
+                        lfm:unlink(SessionId, {guid, FileId}, false),
                         throw(stream_file_error)
                     end,
                     multipart(Req3, SessionId, Params)
@@ -258,20 +258,20 @@ multipart(Req, SessionId, Params) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_file(Req :: cowboy_req:req(),
-    FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
+    FileHandle :: lfm:handle(), Offset :: non_neg_integer(),
     Opts :: cowboy_req:read_body_opts()) -> cowboy_req:req().
 stream_file(Req, FileHandle, Offset, Opts) ->
     case cowboy_req:read_part_body(Req, Opts) of
         {ok, Body, Req2} ->
             % @todo VFS-1815 handle errors, such as {error, enospc}
-            {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
-            ok = logical_file_manager:release(FileHandle),
+            {ok, _, _} = lfm:write(FileHandle, Offset, Body),
+            ok = lfm:release(FileHandle),
             % @todo VFS-1815 register_chunk?
             % or send a message from client that uuid has finished?
             Req2;
         {more, Body, Req2} ->
             {ok, NewHandle, Written} =
-                logical_file_manager:write(FileHandle, Offset, Body),
+                lfm:write(FileHandle, Offset, Body),
             stream_file(Req2, NewHandle, Offset + Written, Opts)
     end.
 
@@ -285,7 +285,7 @@ stream_file(Req, FileHandle, Offset, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_new_file_id(session:id(), Params :: proplists:proplist()) ->
-    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
+    {fslogic_worker:file_guid(), lfm:handle()}.
 get_new_file_id(SessionId, Params) ->
     UploadId = get_bin_param(<<"resumableIdentifier">>, Params),
     ChunkNumber = get_int_param(<<"resumableChunkNumber">>, Params),
@@ -295,7 +295,7 @@ get_new_file_id(SessionId, Params) ->
         1 ->
             ParentId = get_bin_param(<<"parentId">>, Params),
             FileName = get_bin_param(<<"resumableFilename">>, Params),
-            {ok, ParentPath} = logical_file_manager:get_file_path(
+            {ok, ParentPath} = lfm:get_file_path(
                 SessionId, ParentId),
             ProposedPath = filename:join([ParentPath, FileName]),
             {FileId, FileHandle} = create_unique_file(SessionId, ProposedPath),
@@ -344,7 +344,7 @@ get_bin_param(Key, Params) ->
 %%--------------------------------------------------------------------
 -spec create_unique_file(SessionId :: session:id(),
     OriginalPath :: file_meta:path()) ->
-    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
+    {fslogic_worker:file_guid(), lfm:handle()}.
 create_unique_file(SessionId, OriginalPath) ->
     create_unique_file(SessionId, OriginalPath, 0).
 
@@ -359,7 +359,7 @@ create_unique_file(SessionId, OriginalPath) ->
 %%--------------------------------------------------------------------
 -spec create_unique_file(SessionId :: session:id(),
     OriginalPath :: file_meta:path(), Tries :: integer()) ->
-    {fslogic_worker:file_guid(), logical_file_manager:handle()}.
+    {fslogic_worker:file_guid(), lfm:handle()}.
 create_unique_file(_, _, ?MAX_UNIQUE_FILENAME_COUNTER) ->
     throw(filename_occupied);
 
@@ -373,9 +373,9 @@ create_unique_file(SessionId, OriginalPath, Counter) ->
             str_utils:format_bin("~s(~B)~s", [RootNm, Counter, Ext])
     end,
     % @todo use exists when it is implemented
-    case logical_file_manager:stat(SessionId, {path, ProposedPath}) of
+    case lfm:stat(SessionId, {path, ProposedPath}) of
         {error, _} ->
-            {ok, {FileId, FileHandle}} = logical_file_manager:create_and_open(
+            {ok, {FileId, FileHandle}} = lfm:create_and_open(
                 SessionId, ProposedPath, undefined, write),
             {FileId, FileHandle};
         {ok, _} ->

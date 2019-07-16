@@ -75,7 +75,7 @@ stream_binary(
     stream_binary(HttpStatus, Req, State, Size, [{0, Size -1}]);
 stream_binary(HttpStatus, Req, #{path := Path, auth := Auth} = State, Size, Ranges) ->
     StreamSize = binary_stream_size(Ranges, Size),
-    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
+    {ok, FileHandle} = lfm:open(Auth, {path, Path} ,read),
     {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
 
     Req2 = cowboy_req:stream_reply(HttpStatus, #{
@@ -103,7 +103,7 @@ stream_cdmi(Req, #{path := Path, auth := Auth} = State, Size, Range,
     StreamSize = cdmi_streamer:cdmi_stream_size(
         Range, Size, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix
     ),
-    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
+    {ok, FileHandle} = lfm:open(Auth, {path, Path} ,read),
     {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
     Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
         <<"content-length">> => integer_to_binary(StreamSize)
@@ -121,7 +121,7 @@ stream_cdmi(Req, #{path := Path, auth := Auth} = State, Size, Range,
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_range(req(), State :: maps:map(), Range, Encoding :: binary(),
-  BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
+  BufferSize :: integer(), FileHandle :: lfm:handle()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().
 stream_range(Req, State, Range, Encoding, BufferSize, FileHandle)
@@ -135,7 +135,7 @@ stream_range(Req, #{attributes := #file_attr{size = Size}} = State,
 stream_range(Req, State, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
     ReadBufSize = min(ToRead, BufferSize),
-    {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ReadBufSize),
+    {ok, NewFileHandle, Data} = lfm:read(FileHandle, From, ReadBufSize),
     DataSize = size(Data),
     case DataSize of
         0 ->
@@ -157,12 +157,12 @@ stream_range(Req, State, {From, To}, Encoding, BufferSize, FileHandle) ->
 %% Returns updated request.
 %% @end
 %%--------------------------------------------------------------------
--spec write_body_to_file(req(), integer(), onedata_file_api:file_handle()) ->
+-spec write_body_to_file(req(), integer(), lfm:handle()) ->
     {ok, req()}.
 write_body_to_file(Req0, Offset, FileHandle) ->
     WriteFun = fun Write(Req, WriteOffset, Handle) ->
         {Status, Chunk, Req1} = cowboy_req:read_body(Req),
-        {ok, _NewHandle, Bytes} = onedata_file_api:write(Handle, WriteOffset, Chunk),
+        {ok, _NewHandle, Bytes} = lfm:write(Handle, WriteOffset, Chunk),
         case Status of
             more -> Write(Req1, WriteOffset + Bytes, Handle);
             ok -> {ok, Req1}

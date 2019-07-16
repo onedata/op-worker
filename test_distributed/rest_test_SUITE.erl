@@ -16,6 +16,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -26,7 +27,6 @@
 -export([
     macaroon_auth/1,
     internal_error_when_handler_crashes/1,
-    custom_code_when_handler_throws_code/1,
     custom_error_when_handler_throws_error/1
 ]).
 
@@ -34,7 +34,6 @@
 all() -> ?ALL([
     macaroon_auth,
     internal_error_when_handler_crashes,
-    custom_code_when_handler_throws_code,
     custom_error_when_handler_throws_error
 ]).
 
@@ -73,38 +72,26 @@ internal_error_when_handler_crashes(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, files, is_authorized, fun test_crash/2),
+    test_utils:mock_expect(Workers, op_space, get, fun test_crash/2),
 
     % when
-    {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "files"),
+    {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "spaces"),
 
     % then
     ?assertEqual(500, Status).
-
-custom_code_when_handler_throws_code(Config) ->
-    % given
-    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
-    Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400/2),
-
-    % when
-    {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "files"),
-
-    % then
-    ?assertEqual(400, Status).
 
 custom_error_when_handler_throws_error(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400_with_description/2),
+    test_utils:mock_expect(Workers, op_space, get, fun(_, _) -> throw(?ERROR_BAD_VALUE_JSON(<<"dummy">>)) end),
 
     % when
-    {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "files"),
+    {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "spaces"),
 
     % then
     ?assertEqual(400, Status),
-    ?assertEqual(<<"{\"error\":\"badrequest\"}">>, Body).
+    ?assertEqual(<<"{\"error\":\"Bad value: provided \\\"dummy\\\" must be a valid JSON\"}">>, Body).
 
 
 %%%===================================================================
@@ -122,12 +109,13 @@ init_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when
     Case =:= internal_error_when_handler_crashes;
-    Case =:= custom_code_when_handler_throws_code;
-    Case =:= custom_error_when_handler_throws_error ->
+    Case =:= custom_error_when_handler_throws_error
+->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     hackney:start(),
-    test_utils:mock_new(Workers, files),
+    test_utils:mock_new(Workers, op_space),
+    test_utils:mock_expect(Workers, op_space, authorize, fun(_, _) -> true end),
     mock_provider_id(Config),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -141,10 +129,10 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(Case, Config) when
     Case =:= internal_error_when_handler_crashes;
-    Case =:= custom_code_when_handler_throws_code;
-    Case =:= custom_error_when_handler_throws_error ->
+    Case =:= custom_error_when_handler_throws_error
+->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, files),
+    test_utils:mock_unload(Workers, op_space),
     unmock_provider_id(Config),
     hackney:stop(),
     ssl:stop();
@@ -242,9 +230,9 @@ mock_user_logic(Config) ->
         (UserSessId, ?USER_ID) ->
             try session:get_user_id(UserSessId) of
                 {ok, ?USER_ID} -> UserDoc;
-                _ -> {error, forbidden}
+                _ -> ?ERROR_UNAUTHORIZED
             catch
-                _:_ -> {error, forbidden}
+                _:_ -> ?ERROR_UNAUTHORIZED
             end;
         (_, _) ->
             {error, not_found}
@@ -287,11 +275,3 @@ unmock_provider_id(Config) ->
 -spec test_crash(term(), term()) -> no_return().
 test_crash(_, _) ->
     throw(test_crash).
-
--spec test_throw_400(term(), term()) -> no_return().
-test_throw_400(_, _) ->
-    throw(400).
-
--spec test_throw_400_with_description(term(), term()) -> no_return().
-test_throw_400_with_description(_, _) ->
-    throw({400, #{<<"error">> => <<"badrequest">>}}).

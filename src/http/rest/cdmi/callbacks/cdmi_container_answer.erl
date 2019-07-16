@@ -44,7 +44,7 @@ prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     prepare(Tail, State);
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
-    {ok, #file_attr{guid = Guid}} = onedata_file_api:stat(Auth, {path, filepath_utils:parent_dir(Path)}),
+    {ok, #file_attr{guid = Guid}} = lfm:stat(Auth, {path, filepath_utils:parent_dir(Path)}),
     {ok, Id} = file_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"parentID">> => Id};
 prepare([<<"capabilitiesURI">> | Tail], State) ->
@@ -60,7 +60,7 @@ prepare([<<"metadata">> | Tail], #{auth := Auth, guid := Guid} = State) ->
 prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, guid := Guid} = State) ->
     (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Guid}, Prefix)};
 prepare([<<"childrenrange">> | Tail], #{options := Opts, guid := Guid, auth := Auth} = State) ->
-    {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {guid, Guid}),
+    {ok, ChildNum} = lfm:get_children_count(Auth, {guid, Guid}),
     {From, To} =
         case lists:keyfind(<<"children">>, 1, Opts) of
             {<<"children">>, Begin, End} ->
@@ -80,15 +80,15 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, guid := Guid, auth := A
     (prepare(Tail, State))#{<<"childrenrange">> => BinaryRange};
 prepare([{<<"children">>, From, To} | Tail], #{guid := Guid, auth := Auth} = State) ->
     {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
-    {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {guid, Guid}),
+    {ok, ChildNum} = lfm:get_children_count(Auth, {guid, Guid}),
     {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-    {ok, List} = onedata_file_api:ls(Auth, {guid, Guid}, From1, To1 - From1 + 1),
+    {ok, List} = lfm:ls(Auth, {guid, Guid}, From1, To1 - From1 + 1),
     Children = lists:map(
         fun({FileGuid, Name}) -> distinguish_files(FileGuid, Name, Auth) end, List),
     (prepare(Tail, State))#{<<"children">> => Children};
 prepare([<<"children">> | Tail], #{guid := Guid, auth := Auth} = State) ->
     {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
-    {ok, List} = onedata_file_api:ls(Auth, {guid, Guid}, 0, MaxChildren + 1),
+    {ok, List} = lfm:ls(Auth, {guid, Guid}, 0, MaxChildren + 1),
     terminate_if_too_many_children(List, MaxChildren),
     Children = lists:map(
         fun({FileGuid, Name}) -> distinguish_files(FileGuid, Name, Auth) end, List),
@@ -106,10 +106,10 @@ prepare([_Other | Tail], State) ->
 %% (for regular files returns path ending with slash)
 %% @end
 %%--------------------------------------------------------------------
--spec distinguish_files(Guid :: onedata_file_api:file_guid(), Name :: binary(),
-    Auth :: onedata_auth_api:auth()) -> binary().
+-spec distinguish_files(Guid :: file_id:file_guid(), Name :: binary(),
+    Auth :: rest_auth:auth()) -> binary().
 distinguish_files(Guid, Name, Auth) ->
-    case onedata_file_api:stat(Auth, {guid, Guid}) of
+    case lfm:stat(Auth, {guid, Guid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             filepath_utils:ensure_ends_with_slash(Name);
         {ok, _} -> Name
