@@ -335,6 +335,7 @@
 
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
     <<"fullName">> => ?USER_FULL_NAME(__UserId),
     <<"username">> => ?USER_USERNAME(__UserId),
@@ -367,6 +368,7 @@ end).
 
 
 -define(GROUP_SHARED_DATA_VALUE(__GroupId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_group, id = __GroupId, aspect = instance, scope = shared}),
     <<"name">> => ?GROUP_NAME(__GroupId),
     <<"type">> => ?GROUP_TYPE_JSON(__GroupId)
@@ -374,6 +376,7 @@ end).
 
 
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
     <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
@@ -395,6 +398,7 @@ end).
 
 
 -define(SHARE_PUBLIC_DATA_VALUE(__ShareId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
     <<"name">> => ?SHARE_NAME(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
@@ -411,6 +415,7 @@ end).
 
 
 -define(PROVIDER_PROTECTED_DATA_VALUE(__ProviderId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
     <<"name">> => ?PROVIDER_NAME(__ProviderId),
     <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
@@ -442,6 +447,7 @@ end).
 
 
 -define(HANDLE_SERVICE_PRIVATE_DATA_VALUE(__HServiceId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = private}),
     <<"name">> => ?HANDLE_SERVICE_NAME(__HServiceId),
     <<"effectiveUsers">> => ?HANDLE_SERVICE_EFF_USERS_VALUE(__HServiceId),
@@ -450,6 +456,7 @@ end).
 
 
 -define(HANDLE_PUBLIC_DATA_VALUE(__HandleId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
     <<"metadata">> => ?HANDLE_METADATA(__HandleId),
@@ -468,6 +475,7 @@ end).
 end).
 
 -define(HARVESTER_PRIVATE_DATA_VALUE(__HarvesterId), #{
+    <<"revision">> => 1,
     <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = private}),
     <<"indices">> => ?HARVESTER_INDICES(__HarvesterId),
     <<"spaces">> => ?HARVESTER_SPACES(__HarvesterId)

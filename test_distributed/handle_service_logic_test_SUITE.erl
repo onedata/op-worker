@@ -103,12 +103,16 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ChangedData = HService1PrivateData#{<<"name">> => <<"changedName">>},
+    ChangedData = HService1PrivateData#{
+        <<"revision">> => 19,
+        <<"name">> => <<"changedName">>
+    },
     PushMessage = #gs_push_graph{gri = HService1PrivateGRI, data = ChangedData, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage]),
     ?assertMatch(
         {ok, #document{key = ?HANDLE_SERVICE_1, value = #od_handle_service{
-            name = <<"changedName">>
+            name = <<"changedName">>,
+            cache_state = #{revision := 19}
         }}},
         rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
     ),

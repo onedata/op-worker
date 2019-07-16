@@ -14,6 +14,7 @@
 
 -behaviour(dynamic_page_behaviour).
 
+-include("http/rest/http_status.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
@@ -45,11 +46,14 @@ redirect(Req, Path) ->
     OzUrl = oneprovider:get_oz_url(),
     case oneprovider:get_id_or_undefined() of
         undefined ->
-            cowboy_req:reply(200, #{
+            cowboy_req:reply(?HTTP_200_OK, #{
                 <<"content-type">> => <<"text/plain">>
             }, <<"This Oneprovider instance is not yet configured.">>, Req);
         ProviderId ->
-            cowboy_req:reply(307, #{<<"location">> => str_utils:format_bin("~s/~s/~s~s", [
-                OzUrl, onedata:gui_prefix(?OP_WORKER_GUI), ProviderId, Path
-            ])}, Req)
+            cowboy_req:reply(?HTTP_302_FOUND, #{
+                <<"location">> => str_utils:format_bin("~s/~s/~s~s", [
+                    OzUrl, onedata:gui_prefix(?OP_WORKER_GUI), ProviderId, Path
+                ]),
+                <<"cache-control">> => <<"max-age=3600">>
+            }, Req)
     end.

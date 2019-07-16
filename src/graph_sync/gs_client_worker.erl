@@ -293,9 +293,10 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     invalidate_cache(GRI),
     ?debug("Entity deleted in OZ: ~s", [gs_protocol:gri_to_string(GRI)]);
 
-process_push_message(#gs_push_graph{gri = GRI, data = Data, change_type = updated}) ->
-    Doc = gs_client_translator:translate(GRI, Data),
-    cache_record(get_connection_pid(), GRI, Doc).
+process_push_message(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
+    Revision = maps:get(<<"revision">>, Resource),
+    Doc = gs_client_translator:translate(GRI, Resource),
+    coalesce_cache(get_connection_pid(), GRI, Doc, Revision).
 
 %%%===================================================================
 %%% Internal functions
@@ -346,10 +347,11 @@ do_request(Client, #gs_req_graph{operation = get} = GraphReq) ->
                     Err2;
                 {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
                     GRIStr = maps:get(<<"gri">>, Resource),
+                    Revision = maps:get(<<"revision">>, Resource),
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Resource)),
-                    cache_record(get_connection_pid(), NewGRI, Doc),
-                    {ok, Doc}
+                    Doc = gs_client_translator:translate(NewGRI, Resource),
+                    NewestDoc = coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision),
+                    {ok, NewestDoc}
             end
     end;
 do_request(Client, #gs_req_graph{operation = create} = GraphReq) ->
@@ -362,11 +364,12 @@ do_request(Client, #gs_req_graph{operation = create} = GraphReq) ->
                     ok;
                 #gs_resp_graph{data_format = value, data = Data} ->
                     {ok, Data};
-                #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Map} ->
+                #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Resource} ->
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Map)),
-                    cache_record(get_connection_pid(), NewGRI, Doc),
-                    {ok, {NewGRI, Doc}}
+                    Revision = maps:get(<<"revision">>, Resource),
+                    Doc = gs_client_translator:translate(NewGRI, Resource),
+                    NewestDoc = coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision),
+                    {ok, {NewGRI, NewestDoc}}
             end
     end;
 % covers 'delete' and 'update' operations
@@ -430,7 +433,7 @@ maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI
             #{connection_ref := CachedConnRef, scope := CachedScope} = get_cache_state(CachedDoc),
             #gri{scope = Scope} = GRI,
             ConnRef = get_connection_pid(),
-            case (is_pid(ConnRef) andalso ConnRef =/= CachedConnRef) orelse is_scope_lower(CachedScope, Scope) of
+            case (is_pid(ConnRef) andalso ConnRef =/= CachedConnRef) orelse cmp_scope(CachedScope, Scope) == lower of
                 true ->
                     % There was a reconnect since last update or cached scope is
                     % lower than requested -> invalidate cache
@@ -456,40 +459,59 @@ maybe_serve_from_cache(_, _) ->
     false.
 
 
--spec cache_record(connection_ref(), gs_protocol:gri(), doc()) ->
-    ok.
-cache_record(ConnRef, GRI = #gri{type = Type, aspect = instance, scope = Scope}, Doc) ->
-    ShouldUpdateCache = case get_from_cache(GRI) of
+-spec coalesce_cache(connection_ref(), gs_protocol:gri(), doc(), gs_protocol:revision()) ->
+    doc().
+coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = instance, scope = Scope}, Doc, Rev) ->
+    {ShouldUpdateCache, NewerDoc} = case get_from_cache(GRI) of
         false ->
-            true;
+            {true, Doc};
         {true, CachedDoc} ->
-            % In case of higher scope, unsubscribe for the lower and update cache.
+            #{scope := CachedScope} = CacheState = get_cache_state(CachedDoc),
+            CachedRev = maps:get(revision, CacheState, 0),
+
             % In case of the same scope, just overwrite the cache.
             % In case of lower scope, do not update cache.
-            #{scope := OldScope} = get_cache_state(CachedDoc),
-            case is_scope_lower(OldScope, Scope) of
-                true ->
+            case cmp_scope(Scope, CachedScope) of
+                greater when Rev >= CachedRev ->
+                    % doc with greater scope arrived (revision is not lower than
+                    % the one in cache), unsubscribe for the lower scope and
+                    % update the cache
                     call_onezone(ConnRef, ?ROOT_SESS_ID, #gs_req_unsub{
-                        gri = GRI#gri{scope = OldScope}
+                        gri = GRI#gri{scope = CachedScope}
                     }),
-                    true;
-                false ->
-                    not is_scope_lower(Scope, OldScope)
+                    {true, Doc};
+
+                greater when Rev < CachedRev ->
+                    % doc with greater scope arrived, but cached revision is
+                    % greater - this can happen in case of asynchronous updates,
+                    % do not overwrite the cache but return the newer doc
+                    {false, Doc};
+
+                _ when Rev > CachedRev ->
+                    % A doc arrived that has a greater revision, overwrite the
+                    % cache, no matter the scopes
+                    {true, Doc};
+
+                _ when Rev =< CachedRev ->
+                    % locally cached revision and scope are the same or greater
+                    % - do not cache and return the cached doc
+                    {false, CachedDoc}
             end
     end,
     case ShouldUpdateCache of
         false ->
             ok;
         true ->
-            CacheState = #{
+            Type:save_to_cache(put_cache_state(Doc, #{
                 scope => Scope,
-                connection_ref => ConnRef
-            },
-            Type:save_to_cache(put_cache_state(CacheState, Doc)),
-            ?debug("Cached ~s", [gs_protocol:gri_to_string(GRI)]),
+                connection_ref => ConnRef,
+                revision => Rev
+            })),
+            ?debug("Cached ~s (rev. ~B)", [gs_protocol:gri_to_string(GRI), Rev]),
             ok
-    end;
-cache_record(_ConnRef, _GRI, _Doc) ->
+    end,
+    NewerDoc;
+coalesce_cache(_ConnRef, _GRI, _Doc, _Revision) ->
     % Only 'instance' aspects are cached by provider.
     ok.
 
@@ -514,7 +536,7 @@ resolve_authorization(?ROOT_SESS_ID) ->
     undefined;
 
 resolve_authorization(?GUEST_SESS_ID) ->
-    undefined;
+    nobody;
 
 resolve_authorization(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
@@ -543,22 +565,22 @@ resolve_authorization(#macaroon_auth{} = Auth) ->
     {macaroon, MacaroonBin, BoundMacaroons}.
 
 
--spec put_cache_state(cache_state(), doc()) -> doc().
-put_cache_state(CacheState, Doc = #document{value = User = #od_user{}}) ->
+-spec put_cache_state(doc(), cache_state()) -> doc().
+put_cache_state(Doc = #document{value = User = #od_user{}}, CacheState) ->
     Doc#document{value = User#od_user{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Group = #od_group{}}) ->
+put_cache_state(Doc = #document{value = Group = #od_group{}}, CacheState) ->
     Doc#document{value = Group#od_group{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Space = #od_space{}}) ->
+put_cache_state(Doc = #document{value = Space = #od_space{}}, CacheState) ->
     Doc#document{value = Space#od_space{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Share = #od_share{}}) ->
+put_cache_state(Doc = #document{value = Share = #od_share{}}, CacheState) ->
     Doc#document{value = Share#od_share{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Provider = #od_provider{}}) ->
+put_cache_state(Doc = #document{value = Provider = #od_provider{}}, CacheState) ->
     Doc#document{value = Provider#od_provider{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = HService = #od_handle_service{}}) ->
+put_cache_state(Doc = #document{value = HService = #od_handle_service{}}, CacheState) ->
     Doc#document{value = HService#od_handle_service{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Handle = #od_handle{}}) ->
+put_cache_state(Doc = #document{value = Handle = #od_handle{}}, CacheState) ->
     Doc#document{value = Handle#od_handle{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Harvester = #od_harvester{}}) ->
+put_cache_state(Doc = #document{value = Harvester = #od_harvester{}}, CacheState) ->
     Doc#document{value = Harvester#od_harvester{cache_state = CacheState}}.
 
 
@@ -581,18 +603,20 @@ get_cache_state(#document{value = #od_harvester{cache_state = CacheState}}) ->
     CacheState.
 
 
--spec is_scope_lower(gs_protocol:scope(), gs_protocol:scope()) -> boolean().
-is_scope_lower(public, public) -> false;
-is_scope_lower(public, _) -> true;
+-spec cmp_scope(gs_protocol:scope(), gs_protocol:scope()) -> lower | same | greater.
+cmp_scope(public, public) -> same;
+cmp_scope(public, _) -> lower;
 
-is_scope_lower(shared, public) -> false;
-is_scope_lower(shared, shared) -> false;
-is_scope_lower(shared, _) -> true;
+cmp_scope(shared, public) -> greater;
+cmp_scope(shared, shared) -> same;
+cmp_scope(shared, _) -> lower;
 
-is_scope_lower(protected, private) -> true;
-is_scope_lower(protected, _) -> false;
+cmp_scope(protected, private) -> lower;
+cmp_scope(protected, protected) -> same;
+cmp_scope(protected, _) -> greater;
 
-is_scope_lower(private, _) -> false.
+cmp_scope(private, private) -> same;
+cmp_scope(private, _) -> greater.
 
 
 -spec is_authorized(client(), gs_protocol:auth_hint(), gs_protocol:gri(), doc()) ->

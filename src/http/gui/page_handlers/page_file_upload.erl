@@ -16,6 +16,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
+-include("http/rest/http_status.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -31,6 +32,8 @@
 
 % Interval between retries to resolve file handle.
 -define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).
+
+-define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
 
 %% Cowboy API
 -export([handle/2]).
@@ -63,20 +66,20 @@ handle(<<"POST">>, InitialReq) ->
     Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
     case op_gui_session:authenticate(Req) of
         ?ERROR_UNAUTHORIZED ->
-            cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
+            cowboy_req:reply(?HTTP_401_NOT_AUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         false ->
-            cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
+            cowboy_req:reply(?HTTP_401_NOT_AUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         {ok, Identity, Auth} ->
             Host = cowboy_req:host(Req),
             SessionId = op_gui_session:initialize(Identity, Auth, Host),
             try
                 Req2 = multipart(Req, SessionId, []),
-                cowboy_req:reply(200, Req2)
+                cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
                 throw:{missing_param, _} ->
-                    cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req);
+                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req);
                 throw:stream_file_error ->
-                    cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req);
+                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req);
                 Type:Message ->
                     UserId = op_gui_session:get_user_id(),
                     ?error_stacktrace("Error while processing file upload "
@@ -86,7 +89,7 @@ handle(<<"POST">>, InitialReq) ->
                     % because retries are not stable
 %%                    % Return 204 - resumable will retry the upload
 %%                    cowboy_req:reply(204, #{}, <<"">>)
-                    cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req)
+                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
             end
     end.
 

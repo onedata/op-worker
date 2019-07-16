@@ -97,26 +97,34 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ChangedData1 = Group1SharedData#{<<"name">> => <<"changedName">>},
+    ChangedData1 = Group1SharedData#{
+        <<"revision">> => 2,
+        <<"name">> => <<"changedName">>
+    },
     PushMessage1 = #gs_push_graph{gri = Group1SharedGRI, data = ChangedData1, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
 
     ?assertMatch(
         {ok, #document{key = ?GROUP_1, value = #od_group{
-            name = <<"changedName">>
+            name = <<"changedName">>,
+            cache_state = #{revision := 2}
         }}},
         rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, undefined])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % Update of shared scope should not affect the cache
-    ChangedData2 = Group1SharedData#{<<"name">> => <<"changedName2">>},
+    ChangedData2 = Group1SharedData#{
+        <<"revision">> => 5,
+        <<"name">> => <<"changedName2">>
+    },
     PushMessage2 = #gs_push_graph{gri = Group1SharedGRI, data = ChangedData2, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
 
     ?assertMatch(
         {ok, #document{key = ?GROUP_1, value = #od_group{
-            name = <<"changedName2">>
+            name = <<"changedName2">>,
+            cache_state = #{revision := 5}
         }}},
         rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, undefined])
     ),

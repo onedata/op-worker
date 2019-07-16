@@ -354,13 +354,17 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ChangedData = User1SharedData#{<<"fullName">> => <<"changedName">>},
+    ChangedData = User1SharedData#{
+        <<"revision">> => 3,
+        <<"fullName">> => <<"changedName">>
+    },
     PushMessage1 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName">>
+            full_name = <<"changedName">>,
+            cache_state = #{revision := 3}
         }}},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
@@ -372,26 +376,34 @@ subscribe_test(Config) ->
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ChangedData2 = User1ProtectedData#{<<"fullName">> => <<"changedName2">>},
+    ChangedData2 = User1ProtectedData#{
+        <<"revision">> => 5,
+        <<"fullName">> => <<"changedName2">>
+    },
     PushMessage2 = #gs_push_graph{gri = User1ProtectedGRI, data = ChangedData2, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName2">>
+            full_name = <<"changedName2">>,
+            cache_state = #{revision := 5}
         }}},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     % Update of shared scope should not affect the cache
-    ChangedData3 = User1SharedData#{<<"fullName">> => <<"changedName3">>},
+    ChangedData3 = User1SharedData#{
+        <<"revision">> => 5,
+        <<"fullName">> => <<"changedName3">>
+    },
     PushMessage3 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData3, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName2">>
+            full_name = <<"changedName2">>,
+            cache_state = #{revision := 5}
         }}},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
@@ -399,7 +411,8 @@ subscribe_test(Config) ->
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName2">>
+            full_name = <<"changedName2">>,
+            cache_state = #{revision := 5}
         }}},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
@@ -411,30 +424,41 @@ subscribe_test(Config) ->
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ChangedData4 = User1PrivateData#{<<"fullName">> => <<"changedName4">>},
+    ChangedData4 = User1PrivateData#{
+        <<"revision">> => 8,
+        <<"fullName">> => <<"changedName4">>
+    },
     PushMessage4 = #gs_push_graph{gri = User1PrivateGRI, data = ChangedData4, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>
+            full_name = <<"changedName4">>,
+            cache_state = #{revision := 8}
         }}},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
 
     % Update of protected or shared scope should not affect the cache
-    ChangedData5 = User1SharedData#{<<"fullName">> => <<"changedName5">>},
+    ChangedData5 = User1SharedData#{
+        <<"revision">> => 8,
+        <<"fullName">> => <<"changedName5">>
+    },
     PushMessage5 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData5, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
 
-    ChangedData6 = User1ProtectedData#{<<"fullName">> => <<"changedName6">>},
+    ChangedData6 = User1ProtectedData#{
+        <<"revision">> => 8,
+        <<"fullName">> => <<"changedName6">>
+    },
     PushMessage6 = #gs_push_graph{gri = User1ProtectedGRI, data = ChangedData6, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage6]),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>
+            full_name = <<"changedName4">>,
+            cache_state = #{revision := 8}
         }}},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
@@ -442,7 +466,8 @@ subscribe_test(Config) ->
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>
+            full_name = <<"changedName4">>,
+            cache_state = #{revision := 8}
         }}},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
@@ -450,7 +475,8 @@ subscribe_test(Config) ->
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>
+            full_name = <<"changedName4">>,
+            cache_state = #{revision := 8}
         }}},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),

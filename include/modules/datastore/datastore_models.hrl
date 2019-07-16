@@ -21,9 +21,11 @@
 % Graph Sync cache metadata, common for all od_* records (synchronized by
 % Graph Sync).
 -type cache_state() :: #{
-    %% maximum scope that is currently cached
+    % maximum scope that is currently cached
     scope => gs_protocol:scope(),
-    %% connection identifier to verify if the cache is not outdated.
+    % revision (version of the record that increments with every update)
+    revision => gs_protocol:revision(),
+    % connection identifier to verify if the cache is not outdated.
     connection_ref => pid()
 }.
 
