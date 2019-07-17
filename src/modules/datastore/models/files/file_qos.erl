@@ -7,12 +7,12 @@
 %%%-------------------------------------------------------------------
 %%% @doc Model that holds information about qos defined for given file.
 %%% It contains two fields:
-%%%     - qos_list - holds IDs of all qos_items defined for this file,
-%%%     - target_storages - holds mapping storage_id to list of all qos_item IDs that
+%%%     - qos_list - holds IDs of all qos_entrys defined for this file,
+%%%     - target_storages - holds mapping storage_id to list of all qos_entry IDs that
 %%%       requires file replica on this storage.
 %%% file_qos is updated in two cases:
 %%%     1. When new qos is defined for file or directory. In this case,
-%%%        qos_item ID is added to qos_list and to target storage mapping for
+%%%        qos_entry ID is added to qos_list and to target storage mapping for
 %%%        each storage that should store file replica.
 %%%     2. When target_storages for file/directory differs from the target_storages
 %%%        calculated for parent directory.
@@ -46,7 +46,7 @@
 -type record() :: #file_qos{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type qos_list() :: [qos_item:id()].
+-type qos_list() :: [qos_entry:id()].
 -type target_storages() :: #{storage:id() => qos_list()}.
 
 -export_type([qos_list/0, target_storages/0]).
@@ -132,7 +132,7 @@ get_effective(FileGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_to_target_storages(fslogic_worker:file_guid(), [storage:id()],
-    qos_item:id()) -> {ok, key()} | {error, term}.
+    qos_entry:id()) -> {ok, key()} | {error, term}.
 add_to_target_storages(FileGuid, StoragesList, QosId) ->
     Diff = fun(FileQos = #file_qos{target_storages = TS}) ->
         UpdatedTS = merge_storage_list_to_target_storages(QosId, StoragesList, TS),
@@ -144,6 +144,7 @@ add_to_target_storages(FileGuid, StoragesList, QosId) ->
     end, #{}, StoragesList),
     DocToCreate = #document{
         key = FileGuid,
+        scope = file_id:guid_to_space_id(FileGuid),
         value = #file_qos{target_storages = NewTargetStorages}
     },
 
@@ -154,7 +155,7 @@ add_to_target_storages(FileGuid, StoragesList, QosId) ->
 %% Removes QosId from target storages in file_qos document.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_from_target_storages(fslogic_worker:file_guid(), qos_item:id()) ->
+-spec remove_from_target_storages(fslogic_worker:file_guid(), qos_entry:id()) ->
     {ok, key()} | {error, term}.
 remove_from_target_storages(FileGuid, QosId) ->
     Diff = fun(FileQos = #file_qos{target_storages = TS}) ->
@@ -178,7 +179,7 @@ remove_from_target_storages(FileGuid, QosId) ->
 %% Removes QosId from file_qos document.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_id(fslogic_worker:file_guid(), qos_item:id()) ->
+-spec remove_qos_id(fslogic_worker:file_guid(), qos_entry:id()) ->
     {ok, key()} | {error, term}.
 remove_qos_id(FileGuid, QosId) ->
     Diff = fun(FileQos = #file_qos{qos_list = QosList, target_storages = TS}) ->
@@ -219,7 +220,7 @@ merge_file_qos(#file_qos{qos_list = ParentQosList, target_storages = ParentStora
 %%--------------------------------------------------------------------
 %% @doc
 %% @private
-%% Merges parent's target_storages with child's target_storages. If qos_item
+%% Merges parent's target_storages with child's target_storages. If qos_entry
 %% ID is present in both parent's and child's target storages, only that from
 %% child's document should be preserved.
 %% @end
@@ -228,10 +229,10 @@ merge_file_qos(#file_qos{qos_list = ParentQosList, target_storages = ParentStora
 merge_target_storages(ParentStorages, undefined) ->
     ParentStorages;
 merge_target_storages(ParentStorages, ChildStorages) ->
-    ChildQosItemSet = sets:from_list(lists:flatten(maps:values(ChildStorages))),
+    ChildQosEntrySet = sets:from_list(lists:flatten(maps:values(ChildStorages))),
 
     ParentStoragesWithoutCommonQos = maps:fold(fun(StorageId, QosList, Acc) ->
-        NewQosList = sets:to_list(sets:subtract(sets:from_list(QosList), ChildQosItemSet)),
+        NewQosList = sets:to_list(sets:subtract(sets:from_list(QosList), ChildQosEntrySet)),
         case NewQosList of
             [] -> Acc;
             _ -> Acc#{StorageId => NewQosList}
@@ -253,14 +254,14 @@ remove_duplicates_from_list(List) ->
 %% list of storages on which file should be replicated according to this QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec merge_storage_list_to_target_storages(qos_item:id(), [storage:id()] | undefined,
+-spec merge_storage_list_to_target_storages(qos_entry:id(), [storage:id()] | undefined,
     target_storages()) -> target_storages().
 merge_storage_list_to_target_storages(_QosId, undefined, TargetStorages) ->
     TargetStorages;
 merge_storage_list_to_target_storages(QosId, StorageList, TargetStorages) ->
     lists:foldl(fun(StorageId, TargetStoragesForFile) ->
-        QosItemList = maps:get(StorageId, TargetStoragesForFile, []),
-        TargetStoragesForFile#{StorageId => [QosId | QosItemList]}
+        QosEntryList = maps:get(StorageId, TargetStoragesForFile, []),
+        TargetStoragesForFile#{StorageId => [QosId | QosEntryList]}
     end, TargetStorages, StorageList).
 
 %%%===================================================================

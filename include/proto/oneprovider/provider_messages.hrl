@@ -113,18 +113,18 @@
 % messages for adding, listing, getting and removing qos
 -record(add_qos, {
     expression :: binary(),
-    replicas_num :: qos_item:replicas_num()
+    replicas_num :: qos_entry:replicas_num()
 }).
 
 -record(get_effective_file_qos, {
 }).
 
 -record(get_qos, {
-    id :: qos_item:id()
+    id :: qos_entry:id()
 }).
 
 -record(remove_qos, {
-    id :: qos_item:id()
+    id :: qos_entry:id()
 }).
 
 -type provider_request_type() ::
@@ -177,14 +177,14 @@
 }).
 
 -record(qos_id, {
-    id :: qos_item:id()
+    id :: qos_entry:id()
 }).
 
 -record(get_qos_resp, {
     file_guid :: file_meta:uuid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
-    replicas_num = 1 :: qos_item:replicas_num(), % Number of required file replicas.
-    status = undefined :: qos_item:status()
+    replicas_num = 1 :: qos_entry:replicas_num(), % Number of required file replicas.
+    status = undefined :: qos_entry:status()
 }).
 
 -record(effective_file_qos, {

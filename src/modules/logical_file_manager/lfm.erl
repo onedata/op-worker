@@ -245,8 +245,19 @@ unlink(SessId, FileEntry, Silent) ->
     TargetProviderId :: oneprovider:id(), transfer:callback()) ->
     {ok, transfer:id()} | error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
+    schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined)
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
+    TargetProviderId :: oneprovider:id(), transfer:callback(), pid() | undefined) ->
+    {ok, transfer:id()} | error_reply().
+schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID) ->
     ?run(fun() -> lfm_files:schedule_file_replication(
-        SessId, FileKey, TargetProviderId, Callback
+        SessId, FileKey, TargetProviderId, Callback, QosJobPID
     ) end).
 
 %%--------------------------------------------------------------------
@@ -687,8 +698,8 @@ remove_metadata(SessId, FileKey, Type) ->
 %% Add new QoS for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(session:id(), file_key(), binary(), qos_item:replicas_num()) ->
-    {ok, qos_item:id()} | error_reply().
+-spec add_qos(session:id(), file_key(), binary(), qos_entry:replicas_num()) ->
+    {ok, qos_entry:id()} | error_reply().
 add_qos(SessId, FileKey, Expression, ReplicasNum) ->
     ?run(fun() -> lfm_qos:add_qos(SessId, FileKey, Expression, ReplicasNum) end).
 
@@ -707,8 +718,8 @@ get_file_qos(SessId, FileKey) ->
 %% Get details of specific QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_details(session:id(), qos_item:id()) ->
-    {ok, qos_item:record()} | error_reply().
+-spec get_qos_details(session:id(), qos_entry:id()) ->
+    {ok, qos_entry:record()} | error_reply().
 get_qos_details(SessId, QosId) ->
     ?run(fun() -> lfm_qos:get_qos_details(SessId, QosId) end).
 
@@ -717,6 +728,6 @@ get_qos_details(SessId, QosId) ->
 %% Remove single QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(session:id(), qos_item:id()) -> ok | error_reply().
+-spec remove_qos(session:id(), qos_entry:id()) -> ok | error_reply().
 remove_qos(SessId, QosId) ->
     ?run(fun() -> lfm_qos:remove_qos(SessId, QosId) end).

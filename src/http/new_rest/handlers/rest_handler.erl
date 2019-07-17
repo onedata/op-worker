@@ -205,6 +205,7 @@ rest_routes() ->
         file_routes:routes(),
         monitoring_routes:routes(),
         oneprovider_routes:routes(),
+        qos_routes:routes(),
         replica_routes:routes(),
         share_routes:routes(),
         space_routes:routes(),

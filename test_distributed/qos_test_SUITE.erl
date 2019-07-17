@@ -789,8 +789,8 @@ assert_qos_fulfilled(Worker, SessId, QosId) ->
                    "  ActiveTransfers:     ~p~n"
                    "  GeneratingTransfers: ~p~n"
                    "  TraverseJob:         ~p~n",
-                [Qos#qos_item.active_transfers, Qos#qos_item.active_tasks,
-                    Qos#qos_item.traverse_job]),
+                [Qos#qos_entry.active_transfers, Qos#qos_entry.active_tasks,
+                    Qos#qos_entry.traverse_job]),
             false
     end.
 
@@ -945,16 +945,16 @@ wait_for_qos_fulfilment(Master, Worker, SessId, QosId, QosName, Path) ->
            "    Expression:          ~p~n"
            "    ActiveTransfers:     ~p~n"
            "    TraverseJob:         ~p~n"
-           "    ActiveTasks:         ~p~n", [QosName, QosRecord#qos_item.expression,
-        QosRecord#qos_item.active_transfers, QosRecord#qos_item.traverse_job, QosRecord#qos_item.active_tasks]
+           "    ActiveTasks:         ~p~n", [QosName, QosRecord#qos_entry.expression,
+        QosRecord#qos_entry.active_transfers, QosRecord#qos_entry.traverse_job, QosRecord#qos_entry.active_tasks]
     ),
     wait_for_qos_fulfilment(Master, Worker, SessId, QosId, QosName, Path, ?ATTEMPTS).
 
 wait_for_qos_fulfilment(Master, Worker, SessId, QosId, QosName, Path, Attempts) ->
     {ok, QosRecord} = ?assertMatch({ok, _}, lfm_proxy:get_qos_details(Worker, SessId, QosId)),
-    case {QosRecord#qos_item.active_tasks == [], QosRecord#qos_item.traverse_job == undefined} of
+    case {QosRecord#qos_entry.active_tasks == [], QosRecord#qos_entry.traverse_job == undefined} of
         {true, true} ->
-            case wait_for_transfers(Worker, QosRecord#qos_item.active_transfers, Path, QosId) of
+            case wait_for_transfers(Worker, QosRecord#qos_entry.active_transfers, Path, QosId) of
                 true ->
                     Master ! {Path, QosId};
                 false ->
@@ -979,8 +979,8 @@ print_qos_fulfilment_timeout_msg(Qos, QosName) ->
     "    ActiveTransfers:     ~p~n"
     "    TraverseJob:         ~p~n"
     "    ActiveTasks:         ~p~n",
-        [QosName, Qos#qos_item.expression, Qos#qos_item.active_transfers, Qos#qos_item.traverse_job,
-            Qos#qos_item.active_tasks]
+        [QosName, Qos#qos_entry.expression, Qos#qos_entry.active_transfers, Qos#qos_entry.traverse_job,
+            Qos#qos_entry.active_tasks]
     ).
 
 wait_for_transfers(Worker, Transfers, Path, QosId) ->

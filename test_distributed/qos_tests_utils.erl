@@ -18,7 +18,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([create_dir_structure/4, create_file/4, assert_qos_item_document/7,
+-export([create_dir_structure/4, create_file/4, assert_qos_entry_document/6,
     assert_file_qos_document/4, create_directory/3, assert_effective_qos/4,
     get_guid/3]).
 
@@ -26,16 +26,15 @@
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
 
-assert_qos_item_document(Worker, QosId, FileGuid, Expression, ReplicasNum, Status, TraverseTask) ->
-    ExpectedQosItem = #qos_item{
+assert_qos_entry_document(Worker, QosId, FileGuid, Expression, ReplicasNum, Status) ->
+    ExpectedQosEntry = #qos_entry{
         file_guid = FileGuid,
         expression = Expression,
         replicas_num = ReplicasNum,
-        status = Status,
-        traverse_task_status = TraverseTask
+        status = Status
     },
-    {ok, #document{value = QosItem}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_item, get, [QosId])),
-    ?assertMatch(ExpectedQosItem, QosItem).
+    {ok, #document{value = QosEntry}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosId])),
+    ?assertMatch(ExpectedQosEntry, QosEntry).
 
 
 assert_file_qos_document(Worker, FileGuid, QosList, TargetStorages) ->

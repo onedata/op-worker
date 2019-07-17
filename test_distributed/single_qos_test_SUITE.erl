@@ -910,7 +910,6 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
         QosStatus = maps:get(qos_status, QosCfg, ?FULFILLED),
-        TraverseTaskStatus = maps:get(traverse_task_status, QosCfg, ?TRAVERSE_TASK_FINISHED_STATUS),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
@@ -920,9 +919,9 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
         % w8 for traverse tasks completion
         ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS),
 
-        % check qos_item document
-        qos_tests_utils:assert_qos_item_document(
-            Worker, QosId, FileGuid, QosExpressionRPN, ReplicasNum, QosStatus, TraverseTaskStatus
+        % check qos_entry document
+        qos_tests_utils:assert_qos_entry_document(
+            Worker, QosId, FileGuid, QosExpressionRPN, ReplicasNum, QosStatus
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -961,7 +960,6 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
         QosStatus = maps:get(qos_status, QosCfg, ?FULFILLED),
-        TraverseTaskStatus = maps:get(traverse_task_status, QosCfg, ?TRAVERSE_TASK_FINISHED_STATUS),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
@@ -969,18 +967,17 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
         ),
 
         % w8 for traverse tasks completion
-        TraverseTaskStatus2 = case QosStatus == ?IMPOSSIBLE of
+        case QosStatus == ?IMPOSSIBLE of
             true ->
                 % for directory traverse task does not start when cannot fulfill QoS
                 undefined;
             false ->
-                ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS),
-                TraverseTaskStatus
+                ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS)
         end,
 
-        % check qos_item document
-        qos_tests_utils:assert_qos_item_document(
-            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, QosStatus, TraverseTaskStatus2
+        % check qos_entry document
+        qos_tests_utils:assert_qos_entry_document(
+            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, QosStatus
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -1029,10 +1026,9 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
         % w8 for traverse tasks completion
         ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS),
 
-        % check qos_item document
-        qos_tests_utils:assert_qos_item_document(
-            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, ?FULFILLED,
-            ?TRAVERSE_TASK_FINISHED_STATUS
+        % check qos_entry document
+        qos_tests_utils:assert_qos_entry_document(
+            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, ?FULFILLED
         ),
 
         QosNameIdMapping#{QosName => QosId}

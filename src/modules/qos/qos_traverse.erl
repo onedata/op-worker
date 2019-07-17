@@ -28,14 +28,14 @@
 
 -record(add_qos_traverse_args, {
     session_id :: session:id(),
-    qos_id :: qos_item:id(),
+    qos_id :: qos_entry:id(),
     qos_expression :: qos_expression:expression(),
-    replicas_num :: qos_item:replicas_num(),
+    replicas_num :: qos_entry:replicas_num(),
     target_storages = undefined :: file_qos:target_storages() | undefined
 }).
 
 -record(remove_qos_traverse_args, {
-    qos_id :: qos_item:id()
+    qos_id :: qos_entry:id()
 }).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -53,10 +53,9 @@ end).
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(session:id(), file_ctx:ctx(), qos_item:id(), qos_expression:expression(),
+-spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), qos_expression:expression(),
     pos_integer(), [storage:id()] | undefined) -> ok.
 fulfill_qos(SessionId, FileCtx, QosId, QosExpression, ReplicasNum, TargetStorages) ->
-    {ok, _} = qos_item:set_traverse_task_ongoing(QosId),
     Options = #{
         task_id => QosId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
@@ -82,10 +81,10 @@ fulfill_qos(SessionId, FileCtx, QosId, QosExpression, ReplicasNum, TargetStorage
 %% Creates traverse task for removing qos.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(file_ctx:ctx(), qos_item:id()) -> ok.
+-spec remove_qos(file_ctx:ctx(), qos_entry:id()) -> ok.
 remove_qos(FileCtx, QosId) ->
     Options = #{
-        task_id => <<QosId/binary, "remove">>,
+        task_id => <<QosId/binary, "#remove">>,
         execute_on_slave_dir => true,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #remove_qos_traverse_args{qos_id = QosId}
@@ -113,13 +112,18 @@ init_pool() ->
 list_ongoing_jobs() ->
     {ok, []}.
 
-task_finished(QosId) ->
-    {ok, _} = qos_item:set_traverse_task_finished(QosId),
-    case qos_item:get_status(QosId) of
-        ?IMPOSSIBLE ->
+task_finished(TaskId) ->
+    case binary:split(TaskId, <<"#">>) of
+        [_QosId, <<"remove">>] ->
             ok;
         _ ->
-            {ok, _} = qos_item:set_status(QosId, ?FULFILLED)
+            QosId = TaskId,
+            case qos_entry:get_status(QosId) of
+                ?IMPOSSIBLE ->
+                    ok;
+                _ ->
+                    {ok, _} = qos_entry:set_status(QosId, ?FULFILLED)
+            end
     end,
     ok.
 
@@ -155,7 +159,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
 
     case get_target_storages(SessId, {guid, FileGuid}, QosExpression, ReplicasNum) of
         ?CANNOT_FULFILL_QOS ->
-            {ok, _} = qos_item:set_status(QosId, ?IMPOSSIBLE),
+            {ok, _} = qos_entry:set_status(QosId, ?IMPOSSIBLE),
             ok;
         TargetStorages ->
             {ok, _} = file_qos:add_to_target_storages(FileGuid, TargetStorages, QosId),
@@ -193,8 +197,9 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, #remove_qos_traverse_a
 schedule_transfers(SessId, FileGuid, TargetStorages) ->
     lists:foldl(fun(StorageId, TransfersList) ->
         % TODO: VFS-5573 use storage qos
-        {ok, TransferId} = logical_file_manager:schedule_file_replication(
-            SessId, {guid, FileGuid}, StorageId, undefined, self()),
+        {ok, TransferId} = lfm:schedule_file_replication(
+            SessId, {guid, FileGuid}, StorageId, undefined, self()
+        ),
         [TransferId | TransfersList]
     end, [], TargetStorages).
 
@@ -208,7 +213,7 @@ schedule_transfers(SessId, FileGuid, TargetStorages) ->
 -spec get_target_storages(session:id(), logical_file_manager:file_key(),
     qos_expression:expression(), pos_integer()) -> [storage:id()].
 get_target_storages(SessId, FileKey, Expression, ReplicasNum) ->
-    {ok, FileLocations} = onedata_file_api:get_file_distribution(SessId, FileKey),
+    {ok, FileLocations} = lfm:get_file_distribution(SessId, FileKey),
 
     % TODO: VFS-5574 add check if storage has enough free space
     SpaceStorages = qos_traverse:get_space_storages(SessId, FileKey),

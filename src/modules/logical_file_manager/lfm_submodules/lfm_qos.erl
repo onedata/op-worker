@@ -29,8 +29,8 @@
 %% Adds new qos for file or directory, returns QoS ID.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(session:id(), logical_file_manager:file_key(), binary(), qos_item:replicas_num()) ->
-    {ok, qos_item:id()} | logical_file_manager:error_reply().
+-spec add_qos(session:id(), logical_file_manager:file_key(), binary(), qos_entry:replicas_num()) ->
+    {ok, qos_entry:id()} | logical_file_manager:error_reply().
 add_qos(SessId, FileKey, Expression, ReplicasNum) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
@@ -58,13 +58,18 @@ get_file_qos(SessId, FileKey) ->
 %% Get details of specific qos.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_details(session:id(), qos_item:id()) ->
-    {ok, qos_item:record()} | logical_file_manager:error_reply().
+-spec get_qos_details(session:id(), qos_entry:id()) ->
+    {ok, qos_entry:record()} | logical_file_manager:error_reply().
 get_qos_details(SessId, QosId) ->
-    FileGuid = qos_item:get_file_guid(QosId),
+    FileGuid = qos_entry:get_file_guid(QosId),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid, #get_qos{id = QosId},
-        fun(#get_qos_resp{expression = Expression, replicas_num = ReplicasNum, status = Status}) ->
-            {ok, #qos_item{expression = Expression, replicas_num = ReplicasNum, status = Status}}
+        fun(Resp) ->
+            {ok, #qos_entry{
+                file_guid = Resp#get_qos_resp.file_guid,
+                expression = Resp#get_qos_resp.expression,
+                replicas_num = Resp#get_qos_resp.replicas_num,
+                status = Resp#get_qos_resp.status
+            }}
         end).
 
 %%--------------------------------------------------------------------
@@ -72,9 +77,9 @@ get_qos_details(SessId, QosId) ->
 %% Remove single qos.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(session:id(), qos_item:id()) -> ok | logical_file_manager:error_reply().
+-spec remove_qos(session:id(), qos_entry:id()) -> ok | logical_file_manager:error_reply().
 remove_qos(SessId, QosId) ->
-    FileGuid = qos_item:get_file_guid(QosId),
+    FileGuid = qos_entry:get_file_guid(QosId),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid, #remove_qos{id = QosId},
         fun(_) -> ok end).
 
@@ -83,10 +88,10 @@ remove_qos(SessId, QosId) ->
 %% Check if given qos is fulfilled.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_item:id() | file_qos:qos_list()) -> boolean().
+-spec check_qos_fulfilled(session:id(), qos_entry:id() | file_qos:qos_list()) -> boolean().
 check_qos_fulfilled(SessId, QosList) when is_list(QosList) ->
     lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId) end, QosList);
 check_qos_fulfilled(SessId, QosId) ->
     {ok, Qos} = get_qos_details(SessId, QosId),
-    Qos#qos_item.status == ?FULFILLED.
+    Qos#qos_entry.status == ?FULFILLED.
 

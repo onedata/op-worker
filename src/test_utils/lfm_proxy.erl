@@ -83,24 +83,24 @@ teardown(Config) ->
         end, ?config(servers, Config)).
 
 -spec add_qos(node(), session:id(), logical_file_manager:file_key(), binary(),
-    qos_item:replicas_num()) -> {ok, qos_item:id()} | logical_file_manager:error_reply().
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | logical_file_manager:error_reply().
 add_qos(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, logical_file_manager:add_qos(SessId, FileKey, Expression, ReplicasNum)).
+    ?EXEC(Worker, lfm:add_qos(SessId, FileKey, Expression, ReplicasNum)).
 
 -spec get_file_qos(node(), session:id(), logical_file_manager:file_key()) ->
     {ok, {file_qos:qos_list(), file_qos:target_storages()}} | logical_file_manager:error_reply().
 get_file_qos(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, logical_file_manager:get_file_qos(SessId, FileKey)).
+    ?EXEC(Worker, lfm:get_file_qos(SessId, FileKey)).
 
--spec get_qos_details(node(), session:id(), qos_item:id()) ->
-    {ok, #qos_item{}} | logical_file_manager:error_reply().
+-spec get_qos_details(node(), session:id(), qos_entry:id()) ->
+    {ok, #qos_entry{}} | logical_file_manager:error_reply().
 get_qos_details(Worker, SessId, QosId) ->
-    ?EXEC(Worker, logical_file_manager:get_qos_details(SessId, QosId)).
+    ?EXEC(Worker, lfm:get_qos_details(SessId, QosId)).
 
--spec remove_qos(node(), session:id(), qos_item:id()) ->
+-spec remove_qos(node(), session:id(), qos_entry:id()) ->
     ok | logical_file_manager:error_reply().
 remove_qos(Worker, SessId, QosId) ->
-    ?EXEC(Worker, logical_file_manager:remove_qos(SessId, QosId)).
+    ?EXEC(Worker, lfm:remove_qos(SessId, QosId)).
 
 -spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().

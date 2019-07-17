@@ -265,15 +265,14 @@
 
 % This model holds information about single QoS, that is QoS requirement
 % defined by the user for file or directory through QoS expression and
-% number of required replicas. Each such requirement creates new qos_item
+% number of required replicas. Each such requirement creates new qos_entry
 % document even if expressions are exactly the same. For each file / directory
-% multiple qos_item can be defined.
--record(qos_item, {
+% multiple qos_entry can be defined.
+-record(qos_entry, {
     file_guid :: file_id:guid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
-    replicas_num = 1 :: qos_item:replicas_num(), % Required number of file replicas.
-    status = undefined :: qos_item:status(),
-    traverse_task_status = undefined :: qos_item:traverse_task_status()
+    replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
+    status = undefined :: qos_entry:status()
 }).
 
 -record(file_meta, {

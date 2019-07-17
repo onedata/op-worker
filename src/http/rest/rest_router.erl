@@ -23,9 +23,7 @@
     cdmi_container_handler,
     cdmi_dataobject_capabilities_handler,
     cdmi_object_handler,
-    cdmi_objectid_handler,
-    qos,
-    qos_by_public_id
+    cdmi_objectid_handler
 ]).
 
 %%%===================================================================

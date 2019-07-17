@@ -27,7 +27,7 @@
 %% @equiv add_qos/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_item:replicas_num()) ->
+-spec add_qos(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
 add_qos(UserCtx, FileCtx, Expression, ReplicasNum) ->
     check_permissions:execute(
@@ -52,7 +52,7 @@ get_file_qos(UserCtx, FileCtx) ->
 %% @equiv get_qos_details/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_details(user_ctx:ctx(), file_ctx:ctx(), qos_item:id()) -> fslogic_worker:provider_response().
+-spec get_qos_details(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) -> fslogic_worker:provider_response().
 get_qos_details(UserCtx, FileCtx, QosId) ->
     check_permissions:execute(
         [owner],
@@ -64,7 +64,7 @@ get_qos_details(UserCtx, FileCtx, QosId) ->
 %% @equiv remove_qos/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(user_ctx:ctx(), file_ctx:ctx(), qos_item:id()) -> fslogic_worker:provider_response().
+-spec remove_qos(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) -> fslogic_worker:provider_response().
 remove_qos(UserCtx, FileCtx, QosId) ->
     check_permissions:execute(
         [owner],
@@ -79,25 +79,25 @@ remove_qos(UserCtx, FileCtx, QosId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new qos item document. Transforms expression to RPN form.
+%% Creates new qos_entry document. Transforms expression to RPN form.
 %% Calls add_qos_for_file/5 or add_qos_for_dir/5 appropriately.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_item:replicas_num()) ->
+-spec add_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
 add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     QosExpressionInRPN = qos_expression:transform_to_rpn(QosExpression),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    % create qos item document
-    QosItemToCreate = #document{value = #qos_item{
+    % create qos_entry document
+    QosEntryToCreate = #document{value = #qos_entry{
         expression = QosExpressionInRPN,
         replicas_num = ReplicasNum,
         file_guid = FileGuid,
         status = ?IN_PROGRESS
     }},
-    {ok, #document{key = QosId}} = qos_item:create(QosItemToCreate, SpaceId),
+    {ok, #document{key = QosId}} = qos_entry:create(QosEntryToCreate, SpaceId),
 
     case file_ctx:is_dir(FileCtx) of
         {true, _FileCtx} ->
@@ -112,8 +112,8 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
 %% Adds QoS ID to file_qos document. Starts qos_traverse task for file.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_for_file(user_ctx:ctx(), file_ctx:ctx(), qos_item:id(),
-    qos_expression:expression(), qos_item:replicas_num()) ->
+-spec add_qos_for_file(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(),
+    qos_expression:expression(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
 add_qos_for_file(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
@@ -137,7 +137,7 @@ add_qos_for_file(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
 %% Adds QoS ID to file_qos document. Starts qos_traverse task for directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_for_dir(user_ctx:ctx(), file_ctx:ctx(), qos_item:id(),
+-spec add_qos_for_dir(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(),
     qos_expression:expression(), pos_integer()) -> fslogic_worker:provider_response().
 add_qos_for_dir(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
@@ -155,7 +155,7 @@ add_qos_for_dir(UserCtx, FileCtx, QosId, QosExpression, ReplicasNum) ->
     case TargetStorageList of
         ?CANNOT_FULFILL_QOS ->
             create_or_update_file_qos_doc(FileGuid, QosId, []),
-            {ok, _} = qos_item:set_status(QosId, ?IMPOSSIBLE);
+            {ok, _} = qos_entry:set_status(QosId, ?IMPOSSIBLE);
         TargetStorageList ->
             create_or_update_file_qos_doc(FileGuid, QosId, TargetStorageList),
             qos_traverse:fulfill_qos(
@@ -203,31 +203,31 @@ get_file_qos_insecure(_UserCtx, FileCtx) ->
 %% Gets details about QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_details_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_item:id()) ->
+-spec get_qos_details_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
-    {ok, #document{key = QosId, value = QosItem}} = qos_item:get(QosId),
+    {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #get_qos_resp{
-        file_guid = QosItem#qos_item.file_guid,
-        expression = QosItem#qos_item.expression,
-        replicas_num = QosItem#qos_item.replicas_num,
-        status = QosItem#qos_item.status
+        file_guid = QosEntry#qos_entry.file_guid,
+        expression = QosEntry#qos_entry.expression,
+        replicas_num = QosEntry#qos_entry.replicas_num,
+        status = QosEntry#qos_entry.status
     }}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes Qos ID from file_qos documents then removes qos_item document
+%% Removes Qos ID from file_qos documents then removes qos_entry document
 %% for given QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_item:id()) -> fslogic_worker:provider_response().
+-spec remove_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) -> fslogic_worker:provider_response().
 remove_qos_insecure(_UserCtx, FileCtx, QosId) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, _} = file_qos:remove_qos_id(FileGuid, QosId),
     qos_traverse:remove_qos(FileCtx, QosId),
-    qos_item:delete(QosId),
+    qos_entry:delete(QosId),
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -237,7 +237,7 @@ remove_qos_insecure(_UserCtx, FileCtx, QosId) ->
 %% created using QoS ID and list of target storages for that QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update_file_qos_doc(fslogic_worker:file_guid(), qos_item:id(),
+-spec create_or_update_file_qos_doc(fslogic_worker:file_guid(), qos_entry:id(),
     file_qos:target_storages()) -> ok.
 create_or_update_file_qos_doc(FileGuid, QosId, TargetStoragesList) ->
     NewTargetStorages = file_qos:merge_storage_list_to_target_storages(
@@ -245,6 +245,7 @@ create_or_update_file_qos_doc(FileGuid, QosId, TargetStoragesList) ->
     ),
     NewDoc = #document{
         key = FileGuid,
+        scope = file_id:guid_to_space_id(FileGuid),
         value = #file_qos{
             qos_list = [QosId],
             target_storages = NewTargetStorages

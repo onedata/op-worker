@@ -7,12 +7,12 @@
 %%%-------------------------------------------------------------------
 %%% @doc This model holds information about single QoS, that is QoS requirement
 %%% defined by the user for file or directory through QoS expression and
-%%% number of required replicas. Each such requirement creates new qos_item
+%%% number of required replicas. Each such requirement creates new qos_entry
 %%% document even if expressions are exactly the same. For each file / directory
-%%% multiple qos_item can be defined.
+%%% multiple qos_entry can be defined.
 %%% @end
 %%%-------------------------------------------------------------------
--module(qos_item).
+-module(qos_entry).
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
@@ -25,8 +25,8 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get/1, delete/1, create/2, update/2, set_traverse_task_ongoing/1,
-    set_traverse_task_finished/1, get_file_guid/1, set_status/2, get_status/1]).
+-export([get/1, delete/1, create/2, update/2, get_file_guid/1,
+    set_status/2, get_status/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -34,15 +34,13 @@
 -type id() :: binary().
 -type task_id() :: binary().
 -type key() :: datastore:key().
--type record() :: #qos_item{}.
+-type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type status() :: ?FULFILLED | ?IN_PROGRESS | ?IMPOSSIBLE | undefined.
--type traverse_task_status() :: ?TRAVERSE_TASK_ONGOING_STATUS|
-                                ?TRAVERSE_TASK_FINISHED_STATUS | undefined.
+-type status() :: ?FULFILLED | ?IN_PROGRESS | ?IMPOSSIBLE.
 -type replicas_num() :: pos_integer().
 
--export_type([id/0, task_id/0, status/0, traverse_task_status/0, replicas_num/0]).
+-export_type([id/0, task_id/0, status/0, replicas_num/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -61,16 +59,16 @@
 %%%===================================================================
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates qos item document.
+%% Creates qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(doc(), od_space:id()) -> {ok, doc()} | {error, term()}.
-create(#document{value = QosItem}, SpaceId) ->
-    datastore_model:create(?CTX, #document{scope = SpaceId, value = QosItem}).
+create(#document{value = QosEntry}, SpaceId) ->
+    datastore_model:create(?CTX, #document{scope = SpaceId, value = QosEntry}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates qos item.
+%% Updates qos_entry.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(key(), diff()) -> {ok, key()} | {error, term()}.
@@ -88,7 +86,7 @@ get(QosId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes qos item.
+%% Deletes qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
@@ -96,49 +94,25 @@ delete(QosId) ->
     datastore_model:delete(?CTX, QosId).
 
 %%%===================================================================
-%%% Higher-level functions operating on qos_item record.
+%%% Higher-level functions operating on qos_entry record.
 %%%===================================================================
-
--spec set_traverse_task_ongoing(id()) -> {ok, key()} | {error, term}.
-set_traverse_task_ongoing(QosId) ->
-    Diff = fun(QosRecord = #qos_item{traverse_task_status = TaskStatus}) ->
-        case TaskStatus of
-            ?TRAVERSE_TASK_ONGOING_STATUS ->
-                {error, already_exists};
-            _ ->
-                {ok, QosRecord#qos_item{traverse_task_status = ?TRAVERSE_TASK_ONGOING_STATUS}}
-        end
-    end,
-    update(QosId, Diff).
-
--spec set_traverse_task_finished(id()) -> {ok, key()} | {error, term}.
-set_traverse_task_finished(QosId) ->
-    Diff = fun(QosRecord = #qos_item{traverse_task_status = TaskStatus}) ->
-        case TaskStatus of
-            ?TRAVERSE_TASK_ONGOING_STATUS ->
-                {ok, QosRecord#qos_item{traverse_task_status = ?TRAVERSE_TASK_FINISHED_STATUS}};
-            _ ->
-                {error, not_found}
-        end
-    end,
-    update(QosId, Diff).
 
 -spec get_file_guid(id()) -> file_id:file_guid().
 get_file_guid(QosId) ->
-    {ok, #document{value = QosItem}} = qos_item:get(QosId),
-    QosItem#qos_item.file_guid.
+    {ok, #document{value = QosEntry}} = qos_entry:get(QosId),
+    QosEntry#qos_entry.file_guid.
 
 -spec set_status(id(), status()) -> {ok, key()} | {error, term}.
 set_status(QosId, Status) ->
-    Diff = fun(QosItem) ->
-        {ok, QosItem#qos_item{status = Status}}
+    Diff = fun(QosEntry) ->
+        {ok, QosEntry#qos_entry{status = Status}}
     end,
     update(QosId, Diff).
 
--spec get_status(id()) -> status().
+-spec get_status(id()) -> status() | {error, term}.
 get_status(QosId) ->
-    {ok, #document{value = QosItem}} = qos_item:get(QosId),
-    QosItem#qos_item.status.
+    {ok, #document{value = QosEntry}} = qos_entry:get(QosId),
+    QosEntry#qos_entry.status.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -174,6 +148,5 @@ get_record_struct(1) ->
         {file_guid, string},
         {expression, [string]},
         {replicas_num, integer},
-        {status, atom},
-        {traverse_task_status, atom}
+        {status, atom}
     ]}.
