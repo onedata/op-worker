@@ -61,8 +61,7 @@ start() ->
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
         {"/cdmi/cdmi_objectid/:id/[...]", cdmi_handler, by_id},
         {"/cdmi/[...]", cdmi_handler, by_path},
-        rest_handler:rest_routes(),
-        rest_router:top_level_routing()
+        rest_handler:rest_routes()
     ]),
 
     DynamicPageRoutes = [
