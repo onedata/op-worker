@@ -271,8 +271,17 @@ error_no_version(_, _) ->
     ok.
 
 
-get_cdmi_capability(_, _) ->
-    ok.
+get_cdmi_capability(Req, #cdmi_req{
+    type = {capabilities, CapType},
+    options = Options
+} = CdmiReq) ->
+    NonEmptyOpts = utils:ensure_defined(Options, [], ?default_get_capability_opts),
+    Capabilities = case CapType of
+        root -> cdmi_capabilities:root_capabilities(NonEmptyOpts);
+        container -> cdmi_capabilities:container_capabilities(NonEmptyOpts);
+        dataobject -> cdmi_capabilities:dataobject_capabilities(NonEmptyOpts)
+    end,
+    {json_utils:encode(Capabilities), Req, CdmiReq}.
 
 
 get_cdmi_container(_, _) ->
@@ -334,8 +343,8 @@ resolve_by_id(Req) ->
             case rest_auth:authenticate(Req) of
                 {ok, ?USER(_UserId, SessionId) = Client} ->
                     case lfm:get_file_path(SessionId, Guid) of
-                        {ok, Path} ->
-                            {Client, Path};
+                        {ok, FilePath} ->
+                            {Client, FilePath};
                         {error, Errno} ->
                             throw(?ERROR_POSIX(Errno))
                     end;
