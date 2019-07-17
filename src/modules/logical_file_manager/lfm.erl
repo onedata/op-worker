@@ -211,7 +211,7 @@ cp(SessId, FileEntry, TargetPath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
-    {ok, file_meta:path()}.
+    {ok, file_meta:path()} | error_reply().
 get_file_path(SessId, FileGuid) ->
     ?run(fun() -> lfm_files:get_file_path(SessId, FileGuid) end).
 

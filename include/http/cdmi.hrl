@@ -18,6 +18,20 @@
 -define(CDMI_ID_PATH, "/cdmi/cdmi_objectid/:id/[...]").
 -define(CDMI_PATH, "/cdmi/[...]").
 
+-record(cdmi_req, {
+    client = undefined :: undefined | op_logic:client(),
+    resource :: cdmi_handler:cdmi_resource(),
+    % CDMI version associated with request (in cdmi version header).
+    % If not specified only limited operations are permitted.
+    version = undefined :: undefined | binary(),
+    % Parsed query string options associated with request
+    options = [] :: list(),
+    % File path and attributes. They are left undefined in case of
+    % capability request.
+    file_path = undefined :: undefined | file_meta:path(),
+    file_attrs = undefined :: undefined | lfm_attrs:file_attributes()
+}).
+
 
 %% CAPABILITIES
 
@@ -43,6 +57,14 @@
 -define(DATAOBJECT_CAPABILITY_ID,
     <<"0000000000204D293030303030303030303030303030303030303030303030303030303030303033">>
 ).
+
+%% The default json response for capability object will contain this entities.
+%% They can be choosed selectively by appending '?name1;name2' list to the requested url.
+-define(DEFAULT_CAPABILITIES_OPTIONS, [
+    <<"objectType">>, <<"objectID">>, <<"objectName">>,
+    <<"parentURI">>, <<"parentID">>, <<"capabilities">>,
+    <<"childrenrange">>, <<"children">>
+]).
 
 %% List of general cdmi system capabilities
 %% CDMI documentation: chapter 12.1.1 and table 100.

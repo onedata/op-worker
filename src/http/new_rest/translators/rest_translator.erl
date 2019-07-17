@@ -134,6 +134,11 @@ translate_error(?ERROR_POSIX(Errno)) ->
         {<<"Operation failed with: ~p (POSIX)">>, [Errno]}
     };
 
+translate_error(?ERROR_BAD_VERSION(SupportedVersions)) ->
+    {?HTTP_400_BAD_REQUEST,
+        {<<"Not supported protocol version. Supported ones are: ~p">>, [SupportedVersions]}
+    };
+
 % Errors connected with macaroons
 translate_error(?ERROR_BAD_MACAROON) ->
     {?HTTP_401_UNAUTHORIZED,

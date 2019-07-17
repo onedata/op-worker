@@ -13,11 +13,10 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
+-include("http/cdmi.hrl").
 -include("http/rest.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
-
 
 %% cowboy rest handler API
 -export([
@@ -30,6 +29,7 @@
     content_types_provided/2,
 
     error_no_version/2,
+    error_wrong_path/2,
     get_cdmi_capability/2,
     get_cdmi_container/2,
     get_cdmi_dataobject/2,
@@ -43,8 +43,23 @@
 %% Test API
 -export([get_supported_version/1]).
 
+-type cdmi_resource() ::
+    {capabilities, root | container | dataobject} |
+    container |
+    dataobject.
+-type cdmi_req() :: #cdmi_req{}.
+
+-export_type([cdmi_resource/0, cdmi_req/0]).
+
 
 -define(CDMI_VERSION_HEADER, <<"x-cdmi-specification-version">>).
+
+%% Proplist that provides mapping between objectid and capability path
+-define(CAPABILITY_ID_TO_PATH, [
+    {?ROOT_CAPABILITY_ID, filename:absname(<<"/", (?ROOT_CAPABILITY_PATH)/binary>>)},
+    {?CONTAINER_CAPABILITY_ID, filename:absname(<<"/", (?CONTAINER_CAPABILITY_PATH)/binary>>)},
+    {?DATAOBJECT_CAPABILITY_ID, filename:absname(<<"/", (?DATAOBJECT_CAPABILITY_PATH)/binary>>)}
+]).
 
 
 %%%===================================================================
@@ -54,32 +69,33 @@
 
 %%--------------------------------------------------------------------
 %% @doc Cowboy callback function.
-%% Initialize the state for this request and resolves it's type (capability,
-%% container or dataobject).
+%% Initialize the state for this request and resolves resource it's
+%% trying to access (capability, container or dataobject).
 %% @end
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), by_id | by_path) ->
-    {cowboy_rest, cowboy_req:req(), cdmi_req()}.
+    {cowboy_rest, cowboy_req:req(), cdmi_req()} |
+    {ok, cowboy_req:req(), undefined}.
 init(Req, ReqTypeResolutionMethod) ->
     try
         CdmiReq = case ReqTypeResolutionMethod of
             by_id ->
-                resolve_by_id(Req);
+                resolve_resource_by_id(Req);
             by_path ->
                 {Path, _} = cdmi_path:get_path(Req),
-                resolve_by_path(Path)
+                resolve_resource_by_path(Path)
         end,
         {cowboy_rest, Req, CdmiReq}
     catch
         throw:Err ->
-            RestResp = rest_translator:error_response(Err),
-            {ok, send_response(RestResp, Req), undefined};
+            ErrorResp = rest_translator:error_response(Err),
+            {ok, send_response(ErrorResp, Req), undefined};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            RestResp = rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR),
-            {ok, send_response(RestResp, Req), undefined}
+            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
+            {ok, NewReq, undefined}
     end.
 
 
@@ -90,27 +106,30 @@ init(Req, ReqTypeResolutionMethod) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(cowboy_req:req(), cdmi_req()) ->
     {[binary()], cowboy_req:req(), cdmi_req()}.
-allowed_methods(Req, #cdmi_req{type = {capabilities, _}} = CdmiReq) ->
+allowed_methods(Req, #cdmi_req{resource = {capabilities, _}} = CdmiReq) ->
     {[<<"GET">>], Req, CdmiReq};
-allowed_methods(Req, #cdmi_req{type = container} = CdmiReq) ->
+allowed_methods(Req, #cdmi_req{resource = container} = CdmiReq) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, CdmiReq};
-allowed_methods(Req, #cdmi_req{type = dataobject} = CdmiReq) ->
+allowed_methods(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, CdmiReq}.
 
 
 %%--------------------------------------------------------------------
 %% @doc Cowboy callback function.
-%% Checks whether request is malformed.
+%% Checks whether request options (in query string) are malformed or
+%% cdmi version not specified in case of capability request.
 %% @end
 %%--------------------------------------------------------------------
 -spec malformed_request(cowboy_req:req(), cdmi_req()) ->
-    {boolean(), cowboy_req:req(), cdmi_req()}.
-malformed_request(Req, #cdmi_req{type = Type} = CdmiReq) ->
+    {stop | boolean(), cowboy_req:req(), cdmi_req()}.
+malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     ReqVer = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     try {get_supported_version(ReqVer), parse_qs(cowboy_req:qs(Req)), Type} of
         {undefined, _, {capabilities, _}} ->
-            RestResp = rest_translator:error_response(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])),
-            {stop, send_response(RestResp, Req), undefined};
+            ErrorResp = rest_translator:error_response(
+                ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])
+            ),
+            {stop, send_response(ErrorResp, Req), CdmiReq};
         {Version, Options, _} ->
             {false, Req, CdmiReq#cdmi_req{
                 version = Version,
@@ -118,20 +137,20 @@ malformed_request(Req, #cdmi_req{type = Type} = CdmiReq) ->
             }}
     catch
         throw:Err ->
-            RestResp = rest_translator:error_response(Err),
-            {stop, send_response(RestResp, Req), undefined};
+            ErrorResp = rest_translator:error_response(Err),
+            {stop, send_response(ErrorResp, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            RestResp = rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR),
-            {stop, send_response(RestResp, Req), undefined}
+            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
+            {stop, NewReq, CdmiReq}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc Cowboy callback function.
-%% Return whether the user is authorized to perform the action.
+%% Returns whether the user is authorized to perform the action.
 %% CDMI requests, beside capabilities ones (?NOBODY authentication is
 %% associated with them at init/2 fun), require concrete user
 %% authentication.
@@ -142,7 +161,7 @@ malformed_request(Req, #cdmi_req{type = Type} = CdmiReq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(cowboy_req:req(), cdmi_req()) ->
-    {true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
+    {stop | true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
 is_authorized(Req, #cdmi_req{client = undefined} = CdmiReq) ->
     try rest_auth:authenticate(Req) of
         {ok, ?USER = Client} ->
@@ -156,14 +175,14 @@ is_authorized(Req, #cdmi_req{client = undefined} = CdmiReq) ->
             {{false, <<"authentication_error">>}, Req, CdmiReq}
     catch
         throw:Err ->
-            RestResp = rest_translator:error_response(Err),
-            {stop, send_response(RestResp, Req), CdmiReq};
+            ErrorResp = rest_translator:error_response(Err),
+            {stop, send_response(ErrorResp, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            RestResp = rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR),
-            {stop, send_response(RestResp, Req), CdmiReq}
+            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
+            {stop, NewReq, CdmiReq}
     end;
 is_authorized(Req, CdmiReq) ->
     {true, Req, CdmiReq}.
@@ -171,18 +190,18 @@ is_authorized(Req, CdmiReq) ->
 
 %%--------------------------------------------------------------------
 %% @equiv Cowboy callback function.
-%% Checks existence of container or dataobject resources (capabilities are
-%% not checked because they are virtual resources so they always exists).
+%% Checks existence of container or dataobject resources (capabilities always
+%% exist because they are virtual resources).
 %% @end
 %%--------------------------------------------------------------------
 -spec resource_exists(cowboy_req:req(), cdmi_req()) ->
-    {boolean(), cowboy_req:req(), cdmi_req()}.
-resource_exists(Req, #cdmi_req{type = {capabilities, _}} = CdmiReq) ->
+    {stop | boolean(), cowboy_req:req(), cdmi_req()}.
+resource_exists(Req, #cdmi_req{resource = {capabilities, _}} = CdmiReq) ->
     {true, Req, CdmiReq};
 resource_exists(Req, #cdmi_req{
     client = ?USER(_UserId, SessionId),
     file_path = Path,
-    type = Type
+    resource = Type
 } = CdmiReq) ->
     case lfm:stat(SessionId, {path, Path}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} when Type == container ->
@@ -196,8 +215,8 @@ resource_exists(Req, #cdmi_req{
         {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
             {false, Req, CdmiReq};
         {error, Errno} ->
-            RestResp = rest_translator:error_response(?ERROR_POSIX(Errno)),
-            {stop, send_response(RestResp, Req), CdmiReq}
+            ErrorResp = rest_translator:error_response(?ERROR_POSIX(Errno)),
+            {stop, send_response(ErrorResp, Req), CdmiReq}
     end.
 
 
@@ -213,25 +232,29 @@ resource_exists(Req, #cdmi_req{
     SubType :: binary(),
     Params :: '*' | [{binary(), binary()}],
     AcceptResource :: atom().
-content_types_accepted(Req, #cdmi_req{type = container, version = undefined} = CdmiReq) ->
+content_types_accepted(Req, #cdmi_req{resource = container, version = undefined} = CdmiReq) ->
     {[
         {<<"application/cdmi-container">>, error_no_version},
+        {<<"application/cdmi-object">>, error_no_version},
         {'*', put_binary_container}
     ], Req, CdmiReq};
-content_types_accepted(Req, #cdmi_req{type = container} = CdmiReq) ->
+content_types_accepted(Req, #cdmi_req{resource = container} = CdmiReq) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi_container},
+        {<<"application/cdmi-object">>, error_wrong_path},
         {'*', put_binary_container}
 
     ], Req, CdmiReq};
-content_types_accepted(Req, #cdmi_req{type = dataobject, version = undefined} = CdmiReq) ->
+content_types_accepted(Req, #cdmi_req{resource = dataobject, version = undefined} = CdmiReq) ->
     {[
         {<<"application/cdmi-object">>, error_no_version},
+        {<<"application/cdmi-container">>, error_no_version},
         {'*', put_binary_dataobject}
     ], Req, CdmiReq};
-content_types_accepted(Req, #cdmi_req{type = dataobject} = CdmiReq) ->
+content_types_accepted(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
     {[
         {<<"application/cdmi-object">>, put_cdmi_dataobject},
+        {<<"application/cdmi-container">>, error_wrong_path},
         {'*', put_binary_dataobject}
     ], Req, CdmiReq}.
 
@@ -243,24 +266,24 @@ content_types_accepted(Req, #cdmi_req{type = dataobject} = CdmiReq) ->
 %%--------------------------------------------------------------------
 -spec content_types_provided(cowboy_req:req(), cdmi_req()) ->
     {[{ContentType :: binary(), Method :: atom()}], cowboy_req:req(), cdmi_req()}.
-content_types_provided(Req, #cdmi_req{type = {capabilities, _}} = CdmiReq) ->
+content_types_provided(Req, #cdmi_req{resource = {capabilities, _}} = CdmiReq) ->
     {[
         {<<"application/cdmi-capability">>, get_cdmi_capability}
     ], Req, CdmiReq};
-content_types_provided(Req, #cdmi_req{type = container, version = undefined} = CdmiReq) ->
+content_types_provided(Req, #cdmi_req{resource = container, version = undefined} = CdmiReq) ->
     {[
         {<<"application/cdmi-container">>, error_no_version}
     ], Req, CdmiReq};
-content_types_provided(Req, #cdmi_req{type = container} = CdmiReq) ->
+content_types_provided(Req, #cdmi_req{resource = container} = CdmiReq) ->
     {[
         {<<"application/cdmi-container">>, get_cdmi_container}
     ], Req, CdmiReq};
-content_types_provided(Req, #cdmi_req{type = dataobject, version = undefined} = CdmiReq) ->
+content_types_provided(Req, #cdmi_req{resource = dataobject, version = undefined} = CdmiReq) ->
     {[
         {<<"application/binary">>, get_binary_dataobject},
         {<<"application/cdmi-object">>, error_no_version}
     ], Req, CdmiReq};
-content_types_provided(Req, #cdmi_req{type = dataobject} = CdmiReq) ->
+content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
     {[
         {<<"application/binary">>, get_binary_dataobject},
         {<<"application/cdmi-object">>, get_cdmi_dataobject}
@@ -271,11 +294,24 @@ error_no_version(_, _) ->
     ok.
 
 
+error_wrong_path(_, _) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_provided).
+%% Returns requested capabilities.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cdmi_capability(cowboy_req:req(), cdmi_req()) ->
+    {binary(), cowboy_req:req(), cdmi_req()}.
 get_cdmi_capability(Req, #cdmi_req{
-    type = {capabilities, CapType},
+    resource = {capabilities, CapType},
     options = Options
 } = CdmiReq) ->
-    NonEmptyOpts = utils:ensure_defined(Options, [], ?default_get_capability_opts),
+    NonEmptyOpts = utils:ensure_defined(
+        Options, [], ?DEFAULT_CAPABILITIES_OPTIONS
+    ),
     Capabilities = case CapType of
         root -> cdmi_capabilities:root_capabilities(NonEmptyOpts);
         container -> cdmi_capabilities:container_capabilities(NonEmptyOpts);
@@ -328,8 +364,8 @@ delete_resource(_, _) ->
 %% absolute path (it must begin with /).
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_by_id(cowboy_req:req()) -> cdmi_req().
-resolve_by_id(Req) ->
+-spec resolve_resource_by_id(cowboy_req:req()) -> cdmi_req().
+resolve_resource_by_id(Req) ->
     ObjectId = cowboy_req:binding(id, Req),
     Guid = case catch file_id:objectid_to_guid(ObjectId) of
         {ok, Id} ->
@@ -338,7 +374,7 @@ resolve_by_id(Req) ->
             throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"file_id">>))
     end,
 
-    {Cl, BasePath} = case proplists:get_value(ObjectId, ?CapabilityPathById) of
+    {Cl, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
             case rest_auth:authenticate(Req) of
                 {ok, ?USER(_UserId, SessionId) = Client} ->
@@ -363,40 +399,40 @@ resolve_by_id(Req) ->
         _ -> <<BasePath/binary, Path/binary>>
     end,
 
-    CdmiReq = resolve_by_path(FullPath),
+    CdmiReq = resolve_resource_by_path(FullPath),
     CdmiReq#cdmi_req{client = Cl}.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Resolves request type (capability, container or dataobject) using specified
-%% absolute path (it must begin with /).
-%% In case of capability request adds ?NOBODY authorization.
+%% Resolves resource accessed (capability, container or dataobject) using
+%% specified absolute path (it must begin with /).
+%% For capability requests ?NOBODY authorization is additionally added.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_by_path(cowboy_req:req()) -> cdmi_req().
-resolve_by_path(<<"/", Path/binary>> = FullPath) ->
+-spec resolve_resource_by_path(file_meta:path()) -> cdmi_req().
+resolve_resource_by_path(<<"/", Path/binary>> = FullPath) ->
     case Path of
-        ?root_capability_path ->
+        ?ROOT_CAPABILITY_PATH ->
             #cdmi_req{
                 client = ?NOBODY,
-                type = {capabilities, root}
+                resource = {capabilities, root}
             };
-        ?container_capability_path ->
+        ?CONTAINER_CAPABILITY_PATH ->
             #cdmi_req{
                 client = ?NOBODY,
-                type = {capabilities, container}
+                resource = {capabilities, container}
             };
-        ?dataobject_capability_path ->
+        ?DATAOBJECT_CAPABILITY_PATH ->
             #cdmi_req{
                 client = ?NOBODY,
-                type = {capabilities, dataobject}
+                resource = {capabilities, dataobject}
             };
         _ ->
             CdmiReq = case filepath_utils:ends_with_slash(FullPath) of
-                true -> #cdmi_req{type = container};
-                false -> #cdmi_req{type = dataobject}
+                true -> #cdmi_req{resource = container};
+                false -> #cdmi_req{resource = dataobject}
             end,
             CdmiReq#cdmi_req{file_path = FullPath}
     end.
@@ -450,9 +486,14 @@ parse_qs(QueryString) ->
                             [SimpleVal] ->
                                 {SimpleOpt, SimpleVal};
                             [FromBin, ToBin] ->
-                                From = binary_to_integer(FromBin),
-                                To = binary_to_integer(ToBin),
-                                {SimpleOpt, From, To};
+                                try
+                                    From = binary_to_integer(FromBin),
+                                    To = binary_to_integer(ToBin),
+                                    {SimpleOpt, From, To}
+                                catch
+                                    _:_ ->
+                                        throw(?ERROR_BAD_DATA(<<"query string">>))
+                                end;
                             _ ->
                                 throw(?ERROR_BAD_DATA(<<"query string">>))
                         end;

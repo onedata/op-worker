@@ -96,17 +96,3 @@
     {?container_capability_id, filename:absname(<<"/", (?container_capability_path)/binary>>)},
     {?dataobject_capability_id, filename:absname(<<"/", (?dataobject_capability_path)/binary>>)}
 ]).
-
--include_lib("ctool/include/posix/file_attr.hrl").
-
--record(cdmi_req, {
-    client = undefined :: undefined | op_logic:client(),
-    file_path = undefined :: undefined | binary(),
-    file_attrs = undefined :: undefined | #file_attr{},
-    type :: {capabilities, root | container | dataobject} | container | dataobject,
-    version = undefined :: undefined | binary(),
-    options :: map()
-}).
-
--type cdmi_req() :: #cdmi_req{}.
-
