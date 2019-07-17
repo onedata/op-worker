@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 
 -export([get_response/2]).
 

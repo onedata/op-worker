@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").

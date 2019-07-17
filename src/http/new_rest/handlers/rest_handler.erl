@@ -18,7 +18,7 @@
 -behaviour(cowboy_rest).
 
 -include("op_logic.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").

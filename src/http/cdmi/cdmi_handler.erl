@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").

@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
 -include("http/op_gui.hrl").
+-include("http/cdmi.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("gui/include/gui.hrl").
 
@@ -59,8 +60,8 @@ start() ->
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
-        {"/cdmi/cdmi_objectid/:id/[...]", cdmi_handler, by_id},
-        {"/cdmi/[...]", cdmi_handler, by_path},
+        {?CDMI_ID_PATH, cdmi_handler, by_id},
+        {?CDMI_PATH, cdmi_handler, by_path},
         rest_handler:rest_routes()
     ]),
 

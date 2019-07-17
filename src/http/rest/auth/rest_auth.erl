@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("op_logic.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").

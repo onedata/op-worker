@@ -76,7 +76,7 @@ malformed_objectid_request(Req, State) ->
     {State4, Req4} = add_opts_to_state(Req3, State3),
 
     {Handler, Req5} = choose_handler(Req4, Path),
-    request_context:set_handler(Handler),
+%%    request_context:set_handler(Handler),
     {false, Req5, State4}.
 
 %%--------------------------------------------------------------------

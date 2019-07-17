@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

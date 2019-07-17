@@ -9,7 +9,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 
 -ifndef(REST_ERRORS_HRL).
 -define(REST_ERRORS_HRL, 1).
