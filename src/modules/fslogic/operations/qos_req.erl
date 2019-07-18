@@ -22,6 +22,9 @@
 -export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2,
     check_fulfillment/3, restore_qos_on_storage/2]).
 
+% For test purpose
+-export([get_space_storages/2]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -147,7 +150,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         {guid, FileGuid}, QosExpressionInRPN, ReplicasNum),
 
     case TargetStoragesList of
-        {error, cannot_fulfill_qos} ->
+        {error, ?CANNOT_FULFILL_QOS} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
@@ -156,7 +159,6 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
                 TargetStoragesList)
     end,
 
-    % invalidate bounded cache
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
 
     #provider_response{

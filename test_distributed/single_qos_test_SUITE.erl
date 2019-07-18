@@ -840,7 +840,6 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    test_utils:mock_new(Workers, qos_traverse, [passthrough]),
     mock_providers_qos(Config),
     mock_schedule_transfers(Config),
     mock_space_storages(Config, maps:keys(?TEST_PROVIDERS_QOS)),
@@ -849,8 +848,8 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+    test_utils:mock_unload(Workers),
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions
@@ -861,22 +860,24 @@ mock_providers_qos(Config) ->
     test_utils:mock_new(Workers, providers_qos),
     test_utils:mock_expect(Workers, providers_qos, get_storage_qos,
         fun(StorageId, _StorageSet) ->
-            % names of test providers starts with p1, p2 etc.
+            % names of test providers start with p1, p2 etc.
             maps:get(binary:part(StorageId, 0, 2), ?TEST_PROVIDERS_QOS)
         end).
 
 
 mock_schedule_transfers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, qos_traverse, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_traverse, schedule_transfers,
-        fun(_, _, _) ->
+        fun(_, _, _, _) ->
             []
         end).
 
 
 mock_space_storages(Config, StorageList) ->
     Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_expect(Workers, qos_traverse, get_space_storages,
+    test_utils:mock_new(Workers, qos_req, [passthrough]),
+    ok = test_utils:mock_expect(Workers, qos_req, get_space_storages,
         fun(_, _) ->
             StorageList
         end).

@@ -25,6 +25,9 @@
 -export([do_master_job/1, do_slave_job/1, task_finished/1, get_job/1,
     get_sync_info/1, list_ongoing_jobs/0, update_job_progress/5]).
 
+% For test purpose
+-export([schedule_transfers/4]).
+
 -record(add_qos_traverse_args, {
     session_id :: session:id(),
     qos_id :: qos_entry:id(),

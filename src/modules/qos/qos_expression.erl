@@ -55,7 +55,7 @@ transform_to_rpn(Expression) ->
     [storage:id()] | ?CANNOT_FULFILL_QOS.
 get_target_storage(_Expression, _ReplicasNum, [], _FileLocations) ->
     % TODO: VFS-5568 - handle qos requirements that cannot be satisfied
-    ?CANNOT_FULFILL_QOS;
+    {error, ?CANNOT_FULFILL_QOS};
 get_target_storage(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).
 
@@ -186,7 +186,7 @@ filter_storage(Key, Val, StorageSet) ->
 %%--------------------------------------------------------------------
 -spec select([storage:id()], pos_integer(), []) -> [storage:id()] | ?CANNOT_FULFILL_QOS.
 select([], _ReplicasNum, _FileLocations) ->
-    ?CANNOT_FULFILL_QOS;
+    {error, ?CANNOT_FULFILL_QOS};
 select(StorageList, ReplicasNum, FileLocations) ->
     StorageListWithBlocksSize = lists:map(fun (StorageId) ->
             {get_storage_blocks_size(StorageId, FileLocations), StorageId}
@@ -199,7 +199,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
         ReplicasNum ->
             StorageSublist;
         _ ->
-            ?CANNOT_FULFILL_QOS
+            {error, ?CANNOT_FULFILL_QOS}
     end.
 
 %%--------------------------------------------------------------------

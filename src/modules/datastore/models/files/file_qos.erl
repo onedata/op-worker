@@ -32,7 +32,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([update/2, create_or_update/2, get/1]).
+-export([update/2, create_or_update/2, get/1, delete/1]).
 
 -export([
     get_effective/1, add_to_target_storages/3, remove_from_target_storages/2,
@@ -41,6 +41,8 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+
+-export([get_callback/0]).
 
 -type key() :: datastore:key().
 -type record() :: #file_qos{}.
@@ -105,14 +107,8 @@ get(FileGuid) ->
 %%% Higher-level functions operating on file_qos record.
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns effective file_qos for file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_effective(file_meta:doc()) -> record() | undefined.
-get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
-    Callback = fun([#document{key = Uuid, scope = SpaceId}, ParentEffQos, CalculationInfo]) ->
+get_callback() ->
+    fun([#document{key = Uuid, scope = SpaceId}, ParentEffQos, CalculationInfo]) ->
         Guid = file_id:pack_guid(Uuid, SpaceId),
         case {file_qos:get(Guid), ParentEffQos} of
             {{error, not_found}, _} ->
@@ -123,7 +119,17 @@ get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
                 EffQos = merge_file_qos(ParentEffQos, FileQos),
                 {ok, EffQos, CalculationInfo}
         end
-    end,
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns effective file_qos for file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective(file_meta:doc()) -> record() | undefined.
+get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
+    Callback = get_callback(),
 
     CacheTableName = binary_to_atom(SpaceId, utf8),
     {ok, EffQos, _} = effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], []),
