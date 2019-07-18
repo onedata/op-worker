@@ -21,6 +21,7 @@
 -include("http/rest.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% cowboy rest handler API
 -export([
@@ -217,6 +218,8 @@ resource_exists(Req, #cdmi_req{
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
             redirect_to_dataobject(Req, CdmiReq);
         {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+            {false, Req, CdmiReq};
+        {error, ?ENOENT} ->
             {false, Req, CdmiReq};
         {error, Errno} ->
             ErrorResp = rest_translator:error_response(?ERROR_POSIX(Errno)),

@@ -36,12 +36,6 @@
     <<"invalid_childrenrange">>,
     <<"Requested childrenrange is invalid.">>)
 ).
--define(ERROR_TOO_LARGE_CHILDRENRANGE(MaxChildren), ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"too_large_childrenrange">>,
-    <<"Requested childrenrange exceeds the limit of ",
-        (integer_to_binary(MaxChildren))/binary, " entries.">>)
-).
 -define(ERROR_INVALID_RANGE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_range">>,
