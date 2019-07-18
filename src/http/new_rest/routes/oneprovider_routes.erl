@@ -32,5 +32,11 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_provider, id = undefined, aspect = configuration}
+    }},
+    %% Get test image
+    {<<"/test_image">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"image/png">>],
+        b_gri = #b_gri{type = op_provider, id = undefined, aspect = test_image}
     }}
 ].

@@ -36,9 +36,6 @@
 %% Endpoint used to verify authorization nonces issued by this provider
 -define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
 
-% Endpoint for a dummy favicon used to check connectivity in GUI
--define(FAVICON_PATH, "/favicon.ico").
-
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 
@@ -48,6 +45,9 @@
 % Endpoint for viewing public shares
 -define(SHARE_ID_BINDING, share_id).
 -define(PUBLIC_SHARE_COWBOY_ROUTE, "/share/:share_id").
+
+%% All requests to this endpoint will be proxied to onepanel.
+-define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").
 
 -endif.
 
