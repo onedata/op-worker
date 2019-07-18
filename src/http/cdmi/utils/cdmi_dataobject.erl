@@ -244,9 +244,6 @@ put_cdmi(Req, #cdmi_req{
     % update value and metadata depending on creation type
     case OperationPerformed of
         created ->
-            {ok, Attrs2} = ?run(lfm:stat(SessionId, {guid, Guid})),
-            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs2},
-
             {ok, FileHandler} = ?run(lfm:open(SessionId, {guid, Guid}, write)),
             cdmi_metadata:update_cdmi_completion_status(SessionId, {guid, Guid}, <<"Processing">>),
             {ok, _, RawValueSize} = ?run(lfm:write(FileHandler, 0, RawValue)),
@@ -262,19 +259,20 @@ put_cdmi(Req, #cdmi_req{
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(SessionId, {guid, Guid}, CdmiPartialFlag),
 
             % return response
+            {ok, Attrs2} = ?run(lfm:stat(SessionId, {guid, Guid})),
+            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs2},
             Answer = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
             Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req0),
             {true, Req2, CdmiReq2};
         CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
-            {ok, Attrs2} = ?run(lfm:stat(SessionId, {guid, Guid})),
-            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs2},
-
             % update cdmi metadata
             cdmi_metadata:update_encoding(SessionId, {guid, Guid}, RequestedValueTransferEncoding),
             cdmi_metadata:update_mimetype(SessionId, {guid, Guid}, RequestedMimeType),
             cdmi_metadata:update_user_metadata(SessionId, {guid, Guid}, RequestedUserMetadata, URIMetadataNames),
 
             % update cdmi metadata
+            {ok, Attrs2} = ?run(lfm:stat(SessionId, {guid, Guid})),
+            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs2},
             Answer = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
             Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req0),
             {true, Req2, CdmiReq};

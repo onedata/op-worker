@@ -38,7 +38,6 @@
     update_file_test/1,
     create_dir_test/1,
     capabilities_test/1,
-    choose_adequate_handler_test/1,
     use_supported_cdmi_version_test/1,
     use_unsupported_cdmi_version_test/1,
     moved_permanently_test/1,
@@ -66,7 +65,6 @@ all() ->
         update_file_test,
         create_dir_test,
         capabilities_test,
-        choose_adequate_handler_test,
         use_supported_cdmi_version_test,
         use_unsupported_cdmi_version_test,
         moved_permanently_test,
@@ -126,9 +124,6 @@ objectid_test(Config) ->
 
 capabilities_test(Config) ->
     cdmi_test_base:capabilities(Config).
-
-choose_adequate_handler_test(Config) ->
-    cdmi_test_base:choose_adequate_handler(Config).
 
 use_supported_cdmi_version_test(Config) ->
     cdmi_test_base:use_supported_cdmi_version(Config).

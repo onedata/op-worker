@@ -111,13 +111,13 @@ put_cdmi(Req, #cdmi_req{
             ),
             {true, Req1, CdmiReq};
         _ ->
-            {ok, NewAttrs} = ?run(lfm:stat(SessionId, {guid, Guid})),
-            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = NewAttrs},
             cdmi_metadata:update_user_metadata(
                 SessionId,
                 {guid, Guid},
                 RequestedUserMetadata
             ),
+            {ok, NewAttrs} = ?run(lfm:stat(SessionId, {guid, Guid})),
+            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = NewAttrs},
             Answer = get_directory_info(?DEFAULT_GET_DIR_OPTS, CdmiReq2),
             Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
             {true, Req2, CdmiReq}

@@ -36,7 +36,6 @@
     update_file/1,
     create_dir/1,
     capabilities/1,
-    choose_adequate_handler/1,
     use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1,
     moved_permanently/1,
@@ -500,8 +499,9 @@ metadata(Config) ->
     {ok, Code18, _Headers18, _Response18} = do_request(Workers, DirName ++ "?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18),
     ?assertEqual(204, Code18),
 
-    {ok, Code19, _Headers19, _Response19} = do_request(Workers, filename:join(DirName, "some_file"), put, [user_1_token_header(Config)], []),
-    ?assertEqual(403, Code19).
+    {ok, Code19, _Headers19, Response19} = do_request(Workers, filename:join(DirName, "some_file"), put, [user_1_token_header(Config)], []),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ?assertMatch(ExpRestError, {Code19, json_utils:decode(Response19)}).
 %%------------------------------
 
 % Tests cdmi object DELETE requests
@@ -747,31 +747,17 @@ update_file(Config) ->
     %%---- value update, http error ------
     UpdateValue = <<"123">>,
     RequestHeaders6 = [{<<"content-range">>, <<"bytes 0-2,3-4/*">>}],
-    {ok, Code6, _Headers6, _Response6} =
+    {ok, Code6, _Headers6, Response6} =
         do_request(Workers, FullTestFileName, put, [user_1_token_header(Config) | RequestHeaders6],
             UpdateValue),
-    ?assertEqual(400, Code6),
+
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"range">>)),
+    ?assertMatch(ExpRestError, {Code6, json_utils:decode(Response6)}),
 
     ?assert(object_exists(Config, FullTestFileName)),
     ?assertEqual(<<"12300file_content">>,
         get_file_content(Config, FullTestFileName)).
 %%------------------------------
-
-choose_adequate_handler(Config) ->
-    % given
-    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    File = "file",
-    Dir = "dir/",
-
-    % when
-    {ok, _, _, _} = do_request(Workers, File, get, [], []),
-    % then
-    ?assert(rpc:call(WorkerP1, meck, called, [cdmi_object_handler, allowed_methods, '_'])),
-
-    % when
-    {ok, _, _, _} = do_request(Workers, Dir, get, [], []),
-    % then
-    ?assert(rpc:call(WorkerP1, meck, called, [cdmi_container_handler, allowed_methods, '_'])).
 
 use_supported_cdmi_version(Config) ->
     % given
@@ -779,11 +765,12 @@ use_supported_cdmi_version(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
     % when
-    {ok, Code, _ResponseHeaders, _Response} =
+    {ok, Code, _ResponseHeaders, Response} =
         do_request(Workers, "/random", get, RequestHeaders),
 
     % then
-    ?assertEqual(404, Code).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
+    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 use_unsupported_cdmi_version(Config) ->
     % given
@@ -791,11 +778,12 @@ use_unsupported_cdmi_version(Config) ->
     RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
-    {ok, Code, _ResponseHeaders, _Response} =
+    {ok, Code, _ResponseHeaders, Response} =
         do_request(Workers, "/random", get, RequestHeaders),
 
     % then
-    ?assertEqual(400, Code).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])),
+    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'
@@ -981,8 +969,9 @@ objectid(Config) ->
 
     %%---- unauthorized access to / by objectid -------
     RequestHeaders8 = [?CDMI_VERSION_HEADER],
-    {ok, Code8, _, _} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders8, []),
-    ?assertEqual(401, Code8).
+    {ok, Code8, _, Response8} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders8, []),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_UNAUTHORIZED),
+    ?assertMatch(ExpRestError, {Code8, json_utils:decode(Response8)}).
 %%------------------------------
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
@@ -1553,11 +1542,15 @@ acl(Config) ->
     create_file(Config, filename:join("/", Filename1)),
     write_to_file(Config, Filename1, <<"data">>, 0),
 
+    EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+
     % set acl to 'write' and test cdmi/non-cdmi get request (should return 403 forbidden)
     RequestHeaders1 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclWrite),
-    {ok, 403, _, _} = do_request(Workers, Filename1, get, RequestHeaders1, []),
-    {ok, 403, _, _} = do_request(Workers, Filename1, get, [user_1_token_header(Config)], []),
+    {ok, Code1, _, Response1} = do_request(Workers, Filename1, get, RequestHeaders1, []),
+    ?assertMatch(EaccesError, {Code1, json_utils:decode(Response1)}),
+    {ok, Code2, _, Response2} = do_request(Workers, Filename1, get, [user_1_token_header(Config)], []),
+    ?assertMatch(EaccesError, {Code2, json_utils:decode(Response2)}),
     ?assertEqual({error, ?EACCES}, open_file(WorkerP1, Config, Filename1, read)),
 
     % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
@@ -1580,8 +1573,10 @@ acl(Config) ->
     % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadFull),
     RequestBody6 = json_utils:encode(#{<<"value">> => <<"new_data3">>}),
-    {ok, 403, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, RequestBody6),
-    {ok, 403, _, _} = do_request(Workers, Filename1, put, [user_1_token_header(Config)], <<"new_data4">>),
+    {ok, Code3, _, Response3} = do_request(Workers, Filename1, put, RequestHeaders1, RequestBody6),
+    ?assertMatch(EaccesError, {Code3, json_utils:decode(Response3)}),
+    {ok, Code4, _, Response4} = do_request(Workers, Filename1, put, [user_1_token_header(Config)], <<"new_data4">>),
+    ?assertMatch(EaccesError, {Code4, json_utils:decode(Response4)}),
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
     ?assertEqual({error, ?EACCES}, open_file(WorkerP1, Config, Filename1, write)),
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
@@ -1625,23 +1620,28 @@ acl(Config) ->
 
     % set acl to 'write' and test cdmi get request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclWrite),
-    {ok, 403, _, _} = do_request(Workers, Dirname1, get, RequestHeaders2, []),
+    {ok, Code5, _, Response5} = do_request(Workers, Dirname1, get, RequestHeaders2, []),
+    ?assertMatch(EaccesError, {Code5, json_utils:decode(Response5)}),
 
     % set acl to 'read' and test cdmi put request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclReadExecute),
     {ok, 200, _, _} = do_request(WorkerP2, Dirname1, get, RequestHeaders2, []),
-    {ok, 403, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, json_utils:encode(#{<<"metadata">> => #{<<"my_meta">> => <<"value">>}})),
+    {ok, Code6, _, Response6} = do_request(Workers, Dirname1, put, RequestHeaders2, json_utils:encode(#{<<"metadata">> => #{<<"my_meta">> => <<"value">>}})),
+    ?assertMatch(EaccesError, {Code6, json_utils:decode(Response6)}),
 
     % create files (should return 403 forbidden)
-    {ok, 403, _, _} = do_request(Workers, File1, put, [user_1_token_header(Config)], []),
+    {ok, Code7, _, Response7} = do_request(Workers, File1, put, [user_1_token_header(Config)], []),
+    ?assertMatch(EaccesError, {Code7, json_utils:decode(Response7)}),
     ?assert(not object_exists(Config, File1)),
-    {ok, 403, _, _} = do_request(Workers, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+    {ok, Code8, _, Response8} = do_request(Workers, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+    ?assertMatch(EaccesError, {Code8, json_utils:decode(Response8)}),
     ?assert(not object_exists(Config, File2)),
     ?assertEqual({error, ?EACCES}, create_file(Config, File4)),
     ?assert(not object_exists(Config, File4)),
 
     % delete files (should return 403 forbidden)
-    {ok, 403, _, _} = do_request(Workers, File3, delete, [user_1_token_header(Config)], []),
+    {ok, Code9, _, Response9} = do_request(Workers, File3, delete, [user_1_token_header(Config)], []),
+    ?assertMatch(EaccesError, {Code9, json_utils:decode(Response9)}),
     ?assert(object_exists(Config, File3)).
 %%------------------------------
 
@@ -1804,11 +1804,12 @@ create_cdmi_file_without_cdmi_version_header_should_fail(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     % when
-    ?assertMatch(
-        {ok, 400, _ResponseHeaders, _Response},
-        do_request(Workers, binary_to_list(SpaceName) ++ "/file1", put,
-            [user_1_token_header(Config), ?OBJECT_CONTENT_TYPE_HEADER], <<"{}">>
-        )).
+    {ok, Code, _ResponseHeaders, Response} = do_request(
+        Workers, binary_to_list(SpaceName) ++ "/file1", put,
+        [user_1_token_header(Config), ?OBJECT_CONTENT_TYPE_HEADER], <<"{}">>
+    ),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)),
+    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 create_cdmi_dir_without_cdmi_version_header_should_fail(Config) ->
     % given
@@ -1816,11 +1817,12 @@ create_cdmi_dir_without_cdmi_version_header_should_fail(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     % when
-    ?assertMatch(
-        {ok, 400, _ResponseHeaders, _Response},
-        do_request(Workers, binary_to_list(SpaceName) ++ "/dir1/", put,
-            [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER]
-        )).
+    {ok, Code, _ResponseHeaders, Response} = do_request(
+        Workers, binary_to_list(SpaceName) ++ "/dir1/", put,
+        [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER]
+    ),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)),
+    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
 %%%===================================================================

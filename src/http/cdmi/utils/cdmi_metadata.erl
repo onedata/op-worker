@@ -67,7 +67,9 @@ get_user_metadata(SessionId, FileKey) ->
                     {ok, #xattr{value = XattrValue}} ->
                         Acc#{Name => XattrValue};
                     {error, ?ENOATTR} ->
-                        Acc
+                        Acc;
+                    {error, Errno} ->
+                        throw(?ERROR_POSIX(Errno))
                 end
         end,
         #{},
@@ -173,7 +175,9 @@ get_mimetype(SessionId, FileKey) ->
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
-            ?MIMETYPE_DEFAULT_VALUE
+            ?MIMETYPE_DEFAULT_VALUE;
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
     end.
 
 
@@ -189,7 +193,9 @@ get_encoding(SessionId, FileKey) ->
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
-            ?ENCODING_DEFAULT_VALUE
+            ?ENCODING_DEFAULT_VALUE;
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
     end.
 
 
@@ -206,7 +212,9 @@ get_cdmi_completion_status(SessionId, FileKey) ->
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
-            ?COMPLETION_STATUS_DEFAULT_VALUE
+            ?COMPLETION_STATUS_DEFAULT_VALUE;
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
     end.
 
 
@@ -362,7 +370,9 @@ prepare_cdmi_metadata([Name | Rest], FileKey, SessionId, Attrs, Prefix) ->
                                 ?ACL_XATTR_NAME => acl_logic:from_acl_to_json_format(Acl)
                             };
                         {error, ?ENOATTR} ->
-                            prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix)
+                            prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix);
+                        {error, Errno} ->
+                            throw(?ERROR_POSIX(Errno))
                     end
             end;
         false ->
