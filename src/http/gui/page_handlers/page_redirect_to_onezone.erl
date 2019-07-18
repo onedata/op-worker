@@ -14,7 +14,7 @@
 
 -behaviour(dynamic_page_behaviour).
 
--include("http/rest/http_status.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 

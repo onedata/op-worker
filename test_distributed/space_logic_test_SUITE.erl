@@ -226,6 +226,7 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % private scope
+    logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
     ?assertMatch(
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])
@@ -255,31 +256,6 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    % Update of protected scope should not affect the cache
-    ChangedData3 = Space1ProtectedData#{
-        <<"revision">> => 23,
-        <<"name">> => <<"changedName3">>
-    },
-    PushMessage3 = #gs_push_graph{gri = Space1ProtectedGRI, data = ChangedData3, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
-
-    ?assertMatch(
-        {ok, #document{key = ?SPACE_1, value = #od_space{
-            name = <<"changedName2">>,
-            cache_state = #{revision := 23}
-        }}},
-        rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        {ok, #document{key = ?SPACE_1, value = #od_space{
-            name = <<"changedName2">>,
-            cache_state = #{revision := 23}
-        }}},
-        rpc:call(Node, space_logic, get_protected_data, [?ROOT_SESS_ID, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Space1PrivateGRI, change_type = deleted},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
@@ -290,6 +266,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
+    logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
     ?assertMatch(
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])

@@ -113,26 +113,9 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    % Update of shared scope should not affect the cache
-    ChangedData2 = Group1SharedData#{
-        <<"revision">> => 5,
-        <<"name">> => <<"changedName2">>
-    },
-    PushMessage2 = #gs_push_graph{gri = Group1SharedGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
-
-    ?assertMatch(
-        {ok, #document{key = ?GROUP_1, value = #od_group{
-            name = <<"changedName2">>,
-            cache_state = #{revision := 5}
-        }}},
-        rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, undefined])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
     % Simulate a 'deleted' push and see if cache was invalidated
-    PushMessage7 = #gs_push_graph{gri = Group1SharedGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage7]),
+    PushMessage3 = #gs_push_graph{gri = Group1SharedGRI, change_type = deleted},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_group, get_from_cache, [?GROUP_1])
@@ -140,13 +123,14 @@ subscribe_test(Config) ->
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
+    logic_tests_common:invalidate_cache(Config, od_group, ?GROUP_1),
     ?assertMatch(
         {ok, ?GROUP_SHARED_DATA_MATCHER(?GROUP_1)},
         rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, undefined])
     ),
 
-    PushMessage8 = #gs_push_nosub{gri = Group1SharedGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage8]),
+    PushMessage4 = #gs_push_nosub{gri = Group1SharedGRI, reason = forbidden},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_group, get_from_cache, [?GROUP_1])

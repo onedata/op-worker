@@ -207,6 +207,7 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % private scope
+    logic_tests_common:invalidate_cache(Config, od_provider, ?PROVIDER_1),
     ?assertMatch(
         {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
@@ -219,31 +220,6 @@ subscribe_test(Config) ->
     },
     PushMessage2 = #gs_push_graph{gri = Provider1PrivateGRI, data = ChangedData2, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
-
-    ?assertMatch(
-        {ok, #document{key = ?PROVIDER_1, value = #od_provider{
-            name = <<"changedName2">>,
-            cache_state = #{revision := 11}
-        }}},
-        rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertMatch(
-        {ok, #document{key = ?PROVIDER_1, value = #od_provider{
-            name = <<"changedName2">>,
-            cache_state = #{revision := 11}
-        }}},
-        rpc:call(Node, provider_logic, get_protected_data, [?ROOT_SESS_ID, ?PROVIDER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    % Update of protected scope should not affect the cache
-    ChangedData3 = Provider1ProtectedData#{
-        <<"revision">> => 11,
-        <<"name">> => <<"changedName3">>
-    },
-    PushMessage3 = #gs_push_graph{gri = Provider1ProtectedGRI, data = ChangedData3, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
 
     ?assertMatch(
         {ok, #document{key = ?PROVIDER_1, value = #od_provider{

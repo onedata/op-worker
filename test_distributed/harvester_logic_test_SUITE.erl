@@ -111,6 +111,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
+    logic_tests_common:invalidate_cache(Config, od_harvester, ?HARVESTER_1),
     ?assertMatch(
         {ok, ?HARVESTER_PRIVATE_DATA_MATCHER(?HARVESTER_1)},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])

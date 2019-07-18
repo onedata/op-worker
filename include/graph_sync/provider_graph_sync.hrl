@@ -30,7 +30,7 @@
     graph_sync_path, "/graph_sync/provider")).
 
 -define(GS_REQUEST_TIMEOUT, application:get_env(?APP_NAME,
-    graph_sync_request_timeout, timer:seconds(6))).
+    graph_sync_request_timeout, timer:seconds(30))).
 
 -define(GS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
     graph_sync_healthcheck_interval, timer:seconds(4))).

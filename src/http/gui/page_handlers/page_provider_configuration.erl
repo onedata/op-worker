@@ -18,7 +18,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
--include("http/rest/http_status.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 
 -define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
 

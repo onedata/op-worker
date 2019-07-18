@@ -118,6 +118,29 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
+    % Simulate a 'deleted' push and see if cache was invalidated
+    PushMessage2 = #gs_push_graph{gri = HService1PrivateGRI, change_type = deleted},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    ?assertMatch(
+        {error, not_found},
+        rpc:call(Node, od_handle_service, get_from_cache, [?HANDLE_SERVICE_1])
+    ),
+
+    % Simulate a 'nosub' push and see if cache was invalidated, fetch the
+    % record first.
+    logic_tests_common:invalidate_cache(Config, od_handle_service, ?HANDLE_SERVICE_1),
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+
+    PushMessage3 = #gs_push_nosub{gri = HService1PrivateGRI, reason = forbidden},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
+    ?assertMatch(
+        {error, not_found},
+        rpc:call(Node, od_handle_service, get_from_cache, [?HANDLE_SERVICE_1])
+    ),
+
     ok.
 
 

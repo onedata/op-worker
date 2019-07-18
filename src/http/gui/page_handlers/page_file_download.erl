@@ -69,7 +69,7 @@ handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
         false ->
-            cowboy_req:reply(?HTTP_401_NOT_AUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
+            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         {true, SessionId, FileId} ->
             Req2 = gui_cors:allow_origin(oneprovider:get_oz_url(), Req),
             Req3 = gui_cors:allow_frame_origin(oneprovider:get_oz_url(), Req2),

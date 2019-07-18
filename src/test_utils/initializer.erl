@@ -506,7 +506,7 @@ mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
     test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
-        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = #od_share{
+        {ok, _} = put_into_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid,
@@ -524,7 +524,7 @@ mock_share_logic(Config) ->
     test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
         ok = od_share:invalidate_cache(ShareId),
-        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = Share#od_share{name = NewName}}),
+        {ok, _} = put_into_cache(#document{key = ShareId, value = Share#od_share{name = NewName}}),
         ok
     end).
 
@@ -532,6 +532,13 @@ mock_share_logic(Config) ->
 unmock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, share_logic).
+
+
+%% Puts an od_* document in the provider's cache, which triggers posthooks
+-spec put_into_cache(datastore_doc:doc()) -> {ok, datastore_doc:doc()}.
+put_into_cache(Doc = #document{key = Id, value = Record}) ->
+    Type = element(1, Record),
+    Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
 %%%===================================================================
@@ -1245,7 +1252,7 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
                 spaces = proplists:get_value(<<"spaces">>, Setup, []),
                 indices = proplists:get_value(<<"indices">>, Setup, [])
             }},
-        od_harvester:save_to_cache(Doc),
+        {ok, _} = put_into_cache(Doc),
         {ok, Doc}
     end).
 

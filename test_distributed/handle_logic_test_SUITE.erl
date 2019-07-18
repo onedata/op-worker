@@ -224,6 +224,7 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % private scope
+    logic_tests_common:invalidate_cache(Config, od_handle, ?HANDLE_1),
     ?assertMatch(
         {ok, ?HANDLE_PRIVATE_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
@@ -245,32 +246,6 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    % Update of public scope should not affect the cache
-    ChangedData3 = Handle1PublicData#{
-        <<"revision">> => 6,
-        <<"publicHandle">> => <<"changedPublicHandle3">>
-    },
-    PushMessage3 = #gs_push_graph{gri = Handle1PublicGRI, data = ChangedData3, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
-
-    ?assertMatch(
-        {ok, #document{key = ?HANDLE_1, value = #od_handle{
-            public_handle = <<"changedPublicHandle2">>,
-            cache_state = #{revision := 6}
-        }}},
-        rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, #document{key = ?HANDLE_1, value = #od_handle{
-            public_handle = <<"changedPublicHandle2">>,
-            cache_state = #{revision := 6}
-        }}},
-        rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Handle1PrivateGRI, change_type = deleted},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
@@ -281,6 +256,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
+    logic_tests_common:invalidate_cache(Config, od_handle, ?HANDLE_1),
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])

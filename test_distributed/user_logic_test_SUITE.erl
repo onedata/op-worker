@@ -371,6 +371,7 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % protected scope
+    logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
@@ -392,33 +393,8 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    % Update of shared scope should not affect the cache
-    ChangedData3 = User1SharedData#{
-        <<"revision">> => 5,
-        <<"fullName">> => <<"changedName3">>
-    },
-    PushMessage3 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData3, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
-
-    ?assertMatch(
-        {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName2">>,
-            cache_state = #{revision := 5}
-        }}},
-        rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName2">>,
-            cache_state = #{revision := 5}
-        }}},
-        rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
     % private scope
+    logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
@@ -440,48 +416,6 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
 
-    % Update of protected or shared scope should not affect the cache
-    ChangedData5 = User1SharedData#{
-        <<"revision">> => 8,
-        <<"fullName">> => <<"changedName5">>
-    },
-    PushMessage5 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData5, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
-
-    ChangedData6 = User1ProtectedData#{
-        <<"revision">> => 8,
-        <<"fullName">> => <<"changedName6">>
-    },
-    PushMessage6 = #gs_push_graph{gri = User1ProtectedGRI, data = ChangedData6, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage6]),
-
-    ?assertMatch(
-        {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>,
-            cache_state = #{revision := 8}
-        }}},
-        rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>,
-            cache_state = #{revision := 8}
-        }}},
-        rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, #document{key = ?USER_1, value = #od_user{
-            full_name = <<"changedName4">>,
-            cache_state = #{revision := 8}
-        }}},
-        rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage7 = #gs_push_graph{gri = User1PrivateGRI, change_type = deleted},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage7]),
@@ -492,6 +426,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
+    logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])

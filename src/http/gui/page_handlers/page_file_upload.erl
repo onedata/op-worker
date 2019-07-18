@@ -16,8 +16,8 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
--include("http/rest/http_status.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
@@ -66,9 +66,9 @@ handle(<<"POST">>, InitialReq) ->
     Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
     case op_gui_session:authenticate(Req) of
         ?ERROR_UNAUTHORIZED ->
-            cowboy_req:reply(?HTTP_401_NOT_AUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
+            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         false ->
-            cowboy_req:reply(?HTTP_401_NOT_AUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
+            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         {ok, Identity, Auth} ->
             Host = cowboy_req:host(Req),
             SessionId = op_gui_session:initialize(Identity, Auth, Host),

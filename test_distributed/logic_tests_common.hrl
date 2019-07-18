@@ -41,6 +41,7 @@
 -define(USER_1, <<"user1Id">>).
 -define(USER_2, <<"user2Id">>).
 -define(USER_3, <<"user3Id">>). % This user is not related to any entity
+-define(USER_INCREASING_REV, <<"userInvRev">>). % This record has a higher rev every time it is fetched
 -define(GROUP_1, <<"group1Id">>).
 -define(GROUP_2, <<"group2Id">>).
 -define(SPACE_1, <<"space1Id">>).
