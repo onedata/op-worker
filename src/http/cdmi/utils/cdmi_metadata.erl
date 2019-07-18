@@ -13,10 +13,10 @@
 -module(cdmi_metadata).
 
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("http/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
 -export([prepare_metadata/2, prepare_metadata/3, prepare_metadata/4]).
@@ -97,7 +97,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
                 ACL = try acl_logic:from_json_format_to_acl(Value)
                 catch _:Error ->
                     ?warning_stacktrace("Acl conversion error ~p", [Error]),
-                    throw(?ERROR_INVALID_ACL)
+                    throw(?ERROR_BAD_DATA(<<"acl">>))
                 end,
                 ok = lfm:set_acl(Auth, FileKey, ACL);
             ({Name, Value}) ->
@@ -244,7 +244,7 @@ filter_user_metadata_map(UserMetadata) when is_map(UserMetadata) ->
         end,
         UserMetadata);
 filter_user_metadata_map(_) ->
-    throw(?ERROR_INVALID_METADATA).
+    throw(?ERROR_BAD_DATA(<<"metadata">>)).
 
 %%--------------------------------------------------------------------
 %% @doc Filters out metadata with user_metadata_forbidden_prefix.
@@ -259,7 +259,7 @@ filter_user_metadata_keylist(UserMetadata) when is_list(UserMetadata) ->
         end,
         UserMetadata);
 filter_user_metadata_keylist(_) ->
-    throw(?ERROR_INVALID_METADATA).
+    throw(?ERROR_BAD_DATA(<<"metadata">>)).
 
 %%--------------------------------------------------------------------
 %% @doc Filters metadata with names contained in URIMetadataNames list.

@@ -91,7 +91,7 @@ stream_cdmi(Req, #cdmi_req{
         default -> {0, Size - 1};
         _ -> Range0
     end,
-    StreamSize = cdmi_streamer:cdmi_stream_size(
+    StreamSize = cdmi_stream_size(
         Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
     {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, Guid}, read)),

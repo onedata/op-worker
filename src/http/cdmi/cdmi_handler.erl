@@ -101,7 +101,9 @@ init(Req, ReqTypeResolutionMethod) ->
             by_id ->
                 resolve_resource_by_id(Req);
             by_path ->
-                {Path, _} = cdmi_path:get_path(Req),
+                FullHTTPPath = cowboy_req:path(Req),
+                PathTokens = cowboy_req:path_info(Req),
+                Path = join_filename(PathTokens, FullHTTPPath),
                 resolve_resource_by_path(Path)
         end,
         {cowboy_rest, Req, CdmiReq}
@@ -306,21 +308,38 @@ content_types_provided(Req, #cdmi_req{resource = dataobject, version = undefined
     ], Req, CdmiReq};
 content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
     {[
-        {<<"application/binary">>, get_binary_dataobject},
-        {<<"application/cdmi-object">>, get_cdmi_dataobject}
+        {<<"application/cdmi-object">>, get_cdmi_dataobject},
+        {<<"application/binary">>, get_binary_dataobject}
     ], Req, CdmiReq}.
 
 
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function.
+%% Handles PUT with cdmi content type, without CDMI version given
+%% @end
+%%--------------------------------------------------------------------
 -spec error_no_version(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-error_no_version(_, _) ->
-    ok.
+error_no_version(Req, CdmiReq) ->
+    ErrorResp = rest_translator:error_response(
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)
+    ),
+    {stop, send_response(ErrorResp, Req), CdmiReq}.
 
 
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function.
+%% Handles PUT with cdmi-object content type, which indicates that request has
+%% wrong path as it ends with '/'
+%% @end
+%%--------------------------------------------------------------------
 -spec error_wrong_path(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-error_wrong_path(_, _) ->
-    ok.
+error_wrong_path(Req, CdmiReq) ->
+    ErrorResp = rest_translator:error_response(
+        ?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)
+    ),
+    {stop, send_response(ErrorResp, Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -356,12 +375,22 @@ get_cdmi_container(Req, CdmiReq) ->
     ?run_cdmi(Req, CdmiReq, cdmi_container:get_cdmi(Req, CdmiReq)).
 
 
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_provided).
+%% Returns requested info about specified file (dataobject).
+%% @end
+%%--------------------------------------------------------------------
 -spec get_cdmi_dataobject(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 get_cdmi_dataobject(Req, CdmiReq) ->
     ?run_cdmi(Req, CdmiReq, cdmi_dataobject:get_cdmi(Req, CdmiReq)).
 
 
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_provided).
+%% Returns content of specified file (dataobject).
+%% @end
+%%--------------------------------------------------------------------
 -spec get_binary_dataobject(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 get_binary_dataobject(Req, CdmiReq) ->
@@ -464,7 +493,7 @@ resolve_resource_by_id(Req) ->
             {?NOBODY, CapabilityPath}
     end,
 
-    {Path, _} = cdmi_path:get_path_of_id_request(Req),
+    {Path, _} = get_path_of_id_request(Req),
 
     % concatenate BasePath and Path to FullPath
     FullPath = case BasePath of
@@ -627,3 +656,41 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
         Map -> json_utils:encode(Map)
     end,
     cowboy_req:reply(Code, Headers, RespBody, Req).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file path from cowboy request of type /cdmi/cdmi_object/:id/... (works with special characters)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_path_of_id_request(cowboy_req:req()) -> {file_meta:path(), cowboy_req:req()}.
+get_path_of_id_request(Req) ->
+    RawPath = cowboy_req:path(Req),
+    Path = cowboy_req:path_info(Req),
+    Id = cowboy_req:binding(id, Req),
+    IdSize = byte_size(Id),
+    <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, RawPathSuffix/binary>> = RawPath,
+
+    case RawPathSuffix of
+        <<>> ->
+            {<<>>, Req};
+        _ ->
+            JoinedPath = join_filename(Path, RawPath),
+            {JoinedPath, Req}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Join path list and add trailing slash if PathString ends with slash
+%% @end
+%%--------------------------------------------------------------------
+-spec join_filename([file_meta:path()], file_meta:path()) -> file_meta:path().
+join_filename(PathList, PathString) ->
+    JoinedPath = filename:join([<<"/">> | PathList]),
+    case binary:last(PathString) == $/ andalso (not (binary:last(JoinedPath) == $/)) of
+        true ->
+            <<JoinedPath/binary, "/">>;
+        false ->
+            JoinedPath
+    end.

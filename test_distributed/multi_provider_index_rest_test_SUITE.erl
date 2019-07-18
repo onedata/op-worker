@@ -13,8 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("http/rest.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -26,7 +24,6 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 

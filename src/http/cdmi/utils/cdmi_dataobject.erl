@@ -390,15 +390,18 @@ get_file_info(RequestedInfo, #cdmi_req{
                 ),
                 Acc#{<<"completionStatus">> => CompletionStatus};
             (<<"mimetype">>, Acc) ->
-                MimeType = cdmi_metadata:prepare_metadata(
+                MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, Guid}),
+                Acc#{<<"mimetype">> => MimeType};
+            (<<"metadata">>, Acc) ->
+                Metadata = cdmi_metadata:prepare_metadata(
                     SessionId, {guid, Guid}, <<>>, Attrs
                 ),
-                Acc#{<<"mimetype">> => MimeType};
+                Acc#{<<"metadata">> => Metadata};
             ({<<"metadata">>, Prefix}, Acc) ->
-                MimeType = cdmi_metadata:prepare_metadata(
+                Metadata = cdmi_metadata:prepare_metadata(
                     SessionId, {guid, Guid}, Prefix, Attrs
                 ),
-                Acc#{<<"metadata">> => MimeType};
+                Acc#{<<"metadata">> => Metadata};
             (<<"valuetransferencoding">>, Acc) ->
                 Encoding = cdmi_metadata:get_encoding(SessionId, {guid, Guid}),
                 Acc#{<<"valuetransferencoding">> => Encoding};

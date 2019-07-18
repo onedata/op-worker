@@ -15,9 +15,9 @@
 
 -include("op_logic.hrl").
 -include("http/http_common.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 % keys that are forbidden to appear simultaneously in a request's body
 -define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [<<"deserialize">>, <<"copy">>,
@@ -30,7 +30,7 @@
     parse_content_range/2, parse_byte_range/2]).
 
 %% Test API
--export([get_supported_version/1, parse_content/1]).
+-export([parse_content/1]).
 
 %%%===================================================================
 %%% API
@@ -48,7 +48,7 @@ get_ranges(Req, Size) ->
             {undefined, Req};
         RawRange ->
             case parse_byte_range(RawRange, Size) of
-                invalid -> throw(?ERROR_INVALID_RANGE);
+                invalid -> throw(?ERROR_BAD_DATA(<<"range">>));
                 Ranges -> {Ranges, Req}
             end
     end.
@@ -154,21 +154,6 @@ parse_content(Content) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Extract the CDMI version from request arguments string.
-%%--------------------------------------------------------------------
--spec get_supported_version(list() | binary()) ->
-    binary() | undefined.
-get_supported_version(undefined) -> undefined;
-get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
-    VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary, <<",">>, [global])),
-    get_supported_version(VersionList);
-get_supported_version([]) -> throw(?ERROR_UNSUPPORTED_VERSION);
-get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
-get_supported_version([<<"1.1">> | _Rest]) -> <<"1.1.1">>;
-get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
-
-
-%%--------------------------------------------------------------------
 %% @doc Validates correctness of request's body.
 %%--------------------------------------------------------------------
 -spec validate_body(maps:map()) -> ok | no_return().
@@ -177,6 +162,6 @@ validate_body(Body) ->
     KeySet = sets:from_list(Keys),
     ExclusiveRequiredKeysSet = sets:from_list(?KEYS_REQUIRED_TO_BE_EXCLUSIVE),
     case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
-        N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
+        N when N > 1 -> throw(?ERROR_MALFORMED_DATA);
         _ -> ok
     end.

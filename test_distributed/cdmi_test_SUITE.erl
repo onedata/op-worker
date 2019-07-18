@@ -12,22 +12,15 @@
 -module(cdmi_test_SUITE).
 -author("Tomasz Lichon").
 
--include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 -export([
     list_dir_test/1,
@@ -91,16 +84,6 @@ all() ->
         create_cdmi_file_without_cdmi_version_header_should_fail_test,
         create_cdmi_dir_without_cdmi_version_header_should_fail_test
 ]).
-
--define(TIMEOUT, timer:seconds(5)).
-
--define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
--define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
--define(OBJECT_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-object">>}).
-
--define(DEFAULT_FILE_MODE, 8#664).
--define(FILE_BEGINNING, 0).
--define(INFINITY, 9999).
 
 %%%===================================================================
 %%% Test functions

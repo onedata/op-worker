@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
 -include("http/rest.hrl").
 -include("http/cdmi.hrl").
 -include("proto/common/credentials.hrl").
@@ -285,9 +284,10 @@ get_file(Config) ->
 
     %% selective value read non-cdmi error
     RequestHeaders8 = [{<<"Range">>, <<"bytes=1-3,6-4,-3">>}],
-    {ok, Code8, _Headers8, _Response8} =
+    {ok, Code8, _Headers8, Response8} =
         do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders8]),
-    ?assertEqual(400, Code8).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"range">>)),
+    ?assertMatch(ExpRestError, {Code8, json_utils:decode(Response8)}).
 %%------------------------------
 
 % Tests cdmi metadata read on object GET request.
@@ -1231,11 +1231,8 @@ out_of_range(Config) ->
 
     %%----- random childrange ------ (shuld fail)
     {ok, Code4, _Headers4, Response4} = do_request(Workers, TestDirName ++ "/?children:100-132", get, RequestHeaders2, []),
-    ?assertEqual(400, Code4),
-    CdmiResponse4 = json_utils:decode(Response4),
-
-    {_, Error} = ?ERROR_INVALID_CHILDRENRANGE,
-    ?assertMatch(Error, CdmiResponse4).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"childrenrange">>)),
+    ?assertMatch(ExpRestError, {Code4, json_utils:decode(Response4)}).
 %%------------------------------
 
 move_copy_conflict(Config) ->

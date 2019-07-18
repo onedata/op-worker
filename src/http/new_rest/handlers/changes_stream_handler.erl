@@ -102,7 +102,6 @@
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
 -include("http/rest.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
