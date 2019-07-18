@@ -10,10 +10,14 @@
 %%%--------------------------------------------------------------------
 
 -include("http/rest.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 
 -ifndef(CDMI_ERRORS_HRL).
 -define(CDMI_ERRORS_HRL, 1).
+
+-define(ERROR_REPLY(Code, Error, ErrorDescription), {Code, #{
+    <<"error">> => Error,
+    <<"error_description">> => ErrorDescription
+}}).
 
 %% HTTP 400 errors
 -define(ERROR_UNSUPPORTED_VERSION, ?ERROR_REPLY(
@@ -60,11 +64,6 @@
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_metadata">>,
     <<"Given metadata is invalid.">>)
-).
--define(ERROR_MALFORMED_QS, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"malformed_qs">>,
-    <<"Request's query string is malformed.">>)
 ).
 
 -endif.

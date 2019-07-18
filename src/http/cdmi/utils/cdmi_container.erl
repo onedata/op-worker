@@ -145,8 +145,11 @@ put_binary(Req, #cdmi_req{client = Client, file_path = Path} = CdmiReq) ->
 %%--------------------------------------------------------------------
 -spec delete_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
-delete_cdmi(Req, #cdmi_req{client = Client, file_path = Path} = CdmiReq) ->
-    case lfm:rm_recursive(Client#client.session_id, {path, Path}) of
+delete_cdmi(Req, #cdmi_req{
+    client = ?USER(_UserId, SessionId),
+    file_attrs = #file_attr{guid = Guid}
+} = CdmiReq) ->
+    case lfm:rm_recursive(SessionId, {guid, Guid}) of
         ok ->
             {true, Req, CdmiReq};
         {error, Errno} ->
@@ -308,6 +311,6 @@ terminate_if_too_many_children(_, _) ->
 
 %% @private
 -spec check_result({ok, term()} | {error, term()}) ->
-    ok | {ok, term()} | no_return().
+    {ok, term()} | no_return().
 check_result({ok, _} = Res) -> Res;
 check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).

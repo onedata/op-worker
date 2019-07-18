@@ -14,8 +14,8 @@
 
 -include("global_definitions.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("http/rest.hrl").
+-include("http/cdmi.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -997,12 +997,12 @@ capabilities(Config) ->
 
     ?assertMatch(#{<<"content-type">> := <<"application/cdmi-capability">>}, Headers8),
     CdmiResponse8 = (json_utils:decode(Response8)),
-    ?assertMatch(#{<<"objectID">> := ?root_capability_id}, CdmiResponse8),
-    ?assertMatch(#{<<"objectName">> := ?root_capability_path}, CdmiResponse8),
+    ?assertMatch(#{<<"objectID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse8),
+    ?assertMatch(#{<<"objectName">> := ?ROOT_CAPABILITY_PATH}, CdmiResponse8),
     ?assertMatch(#{<<"childrenrange">> := <<"0-1">>}, CdmiResponse8),
     ?assertMatch(#{<<"children">> := [<<"container/">>, <<"dataobject/">>]}, CdmiResponse8),
     Capabilities = maps:get(<<"capabilities">>, CdmiResponse8),
-    ?assertEqual(?root_capability_map, Capabilities),
+    ?assertEqual(?ROOT_CAPABILITY_MAP, Capabilities),
     %%------------------------------
 
     %%-- container capabilities ----
@@ -1010,15 +1010,15 @@ capabilities(Config) ->
     {ok, Code9, _Headers9, Response9} =
         do_request(Workers, "cdmi_capabilities/container/", get, RequestHeaders9, []),
     ?assertEqual(200, Code9),
-    ?assertMatch({ok, Code9, _, Response9}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?container_capability_id) ++ "/", get, RequestHeaders9, [])),
+    ?assertMatch({ok, Code9, _, Response9}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?CONTAINER_CAPABILITY_ID) ++ "/", get, RequestHeaders9, [])),
 
     CdmiResponse9 = (json_utils:decode(Response9)),
-    ?assertMatch(#{<<"parentURI">> := ?root_capability_path}, CdmiResponse9),
-    ?assertMatch(#{<<"parentID">> := ?root_capability_id}, CdmiResponse9),
-    ?assertMatch(#{<<"objectID">> := ?container_capability_id}, CdmiResponse9),
+    ?assertMatch(#{<<"parentURI">> := ?ROOT_CAPABILITY_PATH}, CdmiResponse9),
+    ?assertMatch(#{<<"parentID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse9),
+    ?assertMatch(#{<<"objectID">> := ?CONTAINER_CAPABILITY_ID}, CdmiResponse9),
     ?assertMatch(#{<<"objectName">> := <<"container/">>}, CdmiResponse9),
     Capabilities2 = maps:get(<<"capabilities">>, CdmiResponse9),
-    ?assertEqual(?container_capability_list, Capabilities2),
+    ?assertEqual(?CONTAINER_CAPABILITY_MAP, Capabilities2),
     %%------------------------------
 
     %%-- dataobject capabilities ---
@@ -1026,15 +1026,15 @@ capabilities(Config) ->
     {ok, Code10, _Headers10, Response10} =
         do_request(Workers, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
     ?assertEqual(200, Code10),
-    ?assertMatch({ok, Code10, _, Response10}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?dataobject_capability_id) ++ "/", get, RequestHeaders10, [])),
+    ?assertMatch({ok, Code10, _, Response10}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?DATAOBJECT_CAPABILITY_ID) ++ "/", get, RequestHeaders10, [])),
 
     CdmiResponse10 = (json_utils:decode(Response10)),
-    ?assertMatch(#{<<"parentURI">> := ?root_capability_path}, CdmiResponse10),
-    ?assertMatch(#{<<"parentID">> := ?root_capability_id}, CdmiResponse10),
-    ?assertMatch(#{<<"objectID">> := ?dataobject_capability_id}, CdmiResponse10),
+    ?assertMatch(#{<<"parentURI">> := ?ROOT_CAPABILITY_PATH}, CdmiResponse10),
+    ?assertMatch(#{<<"parentID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse10),
+    ?assertMatch(#{<<"objectID">> := ?DATAOBJECT_CAPABILITY_ID}, CdmiResponse10),
     ?assertMatch(#{<<"objectName">> := <<"dataobject/">>}, CdmiResponse10),
     Capabilities3 = maps:get(<<"capabilities">>, CdmiResponse10),
-    ?assertEqual(?dataobject_capability_list, Capabilities3).
+    ?assertEqual(?DATAOBJECT_CAPABILITY_MAP, Capabilities3).
 %%------------------------------
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path

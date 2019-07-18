@@ -358,18 +358,18 @@ get_cdmi_container(Req, CdmiReq) ->
 
 -spec get_cdmi_dataobject(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-get_cdmi_dataobject(_, _) ->
-    ok.
+get_cdmi_dataobject(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_dataobject:get_cdmi(Req, CdmiReq)).
 
 
 -spec get_binary_dataobject(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-get_binary_dataobject(_, _) ->
-    ok.
+get_binary_dataobject(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_dataobject:get_binary(Req, CdmiReq)).
 
 
 %%--------------------------------------------------------------------
-%% @doc Cowboy callback function (as content_types_provided).
+%% @doc Cowboy callback function (as content_types_accepted).
 %% Creates, moves, copies or updates directory (container).
 %% @end
 %%--------------------------------------------------------------------
@@ -380,7 +380,7 @@ put_cdmi_container(Req, CdmiReq) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Cowboy callback function (as content_types_provided).
+%% @doc Cowboy callback function (as content_types_accepted).
 %% Creates directory (container).
 %% @end
 %%--------------------------------------------------------------------
@@ -390,16 +390,26 @@ put_binary_container(Req, CdmiReq) ->
     ?run_cdmi(Req, CdmiReq, cdmi_container:put_binary(Req, CdmiReq)).
 
 
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_accepted).
+%% Creates, copies, moves or modifies file (dataobject).
+%% @end
+%%--------------------------------------------------------------------
 -spec put_cdmi_dataobject(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-put_cdmi_dataobject(_, _) ->
-    ok.
+put_cdmi_dataobject(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_dataobject:put_cdmi(Req, CdmiReq)).
 
 
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_accepted).
+%% Creates or modifies file (dataobject).
+%% @end
+%%--------------------------------------------------------------------
 -spec put_binary_dataobject(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-put_binary_dataobject(_, _) ->
-    ok.
+put_binary_dataobject(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_dataobject:put_binary(Req, CdmiReq)).
 
 
 %%--------------------------------------------------------------------
@@ -412,7 +422,7 @@ put_binary_dataobject(_, _) ->
 delete_resource(Req, #cdmi_req{resource = container} = CdmiReq) ->
     ?run_cdmi(Req, CdmiReq, cdmi_container:delete_cdmi(Req, CdmiReq));
 delete_resource(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
-    ok.
+    ?run_cdmi(Req, CdmiReq, cdmi_dataobject:delete_cdmi(Req, CdmiReq)).
 
 
 %%%===================================================================

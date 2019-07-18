@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module provides convinience functions designed for
+%%% @doc
+%%% This module provides convenience functions designed for
 %%% handling CDMI user metadata.
 %%% @end
 %%%-------------------------------------------------------------------
