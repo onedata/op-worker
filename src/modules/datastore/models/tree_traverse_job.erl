@@ -102,12 +102,12 @@ get_master_job(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns model's context for documents that are not synced.
+%% Returns model's context used by datastore and dbsync.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
-    ?CTX.
+    ?SYNC_CTX.
 
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().

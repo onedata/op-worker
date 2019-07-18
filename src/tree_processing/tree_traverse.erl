@@ -31,9 +31,9 @@
 %% Main API
 -export([init/4, init/5, run/2, run/3]).
 % Getters API
--export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2]).
+-export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/1, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
+-export([do_master_job/2, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
 -type master_job() :: #tree_traverse{}.
 -type slave_job() :: file_meta:doc().
@@ -151,6 +151,21 @@ get_task(Pool, ID) when is_atom(Pool) ->
 get_task(Pool, ID) ->
     traverse_task:get(Pool, ID).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides information needed for document synchronization.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sync_info() -> traverse:ctx_sync_info().
+get_sync_info() ->
+    Provider = oneprovider:get_id_or_undefined(),
+    #{
+        sync_enabled => true,
+        remote_driver => datastore_remote_driver,
+        mutator => Provider,
+        local_links_tree_id => Provider
+    }.
+
 %%%===================================================================
 %%% Behaviour callbacks
 %%%===================================================================
@@ -161,7 +176,7 @@ get_task(Pool, ID) ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job()) -> {ok, traverse:master_job_map()}.
+-spec do_master_job(master_job(), traverse:id()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
     doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
@@ -170,7 +185,7 @@ do_master_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-} = TT) ->
+} = TT, _TaskID) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
         {undefined, <<>>} -> file_meta:list_children(Doc, BatchSize);
         {undefined, _} -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize);
@@ -205,7 +220,7 @@ do_master_job(#tree_traverse{
 do_master_job(#tree_traverse{
     doc = Doc,
     traverse_info = TraverseInfo
-}) ->
+}, _TaskID) ->
     {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
@@ -236,13 +251,8 @@ get_job(DocOrID) ->
 get_sync_info(#tree_traverse{
     doc = #document{scope = Scope}
 }) ->
-    {ok, #{
-        sync_enabled => true,
-        remote_driver => datastore_remote_driver,
-        mutator => oneprovider:get_id_or_undefined(),
-        local_links_tree_id => oneprovider:get_id_or_undefined(),
-        scope => Scope
-    }}.
+    Info = get_sync_info(),
+    {ok, Info#{scope => Scope}}.
 
 %%--------------------------------------------------------------------
 %% @doc

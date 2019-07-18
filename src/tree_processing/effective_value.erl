@@ -49,6 +49,7 @@
     initial_calculation_info(), args()) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args) ->
+    % TODO - dodac wersje 3/4 argumentowa?
     get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args,
         bounded_cache:get_timestamp()).
 

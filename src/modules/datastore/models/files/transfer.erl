@@ -925,7 +925,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
                     T1#transfer.rerun_id, undefined, T2#transfer.rerun_id
                 )
             },
-            {true , D1#document{value = EmergingTransfer}}
+            {true, D1#document{value = EmergingTransfer}}
     end.
 
 %%--------------------------------------------------------------------
