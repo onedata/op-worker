@@ -66,6 +66,20 @@
     {?DATAOBJECT_CAPABILITY_ID, filename:absname(<<"/", (?DATAOBJECT_CAPABILITY_PATH)/binary>>)}
 ]).
 
+-define(run_cdmi(__Req, __CdmiReq, __FunctionCall),
+    try
+        __FunctionCall
+    catch
+        throw:__Err ->
+            __ErrorResp = rest_translator:error_response(__Err),
+            {stop, send_response(__ErrorResp, __Req), __CdmiReq};
+        Type:Message ->
+            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+                ?MODULE, ?FUNCTION_NAME, Type, Message
+            ]),
+            {stop, cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
+    end
+).
 
 %%%===================================================================
 %%% API
@@ -297,10 +311,14 @@ content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
     ], Req, CdmiReq}.
 
 
+-spec error_no_version(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
 error_no_version(_, _) ->
     ok.
 
 
+-spec error_wrong_path(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
 error_wrong_path(_, _) ->
     ok.
 
@@ -311,7 +329,7 @@ error_wrong_path(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_capability(cowboy_req:req(), cdmi_req()) ->
-    {binary(), cowboy_req:req(), cdmi_req()}.
+    {term(), cowboy_req:req(), cdmi_req()}.
 get_cdmi_capability(Req, #cdmi_req{
     resource = {capabilities, CapType},
     options = Options
@@ -327,35 +345,73 @@ get_cdmi_capability(Req, #cdmi_req{
     {json_utils:encode(Capabilities), Req, CdmiReq}.
 
 
-get_cdmi_container(_, _) ->
-    ok.
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_provided).
+%% Returns requested info about specified directory (container).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cdmi_container(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
+get_cdmi_container(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_container:get_cdmi(Req, CdmiReq)).
 
 
+-spec get_cdmi_dataobject(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
 get_cdmi_dataobject(_, _) ->
     ok.
 
 
+-spec get_binary_dataobject(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
 get_binary_dataobject(_, _) ->
     ok.
 
 
-put_cdmi_container(_, _) ->
-    ok.
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_provided).
+%% Creates, moves, copies or updates directory (container).
+%% @end
+%%--------------------------------------------------------------------
+-spec put_cdmi_container(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
+put_cdmi_container(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_container:put_cdmi(Req, CdmiReq)).
 
 
-put_binary_container(_, _) ->
-    ok.
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function (as content_types_provided).
+%% Creates directory (container).
+%% @end
+%%--------------------------------------------------------------------
+-spec put_binary_container(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
+put_binary_container(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_container:put_binary(Req, CdmiReq)).
 
 
+-spec put_cdmi_dataobject(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
 put_cdmi_dataobject(_, _) ->
     ok.
 
 
+-spec put_binary_dataobject(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
 put_binary_dataobject(_, _) ->
     ok.
 
 
-delete_resource(_, _) ->
+%%--------------------------------------------------------------------
+%% @doc Cowboy callback function.
+%% Deletes specified resource (container or dataobject).
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_resource(cowboy_req:req(), cdmi_req()) ->
+    {term(), cowboy_req:req(), cdmi_req()}.
+delete_resource(Req, #cdmi_req{resource = container} = CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_container:delete_cdmi(Req, CdmiReq));
+delete_resource(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
     ok.
 
 
