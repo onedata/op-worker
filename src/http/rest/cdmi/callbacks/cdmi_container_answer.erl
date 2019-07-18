@@ -107,7 +107,7 @@ prepare([_Other | Tail], State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec distinguish_files(Guid :: file_id:file_guid(), Name :: binary(),
-    Auth :: rest_auth:auth()) -> binary().
+    Auth :: http_auth:auth()) -> binary().
 distinguish_files(Guid, Name, Auth) ->
     case lfm:stat(Auth, {guid, Guid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->

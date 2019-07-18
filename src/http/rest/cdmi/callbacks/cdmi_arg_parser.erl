@@ -378,9 +378,9 @@ is_capability_object(#{path := Path} = Req) ->
 %%--------------------------------------------------------------------
 %% @doc Authenticate user or throw ERROR_UNAUTHORIZED in case of error
 %%--------------------------------------------------------------------
--spec try_authenticate(req()) -> rest_auth:auth().
+-spec try_authenticate(req()) -> http_auth:auth().
 try_authenticate(Req) ->
-    case rest_auth:authenticate(Req) of
+    case http_auth:authenticate(Req) of
         {ok, ?USER(_UserId, SessionId)} ->
             SessionId;
         _ ->

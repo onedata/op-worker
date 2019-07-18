@@ -23,7 +23,7 @@
 
 %% API
 -export([terminate/3, allowed_methods/2, malformed_request/2,
-    is_authorized/2, resource_exists/2, content_types_provided/2,
+    is_authorized/2, content_types_provided/2,
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
@@ -64,15 +64,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
-    rest_auth:is_authorized(Req, State).
-
-%%--------------------------------------------------------------------
-%% @equiv pre_handler:resource_exists/2
-%% @end
-%%--------------------------------------------------------------------
--spec resource_exists(req(), maps:map()) -> {boolean(), req(), maps:map()}.
-resource_exists(Req, State) ->
-    cdmi_existence_checker:container_resource_exists(Req, State).
+    http_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @equiv pre_handler:content_types_provided/2
@@ -218,7 +210,7 @@ error_no_version(_Req, _State) ->
 %% Gets attributes of file, returns undefined when file does not exist
 %% @end
 %%--------------------------------------------------------------------
--spec get_attr(rest_auth:auth(), file_meta:path()) -> #file_attr{} | undefined.
+-spec get_attr(http_auth:auth(), file_meta:path()) -> #file_attr{} | undefined.
 get_attr(Auth, Path) ->
     case lfm:stat(Auth, {path, Path}) of
         {ok, Attrs} -> Attrs;

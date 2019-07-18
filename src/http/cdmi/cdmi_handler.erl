@@ -1,6 +1,8 @@
 %%%--------------------------------------------------------------------
+%%% @author Piotr Ociepka
+%%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -10,6 +12,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_handler).
+-author("Piotr Ociepka").
+-author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
@@ -163,7 +167,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
 -spec is_authorized(cowboy_req:req(), cdmi_req()) ->
     {stop | true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
 is_authorized(Req, #cdmi_req{client = undefined} = CdmiReq) ->
-    try rest_auth:authenticate(Req) of
+    try http_auth:authenticate(Req) of
         {ok, ?USER = Client} ->
             {true, Req, CdmiReq#cdmi_req{client = Client}};
         {ok, ?NOBODY} ->
@@ -376,7 +380,7 @@ resolve_resource_by_id(Req) ->
 
     {Cl, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
-            case rest_auth:authenticate(Req) of
+            case http_auth:authenticate(Req) of
                 {ok, ?USER(_UserId, SessionId) = Client} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->

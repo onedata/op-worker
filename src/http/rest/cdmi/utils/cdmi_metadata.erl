@@ -42,7 +42,7 @@
 %% without "cdmi_" prefix.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_metadata(rest_auth:auth(), lfm:file_key()) ->
+-spec get_user_metadata(http_auth:auth(), lfm:file_key()) ->
     maps:map().
 get_user_metadata(Auth, FileKey) ->
     {ok, Names} = lfm:list_xattr(Auth, FileKey, false, true),
@@ -62,7 +62,7 @@ get_user_metadata(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @equiv update_user_metadata(Auth, FileKey, UserMetadata, []).
 %%--------------------------------------------------------------------
--spec update_user_metadata(rest_auth:auth(), lfm:file_key(),
+-spec update_user_metadata(http_auth:auth(), lfm:file_key(),
     maps:map()) -> ok.
 update_user_metadata(Auth, FileKey, UserMetadata) ->
     update_user_metadata(Auth, FileKey, UserMetadata, []).
@@ -73,7 +73,7 @@ update_user_metadata(Auth, FileKey, UserMetadata) ->
 %% entry in UserMetadata, entry is removed from user metadata associated with a file.
 %% @end
 %%--------------------------------------------------------------------
--spec update_user_metadata(rest_auth:auth(), lfm:file_key(),
+-spec update_user_metadata(http_auth:auth(), lfm:file_key(),
     UserMetadata :: maps:map() | undefined, URIMetadataNames :: [Name :: binary()]) ->
     ok | no_return().
 update_user_metadata(_Auth, _FileKey, undefined, []) ->
@@ -119,7 +119,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
 %%--------------------------------------------------------------------
 %% @equiv prepare_metadata(Auth, FileKey, <<>>).
 %%--------------------------------------------------------------------
--spec prepare_metadata(rest_auth:auth(), lfm:file_key()) ->
+-spec prepare_metadata(http_auth:auth(), lfm:file_key()) ->
     maps:map().
 prepare_metadata(Auth, FileKey) ->
     prepare_metadata(Auth, FileKey, <<>>).
@@ -127,7 +127,7 @@ prepare_metadata(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata.
 %%--------------------------------------------------------------------
--spec prepare_metadata(rest_auth:auth(), lfm:file_key(), binary()) ->
+-spec prepare_metadata(http_auth:auth(), lfm:file_key(), binary()) ->
     maps:map().
 prepare_metadata(Auth, FileKey, Prefix) ->
     {ok, Attrs} = lfm:stat(Auth, FileKey),
@@ -136,7 +136,7 @@ prepare_metadata(Auth, FileKey, Prefix) ->
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata with given prefix.
 %%--------------------------------------------------------------------
--spec prepare_metadata(Auth :: rest_auth:auth(), FileKey :: lfm:file_key(),
+-spec prepare_metadata(Auth :: http_auth:auth(), FileKey :: lfm:file_key(),
     Prefix :: binary(), #file_attr{}) -> maps:map().
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
@@ -149,7 +149,7 @@ prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
 %% could be found
 %% @end
 %%--------------------------------------------------------------------
--spec get_mimetype(rest_auth:auth(), lfm:file_key()) -> binary().
+-spec get_mimetype(http_auth:auth(), lfm:file_key()) -> binary().
 get_mimetype(Auth, FileKey) ->
     case lfm:get_mimetype(Auth, FileKey) of
         {ok, Value} ->
@@ -163,7 +163,7 @@ get_mimetype(Auth, FileKey) ->
 %% if no valuetransferencoding could be found
 %% @end
 %%--------------------------------------------------------------------
--spec get_encoding(rest_auth:auth(), lfm:file_key()) -> binary().
+-spec get_encoding(http_auth:auth(), lfm:file_key()) -> binary().
 get_encoding(Auth, FileKey) ->
     case lfm:get_transfer_encoding(Auth, FileKey) of
         {ok, Value} ->
@@ -178,7 +178,7 @@ get_encoding(Auth, FileKey) ->
 %% binary("Complete") | binary("Processing") | binary("Error")
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_completion_status(rest_auth:auth(), lfm:file_key()) -> binary().
+-spec get_cdmi_completion_status(http_auth:auth(), lfm:file_key()) -> binary().
 get_cdmi_completion_status(Auth, FileKey) ->
     case lfm:get_cdmi_completion_status(Auth, FileKey) of
         {ok, Value} ->
@@ -190,7 +190,7 @@ get_cdmi_completion_status(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Updates mimetype associated with file
 %%--------------------------------------------------------------------
--spec update_mimetype(rest_auth:auth(), lfm:file_key(), binary()) -> ok | no_return().
+-spec update_mimetype(http_auth:auth(), lfm:file_key(), binary()) -> ok | no_return().
 update_mimetype(_Auth, _FileKey, undefined) -> ok;
 update_mimetype(Auth, FileKey, Mimetype) ->
     ok = lfm:set_mimetype(Auth, FileKey, Mimetype).
@@ -198,7 +198,7 @@ update_mimetype(Auth, FileKey, Mimetype) ->
 %%--------------------------------------------------------------------
 %% @doc Updates valuetransferencoding associated with file
 %%--------------------------------------------------------------------
--spec update_encoding(rest_auth:auth(), lfm:file_key(), binary() | undefined) -> ok | no_return().
+-spec update_encoding(http_auth:auth(), lfm:file_key(), binary() | undefined) -> ok | no_return().
 update_encoding(_Auth, _FileKey, undefined) -> ok;
 update_encoding(Auth, FileKey, Encoding) ->
     ok = lfm:set_transfer_encoding(Auth, FileKey, Encoding).
@@ -206,7 +206,7 @@ update_encoding(Auth, FileKey, Encoding) ->
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %%--------------------------------------------------------------------
--spec update_cdmi_completion_status(rest_auth:auth(), lfm:file_key(), binary()) ->
+-spec update_cdmi_completion_status(http_auth:auth(), lfm:file_key(), binary()) ->
     ok | no_return().
 update_cdmi_completion_status(_Auth, _FileKey, undefined) -> ok;
 update_cdmi_completion_status(Auth, FileKey, CompletionStatus)
@@ -219,7 +219,7 @@ update_cdmi_completion_status(Auth, FileKey, CompletionStatus)
 %% @doc Updates completion status associated with file
 %% according to X-CDMI-Partial flag
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status_according_to_partial_flag(rest_auth:auth(), lfm:file_key(), binary()) ->
+-spec set_cdmi_completion_status_according_to_partial_flag(http_auth:auth(), lfm:file_key(), binary()) ->
     ok | no_return().
 set_cdmi_completion_status_according_to_partial_flag(_Auth, _FileKey, <<"true">>) ->
     ok;
@@ -272,7 +272,7 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %% @doc Returns system metadata with given prefix, in mochijson parser format
 %%--------------------------------------------------------------------
 -spec prepare_cdmi_metadata(MetadataNames :: [binary()], lfm:file_key(),
-    rest_auth:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
+    http_auth:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
 prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) ->
     #{};
 prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->

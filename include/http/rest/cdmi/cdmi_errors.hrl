@@ -31,11 +31,6 @@
     <<"conflicting_body_fields">>,
     <<"Request body contains fields that are in conflict with each other.">>)
 ).
--define(ERROR_DUPLICATED_BODY_FIELDS, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"duplicated_body_fields">>,
-    <<"Request body contains duplicates.">>)
-).
 -define(ERROR_INVALID_CHILDRENRANGE, ?ERROR_REPLY(
     ?HTTP_400_BAD_REQUEST,
     <<"invalid_childrenrange">>,
@@ -76,23 +71,6 @@
     ?HTTP_400_BAD_REQUEST,
     <<"malformed_qs">>,
     <<"Request's query string is malformed.">>)
-).
--define(ERROR_INVALID_JSON, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"invalid_json">>,
-    <<"Could not parse json.">>)
-).
--define(ERROR_EXISTS, ?ERROR_REPLY(
-    ?HTTP_400_BAD_REQUEST,
-    <<"already_exists">>,
-    <<"The resource already exists.">>)
-).
-
-%% HTTP 404 errors
--define(ERROR_ATTRIBUTE_NOT_FOUND, ?ERROR_REPLY(
-    ?HTTP_404_NOT_FOUND,
-    <<"attribute_not_found">>,
-    <<"The attribute could not be found.">>)
 ).
 
 -endif.

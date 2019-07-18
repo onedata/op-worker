@@ -193,7 +193,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
-    rest_auth:is_authorized(Req, State).
+    http_auth:is_authorized(Req, State).
 
 
 %%--------------------------------------------------------------------
