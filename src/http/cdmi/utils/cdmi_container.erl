@@ -100,8 +100,10 @@ put_cdmi(Req, #cdmi_req{
     % update metadata and return result
     case OperationPerformed of
         none ->
-            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Options, OptKey == <<"metadata">>],
-            ok = cdmi_metadata:update_user_metadata(
+            URIMetadataNames = [
+                MetadataName || {OptKey, MetadataName} <- Options, OptKey == <<"metadata">>
+            ],
+            cdmi_metadata:update_user_metadata(
                 SessionId,
                 {guid, Guid},
                 RequestedUserMetadata,
@@ -111,7 +113,7 @@ put_cdmi(Req, #cdmi_req{
         _ ->
             {ok, NewAttrs} = ?run(lfm:stat(SessionId, {guid, Guid})),
             CdmiReq2 = CdmiReq#cdmi_req{file_attrs = NewAttrs},
-            ok = cdmi_metadata:update_user_metadata(
+            cdmi_metadata:update_user_metadata(
                 SessionId,
                 {guid, Guid},
                 RequestedUserMetadata
