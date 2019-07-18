@@ -68,7 +68,7 @@ put_cdmi(Req, #cdmi_req{
     file_attrs = Attrs,
     options = Options
 } = CdmiReq) ->
-    {ok, Body, Req1} = cdmi_arg_parser:parse_body(Req),
+    {ok, Body, Req1} = cdmi_parser:parse_body(Req),
     RequestedCopyURI = maps:get(<<"copy">>, Body, undefined),
     RequestedMoveURI = maps:get(<<"move">>, Body, undefined),
     RequestedUserMetadata = maps:get(<<"metadata">>, Body, undefined),

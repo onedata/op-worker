@@ -71,7 +71,7 @@ get_binary(Req, #cdmi_req{
     file_attrs = #file_attr{guid = FileGuid, size = Size}
 } = CdmiReq) ->
     % prepare response
-    {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, Size),
+    {Ranges, Req1} = cdmi_parser:get_ranges(Req, Size),
     MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, MimeType, Req1),
     HttpStatus = case Ranges of
@@ -135,7 +135,7 @@ put_binary(Req, #cdmi_req{
     % prepare request data
     Content = cowboy_req:header(<<"content-type">>, Req, <<"application/octet-stream">>),
     CdmiPartialFlag = cowboy_req:header(<<"x-cdmi-partial">>, Req),
-    {MimeType, Encoding} = cdmi_arg_parser:parse_content(Content),
+    {MimeType, Encoding} = cdmi_parser:parse_content(Content),
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     case Attrs of
         undefined ->
@@ -169,7 +169,7 @@ put_binary(Req, #cdmi_req{
                     {true, Req2, CdmiReq};
                 _ ->
                     Length = cowboy_req:body_length(Req),
-                    case cdmi_arg_parser:parse_content_range(RawRange, Size) of
+                    case cdmi_parser:parse_content_range(RawRange, Size) of
                         {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
                             {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, FileGuid}, write)),
                             cdmi_metadata:update_cdmi_completion_status(SessionId, {guid, FileGuid}, <<"Processing">>),
@@ -201,7 +201,7 @@ put_cdmi(Req, #cdmi_req{
     options = Options
 } = CdmiReq) ->
     % parse body
-    {ok, Body, Req0} = cdmi_arg_parser:parse_body(Req),
+    {ok, Body, Req0} = cdmi_parser:parse_body(Req),
 
     % prepare necessary data
     CdmiPartialFlag = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
