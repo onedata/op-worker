@@ -25,6 +25,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -export([
     list_dir/1,
@@ -583,9 +584,10 @@ delete_dir(Config) ->
 
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
     ?assert(object_exists(Config, "/")),
-    {ok, Code3, _Headers3, _Response3} =
+    {ok, Code3, _Headers3, Response3} =
         do_request(Workers, "/", delete, RequestHeaders3, []),
-    ?assertEqual(403, Code3),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ?assertMatch(ExpRestError, {Code3, json_utils:decode(Response3)}),
     ?assert(object_exists(Config, "/")).
 %%------------------------------
 
@@ -856,9 +858,10 @@ create_dir(Config) ->
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-    {ok, Code4, _Headers4, _Response4} =
+    {ok, Code4, _Headers4, Response4} =
         do_request(Workers, DirWithoutParentName, put, RequestHeaders4, []),
-    ?assertEqual(404, Code4).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?ENOENT)),
+    ?assertMatch(ExpRestError, {Code4, json_utils:decode(Response4)}).
 %%------------------------------
 
 % tests access to file by objectid
