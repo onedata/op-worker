@@ -116,5 +116,11 @@ change_replicated_internal(_SpaceId, #document{value = #traverse_task{}} = Task)
 change_replicated_internal(_SpaceId, #document{key = JobID, value = #tree_traverse_job{}} = Doc) ->
     {ok, Job, PoolName, TaskID} = tree_traverse:get_job(Doc),
     traverse:maybe_run_scheduled_task({job, Job, JobID, PoolName, TaskID}, oneprovider:get_id_or_undefined());
+change_replicated_internal(SpaceId, #document{
+    key = QosId,
+    value = #qos_item{}
+}) ->
+    ?debug("change_replicated_internal: qos entry ~p", [QosId]),
+    qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

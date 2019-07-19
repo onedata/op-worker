@@ -138,7 +138,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         expression = QosExpressionInRPN,
         replicas_num = ReplicasNum,
         file_guid = FileGuid,
-        status = ?IN_PROGRESS
+        status = ?QOS_IN_PROGRESS_STATUS
     }},
     {ok, #document{key = QosId}} = qos_entry:create(QosEntryToCreate, SpaceId),
 
@@ -151,7 +151,9 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
 
     case TargetStoragesList of
         {error, ?CANNOT_FULFILL_QOS} ->
+            create_or_update_file_qos_doc(FileGuid, QosId, []),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
+            % TODO: VFS-5568 - handle qos requirements that cannot be satisfied
             qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
             create_or_update_file_qos_doc(FileGuid, QosId, TargetStoragesList),
@@ -288,8 +290,9 @@ get_target_storages(SessId, FileKey, Expression, ReplicasNum) ->
     {ok, FileLocations} = lfm:get_file_distribution(SessId, FileKey),
 
     % TODO: VFS-5574 add check if storage has enough free space
-    SpaceStorages = get_space_storages(SessId, FileKey),
+    SpaceStorages = ?MODULE:get_space_storages(SessId, FileKey),
     qos_expression:get_target_storage(Expression, ReplicasNum, SpaceStorages, FileLocations).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -302,6 +305,6 @@ get_space_storages(Auth, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(Auth, FileKey),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
-    % TODO: fetch storage IDs here, when appropriate document will be available
+    % TODO: VFS-5573 use storage qos
     {ok, ProvidersId} = space_logic:get_provider_ids(Auth, SpaceId),
     ProvidersId.

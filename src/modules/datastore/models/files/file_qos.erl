@@ -42,8 +42,6 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--export([get_callback/0]).
-
 -type key() :: datastore:key().
 -type record() :: #file_qos{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -56,11 +54,8 @@
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
-    mutator => oneprovider:get_id_or_undefined(),
-    fold_enabled => true
+    mutator => oneprovider:get_id_or_undefined()
 }).
-
--export([list/0]).
 
 
 %%%===================================================================
@@ -70,9 +65,6 @@
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
-
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,8 +99,14 @@ get(FileGuid) ->
 %%% Higher-level functions operating on file_qos record.
 %%%===================================================================
 
-get_callback() ->
-    fun([#document{key = Uuid, scope = SpaceId}, ParentEffQos, CalculationInfo]) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns effective file_qos for file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective(file_meta:doc()) -> record() | undefined.
+get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
+    Callback = fun([#document{key = Uuid, scope = SpaceId}, ParentEffQos, CalculationInfo]) ->
         Guid = file_id:pack_guid(Uuid, SpaceId),
         case {file_qos:get(Guid), ParentEffQos} of
             {{error, not_found}, _} ->
@@ -119,17 +117,7 @@ get_callback() ->
                 EffQos = merge_file_qos(ParentEffQos, FileQos),
                 {ok, EffQos, CalculationInfo}
         end
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns effective file_qos for file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_effective(file_meta:doc()) -> record() | undefined.
-get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
-    Callback = get_callback(),
+    end,
 
     CacheTableName = binary_to_atom(SpaceId, utf8),
     {ok, EffQos, _} = effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], []),

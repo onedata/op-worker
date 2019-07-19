@@ -43,18 +43,12 @@
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined(),
-    fold_enabled => true
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
-
--export([list/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
@@ -101,8 +95,12 @@ delete(QosId) ->
 
 -spec get_file_guid(id()) -> file_id:file_guid().
 get_file_guid(QosId) ->
-    {ok, #document{value = QosEntry}} = qos_entry:get(QosId),
-    QosEntry#qos_entry.file_guid.
+    case qos_entry:get(QosId) of
+        {ok, #document{value = QosEntry}} ->
+            {ok, QosEntry#qos_entry.file_guid};
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec set_status(id(), status()) -> {ok, key()} | {error, term}.
 set_status(QosId, Status) ->
@@ -110,6 +108,7 @@ set_status(QosId, Status) ->
         {ok, QosEntry#qos_entry{status = Status}}
     end,
     update(QosId, Diff).
+
 
 %%--------------------------------------------------------------------
 %% @doc

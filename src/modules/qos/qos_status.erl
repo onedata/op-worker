@@ -6,7 +6,20 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% fixme explain algorithm
+%%% This module is responsible for calculating QoS entry fulfillment status.
+%%% QoS is determined fulfilled when there is:
+%%%     - traverse task triggered by created this QoS entry is finished
+%%%     - there are no remaining transfers, that were created to fulfill this QoS
+%%%
+%%% Active transfers are stored as links where value is transfer id and key is
+%%% expressed as combined:
+%%%     * relative path to QoS entry origin file(file that QoS entry was added to)
+%%%     * storage id where file is transferred to
+%%%
+%%% QoS status of directory is checked by getting next status link to
+%%% given directory relative path. Because status links keys start with relative
+%%% path, if there is unfinished transfer in subtree of this directory next
+%%% status link will start with the same relative path.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_status).
@@ -18,6 +31,12 @@
 
 %% API
 -export([add_status_link/5, delete_status_link/4, check_fulfilment/2, get_relative_path/2]).
+
+-define(QOS_STATUS_LINK_NAME(RelativePath, StorageId), <<RelativePath/binary, "###", StorageId/binary>>).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,11 +70,12 @@ delete_status_link(QosId, Scope, RelativePath, StorageId) ->
 %%--------------------------------------------------------------------
 -spec check_fulfilment(qos_item:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosId, FileGuid) ->
-    {ok, #document{ value = QosItem}} = qos_item:get(QosId),
+    {ok, #document{value = QosItem}} = qos_item:get(QosId),
     check_fulfilment_internal(QosId, FileGuid, QosItem).
 
 %%--------------------------------------------------------------------
 %% @doc
+%% TODO VFS-5633 use uuid instead of name
 %% Returns child file path relative to ancestor's, e.g:
 %%    AncestorAbsolutePath: space1/dir1/dir2
 %%    ChildAbsolutePath: space1/dir1/dir2/dir3/file

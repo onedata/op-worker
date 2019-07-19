@@ -65,18 +65,11 @@
 
 -define(CANNOT_FULFILL_QOS, cannot_fulfill_qos).
 
-% QoS fulfillment statuses
--define(IMPOSSIBLE, impossible).
--define(IN_PROGRESS, in_progess).
--define(FULFILLED, fulfilled).
-
--define(IMPOSSIBLE_QOS_KEY, <<"unsatisfiable_qos_key">>).
+-define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
 
 % qos status
 -define(QOS_IN_PROGRESS_STATUS, in_progress).
 -define(QOS_TRAVERSE_FINISHED_STATUS, traverse_finished).
 -define(QOS_IMPOSSIBLE_STATUS, impossible).
-
--define(QOS_STATUS_LINK_NAME(RelativePath, StorageId), <<RelativePath/binary, "###", StorageId/binary>>).
 
 -endif.

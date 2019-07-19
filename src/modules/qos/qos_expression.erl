@@ -54,7 +54,6 @@ transform_to_rpn(Expression) ->
 -spec get_target_storage(expression(), pos_integer(), [storage:id()], []) ->
     [storage:id()] | ?CANNOT_FULFILL_QOS.
 get_target_storage(_Expression, _ReplicasNum, [], _FileLocations) ->
-    % TODO: VFS-5568 - handle qos requirements that cannot be satisfied
     {error, ?CANNOT_FULFILL_QOS};
 get_target_storage(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).

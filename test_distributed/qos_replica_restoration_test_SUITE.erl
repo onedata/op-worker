@@ -61,7 +61,7 @@ basic_qos_restoration_test_base(Config, DirStructureType) ->
     GuidsAndPaths = qos_test_utils:add_qos_test_base(Config, QosSpec),
     [{Guid, Path} | _] = maps:get(files, GuidsAndPaths),
 
-    SpaceId = fslogic_uuid:guid_to_space_id(Guid),
+    SpaceId = file_id:guid_to_space_id(Guid),
 
     % remove leading slash and space id
     [_, _ | PathTokens] = binary:split(Path, <<"/">>, [global]),

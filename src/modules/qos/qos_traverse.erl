@@ -42,6 +42,7 @@
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
+-define(TASK_ID(QosId), <<QosId/binary, "#", (datastore_utils:gen_key())/binary>>).
 
 %%%===================================================================
 %%% API
@@ -58,7 +59,7 @@ fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
     QosOriginFileGuid = QosItem#qos_entry.file_guid,
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
     Options = #{
-        task_id => QosId,
+        task_id => ?TASK_ID(QosId),
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #add_qos_traverse_args{
             session_id = SessionId,
@@ -112,8 +113,9 @@ init_pool() ->
 list_ongoing_jobs() ->
     {ok, []}.
 
-task_finished(QosId) ->
-    {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
+task_finished(TaskId) ->
+    [QosId, _] = binary:split(TaskId, <<"#">>, [global]),
+    qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
     ok.
 
 get_job(DocOrID) ->
