@@ -7,7 +7,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module provides function to operate on cdmi containers.
+%%% This module provides function to operate on cdmi containers (directories).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_container).
@@ -27,6 +27,10 @@
     <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>,
     <<"childrenrange">>, <<"children">>
 ]).
+
+-define(MAX_CHILDREN_PER_REQUEST, element(2, {ok, _} = application:get_env(
+    ?APP_NAME, max_children_per_request
+))).
 
 -define(run(__FunctionCall), check_result(__FunctionCall)).
 
@@ -48,8 +52,8 @@
     {binary(), cowboy_req:req(), cdmi_handler:cdmi_req()}.
 get_cdmi(Req, #cdmi_req{options = Options} = CdmiReq) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
-    Answer = get_directory_info(NonEmptyOpts, CdmiReq),
-    {json_utils:encode(Answer), Req, CdmiReq}.
+    DirInfo = get_directory_info(NonEmptyOpts, CdmiReq),
+    {json_utils:encode(DirInfo), Req, CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -192,13 +196,12 @@ get_directory_info(RequestedInfo, #cdmi_req{
                     <<"/">> ->
                         Acc;
                     _ ->
-                        case lfm:stat(SessionId, {path, filepath_utils:parent_dir(Path)}) of
-                            {ok, #file_attr{guid = ParentGuid}} ->
-                                {ok, ObjectId} = file_id:guid_to_objectid(ParentGuid),
-                                Acc#{<<"parentID">> => ObjectId};
-                            {error, Errno} ->
-                                throw(?ERROR_POSIX(Errno))
-                        end
+                        {ok, #file_attr{guid = ParentGuid}} = ?run(lfm:stat(
+                            SessionId,
+                            {path, filepath_utils:parent_dir(Path)}
+                        )),
+                        {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
+                        Acc#{<<"parentID">> => ParentObjectId}
                 end;
             (<<"capabilitiesURI">>, Acc) ->
                 Acc#{<<"capabilitiesURI">> => ?CONTAINER_CAPABILITY_PATH};
@@ -216,7 +219,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
                 {ok, ChildNum} = ?run(lfm:get_children_count(SessionId, {guid, Guid})),
                 {From, To} = case lists:keyfind(<<"children">>, 1, RequestedInfo) of
                     {<<"children">>, Begin, End} ->
-                        {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
+                        MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
                         normalize_childrenrange(Begin, End, ChildNum, MaxChildren);
                     _ ->
                         case ChildNum of
@@ -228,23 +231,32 @@ get_directory_info(RequestedInfo, #cdmi_req{
                     {undefined, undefined} ->
                         <<"">>;
                     _ ->
-                        <<(integer_to_binary(From))/binary, "-", (integer_to_binary(To))/binary>>
+                        <<
+                            (integer_to_binary(From))/binary,
+                            "-",
+                            (integer_to_binary(To))/binary
+                        >>
                 end,
                 Acc#{<<"childrenrange">> => BinaryRange};
             ({<<"children">>, From, To}, Acc) ->
-                {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
+                MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
                 {ok, ChildNum} = ?run(lfm:get_children_count(SessionId, {guid, Guid})),
                 {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
                 {ok, List} = ?run(lfm:ls(SessionId, {guid, Guid}, From1, To1 - From1 + 1)),
                 Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
-                    distinguish_files(FileGuid, Name, SessionId)
+                    distinguish_directories(SessionId, FileGuid, Name)
                 end, List)};
             (<<"children">>, Acc) ->
-                {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
+                MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
                 {ok, List} = ?run(lfm:ls(SessionId, {guid, Guid}, 0, MaxChildren + 1)),
-                terminate_if_too_many_children(List, MaxChildren),
+                case length(List) > MaxChildren of
+                    true ->
+                        throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
+                    false ->
+                        ok
+                end,
                 Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
-                    distinguish_files(FileGuid, Name, SessionId)
+                    distinguish_directories(SessionId, FileGuid, Name)
                 end, List)};
             (_, Acc) ->
                 Acc
@@ -268,27 +280,26 @@ normalize_childrenrange(From, To, _ChildNum, _MaxChildren) when From > To ->
     throw(?ERROR_BAD_DATA(<<"childrenrange">>));
 normalize_childrenrange(_From, To, ChildNum, _MaxChildren) when To >= ChildNum ->
     throw(?ERROR_BAD_DATA(<<"childrenrange">>));
-normalize_childrenrange(From, To, ChildNum, MaxChildren) ->
-    To2 = min(ChildNum - 1, To),
-    case MaxChildren < (To2 - From + 1) of
+normalize_childrenrange(From, To, _ChildNum, MaxChildren) ->
+    case (To - From + 1) > MaxChildren of
         true ->
             throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
         false ->
-            {From, To2}
+            {From, To}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Distinguishes regular files from directories
-%% (for regular files returns path ending with slash)
+%% Distinguishes regular files from directories (for directories returns
+%% path ending with slash).
 %% @end
 %%--------------------------------------------------------------------
--spec distinguish_files(file_id:file_guid(), Name :: binary(), session:id()) ->
-    binary() | no_return().
-distinguish_files(Guid, Name, Auth) ->
-    case lfm:stat(Auth, {guid, Guid}) of
+-spec distinguish_directories(session:id(), file_id:file_guid(),
+    Name :: binary()) -> binary() | no_return().
+distinguish_directories(SessionId, Guid, Name) ->
+    case lfm:stat(SessionId, {guid, Guid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             filepath_utils:ensure_ends_with_slash(Name);
         {ok, _} ->
@@ -296,19 +307,6 @@ distinguish_files(Guid, Name, Auth) ->
         {error, Errno} ->
             throw(?ERROR_POSIX(Errno))
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Terminates request with error if requested childrenrange exceeds system limit.
-%% @end
-%%--------------------------------------------------------------------
--spec terminate_if_too_many_children(list(), non_neg_integer()) -> ok | no_return().
-terminate_if_too_many_children(List, MaxChildren) when length(List) > MaxChildren ->
-    throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
-terminate_if_too_many_children(_, _) ->
-    ok.
 
 
 %% @private

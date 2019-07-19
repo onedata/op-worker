@@ -18,8 +18,16 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
-%%-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+
+%% API
+-export([
+    parse_range_header/2, parse_content_range_header/2,
+    parse_content_type_header/1,
+    parse_body/1
+]).
+
+-type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
 % keys that are forbidden to appear simultaneously in a request's body
 -define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [
@@ -29,13 +37,6 @@
 
 -define(CDMI_VERSION_HEADER, <<"x-cdmi-specification-version">>).
 
-%% API
--export([
-    get_ranges/2, parse_content_range/2,
-    parse_body/1,
-    parse_content/1
-]).
-
 
 %%%===================================================================
 %%% API
@@ -43,19 +44,68 @@
 
 
 %%--------------------------------------------------------------------
-%% @doc Get requested ranges list.
+%% @doc Parses byte ranges from 'range' http header.
 %%--------------------------------------------------------------------
--spec get_ranges(cowboy_req:req(), Size :: non_neg_integer()) ->
-    {[{non_neg_integer(), non_neg_integer()}] | undefined, cowboy_req:req()}.
-get_ranges(Req, Size) ->
+-spec parse_range_header(cowboy_req:req(), Threshold :: non_neg_integer()) ->
+    undefined | [range()].
+parse_range_header(Req, Threshold) ->
     case cowboy_req:header(<<"range">>, Req) of
         undefined ->
-            {undefined, Req};
+            undefined;
         RawRange ->
-            case parse_byte_range(RawRange, Size) of
+            case parse_byte_range(RawRange, Threshold) of
                 invalid -> throw(?ERROR_BAD_DATA(<<"range">>));
-                Ranges -> {Ranges, Req}
+                Ranges -> Ranges
             end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses byte range from 'content-range' http header format to erlang
+%% range tuple, i. e. <<"bytes 1-5/10">> will produce -> {1,5}.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_content_range_header(cowboy_req:req(), Threshold :: non_neg_integer()) ->
+    undefined | {range(), ExpectedSize :: integer() | undefined}.
+parse_content_range_header(Req, Threshold) ->
+    case cowboy_req:header(<<"content-range">>, Req) of
+        undefined ->
+            undefined;
+        RangeHeader ->
+            try
+                [<<"bytes">>, RangeWithSize] = binary:split(RangeHeader, <<" ">>, [global]),
+                [RangeBin, ExpectedSize] = binary:split(RangeWithSize, <<"/">>, [global]),
+                [Range] = parse_byte_range([RangeBin], Threshold),
+                case ExpectedSize of
+                    <<"*">> -> {Range, undefined};
+                    _ -> {Range, binary_to_integer(ExpectedSize)}
+                end
+            catch _:_ ->
+                throw(?ERROR_BAD_DATA(<<"content-range">>))
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses content-type header to mimetype and charset part, if charset
+%% is other than utf-8, function returns undefined.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_content_type_header(binary()) ->
+    {Mimetype :: binary(), Encoding :: binary() | undefined}.
+parse_content_type_header(Content) ->
+    case binary:split(Content, <<";">>) of
+        [RawMimetype, RawEncoding] ->
+            case binary:split(utils:trim_spaces(RawEncoding), <<"=">>) of
+                [<<"charset">>, <<"utf-8">>] ->
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                _ ->
+                    {utils:trim_spaces(RawMimetype), undefined}
+            end;
+        [RawMimetype] ->
+            {utils:trim_spaces(RawMimetype), undefined}
     end.
 
 
@@ -73,52 +123,6 @@ parse_body(Req) ->
     {ok, Body, Req1}.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Parses byte ranges from 'content-range' http header format to erlang
-%% range tuple, i. e. <<"bytes 1-5/10">> will produce -> {1,5}
-%% @end
-%%--------------------------------------------------------------------
--spec parse_content_range(binary() | list(), non_neg_integer()) ->
-    invalid | {Range :: {From :: integer(), To :: integer()}, ExpectedSize :: integer() | undefined}.
-parse_content_range(RawHeaderRange, Size) when is_binary(RawHeaderRange) ->
-    try
-        [<<"bytes">>, RawRangeWithSize] = binary:split(RawHeaderRange, <<" ">>, [global]),
-        [RawRange, RawExpectedSize] = binary:split(RawRangeWithSize, <<"/">>, [global]),
-        [Range] = parse_byte_range([RawRange], Size),
-        case RawExpectedSize of
-            <<"*">> ->
-                {Range, undefined};
-            _ ->
-                {Range, binary_to_integer(RawExpectedSize)}
-        end
-    catch
-        _:_ ->
-            invalid
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Parses content-type header to mimetype and charset part, if charset
-%% is other than utf-8, function returns undefined
-%% @end
-%%--------------------------------------------------------------------
--spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
-parse_content(Content) ->
-    case binary:split(Content, <<";">>) of
-        [RawMimetype, RawEncoding] ->
-            case binary:split(utils:trim_spaces(RawEncoding), <<"=">>) of
-                [<<"charset">>, <<"utf-8">>] ->
-                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
-                _ ->
-                    {utils:trim_spaces(RawMimetype), undefined}
-            end;
-        [RawMimetype] ->
-            {utils:trim_spaces(RawMimetype), undefined}
-    end.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -133,7 +137,7 @@ parse_content(Content) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_byte_range(binary() | list(), non_neg_integer()) ->
-    invalid | [{From :: integer(), To :: integer()}].
+    invalid | [range()].
 parse_byte_range(Range, Size) when is_binary(Range) ->
     case binary:split(Range, <<"=">>, [global]) of
         [<<"bytes">>, RawRange] ->
@@ -171,7 +175,7 @@ parse_byte_range(Ranges0, Size) ->
 %% Validates correctness of request's body.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_body(maps:map()) -> ok | no_return().
+-spec validate_body(map()) -> ok | no_return().
 validate_body(Body) ->
     Keys = maps:keys(Body),
     KeySet = sets:from_list(Keys),

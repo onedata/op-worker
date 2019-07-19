@@ -751,7 +751,7 @@ update_file(Config) ->
         do_request(Workers, FullTestFileName, put, [user_1_token_header(Config) | RequestHeaders6],
             UpdateValue),
 
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"range">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"content-range">>)),
     ?assertMatch(ExpRestError, {Code6, json_utils:decode(Response6)}),
 
     ?assert(object_exists(Config, FullTestFileName)),

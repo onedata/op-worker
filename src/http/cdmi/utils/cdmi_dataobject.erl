@@ -6,8 +6,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This is a cowboy handler module, implementing cowboy_rest interface.
-%%% It handles cdmi object PUT, GET and DELETE requests
+%%% @doc
+%%% This module provides function to operate on cdmi dataobjects (files).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_dataobject).
@@ -71,15 +71,15 @@ get_binary(Req, #cdmi_req{
     file_attrs = #file_attr{guid = FileGuid, size = Size}
 } = CdmiReq) ->
     % prepare response
-    {Ranges, Req1} = cdmi_parser:get_ranges(Req, Size),
+    Ranges = cdmi_parser:parse_range_header(Req, Size),
     MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
-    Req2 = cowboy_req:set_resp_header(<<"content-type">>, MimeType, Req1),
+    Req1 = cowboy_req:set_resp_header(<<"content-type">>, MimeType, Req),
     HttpStatus = case Ranges of
         undefined -> ?HTTP_200_OK;
         _ -> ?HTTP_206_PARTIAL_CONTENT
     end,
-    Req3 = cdmi_streamer:stream_binary(HttpStatus, Req2, CdmiReq, Ranges),
-    {stop, Req3, CdmiReq}.
+    Req2 = cdmi_streamer:stream_binary(HttpStatus, Req1, CdmiReq, Ranges),
+    {stop, Req2, CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -135,7 +135,7 @@ put_binary(Req, #cdmi_req{
     % prepare request data
     Content = cowboy_req:header(<<"content-type">>, Req, <<"application/octet-stream">>),
     CdmiPartialFlag = cowboy_req:header(<<"x-cdmi-partial">>, Req),
-    {MimeType, Encoding} = cdmi_parser:parse_content(Content),
+    {MimeType, Encoding} = cdmi_parser:parse_content_type_header(Content),
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     case Attrs of
         undefined ->
@@ -144,7 +144,7 @@ put_binary(Req, #cdmi_req{
             cdmi_metadata:update_encoding(SessionId, {guid, FileGuid}, Encoding),
             {ok, FileHandle} = ?run(lfm:open(SessionId, {path, Path}, write)),
             cdmi_metadata:update_cdmi_completion_status(SessionId, {guid, FileGuid}, <<"Processing">>),
-            {ok, Req1} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
+            {ok, Req1} = write_body_to_file(Req, 0, FileHandle),
             ?run(lfm:fsync(FileHandle)),
             ?run(lfm:release(FileHandle)),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
@@ -154,35 +154,31 @@ put_binary(Req, #cdmi_req{
         #file_attr{guid = FileGuid, size = Size} ->
             cdmi_metadata:update_mimetype(SessionId, {guid, FileGuid}, MimeType),
             cdmi_metadata:update_encoding(SessionId, {guid, FileGuid}, Encoding),
-            RawRange = cowboy_req:header(<<"content-range">>, Req),
-            case RawRange of
+            Length = cowboy_req:body_length(Req),
+            case cdmi_parser:parse_content_range_header(Req, Size) of
                 undefined ->
                     {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, FileGuid}, write)),
                     cdmi_metadata:update_cdmi_completion_status(SessionId, {guid, FileGuid}, <<"Processing">>),
                     ?run(lfm:truncate(SessionId, {guid, FileGuid}, 0)),
-                    {ok, Req2} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
+                    {ok, Req2} = write_body_to_file(Req, 0, FileHandle),
                     ?run(lfm:fsync(FileHandle)),
                     ?run(lfm:release(FileHandle)),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                         SessionId, {guid, FileGuid}, CdmiPartialFlag
                     ),
                     {true, Req2, CdmiReq};
+                {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
+                    {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, FileGuid}, write)),
+                    cdmi_metadata:update_cdmi_completion_status(SessionId, {guid, FileGuid}, <<"Processing">>),
+                    {ok, Req3} = write_body_to_file(Req, From, FileHandle),
+                    ?run(lfm:fsync(FileHandle)),
+                    ?run(lfm:release(FileHandle)),
+                    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
+                        SessionId, {guid, FileGuid}, CdmiPartialFlag
+                    ),
+                    {true, Req3, CdmiReq};
                 _ ->
-                    Length = cowboy_req:body_length(Req),
-                    case cdmi_parser:parse_content_range(RawRange, Size) of
-                        {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, FileGuid}, write)),
-                            cdmi_metadata:update_cdmi_completion_status(SessionId, {guid, FileGuid}, <<"Processing">>),
-                            {ok, Req3} = cdmi_streamer:write_body_to_file(Req, From, FileHandle),
-                            ?run(lfm:fsync(FileHandle)),
-                            ?run(lfm:release(FileHandle)),
-                            cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
-                                SessionId, {guid, FileGuid}, CdmiPartialFlag
-                            ),
-                            {true, Req3, CdmiReq};
-                        _ ->
-                            throw(?ERROR_BAD_DATA(<<"range">>))
-                    end
+                    throw(?ERROR_BAD_DATA(<<"content-range">>))
             end
     end.
 
@@ -372,13 +368,12 @@ get_file_info(RequestedInfo, #cdmi_req{
                     <<"/">> ->
                         Acc;
                     _ ->
-                        case lfm:stat(SessionId, {path, filename:dirname(Path)}) of
-                            {ok, #file_attr{guid = ParentGuid}} ->
-                                {ok, Id} = file_id:guid_to_objectid(ParentGuid),
-                                Acc#{<<"parentID">> => Id};
-                            {error, Errno} ->
-                                throw(?ERROR_POSIX(Errno))
-                        end
+                        {ok, #file_attr{guid = ParentGuid}} = ?run(lfm:stat(
+                            SessionId,
+                            {path, filepath_utils:parent_dir(Path)}
+                        )),
+                        {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
+                        Acc#{<<"parentID">> => ParentObjectId}
                 end;
             (<<"capabilitiesURI">>, Acc) ->
                 Acc#{<<"capabilitiesURI">> => ?DATAOBJECT_CAPABILITY_PATH};
@@ -424,6 +419,24 @@ get_file_info(RequestedInfo, #cdmi_req{
         #{},
         RequestedInfo
     ).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Reads request's body and writes it to file given by handler.
+%% Returns updated request.
+%% @end
+%%--------------------------------------------------------------------
+-spec write_body_to_file(cowboy_req:req(), integer(), lfm:handle()) ->
+    {ok, cowboy_req:req()}.
+write_body_to_file(Req0, Offset, FileHandle) ->
+    {Status, Chunk, Req1} = cowboy_req:read_body(Req0),
+    {ok, _NewHandle, Bytes} = ?run(lfm:write(FileHandle, Offset, Chunk)),
+    case Status of
+        more -> write_body_to_file(Req1, Offset + Bytes, FileHandle);
+        ok -> {ok, Req1}
+    end.
 
 
 %% @private

@@ -7,7 +7,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Functions responsible for streaming files.
+%%% Functions responsible for streaming content of files.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_streamer).
@@ -19,11 +19,11 @@
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
--export([stream_binary/4, stream_cdmi/6, write_body_to_file/3]).
+-export([stream_binary/4, stream_cdmi/6]).
+
+-type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
 -define(run(__FunctionCall), check_result(__FunctionCall)).
 
@@ -115,13 +115,16 @@ stream_cdmi(Req, #cdmi_req{
 %% Gets size of a stream, which is the size of streamed binary data of file.
 %% @end
 %%--------------------------------------------------------------------
--spec binary_stream_size(Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined,
-    FileSize :: non_neg_integer()) -> non_neg_integer().
-binary_stream_size(undefined, FileSize) -> FileSize;
+-spec binary_stream_size(undefined | [range()], FileSize :: non_neg_integer()) ->
+    non_neg_integer().
+binary_stream_size(undefined, FileSize) ->
+    FileSize;
 binary_stream_size(Ranges, FileSize) ->
     lists:foldl(fun
-        ({From, To}, Acc) when To >= From -> max(0, Acc + min(FileSize - 1, To) - From + 1);
-        ({_, _}, Acc)  -> Acc
+        ({From, To}, Acc) when To >= From ->
+            max(0, Acc + min(FileSize - 1, To) - From + 1);
+        ({_, _}, Acc)  ->
+            Acc
     end, 0, Ranges).
 
 
@@ -132,16 +135,16 @@ binary_stream_size(Ranges, FileSize) ->
 %% cdmi_object.
 %% @end
 %%--------------------------------------------------------------------
--spec cdmi_stream_size(Range :: {non_neg_integer(), non_neg_integer()},
-    FileSize :: non_neg_integer(), ValueTransferEncoding :: binary(),
-    JsonBodyPrefix :: binary(), JsonBodySuffix :: binary()) -> non_neg_integer().
-cdmi_stream_size({From, To}, FileSize, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix) when To >= From ->
+-spec cdmi_stream_size(range(), FileSize :: non_neg_integer(),
+    Encoding :: binary(), DataPrefix :: binary(), DataSuffix :: binary()) ->
+    non_neg_integer().
+cdmi_stream_size({From, To}, FileSize, Encoding, DataPrefix, DataSuffix) when To >= From ->
     DataSize = min(FileSize - 1, To) - From + 1,
-    EncodedDataSize = case ValueTransferEncoding of
+    EncodedDataSize = case Encoding of
         <<"base64">> -> trunc(4 * utils:ceil(DataSize / 3.0));
         <<"utf-8">> -> DataSize
     end,
-    byte_size(JsonBodyPrefix) + EncodedDataSize + byte_size(JsonBodySuffix).
+    byte_size(DataPrefix) + EncodedDataSize + byte_size(DataSuffix).
 
 
 %%--------------------------------------------------------------------
@@ -151,46 +154,23 @@ cdmi_stream_size({From, To}, FileSize, ValueTransferEncoding, JsonBodyPrefix, Js
 %% and streamed to given Request object.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_range(cowboy_req:req(),
-    Range :: {non_neg_integer(), non_neg_integer()}, Encoding :: binary(),
-    BufferSize :: integer(), FileHandle :: lfm:handle()) -> ok | no_return().
+-spec stream_range(cowboy_req:req(), range(), Encoding :: binary(),
+    BufferSize :: integer(), FileHandle :: lfm:handle()) ->
+    ok | no_return().
 stream_range(Req, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
     ReadBufSize = min(ToRead, BufferSize),
     {ok, NewFileHandle, Data} = ?run(lfm:read(FileHandle, From, ReadBufSize)),
-    DataSize = size(Data),
-    case DataSize of
+    case size(Data) of
         0 ->
             ok;
-        _ ->
+        DataSize ->
             cowboy_req:stream_body(cdmi_encoder:encode(Data, Encoding), nofin, Req),
             stream_range(
                 Req, {From + DataSize, To},
                 Encoding, BufferSize, NewFileHandle
             )
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Reads request's body and writes it to file given by handler.
-%% Returns updated request.
-%% @end
-%%--------------------------------------------------------------------
--spec write_body_to_file(cowboy_req:req(), integer(), lfm:handle()) ->
-    {ok, cowboy_req:req()}.
-write_body_to_file(Req0, Offset, FileHandle) ->
-    WriteFun = fun Write(Req, WriteOffset, Handle) ->
-        {Status, Chunk, Req1} = cowboy_req:read_body(Req),
-        {ok, _NewHandle, Bytes} = ?run(lfm:write(Handle, WriteOffset, Chunk)),
-        case Status of
-            more -> Write(Req1, WriteOffset + Bytes, Handle);
-            ok -> {ok, Req1}
-        end
-    end,
-
-    WriteFun(Req0, Offset, FileHandle).
 
 
 %% @private
