@@ -41,9 +41,9 @@
     out_of_range_test/1,
     partial_upload_test/1,
     acl_test/1,
-    errors_test/1, % todo
+    errors_test/1,
     accept_header_test/1,
-    move_copy_conflict_test/1, % todo
+    move_copy_conflict_test/1,
     move_test/1,
     copy_test/1,
     create_raw_file_with_cdmi_version_header_should_succeed_test/1,

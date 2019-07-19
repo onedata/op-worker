@@ -1242,11 +1242,8 @@ move_copy_conflict(Config) ->
     RequestBody1 = json_utils:encode(#{<<"move">> => FileUri, 
                                        <<"copy">> => FileUri}),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, NewMoveFileName, put, RequestHeaders1, RequestBody1),
-    ?assertEqual(400, Code1),
-    CdmiResponse1 = (json_utils:decode(Response1)),
-    ?assertMatch(#{<<"error">> := <<"conflicting_body_fields">>,
-                   <<"error_description">> := _ }, CdmiResponse1),
-
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_MALFORMED_DATA),
+    ?assertMatch(ExpRestError, {Code1, json_utils:decode(Response1)}),
     ?assertEqual(FileData, get_file_content(Config, FileName)).
 %%------------------------------
 
@@ -1652,9 +1649,10 @@ errors(Config) ->
         create_test_dir_and_file(Config),
 
     %%---- unauthorized access -----
-    {ok, Code1, _Headers1, _Response1} =
+    {ok, Code1, _Headers1, Response1} =
         do_request(WorkerP2, TestDirName, get, [], []),
-    ?assertEqual(401, Code1),
+    ExpRestError1 = rest_test_utils:get_rest_error(?ERROR_UNAUTHORIZED),
+    ?assertMatch(ExpRestError1, {Code1, json_utils:decode(Response1)}),
     %%------------------------------
 
     %%----- wrong create path ------
@@ -1663,9 +1661,10 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-    {ok, Code2, _Headers2, _Response2} =
+    {ok, Code2, _Headers2, Response2} =
         do_request(Workers, SpaceName ++ "/test_dir", put, RequestHeaders2, []),
-    ?assertEqual(400, Code2),
+    ExpRestError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)),
+    ?assertMatch(ExpRestError2, {Code2, json_utils:decode(Response2)}),
     %%------------------------------
 
     %%---- wrong create path 2 -----
@@ -1674,9 +1673,10 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
-    {ok, Code3, _Headers3, _Response3} =
+    {ok, Code3, _Headers3, Response3} =
         do_request(Workers, SpaceName ++ "/test_dir/", put, RequestHeaders3, []),
-    ?assertEqual(400, Code3),
+    ExpRestError3 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)),
+    ?assertMatch(ExpRestError3, {Code3, json_utils:decode(Response3)}),
     %%------------------------------
 
     %%-------- wrong base64 --------
@@ -1687,31 +1687,34 @@ errors(Config) ->
     ],
     RequestBody4 = json_utils:encode(#{<<"valuetransferencoding">> => <<"base64">>, 
                                        <<"value">> => <<"#$%">>}),
-    {ok, Code4, _Headers4, _Response4} =
+    {ok, Code4, _Headers4, Response4} =
         do_request(Workers, SpaceName ++ "/some_file_b64", put, RequestHeaders4, RequestBody4),
-    ?assertEqual(400, Code4),
+    ExpRestError4 = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"base64">>)),
+    ?assertMatch(ExpRestError4, {Code4, json_utils:decode(Response4)}),
     %%------------------------------
 
-    %%-- reding non-existing file --
+    %%-- reading non-existing file --
     RequestHeaders6 = [
         user_1_token_header(Config),
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
-    {ok, Code6, _Headers6, _Response6} =
+    {ok, Code6, _Headers6, Response6} =
         do_request(WorkerP2, SpaceName ++ "/nonexistent_file", get, RequestHeaders6),
-    ?assertMatch(404, Code6),
+    ExpRestError6 = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
+    ?assertMatch(ExpRestError6, {Code6, json_utils:decode(Response6)}),
     %%------------------------------
 
-    %%--- list nonexisting dir -----
+    %%--- listing non-existing dir -----
     RequestHeaders7 = [
         user_1_token_header(Config),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-    {ok, Code7, _Headers7, _Response7} =
+    {ok, Code7, _Headers7, Response7} =
         do_request(WorkerP2, SpaceName ++ "/nonexisting_dir/", get, RequestHeaders7),
-    ?assertEqual(404, Code7),
+    ExpRestError7 = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
+    ?assertMatch(ExpRestError7, {Code7, json_utils:decode(Response7)}),
     %%------------------------------
 
     %%--- open binary file without permission -----
@@ -1724,10 +1727,11 @@ errors(Config) ->
     RequestHeaders8 = [user_1_token_header(Config)],
 
     mock_opening_file_without_perms(Config),
-    {ok, Code8, _Headers8, _Response8} =
+    {ok, Code8, _Headers8, Response8} =
         do_request(WorkerP1, File8, get, RequestHeaders8),
     unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code8),
+    ExpRestError8 = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ?assertMatch(ExpRestError8, {Code8, json_utils:decode(Response8)}),
     %%------------------------------
 
     %%--- open cdmi file without permission -----
@@ -1744,10 +1748,11 @@ errors(Config) ->
     ],
 
     mock_opening_file_without_perms(Config),
-    {ok, Code9, _Headers9, _Response9} =
+    {ok, Code9, _Headers9, Response9} =
         do_request(WorkerP2, File9, get, RequestHeaders9),
     unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code9).
+    ExpRestError9 = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ?assertMatch(ExpRestError9, {Code9, json_utils:decode(Response9)}).
 %%------------------------------
 
 accept_header(Config) ->
