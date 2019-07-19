@@ -65,7 +65,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
-    {term(), cowboy_req:req(), cdmi_handler:cdmi_req()}.
+    {stop, cowboy_req:req(), cdmi_handler:cdmi_req()}.
 get_binary(Req, #cdmi_req{
     client = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = FileGuid, size = Size}
@@ -95,28 +95,33 @@ get_cdmi(Req, #cdmi_req{
     options = Options
 } = CdmiReq) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_FILE_OPTS),
-    Answer = get_file_info(NonEmptyOpts, CdmiReq),
+    FileInfo = get_file_info(NonEmptyOpts, CdmiReq),
 
-    case maps:get(<<"value">>, Answer, undefined) of
-        {range, Range} ->
-            % prepare response
-            BodyWithoutValue = maps:remove(<<"value">>, Answer),
-            ValueTransferEncoding = cdmi_metadata:get_encoding(SessionId, {guid, FileGuid}),
-            JsonBodyWithoutValue = json_utils:encode(BodyWithoutValue),
-            JsonBodyPrefix = case BodyWithoutValue of
-                #{} = Map when map_size(Map) =:= 0 -> <<"{\"value\":\"">>;
+    case maps:take(<<"value">>, FileInfo) of
+        {{range, Range}, FileInfo2} ->
+            Encoding = cdmi_metadata:get_encoding(SessionId, {guid, FileGuid}),
+            DataPrefix = case map_size(FileInfo2) of
+                0 ->
+                    <<"{\"value\":\"">>;
                 _ ->
-                    <<(erlang:binary_part(JsonBodyWithoutValue, 0, byte_size(JsonBodyWithoutValue) - 1))/binary, ",\"value\":\"">>
+                    EncodedFileInfo1 = json_utils:encode(FileInfo2),
+                    % Closing '}' must be removed to append streaming content
+                    EncodedFileInfo2 = erlang:binary_part(
+                        EncodedFileInfo1,
+                        0,
+                        byte_size(EncodedFileInfo1) - 1
+                    ),
+                    <<EncodedFileInfo2/binary, ",\"value\":\"">>
             end,
-            JsonBodySuffix = <<"\"}">>,
+            DataSuffix = <<"\"}">>,
 
             Req2 = cdmi_streamer:stream_cdmi(
-                Req, CdmiReq, Range,
-                ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix
+                Req, CdmiReq, Range, Encoding,
+                DataPrefix, DataSuffix
             ),
             {stop, Req2, CdmiReq};
-        undefined ->
-            {json_utils:encode(Answer), Req, CdmiReq}
+        error ->
+            {json_utils:encode(FileInfo), Req, CdmiReq}
     end.
 
 
@@ -346,7 +351,7 @@ get_range(Opts) ->
 get_file_info(RequestedInfo, #cdmi_req{
     client = ?USER(_UserId, SessionId),
     file_path = Path,
-    file_attrs = #file_attr{guid = Guid} = Attrs
+    file_attrs = #file_attr{guid = Guid, size = FileSize} = Attrs
 }) ->
     lists:foldl(
         fun
@@ -410,7 +415,7 @@ get_file_info(RequestedInfo, #cdmi_req{
                         )};
                     _ ->
                         Acc#{<<"valuerange">> => iolist_to_binary(
-                            [<<"0-">>, integer_to_binary(Attrs#file_attr.size - 1)]
+                            [<<"0-">>, integer_to_binary(FileSize - 1)]
                         )} %todo fix 0--1 when file is empty
                 end;
             (_, Acc) ->
