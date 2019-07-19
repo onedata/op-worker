@@ -74,13 +74,19 @@ find_record(<<"space">>, SpaceId) ->
             op_gui_error:unauthorized()
     end;
 
+find_record(<<"space-provider-list">>, SpaceId) ->
+    SessionId = op_gui_session:get_session_id(),
+    UserId = op_gui_session:get_user_id(),
+    case user_logic:has_eff_space(SessionId, UserId, SpaceId) of
+        false -> op_gui_error:unauthorized();
+        true -> {ok, space_provider_list_record(SpaceId)}
+    end;
+
 find_record(RecordType, RecordId) ->
     {SpaceId, AdditionalPrivs} = case RecordType of
         <<"space-user-list">> ->
             {RecordId, []};
         <<"space-group-list">> ->
-            {RecordId, []};
-        <<"space-provider-list">> ->
             {RecordId, []};
         <<"space-transfer-link-state">> ->
             {RecordId, [?SPACE_VIEW_TRANSFERS]};
@@ -108,8 +114,6 @@ find_record(RecordType, RecordId) ->
                     {ok, space_user_list_record(RecordId)};
                 <<"space-group-list">> ->
                     {ok, space_group_list_record(RecordId)};
-                <<"space-provider-list">> ->
-                    {ok, space_provider_list_record(RecordId)};
                 <<"space-on-the-fly-transfer-list">> ->
                     {ok, space_on_the_fly_transfer_list_record(RecordId)};
                 <<"space-transfer-stat">> ->
@@ -231,7 +235,6 @@ space_record(SpaceId, HasViewPrivileges) ->
                 fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId
             )
     end,
-
     % Depending on view privileges, show or hide info about members, privileges,
     % providers and transfers.
     {
@@ -275,7 +278,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"hasViewPrivilege">>, HasViewPrivileges},
         {<<"userList">>, RelationWithViewPrivileges},
         {<<"groupList">>, RelationWithViewPrivileges},
-        {<<"providerList">>, RelationWithViewPrivileges},
+        {<<"providerList">>, SpaceId},
         {<<"onTheFlyTransferList">>, RelationWithViewPrivileges},
         {<<"transferOnTheFlyStat">>, TransferOnTheFlyStatId},
         {<<"transferJobStat">>, TransferJobStatId},
