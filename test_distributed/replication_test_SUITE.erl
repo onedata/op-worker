@@ -268,7 +268,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     lfm_proxy:close(W1, Handle2),
 
     % Simulate new user appearing
-    rpc:call(W1, od_user, run_after, [save, [], {ok, #document{key = ExternalUser, value = #od_user{}}}]),
+    rpc:call(W1, od_user, run_after, [create, [], {ok, #document{key = ExternalUser, value = #od_user{}}}]),
 
     %then
     {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, ExternalUser, SpaceId]),

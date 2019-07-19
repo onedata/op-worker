@@ -180,9 +180,7 @@ async_request_handling_test(Config) ->
 
     % Harvest requests are made within async processes (does not block the test process)
     lists:foreach(fun(_) ->
-        spawn(fun() ->
-            rpc:call(Node, space_logic, harvest_metadata, [?SPACE_1, #{}, [], 100, 100])
-        end)
+        rpc:cast(Node, space_logic, harvest_metadata, [?SPACE_1, #{}, [], 100, 100])
     end, lists:seq(1, 5)),
 
     % Short requests are made in parallel and the results are collected (blocks the test process)
