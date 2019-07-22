@@ -29,7 +29,7 @@
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
     schedule_replication_by_index/6, schedule_replica_eviction_by_index/7,
-    get_file_qos/3, add_qos/5, get_qos_details/3, remove_qos/3]).
+    get_file_qos/3, add_qos/5, get_qos_details/3, remove_qos/3, check_qos_fulfilled/3]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -101,6 +101,11 @@ get_qos_details(Worker, SessId, QosId) ->
     ok | logical_file_manager:error_reply().
 remove_qos(Worker, SessId, QosId) ->
     ?EXEC(Worker, lfm:remove_qos(SessId, QosId)).
+
+-spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
+    boolean() | logical_file_manager:error_reply().
+check_qos_fulfilled(Worker, SessId, QosId) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId)).
 
 -spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().

@@ -32,7 +32,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([update/2, create_or_update/2, get/1]).
+-export([update/2, create_or_update/2, get/1, delete/1]).
 
 -export([
     get_effective/1, add_to_target_storages/3, remove_from_target_storages/2,
@@ -56,6 +56,7 @@
     sync_enabled => true,
     mutator => oneprovider:get_id_or_undefined()
 }).
+
 
 %%%===================================================================
 %%% API
@@ -82,8 +83,8 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create_or_update(doc(), diff()) ->
     {ok, key()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    datastore_model:update(?CTX, Key, Diff, Default).
+create_or_update(#document{key = Key} = Doc, Diff) ->
+    datastore_model:update(?CTX, Key, Diff, Doc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,6 +129,19 @@ get_effective(FileGuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Deletes file_qos document.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(key()) -> ok | {error, term()}.
+delete(FileGuid) ->
+    case datastore_model:delete(?CTX, FileGuid) of
+        ok -> ok;
+        {error, not_found} -> ok;
+        {error, _} = Error -> Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Adds storages from given list to target storages in file_qos document.
 %% @end
 %%--------------------------------------------------------------------
@@ -145,7 +159,7 @@ add_to_target_storages(FileGuid, StoragesList, QosId) ->
     DocToCreate = #document{
         key = FileGuid,
         scope = file_id:guid_to_space_id(FileGuid),
-        value = #file_qos{target_storages = NewTargetStorages}
+        value = #file_qos{qos_list = [QosId], target_storages = NewTargetStorages}
     },
 
     create_or_update(DocToCreate, Diff).

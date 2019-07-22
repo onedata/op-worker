@@ -192,7 +192,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #qos_entry{
 create(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = instance}} = Req) ->
     SessionId = Cl#client.session_id,
     QosExpression = maps:get(<<"expression">>, Req#op_req.data),
-    ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data),
+    ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data, 1),
 
     case lfm:add_qos(SessionId, {guid, FileGuid}, QosExpression, ReplicasNum) of
         {ok, QosId} ->
@@ -215,7 +215,7 @@ get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) 
             {ok, #{
                 <<"qosList">> => QosList,
                 <<"targetStorages">> => TargetStorages,
-                <<"fulfilled">> => lfm_qos:check_qos_fulfilled(SessionId, QosList)
+                <<"fulfilled">> => lfm_qos:check_qos_fulfilled(SessionId, QosList, {guid, FileGuid})
             }};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND

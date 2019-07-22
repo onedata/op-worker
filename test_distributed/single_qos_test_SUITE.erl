@@ -399,7 +399,7 @@ add_key_val_qos_that_cannot_be_fulfilled_test_spec() ->
                 qos_expression => <<"country=IT">>,
                 replicas_num => 1,
                 qos_expression_in_rpn => [<<"country=IT">>],
-                qos_status => ?IMPOSSIBLE
+                qos_status => ?QOS_IMPOSSIBLE_STATUS
             }
         ],
         qos_list => [?QOS1],
@@ -423,7 +423,7 @@ add_qos_that_cannot_be_fulfilled_test_spec() ->
                 qos_expression => <<"country=PL|country=PT-type=disk">>,
                 replicas_num => 1,
                 qos_expression_in_rpn => [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"-">>],
-                qos_status => ?IMPOSSIBLE
+                qos_status => ?QOS_IMPOSSIBLE_STATUS
             }
         ],
         qos_list => [?QOS1],
@@ -615,7 +615,7 @@ add_multi_qos_where_one_cannot_be_satisfied_test_spec() ->
                 qos_expression => <<"country=IT">>,
                 replicas_num => 1,
                 qos_expression_in_rpn => [<<"country=IT">>],
-                qos_status => ?IMPOSSIBLE
+                qos_status => ?QOS_IMPOSSIBLE_STATUS
             }
         ],
         qos_list => [?QOS1, ?QOS2],
@@ -840,7 +840,6 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    test_utils:mock_new(Workers, qos_traverse, [passthrough]),
     mock_providers_qos(Config),
     mock_schedule_transfers(Config),
     mock_space_storages(Config, maps:keys(?TEST_PROVIDERS_QOS)),
@@ -849,8 +848,8 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+    test_utils:mock_unload(Workers),
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 %%%===================================================================
 %%% Internal functions
@@ -861,30 +860,31 @@ mock_providers_qos(Config) ->
     test_utils:mock_new(Workers, providers_qos),
     test_utils:mock_expect(Workers, providers_qos, get_storage_qos,
         fun(StorageId, _StorageSet) ->
-            % names of test providers starts with p1, p2 etc.
+            % names of test providers start with p1, p2 etc.
             maps:get(binary:part(StorageId, 0, 2), ?TEST_PROVIDERS_QOS)
         end).
 
 
 mock_schedule_transfers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, qos_traverse, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_traverse, schedule_transfers,
-        fun(_, _, _) ->
+        fun(_, _, _, _) ->
             []
         end).
 
 
 mock_space_storages(Config, StorageList) ->
     Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_expect(Workers, qos_traverse, get_space_storages,
+    test_utils:mock_new(Workers, qos_req, [passthrough]),
+    ok = test_utils:mock_expect(Workers, qos_req, get_space_storages,
         fun(_, _) ->
             StorageList
         end).
 
 
-wait_for_traverse_task_completion(Worker, QosId) ->
-    {ok, #document{value = TraverseTask}} = rpc:call(Worker, tree_traverse, get_task, [qos_traverse, QosId]),
-    TraverseTask#traverse_task.status == finished.
+wait_for_qos_fulfillment(Worker, SessId, QosId) ->
+    ?assertMatch(true, lfm_proxy:check_qos_fulfilled(Worker, SessId, QosId), ?ATTEMPTS).
 
 
 add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
@@ -909,15 +909,17 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?FULFILLED),
+        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
             lfm_proxy:add_qos(Worker, SessId, {guid, FileGuid}, QosExpression, ReplicasNum)
         ),
 
-        % w8 for traverse tasks completion
-        ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS),
+        case QosStatus == ?QOS_IMPOSSIBLE_STATUS of
+            true -> ok;
+            false -> wait_for_qos_fulfillment(Worker, SessId, QosId)
+        end,
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
@@ -959,20 +961,16 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?FULFILLED),
+        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
             lfm_proxy:add_qos(Worker, SessId, {guid, DirGuid}, QosExpression, ReplicasNum)
         ),
 
-        % w8 for traverse tasks completion
-        case QosStatus == ?IMPOSSIBLE of
-            true ->
-                % for directory traverse task does not start when cannot fulfill QoS
-                undefined;
-            false ->
-                ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS)
+          case QosStatus == ?QOS_IMPOSSIBLE_STATUS of
+            true -> ok;
+            false -> wait_for_qos_fulfillment(Worker, SessId, QosId)
         end,
 
         % check qos_entry document
@@ -1016,6 +1014,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
+        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
 
         DirGuid = qos_tests_utils:get_guid(Worker, SessId, DirPath),
         {ok, QosId} = ?assertMatch(
@@ -1023,12 +1022,14 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
             lfm_proxy:add_qos(Worker, SessId, {guid, DirGuid}, QosExpression, ReplicasNum)
         ),
 
-        % w8 for traverse tasks completion
-        ?assertMatch(true, wait_for_traverse_task_completion(Worker, QosId), ?ATTEMPTS),
+        case QosStatus == ?QOS_IMPOSSIBLE_STATUS of
+            true -> ok;
+            false -> wait_for_qos_fulfillment(Worker, SessId, QosId)
+        end,
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, ?FULFILLED
+            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, ?QOS_TRAVERSE_FINISHED_STATUS
         ),
 
         QosNameIdMapping#{QosName => QosId}

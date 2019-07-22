@@ -519,7 +519,9 @@ handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
 handle_provider_request(UserCtx, #get_qos{id = QosId}, FileCtx) ->
     qos_req:get_qos_details(UserCtx, FileCtx, QosId);
 handle_provider_request(UserCtx, #remove_qos{id = QosId}, FileCtx) ->
-    qos_req:remove_qos(UserCtx, FileCtx, QosId).
+    qos_req:remove_qos(UserCtx, FileCtx, QosId);
+handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosId}, FileCtx) ->
+    qos_req:check_fulfillment(UserCtx, FileCtx, QosId).
 
 %%--------------------------------------------------------------------
 %% @private

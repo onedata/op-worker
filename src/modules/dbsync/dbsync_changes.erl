@@ -86,7 +86,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                 links_delete(Doc);
             _ ->
                 Model = element(1, Value),
-                Ctx = datastore_model_default:get_ctx(Model),
+                Ctx = get_ctx(Model),
                 Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
                 case datastore_model:save(Ctx2, Doc) of
                     {ok, Doc2} ->
@@ -130,7 +130,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
 %%--------------------------------------------------------------------
 -spec links_save(model(), key(), doc()) -> undefined | doc().
 links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
-    Ctx = datastore_model_default:get_ctx(Model),
+    Ctx = get_ctx(Model),
     Ctx2 = Ctx#{
         sync_change => true,
         local_links_tree_id => oneprovider:get_id()
@@ -157,7 +157,7 @@ links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
     LocalTreeId = oneprovider:get_id(),
     case TreeId of
         LocalTreeId ->
-            Ctx = datastore_model_default:get_ctx(Model),
+            Ctx = get_ctx(Model),
             Ctx2 = Ctx#{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
@@ -178,7 +178,7 @@ links_delete(Doc = #document{
     LocalTreeId = oneprovider:get_id(),
     case TreeId of
         LocalTreeId ->
-            Ctx = datastore_model_default:get_ctx(Model),
+            Ctx = get_ctx(Model),
             Ctx2 = Ctx#{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
@@ -344,4 +344,30 @@ gather_answers(Pids, Ref, TmpAns) ->
                 false ->
                     timeout
             end
+    end.
+
+get_ctx(Model) ->
+    Ctx = model_apply(Model, {get_ctx, []}, fun() -> #{model => Model} end),
+    Ctx2 = case Model of
+        traverse_task ->
+            Ctx#{sync_enabled => true,
+                remote_driver => datastore_remote_driver,
+                mutator => oneprovider:get_id_or_undefined(),
+                local_links_tree_id => oneprovider:get_id_or_undefined()
+            };
+        tree_traverse_job ->
+            Ctx#{sync_enabled => true,
+                mutator => oneprovider:get_id_or_undefined()
+            };
+        _ ->
+            Ctx
+    end,
+    datastore_model_default:set_defaults(Ctx2).
+
+model_apply(Model, {Function, Args}, DefaultFun) ->
+    Exports = Model:module_info(functions),
+    Arity = length(Args),
+    case lists:keyfind(Function, 1, Exports) of
+        {Function, Arity} -> erlang:apply(Model, Function, Args);
+        _ -> DefaultFun()
     end.

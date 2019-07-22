@@ -18,29 +18,25 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get/1, delete/1, create/2, update/2, get_file_guid/1,
-    set_status/2, get_status/1]).
+-export([get/1, delete/1, create/2, update/2,
+    add_impossible_qos/2, list_impossible_qos/0,
+    get_file_guid/1, set_status/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 -type id() :: binary().
--type task_id() :: binary().
 -type key() :: datastore:key().
 -type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type status() :: ?FULFILLED | ?IN_PROGRESS | ?IMPOSSIBLE.
+-type status() :: ?QOS_IN_PROGRESS_STATUS | ?QOS_TRAVERSE_FINISHED_STATUS | ?QOS_IMPOSSIBLE_STATUS.
 -type replicas_num() :: pos_integer().
 
--export_type([id/0, task_id/0, status/0, replicas_num/0]).
+-export_type([id/0, status/0, replicas_num/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -99,8 +95,12 @@ delete(QosId) ->
 
 -spec get_file_guid(id()) -> file_id:file_guid().
 get_file_guid(QosId) ->
-    {ok, #document{value = QosEntry}} = qos_entry:get(QosId),
-    QosEntry#qos_entry.file_guid.
+    case qos_entry:get(QosId) of
+        {ok, #document{value = QosEntry}} ->
+            {ok, QosEntry#qos_entry.file_guid};
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec set_status(id(), status()) -> {ok, key()} | {error, term}.
 set_status(QosId, Status) ->
@@ -109,10 +109,30 @@ set_status(QosId, Status) ->
     end,
     update(QosId, Diff).
 
--spec get_status(id()) -> status() | {error, term}.
-get_status(QosId) ->
-    {ok, #document{value = QosEntry}} = qos_entry:get(QosId),
-    QosEntry#qos_entry.status.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds given QosId to impossible qos tree.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok | {error, term()}.
+add_impossible_qos(QosId, Scope) ->
+    qos_entry:update(QosId, fun(QosItem) ->
+        {ok, QosItem#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
+    end),
+    datastore_model:add_links(?CTX#{scope => Scope}, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists all impossible qos.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_impossible_qos() ->  {ok, [id()]} | {error, term()}.
+list_impossible_qos() ->
+    datastore_model:fold_links(?CTX, ?IMPOSSIBLE_QOS_KEY, all,
+        fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
+        [], #{}
+    ).
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -150,3 +170,4 @@ get_record_struct(1) ->
         {replicas_num, integer},
         {status, atom}
     ]}.
+

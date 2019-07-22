@@ -66,7 +66,7 @@
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 %% Functions concerning qos
--export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2]).
+-export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2, check_qos_fulfilled/2]).
 
 %%%===================================================================
 %%% API
@@ -731,3 +731,12 @@ get_qos_details(SessId, QosId) ->
 -spec remove_qos(session:id(), qos_entry:id()) -> ok | error_reply().
 remove_qos(SessId, QosId) ->
     ?run(fun() -> lfm_qos:remove_qos(SessId, QosId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check QoS fulfilled.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id()) -> ok | error_reply().
+check_qos_fulfilled(SessId, QosId) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosId) end).

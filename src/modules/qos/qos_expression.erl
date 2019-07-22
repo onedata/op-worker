@@ -46,7 +46,7 @@ transform_to_rpn(Expression) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get list of storage on which file should be replicated according to given
+%% Get list of storages on which file should be replicated according to given
 %% QoS expression and number of replicas.
 %% Takes into consideration actual file locations.
 %% @end
@@ -54,8 +54,7 @@ transform_to_rpn(Expression) ->
 -spec get_target_storage(expression(), pos_integer(), [storage:id()], []) ->
     [storage:id()] | ?CANNOT_FULFILL_QOS.
 get_target_storage(_Expression, _ReplicasNum, [], _FileLocations) ->
-    % TODO: VFS-5568 - handle qos requirements that cannot be satisfied
-    ?CANNOT_FULFILL_QOS;
+    {error, ?CANNOT_FULFILL_QOS};
 get_target_storage(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).
 
@@ -169,8 +168,8 @@ eval_rpn(Operand, Stack, AvailableStorage) ->
 filter_storage(Key, Val, StorageSet) ->
     sets:filter(fun (StorageId) ->
         StorageQos = providers_qos:get_storage_qos(StorageId, StorageSet),
-        case maps:get(Key, StorageQos) of
-            Val ->
+        case maps:find(Key, StorageQos) of
+            {ok, Val} ->
                 true;
             _ ->
                 false
@@ -186,7 +185,7 @@ filter_storage(Key, Val, StorageSet) ->
 %%--------------------------------------------------------------------
 -spec select([storage:id()], pos_integer(), []) -> [storage:id()] | ?CANNOT_FULFILL_QOS.
 select([], _ReplicasNum, _FileLocations) ->
-    ?CANNOT_FULFILL_QOS;
+    {error, ?CANNOT_FULFILL_QOS};
 select(StorageList, ReplicasNum, FileLocations) ->
     StorageListWithBlocksSize = lists:map(fun (StorageId) ->
             {get_storage_blocks_size(StorageId, FileLocations), StorageId}
@@ -199,7 +198,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
         ReplicasNum ->
             StorageSublist;
         _ ->
-            ?CANNOT_FULFILL_QOS
+            {error, ?CANNOT_FULFILL_QOS}
     end.
 
 %%--------------------------------------------------------------------

@@ -13,6 +13,7 @@
 -define(PROVIDER_MESSAGES_HRL, 1).
 
 -include("proto/oneclient/common_messages.hrl").
+-include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
@@ -127,6 +128,10 @@
     id :: qos_entry:id()
 }).
 
+-record(check_qos_fulfillment, {
+    qos_id :: qos_entry:id()
+}).
+
 -type provider_request_type() ::
 #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
 #get_transfer_encoding{} | #set_transfer_encoding{} |
@@ -135,7 +140,7 @@
 #get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
 #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
 #create_share{} | #remove_share{} |
-#add_qos{} | #get_effective_file_qos{} | #get_qos{} | #remove_qos{}.
+#add_qos{} | #get_effective_file_qos{} | #get_qos{} | #remove_qos{} | #check_qos_fulfillment{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -181,10 +186,10 @@
 }).
 
 -record(get_qos_resp, {
-    file_guid :: file_meta:uuid(),
+    file_guid :: fslogic_worker:file_guid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Number of required file replicas.
-    status = undefined :: qos_entry:status()
+    status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status()
 }).
 
 -record(effective_file_qos, {
@@ -192,10 +197,16 @@
     target_storages = #{} :: file_qos:target_storages()
 }).
 
+-record(qos_fulfillment, {
+    qos_id :: qos_entry:id(),
+    fulfilled :: boolean()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | #qos_id{} | #get_qos_resp{} | #effective_file_qos{} | undefined.
+    #scheduled_transfer{} | #qos_id{} | #get_qos_resp{} | #effective_file_qos{} |
+    #qos_fulfillment{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

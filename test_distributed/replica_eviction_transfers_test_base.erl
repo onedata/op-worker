@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains base test of replication.
+%%% This module contains base test of eviction.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_eviction_transfers_test_base).
