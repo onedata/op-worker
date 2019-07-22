@@ -34,6 +34,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
@@ -66,6 +67,8 @@
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
+%% Utility functions
+-export([check_result/1]).
 
 %%%===================================================================
 %%% API
@@ -680,3 +683,18 @@ has_custom_metadata(SessId, FileKey) ->
     ok | error_reply().
 remove_metadata(SessId, FileKey, Type) ->
     ?run(fun() -> lfm_attrs:remove_metadata(SessId, FileKey, Type) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks result of lfm call and if it's error throws ?ERROR_POSIX.
+%% Otherwise returns it.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_result(OK | {error, term()}) -> OK | no_return() when
+    OK :: ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}.
+check_result(ok) -> ok;
+check_result({ok, _} = Res) -> Res;
+check_result({ok, _, _} = Res) -> Res;
+check_result({ok, _, _, _} = Res) -> Res;
+check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).

@@ -1,13 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @author Łukasz Opioła
+%%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2014-2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions for REST.
+%%% Common definitions for CDMI.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -36,9 +36,9 @@
 %% CAPABILITIES
 
 %% Paths for all cdmi capability containers (they can be referred by those paths)
--define(ROOT_CAPABILITY_PATH, <<"cdmi_capabilities/">>).
--define(CONTAINER_CAPABILITY_PATH, <<"cdmi_capabilities/container/">>).
--define(DATAOBJECT_CAPABILITY_PATH, <<"cdmi_capabilities/dataobject/">>).
+-define(ROOT_CAPABILITY_PATH, "cdmi_capabilities/").
+-define(CONTAINER_CAPABILITY_PATH, "cdmi_capabilities/container/").
+-define(DATAOBJECT_CAPABILITY_PATH, "cdmi_capabilities/dataobject/").
 
 % Fake datastore guids of cdmi capability containers, necessary for objectid generation
 -define(ROOT_CAPABILITY_GUID, base64:encode(<<"00000000000000000000000000000001">>)).
@@ -59,7 +59,7 @@
 ).
 
 %% The default json response for capability object will contain this entities.
-%% They can be choosed selectively by appending '?name1;name2' list to the requested url.
+%% They can be chosen selectively by appending '?name1;name2' list to the requested url.
 -define(DEFAULT_CAPABILITIES_OPTIONS, [
     <<"objectType">>, <<"objectID">>, <<"objectName">>,
     <<"parentURI">>, <<"parentID">>, <<"capabilities">>,
@@ -76,7 +76,7 @@
     <<"cdmi_object_access_by_ID">> => <<"true">>
 }).
 
-%% List of cdmi container capabilites
+%% List of cdmi container capabilities
 %% Documentation: chapters 12.1.2, 12.1.4 and tables 101, 103
 -define(CONTAINER_CAPABILITY_MAP, #{
     <<"cdmi_acl">> => <<"true">>,
@@ -97,7 +97,7 @@
     <<"cdmi_copy_dataobject">> => <<"true">>
 }).
 
-%% List of cdmi object capabilites
+%% List of cdmi object capabilities
 %% Documentation: chapters 12.1.2, 12.1.3 and tables 101, 102
 -define(DATAOBJECT_CAPABILITY_MAP, #{
     <<"cdmi_acl">> => <<"true">>,

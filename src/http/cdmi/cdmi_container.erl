@@ -17,9 +17,13 @@
 -include("op_logic.hrl").
 -include("http/cdmi.hrl").
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+
+%% API
+-export([get_cdmi/2, put_cdmi/2, put_binary/2, delete_cdmi/2]).
 
 -define(DEFAULT_GET_DIR_OPTS, [
     <<"objectType">>, <<"objectID">>, <<"objectName">>,
@@ -31,11 +35,6 @@
 -define(MAX_CHILDREN_PER_REQUEST, element(2, {ok, _} = application:get_env(
     ?APP_NAME, max_children_per_request
 ))).
-
--define(run(__FunctionCall), check_result(__FunctionCall)).
-
-%% API
--export([get_cdmi/2, put_cdmi/2, put_binary/2, delete_cdmi/2]).
 
 
 %%%===================================================================
@@ -81,19 +80,19 @@ put_cdmi(Req, #cdmi_req{
     {ok, OperationPerformed, Guid} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, NewGuid} = ?run(lfm:mkdir(SessionId, Path)),
+                {ok, NewGuid} = ?check(lfm:mkdir(SessionId, Path)),
                 {ok, created, NewGuid};
             {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
-                {ok, NewGuid} = ?run(lfm:cp(
+                {ok, NewGuid} = ?check(lfm:cp(
                     SessionId,
                     {path, filepath_utils:ensure_begins_with_slash(CopyURI)},
                     Path
                 )),
                 {ok, copied, NewGuid};
             {undefined, undefined, MoveURI} ->
-                {ok, NewGuid} = ?run(lfm:mv(
+                {ok, NewGuid} = ?check(lfm:mv(
                     SessionId,
                     {path, filepath_utils:ensure_begins_with_slash(MoveURI)},
                     Path
@@ -120,7 +119,7 @@ put_cdmi(Req, #cdmi_req{
                 {guid, Guid},
                 RequestedUserMetadata
             ),
-            {ok, NewAttrs} = ?run(lfm:stat(SessionId, {guid, Guid})),
+            {ok, NewAttrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
             CdmiReq2 = CdmiReq#cdmi_req{file_attrs = NewAttrs},
             Answer = get_directory_info(?DEFAULT_GET_DIR_OPTS, CdmiReq2),
             Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
@@ -136,12 +135,8 @@ put_cdmi(Req, #cdmi_req{
 -spec put_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 put_binary(Req, #cdmi_req{client = Client, file_path = Path} = CdmiReq) ->
-    case lfm:mkdir(Client#client.session_id, Path) of
-        {ok, _} ->
-            {true, Req, CdmiReq};
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
+    ?check(lfm:mkdir(Client#client.session_id, Path)),
+    {true, Req, CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -155,12 +150,8 @@ delete_cdmi(Req, #cdmi_req{
     client = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
-    case lfm:rm_recursive(SessionId, {guid, Guid}) of
-        ok ->
-            {true, Req, CdmiReq};
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
+    ?check(lfm:rm_recursive(SessionId, {guid, Guid})),
+    {true, Req, CdmiReq}.
 
 
 %%%===================================================================
@@ -176,94 +167,90 @@ get_directory_info(RequestedInfo, #cdmi_req{
     file_path = Path,
     file_attrs = #file_attr{guid = Guid} = Attrs
 }) ->
-    lists:foldl(
-        fun
-            (<<"objectType">>, Acc) ->
-                Acc#{<<"objectType">> => <<"application/cdmi-container">>};
-            (<<"objectID">>, Acc) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                Acc#{<<"objectID">> => ObjectId};
-            (<<"objectName">>, Acc) ->
-                Acc#{<<"objectName">> => <<(filename:basename(Path))/binary, "/">>};
-            (<<"parentURI">>, Acc) ->
-                ParentURI = case Path of
-                    <<"/">> -> <<>>;
-                    _ -> filepath_utils:parent_dir(Path)
-                end,
-                Acc#{<<"parentURI">> => ParentURI};
-            (<<"parentID">>, Acc) ->
-                case Path of
-                    <<"/">> ->
-                        Acc;
-                    _ ->
-                        {ok, #file_attr{guid = ParentGuid}} = ?run(lfm:stat(
-                            SessionId,
-                            {path, filepath_utils:parent_dir(Path)}
-                        )),
-                        {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
-                        Acc#{<<"parentID">> => ParentObjectId}
-                end;
-            (<<"capabilitiesURI">>, Acc) ->
-                Acc#{<<"capabilitiesURI">> => ?CONTAINER_CAPABILITY_PATH};
-            (<<"completionStatus">>, Acc) ->
-                Acc#{<<"completionStatus">> => <<"Complete">>};
-            (<<"metadata">>, Acc) ->
-                Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
-                    SessionId, {guid, Guid}, <<>>, Attrs
-                )};
-            ({<<"metadata">>, Prefix}, Acc) ->
-                Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
-                    SessionId, {guid, Guid}, Prefix, Attrs
-                )};
-            (<<"childrenrange">>, Acc) ->
-                {ok, ChildNum} = ?run(lfm:get_children_count(SessionId, {guid, Guid})),
-                {From, To} = case lists:keyfind(<<"children">>, 1, RequestedInfo) of
-                    {<<"children">>, Begin, End} ->
-                        MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-                        normalize_childrenrange(Begin, End, ChildNum, MaxChildren);
-                    _ ->
-                        case ChildNum of
-                            0 -> {undefined, undefined};
-                            _ -> {0, ChildNum - 1}
-                        end
-                end,
-                BinaryRange = case {From, To} of
-                    {undefined, undefined} ->
-                        <<"">>;
-                    _ ->
-                        <<
-                            (integer_to_binary(From))/binary,
-                            "-",
-                            (integer_to_binary(To))/binary
-                        >>
-                end,
-                Acc#{<<"childrenrange">> => BinaryRange};
-            ({<<"children">>, From, To}, Acc) ->
-                MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-                {ok, ChildNum} = ?run(lfm:get_children_count(SessionId, {guid, Guid})),
-                {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-                {ok, List} = ?run(lfm:ls(SessionId, {guid, Guid}, From1, To1 - From1 + 1)),
-                Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
-                    distinguish_directories(SessionId, FileGuid, Name)
-                end, List)};
-            (<<"children">>, Acc) ->
-                MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-                {ok, List} = ?run(lfm:ls(SessionId, {guid, Guid}, 0, MaxChildren + 1)),
-                case length(List) > MaxChildren of
-                    true ->
-                        throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
-                    false ->
-                        ok
-                end,
-                Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
-                    distinguish_directories(SessionId, FileGuid, Name)
-                end, List)};
-            (_, Acc) ->
-                Acc
-        end,
-        #{},
-        RequestedInfo
-    ).
+    lists:foldl(fun
+        (<<"objectType">>, Acc) ->
+            Acc#{<<"objectType">> => <<"application/cdmi-container">>};
+        (<<"objectID">>, Acc) ->
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+            Acc#{<<"objectID">> => ObjectId};
+        (<<"objectName">>, Acc) ->
+            Acc#{<<"objectName">> => <<(filename:basename(Path))/binary, "/">>};
+        (<<"parentURI">>, Acc) ->
+            ParentURI = case Path of
+                <<"/">> -> <<>>;
+                _ -> filepath_utils:parent_dir(Path)
+            end,
+            Acc#{<<"parentURI">> => ParentURI};
+        (<<"parentID">>, Acc) ->
+            case Path of
+                <<"/">> ->
+                    Acc;
+                _ ->
+                    {ok, #file_attr{guid = ParentGuid}} = ?check(lfm:stat(
+                        SessionId,
+                        {path, filepath_utils:parent_dir(Path)}
+                    )),
+                    {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
+                    Acc#{<<"parentID">> => ParentObjectId}
+            end;
+        (<<"capabilitiesURI">>, Acc) ->
+            Acc#{<<"capabilitiesURI">> => <<?CONTAINER_CAPABILITY_PATH>>};
+        (<<"completionStatus">>, Acc) ->
+            Acc#{<<"completionStatus">> => <<"Complete">>};
+        (<<"metadata">>, Acc) ->
+            Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
+                SessionId, {guid, Guid}, <<>>, Attrs
+            )};
+        ({<<"metadata">>, Prefix}, Acc) ->
+            Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
+                SessionId, {guid, Guid}, Prefix, Attrs
+            )};
+        (<<"childrenrange">>, Acc) ->
+            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, {guid, Guid})),
+            {From, To} = case lists:keyfind(<<"children">>, 1, RequestedInfo) of
+                {<<"children">>, Begin, End} ->
+                    MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
+                    normalize_childrenrange(Begin, End, ChildNum, MaxChildren);
+                _ ->
+                    case ChildNum of
+                        0 -> {undefined, undefined};
+                        _ -> {0, ChildNum - 1}
+                    end
+            end,
+            BinaryRange = case {From, To} of
+                {undefined, undefined} ->
+                    <<"">>;
+                _ ->
+                    <<
+                        (integer_to_binary(From))/binary,
+                        "-",
+                        (integer_to_binary(To))/binary
+                    >>
+            end,
+            Acc#{<<"childrenrange">> => BinaryRange};
+        ({<<"children">>, From, To}, Acc) ->
+            MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
+            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, {guid, Guid})),
+            {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
+            {ok, List} = ?check(lfm:ls(SessionId, {guid, Guid}, From1, To1 - From1 + 1)),
+            Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
+                distinguish_directories(SessionId, FileGuid, Name)
+            end, List)};
+        (<<"children">>, Acc) ->
+            MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
+            {ok, List} = ?check(lfm:ls(SessionId, {guid, Guid}, 0, MaxChildren + 1)),
+            case length(List) > MaxChildren of
+                true ->
+                    throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
+                false ->
+                    ok
+            end,
+            Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
+                distinguish_directories(SessionId, FileGuid, Name)
+            end, List)};
+        (_, Acc) ->
+            Acc
+    end, #{}, RequestedInfo).
 
 
 %%--------------------------------------------------------------------
@@ -307,10 +294,3 @@ distinguish_directories(SessionId, Guid, Name) ->
         {error, Errno} ->
             throw(?ERROR_POSIX(Errno))
     end.
-
-
-%% @private
--spec check_result({ok, term()} | {error, term()}) ->
-    {ok, term()} | no_return().
-check_result({ok, _} = Res) -> Res;
-check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).

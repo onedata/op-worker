@@ -987,7 +987,7 @@ capabilities(Config) ->
     ?assertMatch(#{<<"content-type">> := <<"application/cdmi-capability">>}, Headers8),
     CdmiResponse8 = (json_utils:decode(Response8)),
     ?assertMatch(#{<<"objectID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse8),
-    ?assertMatch(#{<<"objectName">> := ?ROOT_CAPABILITY_PATH}, CdmiResponse8),
+    ?assertMatch(#{<<"objectName">> := <<?ROOT_CAPABILITY_PATH>>}, CdmiResponse8),
     ?assertMatch(#{<<"childrenrange">> := <<"0-1">>}, CdmiResponse8),
     ?assertMatch(#{<<"children">> := [<<"container/">>, <<"dataobject/">>]}, CdmiResponse8),
     Capabilities = maps:get(<<"capabilities">>, CdmiResponse8),
@@ -1002,7 +1002,7 @@ capabilities(Config) ->
     ?assertMatch({ok, Code9, _, Response9}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?CONTAINER_CAPABILITY_ID) ++ "/", get, RequestHeaders9, [])),
 
     CdmiResponse9 = (json_utils:decode(Response9)),
-    ?assertMatch(#{<<"parentURI">> := ?ROOT_CAPABILITY_PATH}, CdmiResponse9),
+    ?assertMatch(#{<<"parentURI">> := <<?ROOT_CAPABILITY_PATH>>}, CdmiResponse9),
     ?assertMatch(#{<<"parentID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse9),
     ?assertMatch(#{<<"objectID">> := ?CONTAINER_CAPABILITY_ID}, CdmiResponse9),
     ?assertMatch(#{<<"objectName">> := <<"container/">>}, CdmiResponse9),
@@ -1018,7 +1018,7 @@ capabilities(Config) ->
     ?assertMatch({ok, Code10, _, Response10}, do_request(Workers, "cdmi_objectid/" ++ binary_to_list(?DATAOBJECT_CAPABILITY_ID) ++ "/", get, RequestHeaders10, [])),
 
     CdmiResponse10 = (json_utils:decode(Response10)),
-    ?assertMatch(#{<<"parentURI">> := ?ROOT_CAPABILITY_PATH}, CdmiResponse10),
+    ?assertMatch(#{<<"parentURI">> := <<?ROOT_CAPABILITY_PATH>>}, CdmiResponse10),
     ?assertMatch(#{<<"parentID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse10),
     ?assertMatch(#{<<"objectID">> := ?DATAOBJECT_CAPABILITY_ID}, CdmiResponse10),
     ?assertMatch(#{<<"objectName">> := <<"dataobject/">>}, CdmiResponse10),

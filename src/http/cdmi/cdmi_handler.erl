@@ -8,7 +8,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% The module handling the common CDMI logic. It implements Cowboy's rest
+%%% pseudo-behavior, delegating specific operations to submodules.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_handler).
@@ -61,9 +62,9 @@
 
 %% Proplist that provides mapping between objectid and capability path
 -define(CAPABILITY_ID_TO_PATH, [
-    {?ROOT_CAPABILITY_ID, filename:absname(<<"/", (?ROOT_CAPABILITY_PATH)/binary>>)},
-    {?CONTAINER_CAPABILITY_ID, filename:absname(<<"/", (?CONTAINER_CAPABILITY_PATH)/binary>>)},
-    {?DATAOBJECT_CAPABILITY_ID, filename:absname(<<"/", (?DATAOBJECT_CAPABILITY_PATH)/binary>>)}
+    {?ROOT_CAPABILITY_ID, filename:absname(<<"/", ?ROOT_CAPABILITY_PATH>>)},
+    {?CONTAINER_CAPABILITY_ID, filename:absname(<<"/", ?CONTAINER_CAPABILITY_PATH>>)},
+    {?DATAOBJECT_CAPABILITY_ID, filename:absname(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>)}
 ]).
 
 -define(run_cdmi(__Req, __CdmiReq, __FunctionCall),
@@ -514,30 +515,27 @@ resolve_resource_by_id(Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_resource_by_path(file_meta:path()) -> cdmi_req().
-resolve_resource_by_path(<<"/", Path/binary>> = FullPath) ->
-    case Path of
-        ?ROOT_CAPABILITY_PATH ->
-            #cdmi_req{
-                client = ?NOBODY,
-                resource = {capabilities, root}
-            };
-        ?CONTAINER_CAPABILITY_PATH ->
-            #cdmi_req{
-                client = ?NOBODY,
-                resource = {capabilities, container}
-            };
-        ?DATAOBJECT_CAPABILITY_PATH ->
-            #cdmi_req{
-                client = ?NOBODY,
-                resource = {capabilities, dataobject}
-            };
-        _ ->
-            CdmiReq = case filepath_utils:ends_with_slash(FullPath) of
-                true -> #cdmi_req{resource = container};
-                false -> #cdmi_req{resource = dataobject}
-            end,
-            CdmiReq#cdmi_req{file_path = FullPath}
-    end.
+resolve_resource_by_path(<<"/", ?ROOT_CAPABILITY_PATH>>) ->
+    #cdmi_req{
+        client = ?NOBODY,
+        resource = {capabilities, root}
+    };
+resolve_resource_by_path(<<"/", ?CONTAINER_CAPABILITY_PATH>>) ->
+    #cdmi_req{
+        client = ?NOBODY,
+        resource = {capabilities, container}
+    };
+resolve_resource_by_path(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>) ->
+    #cdmi_req{
+        client = ?NOBODY,
+        resource = {capabilities, dataobject}
+    };
+resolve_resource_by_path(Path) ->
+    CdmiReq = case filepath_utils:ends_with_slash(Path) of
+        true -> #cdmi_req{resource = container};
+        false -> #cdmi_req{resource = dataobject}
+    end,
+    CdmiReq#cdmi_req{file_path = Path}.
 
 
 %%--------------------------------------------------------------------
@@ -580,27 +578,22 @@ parse_qs(QueryString) ->
     lists:map(
         fun
             (Opt) when is_binary(Opt) ->
-                case binary:split(Opt, <<":">>) of
-                    [SimpleOpt] ->
-                        SimpleOpt;
-                    [SimpleOpt, Range] ->
-                        case binary:split(Range, <<"-">>) of
-                            [SimpleVal] ->
-                                {SimpleOpt, SimpleVal};
-                            [FromBin, ToBin] ->
-                                try
+                try
+                    case binary:split(Opt, <<":">>) of
+                        [SimpleOpt] ->
+                            SimpleOpt;
+                        [SimpleOpt, Range] ->
+                            case binary:split(Range, <<"-">>) of
+                                [SimpleVal] ->
+                                    {SimpleOpt, SimpleVal};
+                                [FromBin, ToBin] ->
                                     From = binary_to_integer(FromBin),
                                     To = binary_to_integer(ToBin),
                                     {SimpleOpt, From, To}
-                                catch
-                                    _:_ ->
-                                        throw(?ERROR_BAD_DATA(<<"query string">>))
-                                end;
-                            _ ->
-                                throw(?ERROR_BAD_DATA(<<"query string">>))
-                        end;
-                    _ ->
-                        throw(?ERROR_BAD_DATA(<<"query string">>))
+                            end
+                    end
+                catch _:_ ->
+                    throw(?ERROR_BAD_DATA(<<"query string">>))
                 end;
             (_Other) ->
                 throw(?ERROR_BAD_DATA(<<"query string">>))

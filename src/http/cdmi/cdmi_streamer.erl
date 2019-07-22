@@ -18,14 +18,13 @@
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([stream_binary/4, stream_cdmi/6]).
 
 -type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
-
--define(run(__FunctionCall), check_result(__FunctionCall)).
 
 
 %%%===================================================================
@@ -40,7 +39,7 @@
 %%--------------------------------------------------------------------
 -spec stream_binary(HttpStatus :: non_neg_integer(),
     cowboy_req:req(), cdmi_handler:cdmi_req(),
-    Ranges :: undefined | [{non_neg_integer(), non_neg_integer()}]) ->
+    Ranges :: undefined | [range()]) ->
     cowboy_req:req().
 stream_binary(HttpStatus, Req, #cdmi_req{
     client = ?USER(_UserId, SessionId),
@@ -51,7 +50,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
         _ -> Ranges0
     end,
     StreamSize = binary_stream_size(Ranges, Size),
-    {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, Guid}, read)),
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
     {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
 
     Req2 = cowboy_req:stream_reply(HttpStatus, #{
@@ -71,7 +70,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req(),
-    Range :: default | {non_neg_integer(), non_neg_integer()},
+    Range :: default | range(),
     ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
     JsonBodySuffix :: binary()) -> cowboy_req:req() | no_return().
 stream_cdmi(Req, #cdmi_req{
@@ -94,7 +93,7 @@ stream_cdmi(Req, #cdmi_req{
     StreamSize = cdmi_stream_size(
         Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
-    {ok, FileHandle} = ?run(lfm:open(SessionId, {guid, Guid}, read)),
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
     Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
         <<"content-length">> => integer_to_binary(StreamSize)
     }, Req),
@@ -160,7 +159,7 @@ cdmi_stream_size({From, To}, FileSize, Encoding, DataPrefix, DataSuffix) when To
 stream_range(Req, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
     ReadBufSize = min(ToRead, BufferSize),
-    {ok, NewFileHandle, Data} = ?run(lfm:read(FileHandle, From, ReadBufSize)),
+    {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ReadBufSize)),
     case size(Data) of
         0 ->
             ok;
@@ -171,11 +170,3 @@ stream_range(Req, {From, To}, Encoding, BufferSize, FileHandle) ->
                 Encoding, BufferSize, NewFileHandle
             )
     end.
-
-
-%% @private
--spec check_result({ok, term()} | {ok, term(), term()} | {error, term()}) ->
-    {ok, term()} | {ok, term(), term()} | no_return().
-check_result({ok, _} = Res) -> Res;
-check_result({ok, _, _} = Res) -> Res;
-check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).

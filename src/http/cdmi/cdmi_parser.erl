@@ -89,13 +89,18 @@ parse_content_range_header(Req, Threshold) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Parses content-type header to mimetype and charset part, if charset
+%% Parses content-type header (if it is not provided then
+%% `application/octet-stream` is taken as default) to mimetype and charset part, if charset
 %% is other than utf-8, function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_content_type_header(binary()) ->
+-spec parse_content_type_header(cowboy_req:req()) ->
     {Mimetype :: binary(), Encoding :: binary() | undefined}.
-parse_content_type_header(Content) ->
+parse_content_type_header(Req) ->
+    Content = cowboy_req:header(
+        <<"content-type">>, Req,
+        <<"application/octet-stream">>
+    ),
     case binary:split(Content, <<";">>) of
         [RawMimetype, RawEncoding] ->
             case binary:split(utils:trim_spaces(RawEncoding), <<"=">>) of
@@ -138,16 +143,16 @@ parse_body(Req) ->
 %%--------------------------------------------------------------------
 -spec parse_byte_range(binary() | list(), non_neg_integer()) ->
     invalid | [range()].
-parse_byte_range(Range, Size) when is_binary(Range) ->
-    case binary:split(Range, <<"=">>, [global]) of
+parse_byte_range(RangeBin, Size) when is_binary(RangeBin) ->
+    case binary:split(RangeBin, <<"=">>, [global]) of
         [<<"bytes">>, RawRange] ->
             parse_byte_range(binary:split(RawRange, <<",">>, [global]), Size);
         _ ->
             invalid
     end;
-parse_byte_range(Ranges0, Size) ->
-    Ranges1 = lists:map(fun(Range0) ->
-        Range1 = case binary:split(Range0, <<"-">>, [global]) of
+parse_byte_range(RawRanges, Size) ->
+    ParsedRanges = lists:map(fun(RangeBin) ->
+        ParsedRange = case binary:split(RangeBin, <<"-">>, [global]) of
             [<<>>, FromEnd] ->
                 {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
             [From, <<>>] ->
@@ -157,15 +162,15 @@ parse_byte_range(Ranges0, Size) ->
             _ ->
                 invalid
         end,
-        case Range1 of
+        case ParsedRange of
             invalid -> invalid;
             {F, T} when F > T -> invalid;
-            _ -> Range1
+            _ -> ParsedRange
         end
-    end, Ranges0),
-    case lists:member(invalid, Ranges1) of
+    end, RawRanges),
+    case lists:member(invalid, ParsedRanges) of
         true -> invalid;
-        false -> Ranges1
+        false -> ParsedRanges
     end.
 
 

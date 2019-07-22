@@ -15,6 +15,7 @@
 -author("Malgorzata Plazek").
 -author("Bartosz Walkowicz").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -41,8 +42,6 @@
     <<"cdmi_mtime">>, <<"cdmi_owner">>, ?ACL_XATTR_NAME
 ]).
 
--define(run(__FunctionCall), check_result(__FunctionCall)).
-
 
 %%%===================================================================
 %%% API
@@ -57,25 +56,20 @@
 %%--------------------------------------------------------------------
 -spec get_user_metadata(session:id(), lfm:file_key()) -> map().
 get_user_metadata(SessionId, FileKey) ->
-    {ok, Names} = ?run(lfm:list_xattr(SessionId, FileKey, false, true)),
-    Metadata = lists:foldl(
-        fun
-            (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>, Acc) ->
-                Acc;
-            (Name, Acc) ->
-                case lfm:get_xattr(SessionId, FileKey, Name, false) of
-                    {ok, #xattr{value = XattrValue}} ->
-                        Acc#{Name => XattrValue};
-                    {error, ?ENOATTR} ->
-                        Acc;
-                    {error, Errno} ->
-                        throw(?ERROR_POSIX(Errno))
-                end
-        end,
-        #{},
-        Names
-    ),
-    filter_user_metadata_map(Metadata).
+    {ok, Names} = ?check(lfm:list_xattr(SessionId, FileKey, false, true)),
+    filter_user_metadata_map(lists:foldl(fun
+        (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>, Acc) ->
+            Acc;
+        (Name, Acc) ->
+            case lfm:get_xattr(SessionId, FileKey, Name, false) of
+                {ok, #xattr{value = XattrValue}} ->
+                    Acc#{Name => XattrValue};
+                {error, ?ENOATTR} ->
+                    Acc;
+                {error, Errno} ->
+                    throw(?ERROR_POSIX(Errno))
+            end
+    end, #{}, Names)).
 
 
 %%--------------------------------------------------------------------
@@ -104,29 +98,27 @@ update_user_metadata(SessionId, FileKey, undefined, URIMetadataNames) ->
 update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
     BodyMetadata = filter_user_metadata_map(UserMetadata),
     BodyMetadataNames = maps:keys(BodyMetadata),
-    DeleteAttributeFunction =
-        fun
-            (?ACL_XATTR_NAME) ->
-                ?run(lfm:remove_acl(SessionId, FileKey));
-            (Name) ->
-                ?run(lfm:remove_xattr(SessionId, FileKey, Name))
-        end,
-    ReplaceAttributeFunction =
-        fun
-            ({?ACL_XATTR_NAME, Value}) ->
-                ACL = try acl_logic:from_json_format_to_acl(Value)
-                catch _:Error ->
-                    ?warning_stacktrace("Acl conversion error ~p", [Error]),
-                    throw(?ERROR_BAD_DATA(<<"acl">>))
-                end,
-                ?run(lfm:set_acl(SessionId, FileKey, ACL));
-            ({Name, Value}) ->
-                ?run(lfm:set_xattr(
-                    SessionId, FileKey,
-                    #xattr{name = Name, value = Value},
-                    false, false
-                ))
-        end,
+    DeleteAttributeFunction = fun
+        (?ACL_XATTR_NAME) ->
+            ?check(lfm:remove_acl(SessionId, FileKey));
+        (Name) ->
+            ?check(lfm:remove_xattr(SessionId, FileKey, Name))
+    end,
+    ReplaceAttributeFunction = fun
+        ({?ACL_XATTR_NAME, Value}) ->
+            ACL = try acl_logic:from_json_format_to_acl(Value)
+            catch _:Error ->
+                ?warning_stacktrace("Acl conversion error ~p", [Error]),
+                throw(?ERROR_BAD_DATA(<<"acl">>))
+            end,
+            ?check(lfm:set_acl(SessionId, FileKey, ACL));
+        ({Name, Value}) ->
+            ?check(lfm:set_xattr(
+                SessionId, FileKey,
+                #xattr{name = Name, value = Value},
+                false, false
+            ))
+    end,
     case AllURIMetadataNames of
         [] ->
             lists:foreach(
@@ -226,7 +218,7 @@ get_cdmi_completion_status(SessionId, FileKey) ->
 update_mimetype(_SessionId, _FileKey, undefined) ->
     ok;
 update_mimetype(SessionId, FileKey, Mimetype) ->
-    ?run(lfm:set_mimetype(SessionId, FileKey, Mimetype)).
+    ?check(lfm:set_mimetype(SessionId, FileKey, Mimetype)).
 
 
 %%--------------------------------------------------------------------
@@ -237,7 +229,7 @@ update_mimetype(SessionId, FileKey, Mimetype) ->
 update_encoding(_SessionId, _FileKey, undefined) ->
     ok;
 update_encoding(SessionId, FileKey, Encoding) ->
-    ?run(lfm:set_transfer_encoding(SessionId, FileKey, Encoding)).
+    ?check(lfm:set_transfer_encoding(SessionId, FileKey, Encoding)).
 
 
 %%--------------------------------------------------------------------
@@ -252,7 +244,7 @@ update_cdmi_completion_status(SessionId, FileKey, CompletionStatus) when
     CompletionStatus =:= <<"Processing">>;
     CompletionStatus =:= <<"Error">>
 ->
-    ?run(lfm:set_cdmi_completion_status(SessionId, FileKey, CompletionStatus)).
+    ?check(lfm:set_cdmi_completion_status(SessionId, FileKey, CompletionStatus)).
 
 
 %%--------------------------------------------------------------------
@@ -282,15 +274,12 @@ set_cdmi_completion_status_according_to_partial_flag(SessionId, FileKey, _) ->
 %%--------------------------------------------------------------------
 -spec filter_user_metadata_map(map()) -> map().
 filter_user_metadata_map(UserMetadata) when is_map(UserMetadata) ->
-    maps:filter(
-        fun
-            (?ACL_XATTR_NAME, _Value) ->
-                true;
-            (Name, _Value) ->
-                not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
-        end,
-        UserMetadata
-    );
+    maps:filter(fun
+        (?ACL_XATTR_NAME, _Value) ->
+            true;
+        (Name, _Value) ->
+            not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
+    end, UserMetadata);
 filter_user_metadata_map(_) ->
     throw(?ERROR_BAD_DATA(<<"metadata">>)).
 
@@ -303,15 +292,12 @@ filter_user_metadata_map(_) ->
 %%--------------------------------------------------------------------
 -spec filter_user_metadata_keylist(list()) -> list().
 filter_user_metadata_keylist(UserMetadata) when is_list(UserMetadata) ->
-    lists:filter(
-        fun
-            (?ACL_XATTR_NAME) ->
-                true;
-            (Name) ->
-                not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
-        end,
-        UserMetadata
-    );
+    lists:filter(fun
+        (?ACL_XATTR_NAME) ->
+            true;
+        (Name) ->
+            not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
+    end, UserMetadata);
 filter_user_metadata_keylist(_) ->
     throw(?ERROR_BAD_DATA(<<"metadata">>)).
 
@@ -332,57 +318,44 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns system metadata with given prefix, in mochijson parser format.
+%% Returns system metadata with given prefix.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_cdmi_metadata(MetadataNames :: [binary()], lfm:file_key(),
     session:id(), #file_attr{}, Prefix :: binary()) -> map().
-prepare_cdmi_metadata([], _FileKey, _SessionId, _Attrs, _Prefix) ->
-    #{};
-prepare_cdmi_metadata([Name | Rest], FileKey, SessionId, Attrs, Prefix) ->
-    case str_utils:binary_starts_with(Name, Prefix) of
-        true ->
-            case Name of
-                <<"cdmi_size">> -> %todo clarify what should be written to cdmi_size for directories
-                    (prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix))#{
-                        <<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)
-                    };
-                <<"cdmi_ctime">> ->
-                    (prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix))#{
-                        <<"cdmi_ctime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.ctime)
-                    };
-                <<"cdmi_atime">> ->
-                    (prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix))#{
-                        <<"cdmi_atime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.atime)
-                    };
-                <<"cdmi_mtime">> ->
-                    (prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix))#{
-                        <<"cdmi_mtime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.mtime)
-                    };
-                <<"cdmi_owner">> ->
-                    (prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix))#{
-                        <<"cdmi_owner">> => Attrs#file_attr.owner_id
-                    };
-                ?ACL_XATTR_NAME ->
-                    case lfm:get_acl(SessionId, FileKey) of
-                        {ok, Acl} ->
-                            (prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix))#{
-                                ?ACL_XATTR_NAME => acl_logic:from_acl_to_json_format(Acl)
-                            };
-                        {error, ?ENOATTR} ->
-                            prepare_cdmi_metadata(Rest, FileKey, SessionId, Attrs, Prefix);
-                        {error, Errno} ->
-                            throw(?ERROR_POSIX(Errno))
-                    end
-            end;
-        false ->
-            prepare_cdmi_metadata(Rest, SessionId, FileKey, Attrs, Prefix)
-    end.
+prepare_cdmi_metadata(MetadataNames, FileKey, SessionId, Attrs, Prefix) ->
+    lists:foldl(fun(Name, Metadata) ->
+        case str_utils:binary_starts_with(Name, Prefix) of
+            true ->
+                fill_cdmi_metadata(Name, Metadata, SessionId, FileKey, Attrs);
+            false ->
+                Metadata
+        end
+    end, #{}, MetadataNames).
 
 
 %% @private
--spec check_result(ok | {ok, term()} | {error, term()}) ->
-    ok | {ok, term()} | no_return().
-check_result(ok) -> ok;
-check_result({ok, _} = Res) -> Res;
-check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
+-spec fill_cdmi_metadata(MetadataName :: binary(), Metadata :: map(),
+    session:id(), lfm:file_key(), #file_attr{}) -> map().
+fill_cdmi_metadata(<<"cdmi_size">>, Metadata, _SessionId, _FileKey, Attrs) ->
+    % todo clarify what should be written to cdmi_size for directories
+    Metadata#{<<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)};
+fill_cdmi_metadata(<<"cdmi_atime">>, Metadata, _SessionId, _FileKey, Attrs) ->
+    Metadata#{<<"cdmi_atime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.atime)};
+fill_cdmi_metadata(<<"cdmi_mtime">>, Metadata, _SessionId, _FileKey, Attrs) ->
+    Metadata#{<<"cdmi_mtime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.mtime)};
+fill_cdmi_metadata(<<"cdmi_ctime">>, Metadata, _SessionId, _FileKey, Attrs) ->
+    Metadata#{<<"cdmi_ctime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.ctime)};
+fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileKey, Attrs) ->
+    Metadata#{<<"cdmi_owner">> => Attrs#file_attr.owner_id};
+fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileKey, _Attrs) ->
+    case lfm:get_acl(SessionId, FileKey) of
+        {ok, Acl} ->
+            Metadata#{
+                ?ACL_XATTR_NAME => acl_logic:from_acl_to_json_format(Acl)
+            };
+        {error, ?ENOATTR} ->
+            Metadata;
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
+    end.
