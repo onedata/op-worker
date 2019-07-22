@@ -102,7 +102,7 @@ get_qos_details(Worker, SessId, QosId) ->
 remove_qos(Worker, SessId, QosId) ->
     ?EXEC(Worker, lfm:remove_qos(SessId, QosId)).
 
--spec check_qos_fulfilled(node(), session:id(), qos_item:id()) ->
+-spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
     boolean() | logical_file_manager:error_reply().
 check_qos_fulfilled(Worker, SessId, QosId) ->
     ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId)).

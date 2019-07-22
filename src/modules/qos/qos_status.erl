@@ -43,10 +43,10 @@
 %% Adds new status link for given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec add_status_link(qos_item:id(), datastore_doc:scope(), binary(), storage:id(),
+-spec add_status_link(qos_entry:id(), datastore_doc:scope(), binary(), storage:id(),
     transfer:id()) ->  ok | {error, term()}.
 add_status_link(QosId, Scope, RelativePath, StorageId, TransferId) ->
-    Ctx = (qos_item:get_ctx())#{scope => Scope},
+    Ctx = (qos_entry:get_ctx())#{scope => Scope},
     Link = {?QOS_STATUS_LINK_NAME(RelativePath, StorageId), TransferId},
     ?extract_ok(datastore_model:add_links(Ctx, QosId, oneprovider:get_id(), Link)).
 
@@ -55,27 +55,27 @@ add_status_link(QosId, Scope, RelativePath, StorageId, TransferId) ->
 %% Deletes given status link from given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_status_link(qos_item:id(), datastore_doc:scope(), binary(), storage:id()) ->
+-spec delete_status_link(qos_entry:id(), datastore_doc:scope(), binary(), storage:id()) ->
     ok | {error, term()}.
 delete_status_link(QosId, Scope, RelativePath, StorageId) ->
-    Ctx = (qos_item:get_ctx())#{scope => Scope},
+    Ctx = (qos_entry:get_ctx())#{scope => Scope},
     datastore_model:delete_links(Ctx, QosId, oneprovider:get_id(),
         ?QOS_STATUS_LINK_NAME(RelativePath, StorageId)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks whether given QoS is fulfilled for given file i.e. there is no traverse task
-%% and all transfers are finished.
+%% and all transfers in subtree of given file are finished.
 %% @end
 %%--------------------------------------------------------------------
--spec check_fulfilment(qos_item:id(), fslogic_worker:file_guid()) ->  boolean().
+-spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosId, FileGuid) ->
-    {ok, #document{value = QosItem}} = qos_item:get(QosId),
+    {ok, #document{value = QosItem}} = qos_entry:get(QosId),
     check_fulfilment_internal(QosId, FileGuid, QosItem).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO VFS-5633 use uuid instead of name
+%% TODO VFS-5633 use uuid instead of filename
 %% Returns child file path relative to ancestor's, e.g:
 %%    AncestorAbsolutePath: space1/dir1/dir2
 %%    ChildAbsolutePath: space1/dir1/dir2/dir3/file
@@ -94,8 +94,8 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %%% Internal functions
 %%%===================================================================
 
--spec check_fulfilment_internal(qos_item:id(), fslogic_worker:file_guid(), qos_item:record()) ->  boolean().
-check_fulfilment_internal(QosId, FileGuid, #qos_item{file_guid = OriginGuid, status = Status}) ->
+-spec check_fulfilment_internal(qos_entry:id(), fslogic_worker:file_guid(), qos_entry:record()) ->  boolean().
+check_fulfilment_internal(QosId, FileGuid, #qos_entry{file_guid = OriginGuid, status = Status}) ->
     case Status of
         ?QOS_TRAVERSE_FINISHED_STATUS ->
             RelativePath = get_relative_path(OriginGuid, FileGuid),
@@ -106,6 +106,7 @@ check_fulfilment_internal(QosId, FileGuid, #qos_item{file_guid = OriginGuid, sta
                     not str_utils:binary_starts_with(Path, RelativePath)
             end;
         _ ->
+            %TODO VFS-5642 check if subtree was already traversed
             false
     end.
 
@@ -114,9 +115,9 @@ check_fulfilment_internal(QosId, FileGuid, #qos_item{file_guid = OriginGuid, sta
 %% Returns next status link.
 %% @end
 %%--------------------------------------------------------------------
--spec get_next_status_link(qos_item:id(), binary()) ->  {ok, [binary()]} | {error, term()}.
+-spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, [binary()]} | {error, term()}.
 get_next_status_link(QosId, PrevName) ->
-    datastore_model:fold_links(qos_item:get_ctx(), QosId, all,
+    datastore_model:fold_links(qos_entry:get_ctx(), QosId, all,
         fun(#link{name = N}, Acc) -> {ok, [N | Acc]} end,
         [],
         #{prev_link_name => PrevName, size => 1}

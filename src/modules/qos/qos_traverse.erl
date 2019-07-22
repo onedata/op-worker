@@ -115,7 +115,7 @@ list_ongoing_jobs() ->
 
 task_finished(TaskId) ->
     [QosId, _] = binary:split(TaskId, <<"#">>, [global]),
-    qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
+    {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
     ok.
 
 get_job(DocOrID) ->
@@ -174,7 +174,8 @@ create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
         qos_status:delete_status_link(QosId, SpaceId, RelativePath, StorageId)
     end,
 
-    TransfersList = schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
+    % call using ?MODULE macro for mocking in tests
+    TransfersList = ?MODULE:schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
     wait_for_transfers_completion(TransfersList, OnTransferFinishedFun).
 
 

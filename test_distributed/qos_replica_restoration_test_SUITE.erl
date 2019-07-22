@@ -124,7 +124,6 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config),
     test_utils:mock_unload(Workers, providers_qos).
 

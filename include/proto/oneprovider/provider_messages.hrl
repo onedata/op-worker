@@ -129,7 +129,7 @@
 }).
 
 -record(check_qos_fulfillment, {
-    qos_id :: qos_item:id()
+    qos_id :: qos_entry:id()
 }).
 
 -type provider_request_type() ::
@@ -198,7 +198,7 @@
 }).
 
 -record(qos_fulfillment, {
-    qos_id :: qos_item:id(),
+    qos_id :: qos_entry:id(),
     fulfilled :: boolean()
 }).
 

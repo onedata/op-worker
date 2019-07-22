@@ -13,6 +13,7 @@
 -define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
 -include("modules/events/subscriptions.hrl").
+-include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
@@ -272,7 +273,7 @@
     file_guid :: fslogic_worker:file_guid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
-    status = in_progress :: qos_entry:status()
+    status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status()
 }).
 
 -record(file_meta, {

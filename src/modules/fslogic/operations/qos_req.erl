@@ -102,8 +102,8 @@ check_fulfillment(UserCtx, FileCtx, QosId) ->
 %%--------------------------------------------------------------------
 -spec restore_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
 restore_qos_on_storage(FileCtx, StorageId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    EffFileQos = file_qos:get_effective(FileUuid),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    EffFileQos = file_qos:get_effective(FileGuid),
 
     case EffFileQos of
         undefined ->
@@ -151,6 +151,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
 
     case TargetStoragesList of
         {error, ?CANNOT_FULFILL_QOS} ->
+
             create_or_update_file_qos_doc(FileGuid, QosId, []),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             % TODO: VFS-5568 - handle qos requirements that cannot be satisfied
@@ -233,7 +234,7 @@ remove_qos_insecure(_UserCtx, FileCtx, QosId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether given qos is fulfilled for given
+%% Checks whether given QoS is fulfilled for given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_fulfillment_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
@@ -290,6 +291,7 @@ get_target_storages(SessId, FileKey, Expression, ReplicasNum) ->
     {ok, FileLocations} = lfm:get_file_distribution(SessId, FileKey),
 
     % TODO: VFS-5574 add check if storage has enough free space
+    % call using ?MODULE macro for mocking in tests
     SpaceStorages = ?MODULE:get_space_storages(SessId, FileKey),
     qos_expression:get_target_storage(Expression, ReplicasNum, SpaceStorages, FileLocations).
 
