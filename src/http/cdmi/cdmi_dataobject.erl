@@ -140,43 +140,29 @@ put_binary(Req, #cdmi_req{
 } = CdmiReq) ->
     CdmiPartialFlag = cowboy_req:header(<<"x-cdmi-partial">>, Req),
     {MimeType, Encoding} = cdmi_parser:parse_content_type_header(Req),
-    {Guid, Truncate, Offset} = case Attrs of
+    {FileGuid, Truncate, Offset} = case Attrs of
         undefined ->
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-            {ok, FileGuid} = ?check(lfm:create(SessionId, Path, DefaultMode)),
-            cdmi_metadata:update_mimetype(SessionId, {guid, FileGuid}, MimeType),
-            cdmi_metadata:update_encoding(SessionId, {guid, FileGuid}, Encoding),
-            {FileGuid, false, 0};
-        #file_attr{guid = FileGuid, size = Size} ->
-            cdmi_metadata:update_mimetype(SessionId, {guid, FileGuid}, MimeType),
-            cdmi_metadata:update_encoding(SessionId, {guid, FileGuid}, Encoding),
+            {ok, Guid} = ?check(lfm:create(SessionId, Path, DefaultMode)),
+            {Guid, false, 0};
+        #file_attr{guid = Guid, size = Size} ->
             Length = cowboy_req:body_length(Req),
             case cdmi_parser:parse_content_range_header(Req, Size) of
                 undefined ->
-                    {FileGuid, true, 0};
+                    {Guid, true, 0};
                 {{From, To}, _ExpectedSize} when Length =:= undefined; Length =:= To - From + 1 ->
-                    {FileGuid, false, From};
+                    {Guid, false, From};
                 _ ->
                     throw(?ERROR_BAD_DATA(<<"content-range">>))
             end
     end,
 
-    FileKey = {guid, Guid},
-    {ok, FileHandle} = ?check(lfm:open(SessionId, FileKey, write)),
-    cdmi_metadata:update_cdmi_completion_status(
-        SessionId,
-        FileKey,
-        <<"Processing">>
-    ),
-    Truncate andalso ?check(lfm:truncate(SessionId, FileKey, 0)),
-
-    {ok, Req2} = write_req_body_to_file(Req, Offset, FileHandle),
-    ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:release(FileHandle)),
-    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
-        SessionId,
-        FileKey,
-        CdmiPartialFlag
+    FileKey = {guid, FileGuid},
+    cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
+    cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
+    Req2 = write_req_body_to_file(
+        Req, SessionId, FileKey,
+        Truncate, Offset, CdmiPartialFlag
     ),
     {true, Req2, CdmiReq}.
 
@@ -212,13 +198,17 @@ put_cdmi(Req, #cdmi_req{
         false -> undefined
     end,
     RawValue = cdmi_encoder:decode(Value, Encoding, Range),
-    RawValueSize = byte_size(RawValue),
 
     % create object using create/cp/mv
     {ok, OperationPerformed, Guid} = case {Attrs, CopyURI, MoveURI} of
         {undefined, undefined, undefined} ->
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
             {ok, NewGuid} = ?check(lfm:create(SessionId, Path, DefaultMode)),
+            write_binary_to_file(
+                SessionId, {guid, NewGuid},
+                false, 0, RawValue,
+                CdmiPartialFlag
+            ),
             {ok, created, NewGuid};
         {#file_attr{guid = NewGuid}, undefined, undefined} ->
             {ok, none, NewGuid};
@@ -242,63 +232,27 @@ put_cdmi(Req, #cdmi_req{
     FileKey = {guid, Guid},
     case OperationPerformed of
         created ->
-            {ok, FileHandler} = ?check(lfm:open(SessionId, FileKey, write)),
-            cdmi_metadata:update_cdmi_completion_status(
-                SessionId,
-                FileKey,
-                <<"Processing">>
-            ),
-            {ok, _, RawValueSize} = ?check(lfm:write(FileHandler, 0, RawValue)),
-            ?check(lfm:fsync(FileHandler)),
-            ?check(lfm:release(FileHandler)),
-
-            % update cdmi metadata
             cdmi_metadata:update_encoding(SessionId, FileKey, utils:ensure_defined(
                 Encoding, undefined, <<"utf-8">>
             )),
             cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
             cdmi_metadata:update_user_metadata(SessionId, FileKey, UserMetadata),
-            cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(SessionId, FileKey, CdmiPartialFlag),
-
-            % return response
-            {ok, Attrs2} = ?check(lfm:stat(SessionId, FileKey)),
-            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs2},
-            FileInfo = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
-            Req2 = cowboy_req:set_resp_body(json_utils:encode(FileInfo), Req0),
-            {true, Req2, CdmiReq2};
+            prepare_create_file_cdmi_response(Req, CdmiReq, FileKey);
         CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
-            % update cdmi metadata
             cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
             cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
             cdmi_metadata:update_user_metadata(SessionId, FileKey, UserMetadata, URIMetadataNames),
-
-            % update cdmi metadata
-            {ok, Attrs2} = ?check(lfm:stat(SessionId, FileKey)),
-            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs2},
-            FileInfo = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
-            Req2 = cowboy_req:set_resp_body(json_utils:encode(FileInfo), Req0),
-            {true, Req2, CdmiReq};
+            prepare_create_file_cdmi_response(Req, CdmiReq, FileKey);
         none ->
             cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
             cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
             cdmi_metadata:update_user_metadata(SessionId, FileKey, UserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                    {ok, FileHandler} = ?check(lfm:open(SessionId, FileKey, write)),
-                    cdmi_metadata:update_cdmi_completion_status(SessionId, FileKey, <<"Processing">>),
-                    {ok, _, RawValueSize} = ?check(lfm:write(FileHandler, From, RawValue)),
-                    ?check(lfm:fsync(FileHandler)),
-                    ?check(lfm:release(FileHandler)),
-                    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(SessionId, FileKey, CdmiPartialFlag),
+                    write_binary_to_file(SessionId, FileKey, false, From, RawValue, CdmiPartialFlag),
                     {true, Req0, CdmiReq};
                 undefined when is_binary(Value) ->
-                    {ok, FileHandler} = ?check(lfm:open(SessionId, FileKey, write)),
-                    cdmi_metadata:update_cdmi_completion_status(SessionId, FileKey, <<"Processing">>),
-                    ?check(lfm:truncate(SessionId, FileKey, 0)),
-                    {ok, _, RawValueSize} = ?check(lfm:write(FileHandler, 0, RawValue)),
-                    ?check(lfm:fsync(FileHandler)),
-                    ?check(lfm:release(FileHandler)),
-                    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(SessionId, FileKey, CdmiPartialFlag),
+                    write_binary_to_file(SessionId, FileKey, true, 0, RawValue, CdmiPartialFlag),
                     {true, Req0, CdmiReq};
                 undefined ->
                     {true, Req0, CdmiReq};
@@ -326,6 +280,19 @@ delete_cdmi(Req, #cdmi_req{
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+
+%% @private
+-spec prepare_create_file_cdmi_response(cowboy_req:req(), cdmi_handler:cdmi_req(),
+    lfm:file_key()) -> {true, cowboy_req:req(), cdmi_handler:cdmi_req()}.
+prepare_create_file_cdmi_response(Req1, #cdmi_req{
+    client = ?USER(_UserId, SessionId)
+} = CdmiReq, FileKey) ->
+    {ok, Attrs} = ?check(lfm:stat(SessionId, FileKey)),
+    CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
+    Answer = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
+    Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
+    {true, Req2, CdmiReq2}.
 
 
 %% @private
@@ -406,6 +373,31 @@ get_file_info(RequestedInfo, #cdmi_req{
 
 
 %% @private
+-spec write_req_body_to_file(cowboy_req:req(), session:id(), lfm:file_key(),
+    Truncate :: boolean(), Offset :: non_neg_integer(),
+    CdmiPartialFlag :: undefined | binary()) ->
+    cowboy_req:req().
+write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) ->
+    {ok, FileHandle} = ?check(lfm:open(SessId, FileKey, write)),
+    cdmi_metadata:update_cdmi_completion_status(
+        SessId,
+        FileKey,
+        <<"Processing">>
+    ),
+    Truncate andalso ?check(lfm:truncate(SessId, FileKey, 0)),
+
+    {ok, Req2} = write_req_body_to_file(Req, Offset, FileHandle),
+    ?check(lfm:fsync(FileHandle)),
+    ?check(lfm:release(FileHandle)),
+    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
+        SessId,
+        FileKey,
+        CdmiPartialFlag
+    ),
+    Req2.
+
+
+%% @private
 -spec write_req_body_to_file(cowboy_req:req(), integer(), lfm:handle()) ->
     {ok, cowboy_req:req()}.
 write_req_body_to_file(Req0, Offset, FileHandle) ->
@@ -415,3 +407,28 @@ write_req_body_to_file(Req0, Offset, FileHandle) ->
         more -> write_req_body_to_file(Req1, Offset + Bytes, FileHandle);
         ok -> {ok, Req1}
     end.
+
+
+%% @private
+-spec write_binary_to_file(session:id(), lfm:file_key(), Truncate :: boolean(),
+    Offset :: non_neg_integer(), Data :: binary(),
+    CdmiPartialFlag :: undefined | binary()) ->
+    ok.
+write_binary_to_file(SessionId, FileKey, Truncate, Offset, Data, CdmiPartialFlag) ->
+    DataSize = byte_size(Data),
+    {ok, FileHandle} = ?check(lfm:open(SessionId, FileKey, write)),
+    cdmi_metadata:update_cdmi_completion_status(
+        SessionId,
+        FileKey,
+        <<"Processing">>
+    ),
+    Truncate andalso ?check(lfm:truncate(SessionId, FileKey, 0)),
+
+    {ok, _, DataSize} = ?check(lfm:write(FileHandle, Offset, Data)),
+    ?check(lfm:fsync(FileHandle)),
+    ?check(lfm:release(FileHandle)),
+    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
+        SessionId,
+        FileKey,
+        CdmiPartialFlag
+    ).

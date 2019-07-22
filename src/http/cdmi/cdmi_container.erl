@@ -57,8 +57,9 @@ get_cdmi(Req, #cdmi_req{options = Options} = CdmiReq) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates, copies or moves directory (container) if it doesn't already
-%% exist or updates it's metadata if it does exist.
+%% Creates, copies or moves directory (container) if it doesn't yet
+%% exist and returns new directory info.
+%% Otherwise, if directory already exists, only updates it's metadata.
 %% @end
 %%--------------------------------------------------------------------
 -spec put_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
@@ -66,64 +67,49 @@ get_cdmi(Req, #cdmi_req{options = Options} = CdmiReq) ->
 put_cdmi(_, #cdmi_req{version = undefined}) ->
     throw(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]));
 put_cdmi(Req, #cdmi_req{
-    client = ?USER(_UserId, SessionId),
+    client = ?USER(_UserId, SessId),
     file_path = Path,
     file_attrs = Attrs,
     options = Options
 } = CdmiReq) ->
     {ok, Body, Req1} = cdmi_parser:parse_body(Req),
-    RequestedCopyURI = maps:get(<<"copy">>, Body, undefined),
-    RequestedMoveURI = maps:get(<<"move">>, Body, undefined),
-    RequestedUserMetadata = maps:get(<<"metadata">>, Body, undefined),
+    CopyURI = maps:get(<<"copy">>, Body, undefined),
+    MoveURI = maps:get(<<"move">>, Body, undefined),
+    Metadata = maps:get(<<"metadata">>, Body, undefined),
 
-    % create dir using mkdir/cp/mv
-    {ok, OperationPerformed, Guid} =
-        case {Attrs, RequestedCopyURI, RequestedMoveURI} of
-            {undefined, undefined, undefined} ->
-                {ok, NewGuid} = ?check(lfm:mkdir(SessionId, Path)),
-                {ok, created, NewGuid};
-            {#file_attr{guid = NewGuid}, undefined, undefined} ->
-                {ok, none, NewGuid};
-            {undefined, CopyURI, undefined} ->
-                {ok, NewGuid} = ?check(lfm:cp(
-                    SessionId,
-                    {path, filepath_utils:ensure_begins_with_slash(CopyURI)},
-                    Path
-                )),
-                {ok, copied, NewGuid};
-            {undefined, undefined, MoveURI} ->
-                {ok, NewGuid} = ?check(lfm:mv(
-                    SessionId,
-                    {path, filepath_utils:ensure_begins_with_slash(MoveURI)},
-                    Path
-                )),
-                {ok, moved, NewGuid}
-        end,
-
-    % update metadata and return result
-    case OperationPerformed of
-        none ->
-            URIMetadataNames = [
-                MetadataName || {OptKey, MetadataName} <- Options, OptKey == <<"metadata">>
-            ],
+    case {Attrs, CopyURI, MoveURI} of
+        % create directory
+        {undefined, undefined, undefined} ->
+            {ok, Guid} = ?check(lfm:mkdir(SessId, Path)),
+            cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
+            prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
+        % update metadata
+        {#file_attr{guid = FileGuid}, undefined, undefined} ->
             cdmi_metadata:update_user_metadata(
-                SessionId,
-                {guid, Guid},
-                RequestedUserMetadata,
-                URIMetadataNames
+                SessId,
+                {guid, FileGuid},
+                Metadata,
+                [MetadataName || {<<"metadata">>, MetadataName} <- Options]
             ),
             {true, Req1, CdmiReq};
-        _ ->
-            cdmi_metadata:update_user_metadata(
-                SessionId,
-                {guid, Guid},
-                RequestedUserMetadata
-            ),
-            {ok, NewAttrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
-            CdmiReq2 = CdmiReq#cdmi_req{file_attrs = NewAttrs},
-            Answer = get_directory_info(?DEFAULT_GET_DIR_OPTS, CdmiReq2),
-            Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
-            {true, Req2, CdmiReq}
+        % copy directory
+        {undefined, CopyURI, undefined} ->
+            {ok, Guid} = ?check(lfm:cp(
+                SessId,
+                {path, filepath_utils:ensure_begins_with_slash(CopyURI)},
+                Path
+            )),
+            cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
+            prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
+        % move directory
+        {undefined, undefined, MoveURI} ->
+            {ok, Guid} = ?check(lfm:mv(
+                SessId,
+                {path, filepath_utils:ensure_begins_with_slash(MoveURI)},
+                Path
+            )),
+            cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
+            prepare_create_dir_cdmi_response(Req, CdmiReq, Guid)
     end.
 
 
@@ -157,6 +143,19 @@ delete_cdmi(Req, #cdmi_req{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec prepare_create_dir_cdmi_response(cowboy_req:req(), cdmi_handler:cdmi_req(),
+    file_id:file_guid()) -> {true, cowboy_req:req(), cdmi_handler:cdmi_req()}.
+prepare_create_dir_cdmi_response(Req1, #cdmi_req{
+    client = ?USER(_UserId, SessionId)
+} = CdmiReq, FileGuid) ->
+    {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, FileGuid})),
+    CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
+    Answer = get_directory_info(?DEFAULT_GET_DIR_OPTS, CdmiReq2),
+    Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
+    {true, Req2, CdmiReq2}.
 
 
 %% @private

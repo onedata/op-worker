@@ -575,31 +575,25 @@ get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
 parse_qs(<<>>) ->
     [];
 parse_qs(QueryString) ->
-    lists:map(
-        fun
-            (Opt) when is_binary(Opt) ->
-                try
-                    case binary:split(Opt, <<":">>) of
-                        [SimpleOpt] ->
-                            SimpleOpt;
-                        [SimpleOpt, Range] ->
-                            case binary:split(Range, <<"-">>) of
-                                [SimpleVal] ->
-                                    {SimpleOpt, SimpleVal};
-                                [FromBin, ToBin] ->
-                                    From = binary_to_integer(FromBin),
-                                    To = binary_to_integer(ToBin),
-                                    {SimpleOpt, From, To}
-                            end
+    lists:map(fun(Opt) ->
+        try
+            case binary:split(Opt, <<":">>) of
+                [SimpleOpt] ->
+                    SimpleOpt;
+                [SimpleOpt, Range] ->
+                    case binary:split(Range, <<"-">>) of
+                        [SimpleVal] ->
+                            {SimpleOpt, SimpleVal};
+                        [FromBin, ToBin] ->
+                            From = binary_to_integer(FromBin),
+                            To = binary_to_integer(ToBin),
+                            {SimpleOpt, From, To}
                     end
-                catch _:_ ->
-                    throw(?ERROR_BAD_DATA(<<"query string">>))
-                end;
-            (_Other) ->
-                throw(?ERROR_BAD_DATA(<<"query string">>))
-        end,
-        binary:split(QueryString, <<";">>, [global])
-    ).
+            end
+        catch _:_ ->
+            throw(?ERROR_BAD_DATA(<<"query string">>))
+        end
+    end, binary:split(QueryString, <<";">>, [global])).
 
 
 %%--------------------------------------------------------------------
