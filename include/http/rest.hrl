@@ -11,6 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-include_lib("ctool/include/http/codes.hrl").
+
 -ifndef(REST_HRL).
 -define(REST_HRL, 1).
 
@@ -44,30 +46,6 @@
 -define(BINDING(__KEY), {binding, __KEY}).
 -define(OBJECTID_BINDING(__KEY), {objectid_binding, __KEY}).
 -define(PATH_BINDING, path_binding).
-
-% Defines with HTTP codes
--define(HTTP_200_OK, 200).
--define(HTTP_201_CREATED, 201).
--define(HTTP_202_ACCEPTED, 202).
--define(HTTP_204_NO_CONTENT, 204).
--define(HTTP_206_PARTIAL_CONTENT, 206).
-
--define(HTTP_301_MOVED_PERMANENTLY, 301).
--define(HTTP_303_SEE_OTHER, 303).
--define(HTTP_307_TEMPORARY_REDIRECT, 307).
-
--define(HTTP_400_BAD_REQUEST, 400).
--define(HTTP_401_UNAUTHORIZED, 401).
--define(HTTP_403_FORBIDDEN, 403).
--define(HTTP_404_NOT_FOUND, 404).
--define(HTTP_409_CONFLICT, 409).
--define(HTTP_413_PAYLOAD_TOO_LARGE, 413).
--define(HTTP_415_UNSUPPORTED_MEDIA_TYPE, 415).
--define(HTTP_426_UPGRADE_REQUIRED, 426).
-
--define(HTTP_500_INTERNAL_SERVER_ERROR, 500).
--define(HTTP_501_NOT_IMPLEMENTED, 501).
--define(HTTP_503_SERVICE_UNAVAILABLE, 503).
 
 % Convenience macros used for constructing REST replies
 -define(OK_REPLY(__Body), #rest_resp{code = ?HTTP_200_OK, body = __Body}).

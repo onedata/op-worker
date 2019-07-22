@@ -195,6 +195,8 @@ expected_helper_args(?POSIX_HELPER_NAME) -> [
 expected_helper_args(?S3_HELPER_NAME) -> [
     <<"hostname">>, <<"bucketName">>, <<"scheme">>,
     {optional, <<"timeout">>}, {optional, <<"signatureVersion">>},
+    {optional, <<"maximumCanonicalObjectSize">>},
+    {optional, <<"fileMode">>}, {optional, <<"dirMode">>},
     {optional, <<"blockSize">>}];
 expected_helper_args(?SWIFT_HELPER_NAME) -> [
     <<"authUrl">>, <<"containerName">>, <<"tenantName">>,

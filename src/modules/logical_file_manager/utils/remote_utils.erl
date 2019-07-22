@@ -43,6 +43,8 @@ call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
         {ok, #provider_response{status = #status{code = ?OK}, provider_response = Response}} ->
             OKHandle(Response);
         {ok, #provider_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
     end.
 
@@ -55,6 +57,8 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
         {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
             OKHandle(Response);
         {ok, #fuse_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
     end;
 call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
@@ -65,5 +69,7 @@ call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
         {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = Response}} ->
             OKHandle(Response);
         {ok, #proxyio_response{status = #status{code = Code}}} ->
+            {error, Code};
+        {ok, #status{code = Code}} ->
             {error, Code}
     end.
