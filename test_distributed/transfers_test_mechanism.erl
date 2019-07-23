@@ -1243,7 +1243,7 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Co
                 <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
                     "&migration_provider_id=", MigrationProviderId/binary
                 >>,
-                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+                lists:sort([?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION])
             }
     end,
     Headers = [?USER_TOKEN_HEADER(Config, User)],
@@ -1255,9 +1255,15 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Co
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
     try
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, URL, delete, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+        lists:foreach(fun
+        (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
+            % success will be checked later
+            ok;
+        (PrivsToAdd) ->
+            initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ PrivsToAdd),
+            {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, delete, Headers, []),
+            ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+        end, combinations(RequiredPrivs)),
 
         initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
         case rest_test_utils:request(Worker, URL, delete, Headers, []) of
@@ -1285,7 +1291,7 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
                     "replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary,
                     "&migration_provider_id=", MigrationProviderId/binary
                 >>,
-                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+                lists:sort([?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION])
             }
     end,
     Headers = [?USER_TOKEN_HEADER(Config, User)],
@@ -1297,9 +1303,15 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
     try
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, URL, delete, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+        lists:foreach(fun
+            (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
+                % success will be checked later
+                ok;
+            (PrivsToAdd) ->
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ PrivsToAdd),
+                {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, delete, Headers, []),
+                ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+        end, combinations(RequiredPrivs)),
 
         initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
         case rest_test_utils:request(Worker, URL, delete, Headers, []) of
@@ -1383,28 +1395,23 @@ schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, Spa
     Headers = [?USER_TOKEN_HEADER(Config, User)],
 
     AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+    RequiredPrivs = lists:sort([?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]),
+    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
     UserSpacePrivs = rpc:call(ScheduleNode, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
     try
-        lists:foreach(fun(PrivsToAdd) ->
-            initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ PrivsToAdd),
-            {ok, Code, _, Resp} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
-            ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
-        end, [
-            [],
-            [?SPACE_SCHEDULE_REPLICATION],
-            [?SPACE_SCHEDULE_EVICTION],
-            [?SPACE_QUERY_INDICES],
-            [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
-            [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES],
-            [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]
-        ]),
+        lists:foreach(fun
+            (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
+                % success will be checked later
+                ok;
+            (PrivsToAdd) ->
+                initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ PrivsToAdd),
+                {ok, Code, _, Resp} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
+                ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+        end, combinations(RequiredPrivs)),
 
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [
-            ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES
-        ]),
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ RequiredPrivs),
         case rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []) of
             {ok, 200, _, Body} ->
                 DecodedBody = json_utils:decode(Body),
@@ -1445,14 +1452,20 @@ cancel_transfer_by_rest(Worker, SchedulingUser, CancelingUser, TransferType, Tid
                 RequiredPrivs = case TransferType of
                     replication -> [?SPACE_CANCEL_REPLICATION];
                     eviction -> [?SPACE_CANCEL_EVICTION];
-                    migration -> [?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION]
+                    migration -> lists:sort([?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION])
                 end,
                 SpacePrivs = AllSpacePrivs -- RequiredPrivs,
                 ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs),
-                {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, delete, Headers, []),
-                ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+                lists:foreach(fun
+                    (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
+                        % success will be checked later
+                        ok;
+                    (PrivsToAdd) ->
+                        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs ++ PrivsToAdd),
+                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, HTTPPath, delete, Headers, []),
+                        ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+                end, combinations(RequiredPrivs)),
 
                 initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs ++ RequiredPrivs),
                 ?assertMatch(
@@ -1481,14 +1494,20 @@ rerun_transfer(Worker, User, TransferType, IndexTransfer, OldTid, Config) ->
             true -> [?SPACE_QUERY_INDICES];
             false -> []
         end,
-        RequiredPrivs = TransferPrivs ++ IndexPrivs,
+        RequiredPrivs = lists:sort(TransferPrivs ++ IndexPrivs),
 
         SpacePrivs = AllSpacePrivs -- RequiredPrivs,
         ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+        lists:foreach(fun
+            (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
+                % success will be checked later
+                ok;
+            (PrivsToAdd) ->
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ PrivsToAdd),
+                {ok, Code, _, Resp} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+                ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+        end, combinations(RequiredPrivs)),
 
         initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
         {ok, _, _, Body} = ?assertMatch(
@@ -1635,3 +1654,14 @@ binary_from_term(Val) when is_float(Val) ->
     float_to_binary(Val);
 binary_from_term(Val) when is_atom(Val) ->
     atom_to_binary(Val, utf8).
+
+
+combinations([]) ->
+    [[]];
+combinations([Item]) ->
+    [[Item], []];
+combinations([Item | Items]) ->
+    ItemsCombinations = combinations(Items),
+    ItemsCombinations ++ lists:map(fun(Comb) ->
+        lists:sort([Item | Comb])
+    end, ItemsCombinations).
