@@ -36,6 +36,7 @@
     rerun_replica_eviction_by_other_user/3,
     rerun_dir_eviction/3,
     cancel_replica_eviction_on_target_nodes/2,
+    cancel_replica_eviction_by_other_user/2,
     fail_to_evict_file_replica_without_permissions/3,
     eviction_should_succeed_when_remote_provider_modified_file_replica/3,
     eviction_should_fail_when_evicting_provider_modified_file_replica/3,
@@ -664,6 +665,53 @@ cancel_replica_eviction_on_target_nodes(Config, Type) ->
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_evicted => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2],
+                timeout = timer:minutes(6),
+                attempts = 600
+            }
+        }
+    ).
+
+cancel_replica_eviction_by_other_user(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                user = User1,
+                user2 = User2,
+                type = Type,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_replica_eviction_by_other_user/2
             },
             expected = #expected{
                 expected_transfer = #{

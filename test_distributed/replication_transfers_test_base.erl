@@ -41,6 +41,7 @@
     schedule_replication_on_not_supporting_provider/3,
     transfer_continues_on_modified_storage/3,
     cancel_replication_on_target_nodes/2,
+    cancel_replication_by_other_user/2,
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3,
     rerun_file_replication/3,
@@ -790,6 +791,48 @@ cancel_replication_on_target_nodes(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:cancel_replication_on_target_nodes/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_replicated => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ).
+
+cancel_replication_by_other_user(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                user = User1,
+                user2 = User2,
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_replication_by_other_user/2
             },
             expected = #expected{
                 expected_transfer = #{

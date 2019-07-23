@@ -38,6 +38,7 @@
     error_on_replicating_files/2,
     change_storage_params/2,
     cancel_replication_on_target_nodes/2,
+    cancel_replication_by_other_user/2,
     replicate_files_from_index/2,
     fail_to_replicate_files_from_index/2,
     remove_file_during_replication/2,
@@ -47,6 +48,7 @@
     evict_each_file_replica_separately/2,
     schedule_replica_eviction_without_permissions/2,
     cancel_replica_eviction_on_target_nodes/2,
+    cancel_replica_eviction_by_other_user/2,
     evict_replicas_from_index/2,
     fail_to_evict_replicas_from_index/2,
     remove_file_during_eviction/2,
@@ -226,7 +228,32 @@ cancel_replication_on_target_nodes(Config, #scenario{
 
     utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replication_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, Tid, Config, Type)
+        cancel_transfer(TargetNode, User, User, replication, Tid, Config, Type)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+cancel_replication_by_other_user(Config, #scenario{
+    user = User1,
+    user2 = User2,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
+    FileKey = file_key(Guid, Path, FileKeyType),
+    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User1, FileKey, Config, Type),
+        {TargetNode, Tid, Guid, Path}
+    end, ReplicatingNodes),
+
+    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        await_replication_starts(TargetNode, Tid),
+        cancel_transfer(TargetNode, User1, User2, replication, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
@@ -377,7 +404,32 @@ cancel_replica_eviction_on_target_nodes(Config, #scenario{
 
     utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replica_eviction_starts(TargetNode, Tid),
-        cancel_transfer(TargetNode, Tid, Config, Type)
+        cancel_transfer(TargetNode, User, User, eviction, Tid, Config, Type)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+cancel_replica_eviction_by_other_user(Config, #scenario{
+    user = User1,
+    user2 = User2,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    evicting_nodes = EvictingNodes
+}) ->
+    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
+    FileKey = file_key(Guid, Path, FileKeyType),
+    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User1, FileKey, Config, Type),
+        {EvictingNode, Tid, Guid, Path}
+    end, EvictingNodes),
+
+    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        await_replica_eviction_starts(TargetNode, Tid),
+        cancel_transfer(TargetNode, User1, User2, eviction, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
@@ -1047,9 +1099,8 @@ schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, lfm) 
 schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
     schedule_file_replication_by_rest(ScheduleNode, ProviderId, User, FileKey, Config).
 
-schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_file_replication(ScheduleNode, SessionId, FileKey, ProviderId).
+schedule_file_replication_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
+    erlang:error(not_implemented).
 
 schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
     HTTPPath = <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
@@ -1148,18 +1199,16 @@ schedule_replication_by_index_via_rest(Worker, ProviderId, User, SpaceId, IndexN
         initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
     end.
 
-schedule_replication_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_replication_by_index(ScheduleNode, SessionId, ProviderId, SpaceId, IndexName, QueryViewParams).
+schedule_replication_by_index_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _IndexName, _QueryViewParams, _Config) ->
+    erlang:error(not_implemented).
 
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, lfm) ->
     schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config);
 schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest) ->
     schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, undefined).
 
-schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, undefined).
+schedule_replica_eviction_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
+    erlang:error(not_implemented).
 
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
     {URL, RequiredPrivs} = case MigrationProviderId of
@@ -1249,9 +1298,8 @@ schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, Inde
 schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, rest) ->
     schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config).
 
-schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, undefined, SpaceId, IndexName, QueryViewParams).
+schedule_replica_eviction_by_index_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _IndexName, _QueryViewParams, _Config) ->
+    erlang:error(not_implemented).
 
 schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
     QueryParamsBin = create_query_string(QueryViewParams),
@@ -1294,18 +1342,16 @@ schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm,
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, rest, MigrationProviderId) ->
     schedule_replica_eviction_by_rest(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId).
 
-schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, MigrationProviderId).
+schedule_replica_migration_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config, _MigrationProviderId) ->
+    erlang:error(not_implemented).
 
 schedule_replica_migration_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm, MigrationProviderId) ->
     schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId);
 schedule_replica_migration_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, rest, MigrationProviderId) ->
     schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId).
 
-schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
-    SessionId = ?USER_SESSION(ScheduleNode, User, Config),
-    lfm_proxy:schedule_replica_eviction_by_index(ScheduleNode, SessionId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams).
+schedule_replica_migration_by_index_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _IndexName, _QueryViewParams, _Config, _MigrationProviderId) ->
+    erlang:error(not_implemented).
 
 schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
     QueryParamsBin = create_query_string(QueryViewParams),
@@ -1350,17 +1396,52 @@ schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, Spa
         initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, UserSpacePrivs)
     end.
 
-cancel_transfer(ScheduleNode, Tid, Config, lfm) ->
-    cancel_transfer_by_lfm(ScheduleNode, Tid, Config);
-cancel_transfer(ScheduleNode, Tid, Config, rest) ->
-    cancel_transfer_by_rest(ScheduleNode, Tid, Config).
+cancel_transfer(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config, lfm) ->
+    cancel_transfer_by_lfm(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config);
+cancel_transfer(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config, rest) ->
+    cancel_transfer_by_rest(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config).
 
-cancel_transfer_by_lfm(_Worker, _Tid, _Config) ->
+cancel_transfer_by_lfm(_Worker, _SchedulingUser, _CancelingUser, _TransferType, _Tid, _Config) ->
     erlang:error(not_implemented).
 
-cancel_transfer_by_rest(Worker, Tid, Config) ->
-    rest_test_utils:request(Worker, <<"transfers/", Tid/binary>>, delete,
-        ?DEFAULT_USER_TOKEN_HEADERS(Config), []).
+cancel_transfer_by_rest(Worker, SchedulingUser, CancelingUser, TransferType, Tid, Config) ->
+    HTTPPath = <<"transfers/", Tid/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, CancelingUser)],
+    SpaceId = ?config(?SPACE_ID_KEY, Config),
+
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, CancelingUser]),
+    try
+        case SchedulingUser =:= CancelingUser of
+            true ->
+                % User should always be able to cancel his transfers
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, []),
+                ?assertMatch(
+                    {ok, 204, _ , _},
+                    rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
+                );
+            false ->
+                AllSpacePrivs = privileges:space_privileges(),
+                RequiredPrivs = case TransferType of
+                    replication -> [?SPACE_CANCEL_REPLICATION];
+                    eviction -> [?SPACE_CANCEL_EVICTION];
+                    migration -> [?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION]
+                end,
+                SpacePrivs = AllSpacePrivs -- RequiredPrivs,
+                ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs),
+                {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, delete, Headers, []),
+                ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs ++ RequiredPrivs),
+                ?assertMatch(
+                    {ok, 204, _ , _},
+                    rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
+                )
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, UserSpacePrivs)
+    end.
 
 
 %% Modifies storage timeout twice in order to

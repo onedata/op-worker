@@ -36,6 +36,7 @@
     rerun_replica_eviction_by_other_user/1,
     rerun_dir_eviction/1,
     cancel_replica_eviction_on_target_nodes/1,
+    cancel_replica_eviction_by_other_user/1,
     fail_to_evict_file_replica_without_permissions/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
@@ -138,6 +139,9 @@ rerun_dir_eviction(Config) ->
 
 cancel_replica_eviction_on_target_nodes(Config) ->
     replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes(Config, rest).
+
+cancel_replica_eviction_by_other_user(Config) ->
+    replica_eviction_transfers_test_base:cancel_replica_eviction_by_other_user(Config, rest).
 
 fail_to_evict_file_replica_without_permissions(Config) ->
     replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, path).
