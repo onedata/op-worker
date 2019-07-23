@@ -35,8 +35,6 @@
     <<"reference">>, <<"deserializevalue">>, <<"value">>
 ]).
 
--define(CDMI_VERSION_HEADER, <<"x-cdmi-specification-version">>).
-
 
 %%%===================================================================
 %%% API
@@ -89,8 +87,8 @@ parse_content_range_header(Req, Threshold) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Parses content-type header (if it is not provided then
-%% `application/octet-stream` is taken as default) to mimetype and charset part, if charset
+%% Parses content-type header (`application/octet-stream` is taken as default
+%% if header is not provided then) to mimetype and charset part, if charset
 %% is other than utf-8, function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
