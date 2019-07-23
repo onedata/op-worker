@@ -41,7 +41,9 @@
     scheduling_migration_by_not_existing_key_in_index_should_succeed/1,
     schedule_migration_of_100_regular_files_by_index_with_batch_1000/1,
     schedule_migration_of_100_regular_files_by_index_with_batch_100/1,
-    schedule_migration_of_100_regular_files_by_index_with_batch_10/1
+    schedule_migration_of_100_regular_files_by_index_with_batch_10/1,
+    cancel_migration_on_target_nodes/1,
+    cancel_migration_by_other_user/1
 ]).
 
 all() -> [
@@ -66,7 +68,9 @@ all() -> [
     scheduling_migration_by_not_existing_key_in_index_should_succeed,
     schedule_migration_of_100_regular_files_by_index_with_batch_1000,
     schedule_migration_of_100_regular_files_by_index_with_batch_100,
-    schedule_migration_of_100_regular_files_by_index_with_batch_10
+    schedule_migration_of_100_regular_files_by_index_with_batch_10,
+    cancel_migration_on_target_nodes,
+    cancel_migration_by_other_user
 ].
 
 %%%===================================================================
@@ -140,6 +144,12 @@ schedule_migration_of_100_regular_files_by_index_with_batch_100(Config) ->
 schedule_migration_of_100_regular_files_by_index_with_batch_10(Config) ->
     %replica_migration_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 10
     replica_migration_transfers_test_base:schedule_migration_of_100_regular_files_by_index(Config, rest).
+
+cancel_migration_on_target_nodes(Config) ->
+    replica_migration_transfers_test_base:cancel_migration_on_target_nodes(Config, rest).
+
+cancel_migration_by_other_user(Config) ->
+    replica_migration_transfers_test_base:cancel_migration_by_other_user(Config, rest).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -39,7 +39,10 @@
     scheduling_migration_by_empty_index_should_succeed/2,
     scheduling_migration_by_not_existing_key_in_index_should_succeed/2,
     schedule_migration_of_100_regular_files_by_index/2,
-    schedule_migration_of_regular_file_by_index_with_reduce/2]).
+    schedule_migration_of_regular_file_by_index_with_reduce/2,
+    cancel_migration_on_target_nodes/2,
+    cancel_migration_by_other_user/2
+]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -986,6 +989,97 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
             }
         }
     ).
+
+cancel_migration_on_target_nodes(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP1],
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_migration_on_target_nodes/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => cancelled,
+                    eviction_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_replicated => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ).
+
+cancel_migration_by_other_user(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                type = Type,
+                user = User1,
+                user2 = User2,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP1],
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_migration_by_other_user/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => cancelled,
+                    eviction_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_replicated => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

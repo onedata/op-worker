@@ -61,6 +61,8 @@
     migrate_root_directory/2,
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
+    cancel_migration_on_target_nodes/2,
+    cancel_migration_by_other_user/2,
     migrate_replicas_from_index/2,
     fail_to_migrate_replicas_from_index/2
 ]).
@@ -612,6 +614,63 @@ schedule_replica_migration_without_permissions(Config, #scenario{
         end, ReplicatingNodes)
     end, EvictingNodes),
     Config.
+
+cancel_migration_on_target_nodes(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
+    FileKey = file_key(Guid, Path, FileKeyType),
+    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
+        lists:map(fun(EvictingNode) ->
+            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId),
+            {ReplicatingNode, Tid, Guid, Path}
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+
+    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        await_replication_starts(TargetNode, Tid),
+        cancel_transfer(TargetNode, User, User, migration, Tid, Config, Type)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+cancel_migration_by_other_user(Config, #scenario{
+    user = User1,
+    user2 = User2,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    {Guid, Path} = ?config(?ROOT_DIR_KEY, Config),
+    FileKey = file_key(Guid, Path, FileKeyType),
+    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
+        lists:map(fun(EvictingNode) ->
+            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId, User1, FileKey, Config, Type, ReplicatingProviderId),
+            {ReplicatingNode, Tid, Guid, Path}
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+
+    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+        await_replication_starts(TargetNode, Tid),
+        cancel_transfer(TargetNode, User1, User2, migration, Tid, Config, Type)
+    end, NodesTransferIdsAndFiles),
+
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
 
 migrate_replicas_from_index(Config, #scenario{
     user = User,
