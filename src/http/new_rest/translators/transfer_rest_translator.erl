@@ -29,9 +29,9 @@
 -spec create_response(op_logic:gri(), op_logic:auth_hint(),
     op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = instance}, _, value, TransferId) ->
+create_response(#gri{aspect = rerun}, _, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
-    ?CREATED_REPLY(PathTokens, [<<"transfers">>, TransferId]).
+    ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
 
 
 %%--------------------------------------------------------------------

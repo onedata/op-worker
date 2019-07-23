@@ -35,6 +35,7 @@
     rerun_replica_eviction/1,
     rerun_replica_eviction_by_other_user/1,
     rerun_dir_eviction/1,
+    rerun_index_eviction/1,
     cancel_replica_eviction_on_target_nodes/1,
     cancel_replica_eviction_by_other_user/1,
     fail_to_evict_file_replica_without_permissions/1,
@@ -70,6 +71,7 @@ all() -> [
     rerun_replica_eviction,
     rerun_replica_eviction_by_other_user,
     rerun_dir_eviction,
+    rerun_index_eviction,
     cancel_replica_eviction_on_target_nodes,
 %%    fail_to_evict_file_replica_without_permissions %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
@@ -136,6 +138,9 @@ rerun_replica_eviction_by_other_user(Config) ->
 
 rerun_dir_eviction(Config) ->
     replica_eviction_transfers_test_base:rerun_dir_eviction(Config, rest, guid).
+
+rerun_index_eviction(Config) ->
+    replica_eviction_transfers_test_base:rerun_index_eviction(Config, rest).
 
 cancel_replica_eviction_on_target_nodes(Config) ->
     replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes(Config, rest).

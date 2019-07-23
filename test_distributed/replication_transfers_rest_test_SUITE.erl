@@ -53,6 +53,7 @@
     rerun_file_replication/1,
     rerun_file_replication_by_other_user/1,
     rerun_dir_replication/1,
+    rerun_index_replication/1,
     schedule_replication_of_regular_file_by_index/1,
     schedule_replication_of_regular_file_by_index2/1,
     schedule_replication_of_regular_file_by_index_with_reduce/1,
@@ -99,6 +100,7 @@ all() -> [
     rerun_file_replication,
     rerun_file_replication_by_other_user,
     rerun_dir_replication,
+    rerun_index_replication,
     schedule_replication_of_regular_file_by_index,
     schedule_replication_of_regular_file_by_index2,
     schedule_replication_of_regular_file_by_index_with_reduce,
@@ -208,6 +210,9 @@ rerun_file_replication_by_other_user(Config) ->
 
 rerun_dir_replication(Config) ->
     replication_transfers_test_base:rerun_dir_replication(Config, rest, guid).
+
+rerun_index_replication(Config) ->
+    replication_transfers_test_base:rerun_index_replication(Config, rest).
 
 schedule_replication_of_regular_file_by_index(Config) ->
     replication_transfers_test_base:schedule_replication_of_regular_file_by_index(Config, rest).

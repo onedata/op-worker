@@ -39,6 +39,8 @@
     change_storage_params/2,
     cancel_replication_on_target_nodes/2,
     cancel_replication_by_other_user/2,
+    rerun_replication/2,
+    rerun_index_replication/2,
     replicate_files_from_index/2,
     fail_to_replicate_files_from_index/2,
     remove_file_during_replication/2,
@@ -49,6 +51,8 @@
     schedule_replica_eviction_without_permissions/2,
     cancel_replica_eviction_on_target_nodes/2,
     cancel_replica_eviction_by_other_user/2,
+    rerun_evictions/2,
+    rerun_index_evictions/2,
     evict_replicas_from_index/2,
     fail_to_evict_replicas_from_index/2,
     remove_file_during_eviction/2,
@@ -58,10 +62,7 @@
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
     migrate_replicas_from_index/2,
-    fail_to_migrate_replicas_from_index/2,
-
-    % generic scenarios
-    rerun_transfers/2
+    fail_to_migrate_replicas_from_index/2
 ]).
 
 -export([move_transfer_ids_to_old_key/1]).
@@ -260,6 +261,24 @@ cancel_replication_by_other_user(Config, #scenario{
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
 
+rerun_replication(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, replication, false, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+rerun_index_replication(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, replication, true, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
 replicate_files_from_index(Config, #scenario{
     user = User,
     type = Type,
@@ -432,6 +451,24 @@ cancel_replica_eviction_by_other_user(Config, #scenario{
         cancel_transfer(TargetNode, User1, User2, eviction, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+rerun_evictions(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, eviction, false, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+rerun_index_evictions(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, eviction, true, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
@@ -624,22 +661,6 @@ fail_to_migrate_replicas_from_index(Config, #scenario{
         end, EvictingNodes)
     end, ReplicatingNodes),
     Config.
-
-%%%===================================================================
-%%% Generic scenarios
-%%%===================================================================
-
-rerun_transfers(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, OldTid),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
-
-rerun_transfer(Worker, UserId, OldTid) ->
-    rpc:call(Worker, transfer, rerun_ended, [UserId, OldTid]).
 
 %%%===================================================================
 %%% Internal functions
@@ -1443,6 +1464,42 @@ cancel_transfer_by_rest(Worker, SchedulingUser, CancelingUser, TransferType, Tid
         initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, UserSpacePrivs)
     end.
 
+rerun_transfer(Worker, User, TransferType, IndexTransfer, OldTid, Config) ->
+    HTTPPath = <<"transfers/", OldTid/binary, "/rerun">>,
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+    SpaceId = ?config(?SPACE_ID_KEY, Config),
+
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    try
+        AllSpacePrivs = privileges:space_privileges(),
+        TransferPrivs = case TransferType of
+            replication -> [?SPACE_SCHEDULE_REPLICATION];
+            eviction -> [?SPACE_SCHEDULE_EVICTION];
+            migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+        end,
+        IndexPrivs = case IndexTransfer of
+            true -> [?SPACE_QUERY_INDICES];
+            false -> []
+        end,
+        RequiredPrivs = TransferPrivs ++ IndexPrivs,
+
+        SpacePrivs = AllSpacePrivs -- RequiredPrivs,
+        ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
+        {ok, _, _, Body} = ?assertMatch(
+            {ok, 200, _ , _},
+            rest_test_utils:request(Worker, HTTPPath, post, Headers, [])
+        ),
+        #{<<"transferId">> := NewTid} = json_utils:decode(Body),
+        {ok, NewTid}
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
+    end.
 
 %% Modifies storage timeout twice in order to
 %% trigger helper reload and restore previous value.

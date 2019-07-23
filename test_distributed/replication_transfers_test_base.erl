@@ -47,6 +47,7 @@
     rerun_file_replication/3,
     rerun_file_replication_by_other_user/3,
     rerun_dir_replication/3,
+    rerun_index_replication/2,
     schedule_replication_of_regular_file_by_index/2,
     schedule_replication_of_regular_file_by_index2/2,
     schedule_replication_of_regular_file_by_index_with_reduce/2,
@@ -990,7 +991,7 @@ rerun_file_replication(Config, Type, FileKeyType) ->
         Config3, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
-                function = fun transfers_test_mechanism:rerun_transfers/2
+                function = fun transfers_test_mechanism:rerun_replication/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1072,7 +1073,7 @@ rerun_file_replication_by_other_user(Config, Type, FileKeyType) ->
             setup = undefined,
             scenario = #scenario{
                 user = User2,
-                function = fun transfers_test_mechanism:rerun_transfers/2
+                function = fun transfers_test_mechanism:rerun_replication/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1151,7 +1152,7 @@ rerun_dir_replication(Config, Type, FileKeyType) ->
         Config3, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
-                function = fun transfers_test_mechanism:rerun_transfers/2
+                function = fun transfers_test_mechanism:rerun_replication/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1169,6 +1170,110 @@ rerun_dir_replication(Config, Type, FileKeyType) ->
                     mth_hist => ?MONTH_HIST(#{ProviderId1 => TotalSize})
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            }
+        }
+    ).
+
+rerun_index_replication(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+        [], [ProviderId2]),
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+
+    Config3 = transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_name = IndexName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => 0}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => 0})
+                },
+                assertion_nodes = [WorkerP2],
+                assert_transferred_file_model = false
+            }
+        }
+    ),
+
+    Config4 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config3),
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config4, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_index_replication/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                assert_transferred_file_model = false,
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
