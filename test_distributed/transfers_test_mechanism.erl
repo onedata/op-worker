@@ -24,6 +24,8 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([run_test/2]).
@@ -1050,29 +1052,59 @@ schedule_file_replication_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config
     lfm_proxy:schedule_file_replication(ScheduleNode, SessionId, FileKey, ProviderId).
 
 schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
-    case rest_test_utils:request(Worker,
-        <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-        post, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, 400, _, Body} ->
-            {error, Body}
+    HTTPPath = <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+    SpaceId = ?config(?SPACE_ID_KEY, Config),
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION],
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs -- [?SPACE_SCHEDULE_REPLICATION]),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION]),
+        case rest_test_utils:request(Worker, HTTPPath, post, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, 400, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
     end;
 schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    case rest_test_utils:request(Worker,
-        <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-        post, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, 400, _, Body} ->
-            {error, Body}
+    HTTPPath = <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION],
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs -- [?SPACE_SCHEDULE_REPLICATION]),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION]),
+        case rest_test_utils:request(Worker, HTTPPath, post, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, 400, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
     end.
 
 schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm) ->
@@ -1082,16 +1114,38 @@ schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName
 
 schedule_replication_by_index_via_rest(Worker, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
     QueryParamsBin = create_query_string(QueryViewParams),
-    case rest_test_utils:request(Worker,
-        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
-        post, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, 400, _, Body} ->
-            {error, Body}
+    HTTPPath = <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES],
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION]),
+        {ok, Code2, _, Resp2} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_QUERY_INDICES]),
+        {ok, Code2, _, Resp2} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES]),
+        case rest_test_utils:request(Worker, HTTPPath, post, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, 400, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
     end.
 
 schedule_replication_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
@@ -1108,38 +1162,86 @@ schedule_replica_eviction_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config
     lfm_proxy:schedule_file_replica_eviction(ScheduleNode, SessionId, FileKey, ProviderId, undefined).
 
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
-    URL = case MigrationProviderId of
+    {URL, RequiredPrivs} = case MigrationProviderId of
         undefined ->
-            <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>;
+            {
+                <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
+                [?SPACE_SCHEDULE_EVICTION]
+            };
         _ ->
-            <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
-                "&migration_provider_id=", MigrationProviderId/binary>>
+            {
+                <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
+                    "&migration_provider_id=", MigrationProviderId/binary
+                >>,
+                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+            }
     end,
-    case rest_test_utils:request(Worker, URL, delete, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, _, _, Body} ->
-            {error, Body}
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+    SpaceId = ?config(?SPACE_ID_KEY, Config),
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, URL, delete, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
+        case rest_test_utils:request(Worker, URL, delete, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, _, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
     end;
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config, MigrationProviderId) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = case MigrationProviderId of
+    {URL, RequiredPrivs} = case MigrationProviderId of
         undefined ->
-            <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>;
+            {
+                <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
+                [?SPACE_SCHEDULE_EVICTION]
+            };
         _ ->
-            <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary,
-            "&migration_provider_id=", MigrationProviderId/binary>>
+            {
+                <<
+                    "replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary,
+                    "&migration_provider_id=", MigrationProviderId/binary
+                >>,
+                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+            }
     end,
-    case rest_test_utils:request(Worker, URL, delete, [?USER_TOKEN_HEADER(Config, User)], []) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, _, _, Body} ->
-            {error, Body}
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, URL, delete, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
+        case rest_test_utils:request(Worker, URL, delete, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, _, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
     end.
 
 schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm) ->
@@ -1153,16 +1255,38 @@ schedule_replica_eviction_by_index_via_lfm(ScheduleNode, ProviderId, User, Space
 
 schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
     QueryParamsBin = create_query_string(QueryViewParams),
-    case rest_test_utils:request(ScheduleNode,
-        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
-        delete, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, 400, _, Body} ->
-            {error, Body}
+    HTTPPath = <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+    UserSpacePrivs = rpc:call(ScheduleNode, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
+
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_EVICTION]),
+        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
+
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_QUERY_INDICES]),
+        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
+
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]),
+        case rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, 400, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, UserSpacePrivs)
     end.
 
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
@@ -1185,18 +1309,45 @@ schedule_replica_migration_by_index_via_lfm(ScheduleNode, ProviderId, User, Spac
 
 schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
     QueryParamsBin = create_query_string(QueryViewParams),
-    case rest_test_utils:request(ScheduleNode,
-        <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
-            "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
-        delete, [?USER_TOKEN_HEADER(Config, User)], []
-    ) of
-        {ok, 200, _, Body} ->
-            DecodedBody = json_utils:decode(Body),
-            #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-            {ok, Tid};
-        {ok, 400, _, Body} ->
-            {error, Body}
+    HTTPPath = <<
+        "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
+        "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
+    >>,
+    Headers = [?USER_TOKEN_HEADER(Config, User)],
+
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+    UserSpacePrivs = rpc:call(ScheduleNode, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    try
+        lists:foreach(fun(PrivsToAdd) ->
+            initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ PrivsToAdd),
+            {ok, Code, _, Resp} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+            ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+        end, [
+            [],
+            [?SPACE_SCHEDULE_REPLICATION],
+            [?SPACE_SCHEDULE_EVICTION],
+            [?SPACE_QUERY_INDICES],
+            [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
+            [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES],
+            [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]
+        ]),
+
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [
+            ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES
+        ]),
+        case rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, 400, _, Body} ->
+                {error, Body}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, UserSpacePrivs)
     end.
 
 cancel_transfer(ScheduleNode, Tid, Config, lfm) ->
