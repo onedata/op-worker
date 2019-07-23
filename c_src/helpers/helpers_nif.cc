@@ -550,6 +550,13 @@ ERL_NIF_TERM readdir(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM listobjects(NifCTX ctx, helper_ptr helper, folly::fbstring prefix,
+    folly::fbstring marker, const off_t offset, const size_t count)
+{
+    handle_result(ctx, helper->listobjects(prefix, marker, offset, count));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM access(
     NifCTX ctx, helper_ptr helper, folly::fbstring file, const int mask)
 {

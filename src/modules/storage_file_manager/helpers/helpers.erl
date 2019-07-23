@@ -26,7 +26,8 @@
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
-    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2, readdir/4]).
+    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
+    readdir/4, listobjects/5]).
 -export([init_counters/0, init_report/0]).
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
@@ -37,6 +38,7 @@
 }).
 
 -type file_id() :: binary().
+-type marker() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.
 -type helper() :: #helper{}.
@@ -51,7 +53,7 @@
 -define(EXOMETER_COUNTERS, [get_helper_handle, readdir, getattr, access, mknod,
     mkdir, unlink, rmdir, symlink, rename, link, chmod, chown, truncate,
     setxattr, getxattr, removexattr, listxattr, open, read, write, release,
-    flush, fsync]).
+    flush, fsync, listobjects]).
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 %%%===================================================================
@@ -94,6 +96,16 @@ refresh_params(#file_handle{} = Handle, Args) ->
     Count :: non_neg_integer()) -> {ok, [file_id()]} | {error, Reason :: term()}.
 readdir(Handle, FileId, Offset, Count) ->
     ?MODULE:apply_helper_nif(Handle, readdir, [FileId, Offset, Count]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:listobjects/5} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec listobjects(helper_handle(), file_id(), marker(), Offset :: non_neg_integer(),
+    Count :: non_neg_integer()) -> {ok, [file_id()]} | {error, Reason :: term()}.
+listobjects(Handle, FileId, Marker, Offset, Count) ->
+    ?MODULE:apply_helper_nif(Handle, listobjects, [FileId, Marker, Offset, Count]).
 
 %%--------------------------------------------------------------------
 %% @doc

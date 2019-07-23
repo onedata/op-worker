@@ -31,7 +31,7 @@
     mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
     listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
-    readdir/4]).
+    readdir/4, listobjects/5]).
 -export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
@@ -59,6 +59,13 @@ refresh_params(_Handle, _Args) ->
 -spec readdir(helper_handle(), helpers:file_id(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) -> {ok, response_ref()} | {error, Reason :: term()}.
 readdir(_Handle, _FileId, _Offset, _Count) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec listobjects(helper_handle(), helpers:file_id(), helpers:marker(),
+    Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+listobjects(_Handle, _FileId, _Marker, _Offset, _Count) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
