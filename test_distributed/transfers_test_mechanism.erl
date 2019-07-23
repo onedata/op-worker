@@ -1313,15 +1313,15 @@ schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, Spac
 
     try
         initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+        {ok, Code1, _, Resp1} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
         ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
 
         initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_EVICTION]),
-        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
         ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
 
         initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_QUERY_INDICES]),
-        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
         ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
 
         initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]),
@@ -1369,7 +1369,7 @@ schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, Spa
     try
         lists:foreach(fun(PrivsToAdd) ->
             initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ PrivsToAdd),
-            {ok, Code, _, Resp} = rest_test_utils:request(ScheduleNode, HTTPPath, post, Headers, []),
+            {ok, Code, _, Resp} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
             ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
         end, [
             [],
