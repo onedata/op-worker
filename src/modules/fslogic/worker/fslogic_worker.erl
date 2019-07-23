@@ -169,7 +169,7 @@ handle(?INIT_QOS_CACHE) ->
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
     init_qos_cache_for_space(SpaceId);
-handle(Msg = {?CHECK_QOS_CACHE, #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
+handle({?CHECK_QOS_CACHE, Msg = #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
     ?debug("Checking QoS bounded cache"),
     bounded_cache:check_cache_size(Msg);
 handle({fuse_request, SessId, FuseRequest}) ->

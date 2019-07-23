@@ -127,7 +127,7 @@ transfer_regular_file(FileCtx, #transfer_params{
     supporting_provider = SupportingProvider
 }) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO: use actual storage id
+    % TODO: VFS-5573 use actual storage id
     EvictingStorage = oneprovider:get_id_or_undefined(),
     SupportingStorage = SupportingProvider,
     QosStorages = case file_qos:get_effective(Uuid) of
@@ -135,6 +135,7 @@ transfer_regular_file(FileCtx, #transfer_params{
         #file_qos{target_storages = TS} -> TS
     end,
 
+    % TODO: VFS-5573 use actual storage qos
     EquivalentStorages =
         providers_qos:get_provider_qos(EvictingStorage)
             ==

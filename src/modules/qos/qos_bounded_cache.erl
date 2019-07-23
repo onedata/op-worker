@@ -32,8 +32,8 @@
 
 -spec init_group() -> ok | {error, term()}.
 init_group() ->
-    CheckFrequency = application:get_env(?APP_NAME, qos_bounded_cache_check_frequency),
-    Size = application:get_env(?APP_NAME, qos_bounded_cache_size),
+    CheckFrequency = application:get_env(?APP_NAME, qos_bounded_cache_check_frequency, 30000), % 5 min
+    Size = application:get_env(?APP_NAME, qos_bounded_cache_size, 100),
 
     bounded_cache:init_group(?QOS_BOUNDED_CACHE_GROUP, #{
         check_frequency => CheckFrequency,

@@ -67,6 +67,9 @@
 -define(R_PAREN, <<")">>).
 -define(EQUALITY, <<"=">>).
 
+
+-define(QOS_BOUNDED_CACHE_GROUP, <<"qos_cache_group">>).
+
 -define(ERROR_CANNOT_FULFILL_QOS, cannot_fulfill_qos).
 
 

@@ -203,7 +203,7 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
 %% effective file_qos.
 %% @end
 %%--------------------------------------------------------------------
--spec merge_file_qos(record(), target_storages()) -> record().
+-spec merge_file_qos(record(), record()) -> record().
 merge_file_qos(#file_qos{qos_list = ParentQosList, target_storages = ParentStorages},
     #file_qos{qos_list = ChildQosList, target_storages = ChildStorages}) ->
     MergedQosList = remove_duplicates_from_list(ParentQosList ++ ChildQosList),
@@ -218,8 +218,8 @@ merge_file_qos(#file_qos{qos_list = ParentQosList, target_storages = ParentStora
 %% child's document should be preserved.
 %% @end
 %%--------------------------------------------------------------------
--spec merge_target_storages(target_storages(), target_storages() | undefined) -> target_storages().
-merge_target_storages(ParentStorages, undefined) ->
+-spec merge_target_storages(target_storages(), target_storages()) -> target_storages().
+merge_target_storages(ParentStorages, ChildStorages) when map_size(ChildStorages) == 0 ->
     ParentStorages;
 merge_target_storages(ParentStorages, ChildStorages) ->
     ChildQosEntrySet = sets:from_list(lists:flatten(maps:values(ChildStorages))),

@@ -12,6 +12,7 @@
 -module(qos_expression).
 -author("Michal Cwiertnia").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
 
 %% API
@@ -51,8 +52,8 @@ transform_to_rpn(Expression) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_storages(expression(), pos_integer(), [storage:id()], []) ->
-    [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
+-spec get_target_storages(expression(), pos_integer(), [storage:id()], [#file_location{}]) ->
+    [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
 get_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
     {error, ?ERROR_CANNOT_FULFILL_QOS};
 get_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
@@ -142,7 +143,8 @@ eval_rpn(RPNExpression, StorageList) ->
         end , [], RPNExpression),
     sets:to_list(ResSet).
 
--spec eval_rpn(binary(), operand_stack(), sets:set(storage:id())) -> sets:set(storage:id()).
+-spec eval_rpn(binary(), operand_stack(), sets:set(storage:id())) ->
+    [sets:set(storage:id())] | no_return().
 eval_rpn(?UNION, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
     [sets:union(Operand1, Operand2)| StackTail];
 eval_rpn(?INTERSECTION, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
@@ -183,7 +185,7 @@ filter_storage(Key, Val, StorageSet) ->
 %% Storage with higher current blocks size are preferred.
 %% @end
 %%--------------------------------------------------------------------
--spec select([storage:id()], pos_integer(), []) -> [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
+-spec select([storage:id()], pos_integer(), []) -> [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
 select([], _ReplicasNum, _FileLocations) ->
     {error, ?ERROR_CANNOT_FULFILL_QOS};
 select(StorageList, ReplicasNum, FileLocations) ->

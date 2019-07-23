@@ -31,9 +31,8 @@
 -record(add_qos_traverse_args, {
     session_id :: session:id(),
     qos_id :: qos_entry:id(),
-    qos_entry :: #qos_entry{},
     file_path_tokens = [] :: [binary()],
-    target_storages = undefined :: file_qos:target_storages() | undefined
+    target_storages = undefined :: [storage:id()] | undefined
 }).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -65,8 +64,7 @@ fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
             target_storages = TargetStorages
         }
     },
-
-    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
+   {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
 
 %%--------------------------------------------------------------------
@@ -132,7 +130,7 @@ do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_
 %% Creates file replicas on given storages.
 %% @end
 %%--------------------------------------------------------------------
--spec create_qos_replicas(file_meta:uuid(), datastore_doc:scope(), file_qos:target_storages(),
+-spec create_qos_replicas(file_meta:uuid(), datastore_doc:scope(), [storage:id()],
     #add_qos_traverse_args{}) -> ok.
 create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
@@ -149,8 +147,8 @@ create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
     end,
 
     % call using ?MODULE macro for mocking in tests
-    TransfersList = ?MODULE:schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
-    wait_for_transfers_completion(TransfersList, OnTransferFinishedFun).
+    TransfersStorageProplist = ?MODULE:schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
+    wait_for_transfers_completion(TransfersStorageProplist, OnTransferFinishedFun).
 
 
 %%--------------------------------------------------------------------
@@ -160,7 +158,7 @@ create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_transfers(session:id(), fslogic_worker:file_guid(), [storage:id()],  OnTransferScheduledFun) ->
-    [transfer:id()] when  OnTransferScheduledFun :: fun((transfer:id(), storage:id()) -> ok).
+    [{transfer:id(), storage:id()}] when  OnTransferScheduledFun :: fun((transfer:id(), storage:id()) -> ok).
 schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun) ->
     lists:map(fun(StorageId) ->
         % TODO: VFS-5573 use storage qos

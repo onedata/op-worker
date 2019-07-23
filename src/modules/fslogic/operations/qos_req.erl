@@ -244,6 +244,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
     FulfillmentStatus = qos_status:check_fulfilment(QosId, file_ctx:get_guid_const(FileCtx)),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #qos_fulfillment{
+        qos_id = QosId,
         fulfilled = FulfillmentStatus
     }}.
 
@@ -258,7 +259,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_target_storages(session:id(), file_ctx:ctx(),
-    qos_expression:expression(), pos_integer()) -> [storage:id()].
+    qos_expression:expression(), pos_integer()) -> [storage:id()] | {error, term()}.
 calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     FileKey = {guid, FileGuid},
