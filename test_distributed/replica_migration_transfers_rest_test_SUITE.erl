@@ -43,7 +43,9 @@
     schedule_migration_of_100_regular_files_by_index_with_batch_100/1,
     schedule_migration_of_100_regular_files_by_index_with_batch_10/1,
     cancel_migration_on_target_nodes/1,
-    cancel_migration_by_other_user/1
+    cancel_migration_by_other_user/1,
+    rerun_file_migration/1,
+    rerun_index_migration/1
 ]).
 
 all() -> [
@@ -70,7 +72,8 @@ all() -> [
     schedule_migration_of_100_regular_files_by_index_with_batch_100,
     schedule_migration_of_100_regular_files_by_index_with_batch_10,
     cancel_migration_on_target_nodes,
-    cancel_migration_by_other_user
+    cancel_migration_by_other_user,
+    rerun_file_migration
 ].
 
 %%%===================================================================
@@ -150,6 +153,12 @@ cancel_migration_on_target_nodes(Config) ->
 
 cancel_migration_by_other_user(Config) ->
     replica_migration_transfers_test_base:cancel_migration_by_other_user(Config, rest).
+
+rerun_file_migration(Config) ->
+    replica_migration_transfers_test_base:rerun_file_migration(Config, rest, guid).
+
+rerun_index_migration(Config) ->
+    replica_migration_transfers_test_base:rerun_index_migration(Config, rest).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

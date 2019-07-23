@@ -41,7 +41,9 @@
     schedule_migration_of_100_regular_files_by_index/2,
     schedule_migration_of_regular_file_by_index_with_reduce/2,
     cancel_migration_on_target_nodes/2,
-    cancel_migration_by_other_user/2
+    cancel_migration_by_other_user/2,
+    rerun_file_migration/3,
+    rerun_index_migration/2
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -1080,6 +1082,195 @@ cancel_migration_by_other_user(Config, Type) ->
         }
     ).
 
+rerun_file_migration(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP1],
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => failed,
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 1,
+                    files_processed => 1,
+                    failed_files => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 0
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2],
+                attempts = 120,
+                timeout = timer:minutes(2)
+            }
+        }
+    ),
+    Config3 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config2),
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config3, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_migrations/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    user_id => ?DEFAULT_USER,
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    failed_files => 0,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    files_evicted => 1,
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            }
+        }
+    ).
+
+rerun_index_migration(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId1, ProviderId2]),
+    ?assertIndexQuery([FileId], WorkerP1, SpaceId, IndexName, [{key, XattrValue}]),
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName, [{key, XattrValue}]),
+
+    transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
+
+    Config3 = transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                evicting_nodes = [WorkerP1],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:migrate_replicas_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_name = IndexName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => failed,
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    failed_files => 1,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = undefined,
+                assert_transferred_file_model = false,
+                attempts = 120,
+                timeout = timer:minutes(2)
+            }
+        }
+    ),
+    Config4 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config3),
+    transfers_test_utils:unmock_replica_synchronizer_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config4, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_index_migrations/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    replicating_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 4,
+                    files_processed => 4,
+                    files_replicated => 1,
+                    bytes_replicated => ?DEFAULT_SIZE,
+                    files_evicted => 1,
+                    min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => ?DEFAULT_SIZE})
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                assert_transferred_file_model = false,
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => []},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            }
+        }
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

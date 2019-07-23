@@ -63,6 +63,8 @@
     schedule_replica_migration_without_permissions/2,
     cancel_migration_on_target_nodes/2,
     cancel_migration_by_other_user/2,
+    rerun_migrations/2,
+    rerun_index_migrations/2,
     migrate_replicas_from_index/2,
     fail_to_migrate_replicas_from_index/2
 ]).
@@ -639,6 +641,24 @@ cancel_migration_on_target_nodes(Config, #scenario{
         cancel_transfer(TargetNode, User, User, migration, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+rerun_migrations(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, false, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
+    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
+        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
+    end, Config, []).
+
+rerun_index_migrations(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, true, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
     update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
         NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
     end, Config, []).
