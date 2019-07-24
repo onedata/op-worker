@@ -803,7 +803,7 @@ cancel_replica_eviction_by_other_user(Config, Type) ->
             },
             scenario = #scenario{
                 user = User1,
-                user2 = User2,
+                cancelling_user = User2,
                 type = Type,
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP2],

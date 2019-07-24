@@ -79,6 +79,12 @@
 -define(DEFAULT_USER_TOKEN_HEADERS(Config),
     [?USER_TOKEN_HEADER(Config, ?DEFAULT_USER)]).
 
+-define(UPDATE_TRANSFERS_KEY(__NodesTransferIdsAndFiles, __Config),
+    update_config(?TRANSFERS_KEY, fun(__OldNodesTransferIdsAndFiles) ->
+        __NodesTransferIdsAndFiles ++ __OldNodesTransferIdsAndFiles
+    end, __Config, [])
+).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -140,10 +146,7 @@ replicate_root_directory(Config, #scenario{
         {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
         {TargetNode, Tid, Guid, Path}
     end, ReplicatingNodes),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
-
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 replicate_each_file_separately(Config, #scenario{
     user = User,
@@ -162,9 +165,7 @@ replicate_each_file_separately(Config, #scenario{
         end, FilesGuidsAndPaths)
     end, ReplicatingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 error_on_replicating_files(Config, #scenario{
     user = User,
@@ -211,10 +212,7 @@ change_storage_params(Config, #scenario{
         modify_storage_timeout(Node, StorageId, <<"100000">>)
     end, ReplicatingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
-
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 cancel_replication_on_target_nodes(Config, #scenario{
     user = User,
@@ -236,13 +234,11 @@ cancel_replication_on_target_nodes(Config, #scenario{
         cancel_transfer(TargetNode, User, User, replication, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 cancel_replication_by_other_user(Config, #scenario{
     user = User1,
-    user2 = User2,
+    cancelling_user = User2,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -261,27 +257,21 @@ cancel_replication_by_other_user(Config, #scenario{
         cancel_transfer(TargetNode, User1, User2, replication, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 rerun_replication(Config, #scenario{user = User}) ->
     NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
         {ok, NewTid} = rerun_transfer(TargetNode, User, replication, false, OldTid, Config),
         {TargetNode, NewTid, Guid, Path}
     end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 rerun_index_replication(Config, #scenario{user = User}) ->
     NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
         {ok, NewTid} = rerun_transfer(TargetNode, User, replication, true, OldTid, Config),
         {TargetNode, NewTid, Guid, Path}
     end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 replicate_files_from_index(Config, #scenario{
     user = User,
@@ -299,9 +289,7 @@ replicate_files_from_index(Config, #scenario{
         {TargetNode, Tid, undefined, undefined}
     end, ReplicatingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 fail_to_replicate_files_from_index(Config, #scenario{
     user = User,
@@ -343,9 +331,7 @@ remove_file_during_replication(Config, #scenario{
         ok = remove_file(TargetNode, User, FileKey, Config)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 %%%===================================================================
 %%% Eviction scenarios
@@ -365,9 +351,7 @@ evict_root_directory(Config, #scenario{
         {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
         {EvictingNode, Tid, Guid, Path}
     end, EvictingNodes),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 evict_each_file_replica_separately(Config, #scenario{
     user = User,
@@ -386,9 +370,7 @@ evict_each_file_replica_separately(Config, #scenario{
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 schedule_replica_eviction_without_permissions(Config, #scenario{
     user = User,
@@ -430,13 +412,11 @@ cancel_replica_eviction_on_target_nodes(Config, #scenario{
         cancel_transfer(TargetNode, User, User, eviction, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 cancel_replica_eviction_by_other_user(Config, #scenario{
     user = User1,
-    user2 = User2,
+    cancelling_user = User2,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -455,27 +435,21 @@ cancel_replica_eviction_by_other_user(Config, #scenario{
         cancel_transfer(TargetNode, User1, User2, eviction, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 rerun_evictions(Config, #scenario{user = User}) ->
     NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
         {ok, NewTid} = rerun_transfer(TargetNode, User, eviction, false, OldTid, Config),
         {TargetNode, NewTid, Guid, Path}
     end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 rerun_index_evictions(Config, #scenario{user = User}) ->
     NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
         {ok, NewTid} = rerun_transfer(TargetNode, User, eviction, true, OldTid, Config),
         {TargetNode, NewTid, Guid, Path}
     end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 evict_replicas_from_index(Config, #scenario{
     user = User,
@@ -493,9 +467,7 @@ evict_replicas_from_index(Config, #scenario{
         {EvictingNode, Tid, undefined, undefined}
     end, EvictingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 fail_to_evict_replicas_from_index(Config, #scenario{
     user = User,
@@ -536,9 +508,7 @@ remove_file_during_eviction(Config, #scenario{
         ok = remove_file(EvictingNode, User, FileKey, Config)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 %%%===================================================================
 %%% Migration scenarios
@@ -563,9 +533,7 @@ migrate_root_directory(Config, #scenario{
             {EvictingNode, Tid, Guid, Path}
         end, EvictingNodes)
     end, ReplicatingNodes),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 migrate_each_file_replica_separately(Config, #scenario{
     user = User,
@@ -589,9 +557,7 @@ migrate_each_file_replica_separately(Config, #scenario{
         end, EvictingNodes)
     end, ReplicatingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 schedule_replica_migration_without_permissions(Config, #scenario{
     user = User,
@@ -641,31 +607,25 @@ cancel_migration_on_target_nodes(Config, #scenario{
         cancel_transfer(TargetNode, User, User, migration, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 rerun_migrations(Config, #scenario{user = User}) ->
     NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
         {ok, NewTid} = rerun_transfer(TargetNode, User, migration, false, OldTid, Config),
         {TargetNode, NewTid, Guid, Path}
     end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 rerun_index_migrations(Config, #scenario{user = User}) ->
     NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
         {ok, NewTid} = rerun_transfer(TargetNode, User, migration, true, OldTid, Config),
         {TargetNode, NewTid, Guid, Path}
     end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 cancel_migration_by_other_user(Config, #scenario{
     user = User1,
-    user2 = User2,
+    cancelling_user = User2,
     type = Type,
     file_key_type = FileKeyType,
     schedule_node = ScheduleNode,
@@ -688,9 +648,7 @@ cancel_migration_by_other_user(Config, #scenario{
         cancel_transfer(TargetNode, User1, User2, migration, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 migrate_replicas_from_index(Config, #scenario{
     user = User,
@@ -715,9 +673,7 @@ migrate_replicas_from_index(Config, #scenario{
         end, EvictingNodes)
     end, ReplicatingNodes),
 
-    update_config(?TRANSFERS_KEY, fun(OldNodesTransferIdsAndFiles) ->
-        NodesTransferIdsAndFiles ++ OldNodesTransferIdsAndFiles
-    end, Config, []).
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 fail_to_migrate_replicas_from_index(Config, #scenario{
     user = User,
@@ -1203,60 +1159,26 @@ schedule_file_replication_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _C
     erlang:error(not_implemented).
 
 schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
-    HTTPPath = <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
-
-    AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION],
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
-    try
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs -- [?SPACE_SCHEDULE_REPLICATION]),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION]),
-        case rest_test_utils:request(Worker, HTTPPath, post, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, 400, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
-    end;
+    schedule_transfer_by_rest(
+        Worker,
+        ?config(?SPACE_ID_KEY, Config),
+        User,
+        [?SPACE_SCHEDULE_REPLICATION],
+        <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
+        post,
+        Config
+    );
 schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    HTTPPath = <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-
-    AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION],
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
-    try
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs -- [?SPACE_SCHEDULE_REPLICATION]),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION]),
-        case rest_test_utils:request(Worker, HTTPPath, post, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, 400, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
-    end.
+    schedule_transfer_by_rest(
+        Worker,
+        file_id:guid_to_space_id(FileGuid),
+        User,
+        [?SPACE_SCHEDULE_REPLICATION],
+        <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
+        post,
+        Config
+    ).
 
 schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm) ->
     schedule_replication_by_index_via_lfm(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config);
@@ -1265,39 +1187,18 @@ schedule_replication_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName
 
 schedule_replication_by_index_via_rest(Worker, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
     QueryParamsBin = create_query_string(QueryViewParams),
-    HTTPPath = <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-
-    AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES],
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
-    try
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION]),
-        {ok, Code2, _, Resp2} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_QUERY_INDICES]),
-        {ok, Code2, _, Resp2} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES]),
-        case rest_test_utils:request(Worker, HTTPPath, post, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, 400, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
-    end.
+    schedule_transfer_by_rest(
+        Worker,
+        SpaceId,
+        User,
+        [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES],
+        <<
+            "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
+            "&space_id=", SpaceId/binary, QueryParamsBin/binary
+        >>,
+        post,
+        Config
+    ).
 
 schedule_replication_by_index_via_lfm(_ScheduleNode, _ProviderId, _User, _SpaceId, _IndexName, _QueryViewParams, _Config) ->
     erlang:error(not_implemented).
@@ -1311,98 +1212,61 @@ schedule_replica_eviction_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _C
     erlang:error(not_implemented).
 
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
-    {URL, RequiredPrivs} = case MigrationProviderId of
+    case MigrationProviderId of
+        % eviction
         undefined ->
-            {
+            schedule_transfer_by_rest(
+                Worker,
+                ?config(?SPACE_ID_KEY, Config),
+                User,
+                [?SPACE_SCHEDULE_EVICTION],
                 <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-                [?SPACE_SCHEDULE_EVICTION]
-            };
+                delete,
+                Config
+            );
+        % migration
         _ ->
-            {
-                <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
+            schedule_transfer_by_rest(
+                Worker,
+                ?config(?SPACE_ID_KEY, Config),
+                User,
+                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
+                <<
+                    "replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
                     "&migration_provider_id=", MigrationProviderId/binary
                 >>,
-                lists:sort([?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION])
-            }
-    end,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
-
-    AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
-    try
-        lists:foreach(fun
-        (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
-            % success will be checked later
-            ok;
-        (PrivsToAdd) ->
-            initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ PrivsToAdd),
-            {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, delete, Headers, []),
-            ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
-        end, combinations(RequiredPrivs)),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
-        case rest_test_utils:request(Worker, URL, delete, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, _, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
+                delete,
+                Config
+            )
     end;
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config, MigrationProviderId) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    {URL, RequiredPrivs} = case MigrationProviderId of
+    case MigrationProviderId of
+        % eviction
         undefined ->
-            {
+            schedule_transfer_by_rest(
+                Worker,
+                file_id:guid_to_space_id(FileGuid),
+                User,
+                [?SPACE_SCHEDULE_EVICTION],
                 <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-                [?SPACE_SCHEDULE_EVICTION]
-            };
+                delete,
+                Config
+            );
+        % migration
         _ ->
-            {
+            schedule_transfer_by_rest(
+                Worker,
+                file_id:guid_to_space_id(FileGuid),
+                User,
+                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
                 <<
                     "replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary,
                     "&migration_provider_id=", MigrationProviderId/binary
                 >>,
-                lists:sort([?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION])
-            }
-    end,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-
-    AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
-    try
-        lists:foreach(fun
-            (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
-                % success will be checked later
-                ok;
-            (PrivsToAdd) ->
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ PrivsToAdd),
-                {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, delete, Headers, []),
-                ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
-        end, combinations(RequiredPrivs)),
-
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
-        case rest_test_utils:request(Worker, URL, delete, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, _, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
+                delete,
+                Config
+            )
     end.
 
 schedule_replica_eviction_by_index(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, lfm) ->
@@ -1415,39 +1279,18 @@ schedule_replica_eviction_by_index_via_lfm(_ScheduleNode, _ProviderId, _User, _S
 
 schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config) ->
     QueryParamsBin = create_query_string(QueryViewParams),
-    HTTPPath = <<"replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-
-    AllSpacePrivs = privileges:space_privileges(),
-    SpacePrivs = AllSpacePrivs -- [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
-    UserSpacePrivs = rpc:call(ScheduleNode, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
-    try
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs),
-        {ok, Code1, _, Resp1} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp1)}),
-
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_EVICTION]),
-        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
-
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_QUERY_INDICES]),
-        {ok, Code2, _, Resp2} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
-        ?assertMatch(ErrorForbidden, {Code1, json_utils:decode(Resp2)}),
-
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]),
-        case rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, 400, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, UserSpacePrivs)
-    end.
+    schedule_transfer_by_rest(
+        ScheduleNode,
+        SpaceId,
+        User,
+        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+        <<
+            "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
+            "&space_id=", SpaceId/binary, QueryParamsBin/binary
+        >>,
+        delete,
+        Config
+    ).
 
 schedule_replica_migration(ScheduleNode, ProviderId, User, FileKey, Config, lfm, MigrationProviderId) ->
     schedule_replica_migration_by_lfm(ScheduleNode, ProviderId, User, FileKey, Config, MigrationProviderId);
@@ -1467,61 +1310,38 @@ schedule_replica_migration_by_index_via_lfm(_ScheduleNode, _ProviderId, _User, _
 
 schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, SpaceId, IndexName, QueryViewParams, Config, MigrationProviderId) ->
     QueryParamsBin = create_query_string(QueryViewParams),
-    HTTPPath = <<
-        "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
-        "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
-    >>,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
+    schedule_transfer_by_rest(
+        ScheduleNode,
+        SpaceId,
+        User,
+        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+        <<
+            "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
+            "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
+        >>,
+        delete,
+        Config
+    ).
 
-    AllSpacePrivs = privileges:space_privileges(),
-    RequiredPrivs = lists:sort([?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES]),
-    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-    UserSpacePrivs = rpc:call(ScheduleNode, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+cancel_transfer(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config, lfm) ->
+    cancel_transfer_by_lfm(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config);
+cancel_transfer(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config, rest) ->
+    cancel_transfer_by_rest(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config).
 
-    try
-        lists:foreach(fun
-            (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
-                % success will be checked later
-                ok;
-            (PrivsToAdd) ->
-                initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ PrivsToAdd),
-                {ok, Code, _, Resp} = rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []),
-                ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
-        end, combinations(RequiredPrivs)),
-
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, SpacePrivs ++ RequiredPrivs),
-        case rest_test_utils:request(ScheduleNode, HTTPPath, delete, Headers, []) of
-            {ok, 200, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, 400, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges([ScheduleNode], SpaceId, User, UserSpacePrivs)
-    end.
-
-cancel_transfer(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config, lfm) ->
-    cancel_transfer_by_lfm(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config);
-cancel_transfer(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config, rest) ->
-    cancel_transfer_by_rest(ScheduleNode, SchedulingUser, CancelingUser, TransferType, Tid, Config).
-
-cancel_transfer_by_lfm(_Worker, _SchedulingUser, _CancelingUser, _TransferType, _Tid, _Config) ->
+cancel_transfer_by_lfm(_Worker, _SchedulingUser, _CancellingUser, _TransferType, _Tid, _Config) ->
     erlang:error(not_implemented).
 
-cancel_transfer_by_rest(Worker, SchedulingUser, CancelingUser, TransferType, Tid, Config) ->
+cancel_transfer_by_rest(Worker, SchedulingUser, CancellingUser, TransferType, Tid, Config) ->
     HTTPPath = <<"transfers/", Tid/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, CancelingUser)],
+    Headers = [?USER_TOKEN_HEADER(Config, CancellingUser)],
     SpaceId = ?config(?SPACE_ID_KEY, Config),
 
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, CancelingUser]),
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, CancellingUser]),
     try
-        case SchedulingUser =:= CancelingUser of
+        case SchedulingUser =:= CancellingUser of
             true ->
                 % User should always be able to cancel his transfers
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, []),
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, []),
                 ?assertMatch(
                     {ok, 204, _ , _},
                     rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
@@ -1541,62 +1361,72 @@ cancel_transfer_by_rest(Worker, SchedulingUser, CancelingUser, TransferType, Tid
                         % success will be checked later
                         ok;
                     (PrivsToAdd) ->
-                        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs ++ PrivsToAdd),
+                        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, SpacePrivs ++ PrivsToAdd),
                         {ok, Code, _, Resp} = rest_test_utils:request(Worker, HTTPPath, delete, Headers, []),
                         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
                 end, combinations(RequiredPrivs)),
 
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, SpacePrivs ++ RequiredPrivs),
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, SpacePrivs ++ RequiredPrivs),
                 ?assertMatch(
                     {ok, 204, _ , _},
                     rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
                 )
         end
     after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancelingUser, UserSpacePrivs)
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, UserSpacePrivs)
     end.
 
 rerun_transfer(Worker, User, TransferType, IndexTransfer, OldTid, Config) ->
-    HTTPPath = <<"transfers/", OldTid/binary, "/rerun">>,
-    Headers = [?USER_TOKEN_HEADER(Config, User)],
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
+    TransferPrivs = case TransferType of
+        replication -> [?SPACE_SCHEDULE_REPLICATION];
+        eviction -> [?SPACE_SCHEDULE_EVICTION];
+        migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
+    end,
+    IndexPrivs = case IndexTransfer of
+        true -> [?SPACE_QUERY_INDICES];
+        false -> []
+    end,
 
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, User]),
+    schedule_transfer_by_rest(
+        Worker,
+        ?config(?SPACE_ID_KEY, Config),
+        User,
+        TransferPrivs ++ IndexPrivs,
+        <<"transfers/", OldTid/binary, "/rerun">>,
+        post,
+        Config
+    ).
+
+schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Config) ->
+    Headers = [?USER_TOKEN_HEADER(Config, UserId)],
+    AllSpacePrivs = privileges:space_privileges(),
+    SpacePrivs = AllSpacePrivs -- RequiredPrivs,
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]),
+    SortedRequiredPrivs = lists:sort(RequiredPrivs),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
     try
-        AllSpacePrivs = privileges:space_privileges(),
-        TransferPrivs = case TransferType of
-            replication -> [?SPACE_SCHEDULE_REPLICATION];
-            eviction -> [?SPACE_SCHEDULE_EVICTION];
-            migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
-        end,
-        IndexPrivs = case IndexTransfer of
-            true -> [?SPACE_QUERY_INDICES];
-            false -> []
-        end,
-        RequiredPrivs = lists:sort(TransferPrivs ++ IndexPrivs),
-
-        SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-        ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
-
         lists:foreach(fun
-            (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
+            (PrivsToAdd) when PrivsToAdd =:= SortedRequiredPrivs ->
                 % success will be checked later
                 ok;
             (PrivsToAdd) ->
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ PrivsToAdd),
-                {ok, Code, _, Resp} = rest_test_utils:request(Worker, HTTPPath, post, Headers, []),
+                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
+                {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, []),
                 ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
         end, combinations(RequiredPrivs)),
 
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, SpacePrivs ++ RequiredPrivs),
-        {ok, _, _, Body} = ?assertMatch(
-            {ok, 200, _ , _},
-            rest_test_utils:request(Worker, HTTPPath, post, Headers, [])
-        ),
-        #{<<"transferId">> := NewTid} = json_utils:decode(Body),
-        {ok, NewTid}
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
+        case rest_test_utils:request(Worker, URL, Method, Headers, []) of
+            {ok, 200, _, Body} ->
+                DecodedBody = json_utils:decode(Body),
+                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                {ok, Tid};
+            {ok, 400, _, Body} ->
+                {error, Body}
+        end
     after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, User, UserSpacePrivs)
+        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, UserId, UserSpacePrivs)
     end.
 
 %% Modifies storage timeout twice in order to

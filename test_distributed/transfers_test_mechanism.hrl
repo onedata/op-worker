@@ -52,7 +52,7 @@
 
 -record(scenario, {
     user = ?DEFAULT_USER,
-    user2 = ?DEFAULT_USER,
+    cancelling_user = ?DEFAULT_USER,
     type = lfm :: lfm | rest,
     file_key_type = guid :: guid | path,
     schedule_node :: node(),

@@ -73,7 +73,8 @@ all() -> [
     schedule_migration_of_100_regular_files_by_index_with_batch_10,
     cancel_migration_on_target_nodes,
     cancel_migration_by_other_user,
-    rerun_file_migration
+    rerun_file_migration,
+    rerun_index_migration
 ].
 
 %%%===================================================================

@@ -1058,7 +1058,7 @@ cancel_migration_by_other_user(Config, Type) ->
             scenario = #scenario{
                 type = Type,
                 user = User1,
-                user2 = User2,
+                cancelling_user = User2,
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP1],
                 replicating_nodes = [WorkerP2],

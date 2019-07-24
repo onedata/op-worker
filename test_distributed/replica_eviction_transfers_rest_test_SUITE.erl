@@ -73,6 +73,7 @@ all() -> [
     rerun_dir_eviction,
     rerun_index_eviction,
     cancel_replica_eviction_on_target_nodes,
+    cancel_replica_eviction_by_other_user,
 %%    fail_to_evict_file_replica_without_permissions %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica,
