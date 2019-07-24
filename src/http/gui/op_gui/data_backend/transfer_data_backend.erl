@@ -169,21 +169,21 @@ create_record(<<"transfer">>, Data) ->
         replication ->
             op_logic:handle(#op_req{
                 operation = create,
-                client = #client{type = user, id = UserId, session_id = SessionId},
+                auth = #auth{subject = ?SUB(user, UserId), session_id = SessionId},
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => ReplicatingProvider}
             });
         eviction ->
             op_logic:handle(#op_req{
                 operation = delete,
-                client = #client{type = user, id = UserId, session_id = SessionId},
+                auth = #auth{subject = ?SUB(user, UserId), session_id = SessionId},
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => EvictingProvider}
             });
         migration ->
             op_logic:handle(#op_req{
                 operation = delete,
-                client = #client{type = user, id = UserId, session_id = SessionId},
+                auth = #auth{subject = ?SUB(user, UserId), session_id = SessionId},
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{
                     <<"provider_id">> => EvictingProvider,
@@ -250,7 +250,7 @@ cancel_transfer(SessionId, StateAndTransferId) ->
 
     Result = op_logic:handle(#op_req{
         operation = delete,
-        client = #client{type = user, id = UserId, session_id = SessionId},
+        auth = #auth{subject = ?SUB(user, UserId), session_id = SessionId},
         gri = #gri{type = op_transfer, id = TransferId, aspect = instance}
     }),
 
@@ -285,7 +285,7 @@ rerun_transfer(SessionId, StateAndTransferId) ->
 
     Result = op_logic:handle(#op_req{
         operation = create,
-        client = #client{type = user, id = UserId, session_id = SessionId},
+        auth = #auth{subject = ?SUB(user, UserId), session_id = SessionId},
         gri = #gri{type = op_transfer, id = TransferId, aspect = rerun}
     }),
 

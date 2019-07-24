@@ -40,7 +40,7 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, ?USER(UserId, SessionId)} ->
+        {ok, #auth{subject = ?SUB(user, UserId), session_id = SessionId}} ->
             {true, Req, State#{
                 user_id => UserId,
                 auth => SessionId
@@ -62,19 +62,22 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(req()) -> op_logic:client() | {error, term()}.
+-spec authenticate(req()) -> aai:auth() | {error, term()}.
 authenticate(Req) ->
     case resolve_auth(Req) of
         {error, not_found} ->
             {ok, ?NOBODY};
-        Auth ->
-            case user_identity:get_or_fetch(Auth) of
+        Credentials ->
+            case user_identity:get_or_fetch(Credentials) of
                 {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
-                    case session_manager:reuse_or_create_rest_session(Iden, Auth) of
-                        {ok, SessId} ->
-                            {ok, ?USER(UserId, SessId)};
+                    case session_manager:reuse_or_create_rest_session(Iden, Credentials) of
+                        {ok, SessionId} ->
+                            {ok, #auth{
+                                subject = ?SUB(user, UserId),
+                                session_id = SessionId
+                            }};
                         {error, {invalid_identity, _}} ->
-                            user_identity:delete(Auth),
+                            user_identity:delete(Credentials),
                             authenticate(Req)
                     end;
                 Error ->

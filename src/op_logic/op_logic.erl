@@ -35,7 +35,6 @@
 % for better readability of logic modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
--type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
@@ -56,7 +55,6 @@
 -type error() :: gs_protocol:error().
 
 -export_type([
-    client/0,
     op_plugin/0,
     operation/0,
     entity_id/0,
@@ -85,6 +83,7 @@
 
 %% API
 -export([handle/1, handle/2]).
+-export([is_authorized/2]).
 -export([client_to_string/1]).
 
 
@@ -144,10 +143,31 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Return if given client is authorized to perform given request, as specified
+%% in the #op_req{} record. Entity can be provided if it was prefetched.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), entity()) -> {true, gs_protocol:gri()} | false.
+is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, Entity) ->
+    try
+        ensure_authorized(#req_ctx{
+            req = OpReq,
+            plugin = EntityType:op_logic_plugin(),
+            entity = Entity
+        }),
+        {true, GRI}
+    catch
+        _:_ ->
+            false
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns a readable string representing provided client.
 %% @end
 %%--------------------------------------------------------------------
--spec client_to_string(client()) -> string().
+-spec client_to_string(aai:auth()) -> string().
 client_to_string(?NOBODY) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
 client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
@@ -258,7 +278,7 @@ ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized(req_ctx()) -> ok | no_return().
-ensure_authorized(#req_ctx{req = #op_req{client = ?ROOT}}) ->
+ensure_authorized(#req_ctx{req = #op_req{auth = ?ROOT}}) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     ok;
@@ -274,7 +294,7 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
         true ->
             ok;
         false ->
-            case OpReq#op_req.client of
+            case OpReq#op_req.auth of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
@@ -310,7 +330,7 @@ process_request(#req_ctx{
 }) ->
     Result = Plugin:create(Req),
     case {Result, Req} of
-        {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, client = Cl}} ->
+        {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, auth = Cl}} ->
             % If an entity instance is created, log an information about it
             % (it's a significant operation and this information might be useful).
             {EntType, _EntId} = case Resource of
@@ -341,7 +361,7 @@ process_request(#req_ctx{
 
 process_request(#req_ctx{
     plugin = Plugin, 
-    req = #op_req{operation = delete, client = Cl, gri = GRI} = Req
+    req = #op_req{operation = delete, auth = Cl, gri = GRI} = Req
 }) ->
     case {Plugin:delete(Req), GRI} of
         {ok, #gri{type = Type, id = Id, aspect = instance}} ->

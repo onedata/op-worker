@@ -67,7 +67,7 @@ get_cdmi(Req, #cdmi_req{options = Options} = CdmiReq) ->
 put_cdmi(_, #cdmi_req{version = undefined}) ->
     throw(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]));
 put_cdmi(Req, #cdmi_req{
-    client = ?USER(_UserId, SessId),
+    auth = #auth{session_id = SessId},
     file_path = Path,
     file_attrs = Attrs,
     options = Options
@@ -120,8 +120,8 @@ put_cdmi(Req, #cdmi_req{
 %%--------------------------------------------------------------------
 -spec put_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
-put_binary(Req, #cdmi_req{client = Client, file_path = Path} = CdmiReq) ->
-    ?check(lfm:mkdir(Client#client.session_id, Path)),
+put_binary(Req, #cdmi_req{auth = Auth, file_path = Path} = CdmiReq) ->
+    ?check(lfm:mkdir(Auth#auth.session_id, Path)),
     {true, Req, CdmiReq}.
 
 
@@ -133,7 +133,7 @@ put_binary(Req, #cdmi_req{client = Client, file_path = Path} = CdmiReq) ->
 -spec delete_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 delete_cdmi(Req, #cdmi_req{
-    client = ?USER(_UserId, SessionId),
+    auth = #auth{session_id = SessionId},
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
     ?check(lfm:rm_recursive(SessionId, {guid, Guid})),
@@ -149,7 +149,7 @@ delete_cdmi(Req, #cdmi_req{
 -spec prepare_create_dir_cdmi_response(cowboy_req:req(), cdmi_handler:cdmi_req(),
     file_id:file_guid()) -> {true, cowboy_req:req(), cdmi_handler:cdmi_req()}.
 prepare_create_dir_cdmi_response(Req1, #cdmi_req{
-    client = ?USER(_UserId, SessionId)
+    auth = #auth{session_id = SessionId}
 } = CdmiReq, FileGuid) ->
     {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, FileGuid})),
     CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
@@ -162,7 +162,7 @@ prepare_create_dir_cdmi_response(Req1, #cdmi_req{
 -spec get_directory_info([RequestedInfo :: binary()], cdmi_handler:cdmi_req()) ->
     map() | no_return().
 get_directory_info(RequestedInfo, #cdmi_req{
-    client = ?USER(_UserId, SessionId),
+    auth = #auth{session_id = SessionId},
     file_path = Path,
     file_attrs = #file_attr{guid = Guid} = Attrs
 }) ->

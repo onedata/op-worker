@@ -189,7 +189,7 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
 authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
@@ -198,10 +198,10 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_space_membership(Req#op_req.client, Guid);
+    check_space_membership(Req#op_req.auth, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    check_space_membership(Req#op_req.client, Guid);
+    check_space_membership(Req#op_req.auth, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
@@ -209,7 +209,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_space_membership(Req#op_req.client, Guid).
+    check_space_membership(Req#op_req.auth, Guid).
 
 
 %%--------------------------------------------------------------------
@@ -224,10 +224,10 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, 
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_space_supported_locally(Req#op_req.client, Guid);
+    assert_space_supported_locally(Req#op_req.auth, Guid);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    assert_space_supported_locally(Req#op_req.client, Guid);
+    assert_space_supported_locally(Req#op_req.auth, Guid);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
@@ -235,7 +235,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_space_supported_locally(Req#op_req.client, Guid).
+    assert_space_supported_locally(Req#op_req.auth, Guid).
 
 
 %%--------------------------------------------------------------------
@@ -244,16 +244,16 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
     Mode = maps:get(<<"mode">>, Data),
-    ?run(lfm:set_perms(Cl#client.session_id, {guid, Guid}, Mode));
+    ?run(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, Mode));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
     [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
     Xattr = #xattr{name = Name, value = Value},
-    ?run(lfm:set_xattr(Cl#client.session_id, {guid, Guid}, Xattr, false, false));
+    ?run(lfm:set_xattr(Auth#auth.session_id, {guid, Guid}, Xattr, false, false));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
     JSON = maps:get(<<"application/json">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -265,11 +265,11 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_met
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
      end,
-    ?run(lfm:set_metadata(Cl#client.session_id, {guid, Guid}, json, JSON, FilterList));
+    ?run(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, json, JSON, FilterList));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?run(lfm:set_metadata(Cl#client.session_id, {guid, Guid}, rdf, Rdf, [])).
+    ?run(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%--------------------------------------------------------------------
@@ -278,8 +278,8 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
+    SessionId = Auth#auth.session_id,
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
     {ok, Path} = ?run(lfm:get_file_path(SessionId, FileGuid)),
@@ -298,8 +298,8 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}},
             ?ERROR_POSIX(Errno)
    end;
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
+    SessionId = Auth#auth.session_id,
     Attributes = case maps:get(<<"attribute">>, Data, undefined) of
         undefined -> ?ALL_BASIC_ATTRIBUTES;
         Attr -> [Attr]
@@ -307,8 +307,8 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}
     {ok, Attrs} = ?run(lfm:stat(SessionId, {guid, FileGuid})),
     {ok, gather_attributes(#{}, Attributes, Attrs)};
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
+    SessionId = Auth#auth.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
 
     case maps:get(<<"attribute">>, Data, undefined) of
@@ -332,8 +332,8 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
             {ok, #{XattrName => Val}}
     end;
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
+    SessionId = Auth#auth.session_id,
 
     Inherited = maps:get(<<"inherited">>, Data, false),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -350,8 +350,8 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_me
 
     ?run(lfm:get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
 
-get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?run(lfm:get_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, [], false)).
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
+    ?run(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false)).
 
 
 %%--------------------------------------------------------------------
@@ -386,14 +386,14 @@ delete(_) ->
 %% in case of user root dir since it doesn't belong to any space.
 %% @end
 %%--------------------------------------------------------------------
--spec check_space_membership(op_logic:client(), file_id:file_guid()) -> boolean().
-check_space_membership(Client, Guid) ->
-    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
+-spec check_space_membership(aai:auth(), file_id:file_guid()) -> boolean().
+check_space_membership(?USER(UserId) = Auth, Guid) ->
+    case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
             true;
         _ ->
             SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:is_eff_space_member(Client, SpaceId)
+            op_logic_utils:is_eff_space_member(Auth, SpaceId)
     end.
 
 
@@ -405,9 +405,9 @@ check_space_membership(Client, Guid) ->
 %% and can be reached from any provider.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_space_supported_locally(op_logic:client(), file_id:file_guid()) ->
+-spec assert_space_supported_locally(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
-assert_space_supported_locally(#client{id = UserId}, Guid) ->
+assert_space_supported_locally(?USER(UserId), Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
             ok;

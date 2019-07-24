@@ -205,16 +205,16 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
 
-authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index_reduce_function, _}
 }}, _) ->
@@ -224,49 +224,49 @@ authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User is always authorized to list his spaces
     true;
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
     aspect = instance
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = indices
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_INDICES);
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_INDICES);
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {query_index, _}
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_QUERY_INDICES);
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = transfers
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = update, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
 
-authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index, _}
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
 
-authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {index_reduce_function, _}
 }}, _) ->
@@ -378,7 +378,10 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
+get(#op_req{gri = #gri{aspect = list}, auth = #auth{
+    subject = ?SUB(user, UserId),
+    session_id = SessionId}
+}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
             {ok ,lists:map(fun(SpaceId) ->
@@ -389,8 +392,8 @@ get(#op_req{client = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
             Error
     end;
 
-get(#op_req{client = Cl, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
-    case space_logic:get(Cl#client.session_id, SpaceId) of
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
+    case space_logic:get(Auth#auth.session_id, SpaceId) of
         {ok, #document{value = #od_space{name = Name, providers = ProvidersIds}}} ->
             Providers = lists:map(fun(ProviderId) ->
                 {ok, ProviderName} = provider_logic:get_name(ProviderId),

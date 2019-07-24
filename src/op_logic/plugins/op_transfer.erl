@@ -116,10 +116,10 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
     IndexPrivileges = case Transfer#transfer.index_name of
@@ -133,19 +133,19 @@ authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
     end,
     space_logic:has_eff_privileges(SpaceId, UserId, IndexPrivileges ++ TransferPrivileges);
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = instance
 }}, #transfer{space_id = SpaceId}) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = delete, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     aspect = instance
 }} = Req, #transfer{space_id = SpaceId} = Transfer) ->
     case Transfer#transfer.user_id of
         UserId ->
             % User doesn't need cancel privileges to cancel his transfer but
             % must still be member of space.
-            op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+            op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
         _ ->
             case transfer:type(Transfer) of
                 replication ->
@@ -186,8 +186,8 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, gri = #gri{id = TransferId, aspect = rerun}}) ->
-    case transfer:rerun_ended(Cl#client.id, TransferId) of
+create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
+    case transfer:rerun_ended(UserId, TransferId) of
         {ok, NewTransferId} ->
             {ok, value, NewTransferId};
         {error, not_ended} ->
