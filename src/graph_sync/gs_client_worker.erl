@@ -530,6 +530,7 @@ coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = R
             _ when Rev < CachedRev ->
                 % In case the fetched revision is lower, return 'stale_record'
                 % error, which will cause the request to be repeated
+                ?debug("Stale record ~s: received rev. ~B, but rev. ~B is already cached", [gs_protocol:gri_to_string(GRI), Rev, CachedRev]),
                 {error, stale_record};
 
             greater when Rev >= CachedRev ->
