@@ -36,8 +36,8 @@
     rerun_replica_eviction_by_other_user/3,
     rerun_dir_eviction/3,
     rerun_index_eviction/2,
-    cancel_replica_eviction_on_target_nodes/2,
-    cancel_replica_eviction_by_other_user/2,
+    cancel_replica_eviction_on_target_nodes_by_scheduling_user/2,
+    cancel_replica_eviction_on_target_nodes_by_other_user/2,
     fail_to_evict_file_replica_without_permissions/3,
     eviction_should_succeed_when_remote_provider_modified_file_replica/3,
     eviction_should_fail_when_evicting_provider_modified_file_replica/3,
@@ -736,7 +736,7 @@ rerun_index_eviction(Config, Type) ->
     ).
 
 
-cancel_replica_eviction_on_target_nodes(Config, Type) ->
+cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
@@ -760,7 +760,7 @@ cancel_replica_eviction_on_target_nodes(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes/2
+                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes_by_scheduling_user/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -779,7 +779,7 @@ cancel_replica_eviction_on_target_nodes(Config, Type) ->
         }
     ).
 
-cancel_replica_eviction_by_other_user(Config, Type) ->
+cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     User1 = <<"user1">>,
     User2 = <<"user2">>,
@@ -807,7 +807,7 @@ cancel_replica_eviction_by_other_user(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_replica_eviction_by_other_user/2
+                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes_by_other_user/2
             },
             expected = #expected{
                 expected_transfer = #{

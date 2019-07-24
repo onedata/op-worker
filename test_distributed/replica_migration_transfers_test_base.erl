@@ -40,8 +40,8 @@
     scheduling_migration_by_not_existing_key_in_index_should_succeed/2,
     schedule_migration_of_100_regular_files_by_index/2,
     schedule_migration_of_regular_file_by_index_with_reduce/2,
-    cancel_migration_on_target_nodes/2,
-    cancel_migration_by_other_user/2,
+    cancel_migration_on_target_nodes_by_scheduling_user/2,
+    cancel_migration_on_target_nodes_by_other_user/2,
     rerun_file_migration/3,
     rerun_index_migration/2
 ]).
@@ -992,7 +992,7 @@ schedule_migration_of_100_regular_files_by_index(Config, Type) ->
         }
     ).
 
-cancel_migration_on_target_nodes(Config, Type) ->
+cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
@@ -1015,7 +1015,7 @@ cancel_migration_on_target_nodes(Config, Type) ->
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP1],
                 replicating_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_migration_on_target_nodes/2
+                function = fun transfers_test_mechanism:cancel_migration_on_target_nodes_by_scheduling_user/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1035,7 +1035,7 @@ cancel_migration_on_target_nodes(Config, Type) ->
         }
     ).
 
-cancel_migration_by_other_user(Config, Type) ->
+cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
@@ -1062,7 +1062,7 @@ cancel_migration_by_other_user(Config, Type) ->
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP1],
                 replicating_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_migration_by_other_user/2
+                function = fun transfers_test_mechanism:cancel_migration_on_target_nodes_by_other_user/2
             },
             expected = #expected{
                 expected_transfer = #{

@@ -40,8 +40,8 @@
     replicate_to_not_supporting_provider/3,
     schedule_replication_on_not_supporting_provider/3,
     transfer_continues_on_modified_storage/3,
-    cancel_replication_on_target_nodes/2,
-    cancel_replication_by_other_user/2,
+    cancel_replication_on_target_nodes_by_scheduling_user/2,
+    cancel_replication_on_target_nodes_by_other_user/2,
     file_replication_failures_should_fail_whole_transfer/3,
     many_simultaneous_failed_transfers/3,
     rerun_file_replication/3,
@@ -769,7 +769,7 @@ transfer_continues_on_modified_storage(Config, Type, FileKeyType) ->
         }
     ).
 
-cancel_replication_on_target_nodes(Config, Type) ->
+cancel_replication_on_target_nodes_by_scheduling_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
@@ -791,7 +791,7 @@ cancel_replication_on_target_nodes(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_replication_on_target_nodes/2
+                function = fun transfers_test_mechanism:cancel_replication_on_target_nodes_by_scheduling_user/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -808,7 +808,7 @@ cancel_replication_on_target_nodes(Config, Type) ->
         }
     ).
 
-cancel_replication_by_other_user(Config, Type) ->
+cancel_replication_on_target_nodes_by_other_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     User1 = <<"user1">>,
     User2 = <<"user2">>,
@@ -833,7 +833,7 @@ cancel_replication_by_other_user(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_replication_by_other_user/2
+                function = fun transfers_test_mechanism:cancel_replication_on_target_nodes_by_other_user/2
             },
             expected = #expected{
                 expected_transfer = #{

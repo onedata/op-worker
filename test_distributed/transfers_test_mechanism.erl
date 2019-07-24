@@ -37,8 +37,8 @@
     replicate_each_file_separately/2,
     error_on_replicating_files/2,
     change_storage_params/2,
-    cancel_replication_on_target_nodes/2,
-    cancel_replication_by_other_user/2,
+    cancel_replication_on_target_nodes_by_scheduling_user/2,
+    cancel_replication_on_target_nodes_by_other_user/2,
     rerun_replication/2,
     rerun_index_replication/2,
     replicate_files_from_index/2,
@@ -49,8 +49,8 @@
     evict_root_directory/2,
     evict_each_file_replica_separately/2,
     schedule_replica_eviction_without_permissions/2,
-    cancel_replica_eviction_on_target_nodes/2,
-    cancel_replica_eviction_by_other_user/2,
+    cancel_replica_eviction_on_target_nodes_by_scheduling_user/2,
+    cancel_replica_eviction_on_target_nodes_by_other_user/2,
     rerun_evictions/2,
     rerun_index_evictions/2,
     evict_replicas_from_index/2,
@@ -61,8 +61,8 @@
     migrate_root_directory/2,
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
-    cancel_migration_on_target_nodes/2,
-    cancel_migration_by_other_user/2,
+    cancel_migration_on_target_nodes_by_scheduling_user/2,
+    cancel_migration_on_target_nodes_by_other_user/2,
     rerun_migrations/2,
     rerun_index_migrations/2,
     migrate_replicas_from_index/2,
@@ -214,7 +214,7 @@ change_storage_params(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-cancel_replication_on_target_nodes(Config, #scenario{
+cancel_replication_on_target_nodes_by_scheduling_user(Config, #scenario{
     user = User,
     type = Type,
     file_key_type = FileKeyType,
@@ -236,7 +236,7 @@ cancel_replication_on_target_nodes(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-cancel_replication_by_other_user(Config, #scenario{
+cancel_replication_on_target_nodes_by_other_user(Config, #scenario{
     user = User1,
     cancelling_user = User2,
     type = Type,
@@ -392,7 +392,7 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
     end, EvictingNodes),
     Config.
 
-cancel_replica_eviction_on_target_nodes(Config, #scenario{
+cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, #scenario{
     user = User,
     type = Type,
     file_key_type = FileKeyType,
@@ -414,7 +414,7 @@ cancel_replica_eviction_on_target_nodes(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-cancel_replica_eviction_by_other_user(Config, #scenario{
+cancel_replica_eviction_on_target_nodes_by_other_user(Config, #scenario{
     user = User1,
     cancelling_user = User2,
     type = Type,
@@ -583,7 +583,7 @@ schedule_replica_migration_without_permissions(Config, #scenario{
     end, EvictingNodes),
     Config.
 
-cancel_migration_on_target_nodes(Config, #scenario{
+cancel_migration_on_target_nodes_by_scheduling_user(Config, #scenario{
     user = User,
     type = Type,
     file_key_type = FileKeyType,
@@ -609,21 +609,7 @@ cancel_migration_on_target_nodes(Config, #scenario{
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
-rerun_migrations(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, false, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-rerun_index_migrations(Config, #scenario{user = User}) ->
-    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
-        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, true, OldTid, Config),
-        {TargetNode, NewTid, Guid, Path}
-    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
-    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
-
-cancel_migration_by_other_user(Config, #scenario{
+cancel_migration_on_target_nodes_by_other_user(Config, #scenario{
     user = User1,
     cancelling_user = User2,
     type = Type,
@@ -648,6 +634,20 @@ cancel_migration_by_other_user(Config, #scenario{
         cancel_transfer(TargetNode, User1, User2, migration, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
 
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
+
+rerun_migrations(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, false, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
+
+rerun_index_migrations(Config, #scenario{user = User}) ->
+    NodesTransferIdsAndFiles = lists:map(fun({TargetNode, OldTid, Guid, Path}) ->
+        {ok, NewTid} = rerun_transfer(TargetNode, User, migration, true, OldTid, Config),
+        {TargetNode, NewTid, Guid, Path}
+    end, ?config(?OLD_TRANSFERS_KEY, Config, [])),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 migrate_replicas_from_index(Config, #scenario{
