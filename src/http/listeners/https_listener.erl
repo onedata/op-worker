@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
 -include("http/op_gui.hrl").
+-include("http/cdmi.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("gui/include/gui.hrl").
 
@@ -67,8 +68,9 @@ start() ->
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
-        rest_handler:rest_routes(),
-        rest_router:top_level_routing()
+        {?CDMI_ID_PATH, cdmi_handler, by_id},
+        {?CDMI_PATH, cdmi_handler, by_path},
+        rest_handler:rest_routes()
     ]),
 
     DynamicPageRoutes = [
