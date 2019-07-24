@@ -2,7 +2,7 @@
 
 REPO	        ?= op-worker
 
-# distro for package building (oneof: xenial, centos-7-x86_64)
+# distro for package building (oneof: xenial, bionic, centos-7-x86_64)
 DISTRIBUTION    ?= none
 export DISTRIBUTION
 
@@ -125,7 +125,7 @@ dialyzer:
 
 check_distribution:
 ifeq ($(DISTRIBUTION), none)
-	@echo "Please provide package distribution. Oneof: 'xenial', 'centos-7-x86_64'"
+	@echo "Please provide package distribution. Oneof: 'xenial', 'bionic', 'centos-7-x86_64'"
 	@exit 1
 else
 	@echo "Building package for distribution $(DISTRIBUTION)"

@@ -1,11 +1,24 @@
 ##
 ## Export all variables to sub-invocation
 ##
+##
+## Export all variables to sub-invocation
+##
 export
 
-bootstrap:
+TEMPLATE_DIR := $(PKG_ID)/node_package/priv/templates
+DEB_TEMPLATE_DIR := $(TEMPLATE_DIR)/deb
+
+bootstrap: $(DEB_TEMPLATE_DIR)/deb.template
 	mkdir -p $(PKG_ID)/debian
 	cd $(PKG_ID)/debian && ../node_package/rebar -v create \
                               template_dir=../node_package/priv/templates \
                               template_vars=../$(PKG_VARS_CONFIG) template=deb
 	make -C $(PKG_ID) -f debian/Makefile
+
+DYNAMIC_PARAMS := ,{version, \"$(PKG_VERSION)\"}\
+                  ,{build, \"$(PKG_BUILD)\"}\
+                  ,{distribution, \"$(DISTRIBUTION)\"}
+
+$(DEB_TEMPLATE_DIR)/deb.template: $(DEB_TEMPLATE_DIR)/deb.template.template
+	sed "s/%dynamic_params%/$(DYNAMIC_PARAMS)/" $< > $@
