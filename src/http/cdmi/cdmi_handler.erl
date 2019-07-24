@@ -630,8 +630,10 @@ redirect_to(Req, CdmiReq, Path) ->
         <<"">> -> <<"https://", Hostname/binary, "/cdmi", Path/binary>>;
         _ -> <<"https://", Hostname/binary, "/cdmi", Path/binary, "?", Qs/binary>>
     end,
-    Headers = #{<<"location">> => Location},
-    NewReq = cowboy_req:reply(?HTTP_301_MOVED_PERMANENTLY, Headers, Req),
+    NewReq = cowboy_req:reply(?HTTP_302_FOUND, #{
+        <<"location">> => Location,
+        <<"cache-control">> => <<"max-age=3600">>
+    }, Req),
     {stop, NewReq, CdmiReq}.
 
 

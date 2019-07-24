@@ -34,19 +34,19 @@
 }).
 
 %% API
--export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2, get_posthooks/0]).
+-export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
-save_to_cache(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+-spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
+update_cache(Id, Diff, Default) ->
+    datastore_model:update(?CTX, Id, Diff, Default).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -62,15 +62,6 @@ invalidate_cache(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Provider create/update posthook.
-%% @end
-%%--------------------------------------------------------------------
--spec run_after(atom(), list(), term()) -> term().
-run_after(_Function, _Args, Result) ->
-    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -201,13 +192,3 @@ upgrade_record(2, Provider) ->
 
         #{}
     }}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of callbacks which will be called after each operation
-%% on datastore model.
-%% @end
-%%--------------------------------------------------------------------
--spec get_posthooks() -> [datastore_hooks:posthook()].
-get_posthooks() ->
-    [fun run_after/3].

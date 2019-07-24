@@ -15,6 +15,8 @@
 
 -behaviour(dynamic_page_behaviour).
 
+-include_lib("ctool/include/http/codes.hrl").
+
 -export([handle/2]).
 
 %%%===================================================================
@@ -29,7 +31,8 @@
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
     {ok, IdentityMacaroon} = provider_auth:get_identity_macaroon(),
-    cowboy_req:reply(200,
+    cowboy_req:reply(
+        ?HTTP_200_OK,
         #{<<"content-type">> => <<"text/plain">>},
         IdentityMacaroon,
         Req

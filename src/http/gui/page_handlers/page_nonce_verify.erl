@@ -15,6 +15,8 @@
 
 -behaviour(dynamic_page_behaviour).
 
+-include_lib("ctool/include/http/codes.hrl").
+
 -export([handle/2]).
 
 %%%===================================================================
@@ -33,7 +35,8 @@ handle(<<"GET">>, Req) ->
         true -> <<"ok">>;
         false -> <<"error">>
     end,
-    cowboy_req:reply(200,
+    cowboy_req:reply(
+        ?HTTP_200_OK,
         #{<<"content-type">> => <<"application/json">>},
         json_utils:encode(#{<<"status">> => Status}),
         Req
