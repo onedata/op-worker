@@ -129,7 +129,7 @@ handle_rpc(_, #auth{session_id = SessionId}, <<"getDirChildren">>, Data) ->
     StartId = maps:get(<<"index">>, Data),
     Offset = maps:get(<<"offset">>, Data, 0),
     Limit = maps:get(<<"limit">>, Data),
-    case lfm:ls_by_key(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
+    case lfm:ls_by_startid(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
         {ok, Children} ->
             {ok, lists:map(fun({ChildGuid, _ChildName}) ->
                 gs_protocol:gri_to_string(#gri{

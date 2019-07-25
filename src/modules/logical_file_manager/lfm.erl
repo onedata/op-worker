@@ -43,7 +43,7 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, ls_by_key/5, read_dir_plus/4, read_dir_plus/5,
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, ls_by_startid/5, read_dir_plus/4, read_dir_plus/5,
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
@@ -124,11 +124,11 @@ ls(SessId, FileKey, Offset, Limit) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls_by_key(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec ls_by_startid(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), StartId :: file_meta:name()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
-ls_by_key(SessId, FileKey, Offset, Limit, StartId) ->
-    ?run(fun() -> lfm_dirs:ls_by_key(SessId, FileKey, Offset, Limit, StartId) end).
+ls_by_startid(SessId, FileKey, Offset, Limit, StartId) ->
+    ?run(fun() -> lfm_dirs:ls_by_by_startid(SessId, FileKey, Offset, Limit, StartId) end).
 
 %%--------------------------------------------------------------------
 %% @doc

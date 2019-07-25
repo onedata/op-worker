@@ -73,7 +73,7 @@
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/4, get_file_children/5, get_file_children_by_key/5,
+    get_file_children/4, get_file_children/5, get_file_children_by_startid/5,
     get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
@@ -738,10 +738,10 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 %% Returns list of file children (starting from specified key).
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_children_by_key(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(),
-    Limit :: non_neg_integer(), StartId :: file_meta:name()) ->
+-spec get_file_children_by_startid(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(),
+    Limit :: non_neg_integer(), StartId :: undefined | file_meta:name()) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children_by_key(FileCtx, UserCtx, Offset, Limit, StartId) ->
+get_file_children_by_startid(FileCtx, UserCtx, Offset, Limit, StartId) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             {get_user_spaces(UserCtx, Offset, Limit), FileCtx};
@@ -753,8 +753,8 @@ get_file_children_by_key(FileCtx, UserCtx, Offset, Limit, StartId) ->
                 new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
             end,
 
-            {ok, ChildrenLinks, _} = file_meta:list_children_by_key(
-                FileDoc, StartId, Limit
+            {ok, ChildrenLinks, _} = file_meta:list_children_by_startid(
+                FileDoc, StartId, Offset, Limit
             ),
             {lists:map(MapFun, ChildrenLinks), FileCtx2}
     end.

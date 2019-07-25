@@ -69,6 +69,7 @@
   readdir_plus_should_work_with_token2/1,
   readdir_should_work_with_token/1,
   readdir_should_work_with_token2/1,
+  readdir_should_work_with_startid/1,
   lfm_recreate_handle/1,
   lfm_open_failure/1,
   lfm_create_and_open_failure/1,
@@ -443,6 +444,14 @@ readdir_should_work_with_token2(Config) ->
   Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
   Token4 = verify_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3),
   ?assertEqual(<<"">>, Token4).
+
+readdir_should_work_with_startid(Config) ->
+  {MainDirPath, Files} = generate_dir(Config, 10),
+  StartId1 = verify_with_startid(Config, MainDirPath, Files, 4, 4, 0, undefined),
+  StartId2 = verify_with_startid(Config, MainDirPath, Files, 4, 4, 3, StartId1),
+  StartId3 = verify_with_startid(Config, MainDirPath, Files, 3, 3, 6, StartId2),
+  StartId4 = verify_with_startid(Config, MainDirPath, Files, 2, 3, 8, StartId3),
+  ?assertEqual(lists:last(Files), StartId4).
 
 echo_loop(Config) ->
   ?PERFORMANCE(Config, [
@@ -1656,6 +1665,28 @@ verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLas
                 end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
   ?assertEqual(IsLast, IL),
   Token2.
+
+verify_with_startid(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, StartId) ->
+  [Worker | _] = ?config(op_worker_nodes, Config),
+
+  {SessId1, _UserId1} =
+    {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+  Ans = lfm_proxy:ls_by_startid(Worker, SessId1, {path, MainDirPath}, 0, Limit, StartId),
+  {ok, List} = ?assertMatch({ok, _}, Ans),
+  ?assertEqual(ExpectedSize, length(List)),
+
+  lists:foreach(fun({{_, F1}, F2}) ->
+    ?assertEqual(F1, F2)
+  end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
+
+  case List of
+    [_ | _] ->
+      {_, NextStartId} = lists:last(List),
+      NextStartId;
+    _ ->
+      undefined
+  end.
 
 verify_file_content(Config, Handle, FileContent) ->
   [Worker | _] = ?config(op_worker_nodes, Config),

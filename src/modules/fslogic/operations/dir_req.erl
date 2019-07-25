@@ -18,7 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([mkdir/4, read_dir/5, read_dir_by_key/5, read_dir_plus/5]).
+-export([mkdir/4, read_dir/5, read_dir_by_startid/5, read_dir_plus/5]).
 
 %%%===================================================================
 %%% API
@@ -51,17 +51,17 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
         fun read_dir_insecure/5).
 
 %%--------------------------------------------------------------------
-%% @equiv read_dir_insecure/4 with permission checks
+%% @equiv read_dir_by_startid_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_by_key(user_ctx:ctx(), file_ctx:ctx(),
+-spec read_dir_by_startid(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     StartId :: file_meta:name()) -> fslogic_worker:fuse_response().
-read_dir_by_key(UserCtx, FileCtx, Offset, Limit, StartId) ->
+read_dir_by_startid(UserCtx, FileCtx, Offset, Limit, StartId) ->
     check_permissions:execute(
         [traverse_ancestors, ?list_container],
         [UserCtx, FileCtx, Offset, Limit, StartId],
-        fun read_dir_by_key_insecure/5).
+        fun read_dir_by_startid_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv read_dir_plus_insecure/5 with permission checks
@@ -152,14 +152,14 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists directory starting from specified StartId.
+%% Lists directory starting from specified StartId (file name).
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_by_key_insecure(user_ctx:ctx(), file_ctx:ctx(),
+-spec read_dir_by_startid_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     StartId :: file_meta:name()) -> fslogic_worker:fuse_response().
-read_dir_by_key_insecure(UserCtx, FileCtx, Offset, Limit, StartId) ->
-    {Children, FileCtx2} = file_ctx:get_file_children_by_key(
+read_dir_by_startid_insecure(UserCtx, FileCtx, Offset, Limit, StartId) ->
+    {Children, FileCtx2} = file_ctx:get_file_children_by_startid(
         FileCtx, UserCtx, Offset, Limit, StartId
     ),
     fslogic_times:update_atime(FileCtx2),

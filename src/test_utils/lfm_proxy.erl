@@ -20,7 +20,7 @@
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5,
     create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
     read/4, silent_read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5,
-    ls/6, read_dir_plus/5, read_dir_plus/6, set_perms/4,
+    ls/6, ls_by_startid/6, read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
     get_acl/3, set_acl/4, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
@@ -261,6 +261,12 @@ ls(Worker, SessId, FileKey, Offset, Limit) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], binary(), boolean()} | lfm:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit, Token) ->
     ?EXEC(Worker, lfm:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
+
+-spec ls_by_startid(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer(), file_meta:name()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
+ls_by_startid(Worker, SessId, FileKey, Offset, Limit, StartId) ->
+    ?EXEC(Worker, lfm:ls_by_startid(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, StartId)).
 
 -spec read_dir_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
     {ok, [#file_attr{}]} | lfm:error_reply().
