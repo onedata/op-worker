@@ -45,12 +45,14 @@
     schedule_replication_on_not_supporting_provider_by_guid/1,
     schedule_replication_on_not_supporting_provider_by_path/1,
     transfer_continues_on_modified_storage/1,
-    cancel_replication_on_target_nodes/1,
+    cancel_replication_on_target_nodes_by_scheduling_user/1,
+    cancel_replication_on_target_nodes_by_other_user/1,
     file_replication_failures_should_fail_whole_transfer/1,
     many_simultaneous_failed_transfers/1,
     rerun_file_replication/1,
     rerun_file_replication_by_other_user/1,
     rerun_dir_replication/1,
+    rerun_index_replication/1,
     schedule_replication_of_regular_file_by_index/1,
     schedule_replication_of_regular_file_by_index2/1,
     schedule_replication_of_regular_file_by_index_with_reduce/1,
@@ -90,12 +92,14 @@ all() -> [
     schedule_replication_on_not_supporting_provider_by_guid,
     schedule_replication_on_not_supporting_provider_by_path,
     transfer_continues_on_modified_storage,
-    cancel_replication_on_target_nodes,
+    cancel_replication_on_target_nodes_by_scheduling_user,
+    cancel_replication_on_target_nodes_by_other_user,
     % file_replication_failures_should_fail_whole_transfer, TODO uncomment after resolving VFS-4742
     many_simultaneous_failed_transfers,
     rerun_file_replication,
     rerun_file_replication_by_other_user,
     rerun_dir_replication,
+    rerun_index_replication,
     schedule_replication_of_regular_file_by_index,
     schedule_replication_of_regular_file_by_index2,
     schedule_replication_of_regular_file_by_index_with_reduce,
@@ -185,8 +189,11 @@ schedule_replication_on_not_supporting_provider_by_path(Config) ->
 transfer_continues_on_modified_storage(Config) ->
     replication_transfers_test_base:transfer_continues_on_modified_storage(Config, rest, path).
 
-cancel_replication_on_target_nodes(Config) ->
-    replication_transfers_test_base:cancel_replication_on_target_nodes(Config, rest).
+cancel_replication_on_target_nodes_by_scheduling_user(Config) ->
+    replication_transfers_test_base:cancel_replication_on_target_nodes_by_scheduling_user(Config, rest).
+
+cancel_replication_on_target_nodes_by_other_user(Config) ->
+    replication_transfers_test_base:cancel_replication_on_target_nodes_by_other_user(Config, rest).
 
 file_replication_failures_should_fail_whole_transfer(Config) ->
     replication_transfers_test_base:file_replication_failures_should_fail_whole_transfer(Config, rest, guid).
@@ -202,6 +209,9 @@ rerun_file_replication_by_other_user(Config) ->
 
 rerun_dir_replication(Config) ->
     replication_transfers_test_base:rerun_dir_replication(Config, rest, guid).
+
+rerun_index_replication(Config) ->
+    replication_transfers_test_base:rerun_index_replication(Config, rest).
 
 schedule_replication_of_regular_file_by_index(Config) ->
     replication_transfers_test_base:schedule_replication_of_regular_file_by_index(Config, rest).

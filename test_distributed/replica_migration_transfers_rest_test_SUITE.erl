@@ -40,7 +40,11 @@
     scheduling_migration_by_not_existing_key_in_index_should_succeed/1,
     schedule_migration_of_100_regular_files_by_index_with_batch_1000/1,
     schedule_migration_of_100_regular_files_by_index_with_batch_100/1,
-    schedule_migration_of_100_regular_files_by_index_with_batch_10/1
+    schedule_migration_of_100_regular_files_by_index_with_batch_10/1,
+    cancel_migration_on_target_nodes_by_scheduling_user/1,
+    cancel_migration_on_target_nodes_by_other_user/1,
+    rerun_file_migration/1,
+    rerun_index_migration/1
 ]).
 
 all() -> [
@@ -65,7 +69,11 @@ all() -> [
     scheduling_migration_by_not_existing_key_in_index_should_succeed,
     schedule_migration_of_100_regular_files_by_index_with_batch_1000,
     schedule_migration_of_100_regular_files_by_index_with_batch_100,
-    schedule_migration_of_100_regular_files_by_index_with_batch_10
+    schedule_migration_of_100_regular_files_by_index_with_batch_10,
+    cancel_migration_on_target_nodes_by_scheduling_user,
+    cancel_migration_on_target_nodes_by_other_user,
+    rerun_file_migration,
+    rerun_index_migration
 ].
 
 %%%===================================================================
@@ -139,6 +147,18 @@ schedule_migration_of_100_regular_files_by_index_with_batch_100(Config) ->
 schedule_migration_of_100_regular_files_by_index_with_batch_10(Config) ->
     %replica_migration_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 10
     replica_migration_transfers_test_base:schedule_migration_of_100_regular_files_by_index(Config, rest).
+
+cancel_migration_on_target_nodes_by_scheduling_user(Config) ->
+    replica_migration_transfers_test_base:cancel_migration_on_target_nodes_by_scheduling_user(Config, rest).
+
+cancel_migration_on_target_nodes_by_other_user(Config) ->
+    replica_migration_transfers_test_base:cancel_migration_on_target_nodes_by_other_user(Config, rest).
+
+rerun_file_migration(Config) ->
+    replica_migration_transfers_test_base:rerun_file_migration(Config, rest, guid).
+
+rerun_index_migration(Config) ->
+    replica_migration_transfers_test_base:rerun_index_migration(Config, rest).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
