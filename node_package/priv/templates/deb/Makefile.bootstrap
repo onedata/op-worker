@@ -1,9 +1,6 @@
 ##
 ## Export all variables to sub-invocation
 ##
-##
-## Export all variables to sub-invocation
-##
 export
 
 TEMPLATE_DIR := $(PKG_ID)/node_package/priv/templates
