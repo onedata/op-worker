@@ -66,6 +66,7 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
+operation_supported(create, instance, private) -> true;
 operation_supported(create, attrs, private) -> true;
 operation_supported(create, xattrs, private) -> true;
 operation_supported(create, json_metadata, private) -> true;
@@ -87,6 +88,24 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
+    required => #{
+        <<"name">> => {binary, non_empty},
+        <<"type">> => {binary, [<<"file">>, <<"dir">>]},
+        <<"parent">> => {binary, fun(Parent) ->
+            try gs_protocol:string_to_gri(Parent) of
+                #gri{type = op_file, id = ParentGuid, aspect = instance} ->
+                    {true, ParentGuid};
+                _ ->
+                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"parent">>))
+            catch _:_ ->
+                false
+            end
+        end}
+
+    }
+};
+
 data_spec(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
     required => #{<<"mode">> => {binary,
         fun(Mode) ->
@@ -196,6 +215,10 @@ exists(_, _) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
+authorize(#op_req{operation = create, gri = #gri{aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Req#op_req.data)),
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
+
 authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
     As =:= xattrs;
@@ -225,6 +248,10 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Req#op_req.data)),
+    op_logic_utils:assert_space_supported_locally(SpaceId);
+
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
     As =:= xattrs;
@@ -254,6 +281,23 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
+    SessionId = Auth#auth.session_id,
+
+    Name = maps:get(<<"name">>, Data),
+    Type = maps:get(<<"type">>, Data),
+    ParentGuid = maps:get(<<"parent">>, Data),
+
+    {ok, ParentPath} = ?run(lfm:get_file_path(SessionId, ParentGuid)),
+    Path = filename:join([ParentPath, Name]),
+    {ok, Guid} = case Type of
+        <<"file">> -> ?run(lfm:create(SessionId, Path));
+        <<"dir">> -> ?run(lfm:mkdir(SessionId, Path))
+    end,
+
+    {ok, Attrs} = ?run(lfm:stat(SessionId, {guid, Guid})),
+    {ok, resource, {GRI#gri{id = Guid}, Attrs}};
+
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
     Mode = maps:get(<<"mode">>, Data),
     ?run(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, Mode));

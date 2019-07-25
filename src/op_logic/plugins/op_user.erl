@@ -55,6 +55,7 @@ op_logic_plugin() ->
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(get, instance, private) -> true;
+operation_supported(get, eff_spaces, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -66,6 +67,9 @@ operation_supported(_, _, _) -> false.
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
     undefined.
 
 
@@ -110,7 +114,10 @@ authorize(#op_req{auth = ?USER(UserId), gri = #gri{id = UserId}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= eff_spaces
+->
     ok.
 
 

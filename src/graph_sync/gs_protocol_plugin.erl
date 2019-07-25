@@ -67,7 +67,7 @@ decode_entity_type(<<"harvester">>) -> od_harvester;
 
 % communication with op gui
 decode_entity_type(<<"file">>) -> op_file;
-decode_entity_type(<<"op_space">>) -> op_file;
-decode_entity_type(<<"op_file">>) -> op_file;
+decode_entity_type(<<"op_space">>) -> op_space;
+decode_entity_type(<<"op_user">>) -> op_user;
 
 decode_entity_type(_) -> throw(?ERROR_BAD_TYPE).
