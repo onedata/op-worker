@@ -29,6 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec encode_entity_type(gs_protocol:entity_type()) -> binary().
+% communication with oz
 encode_entity_type(od_user) -> <<"user">>;
 encode_entity_type(od_group) -> <<"group">>;
 encode_entity_type(od_space) -> <<"space">>;
@@ -38,6 +39,12 @@ encode_entity_type(od_handle_service) -> <<"handleService">>;
 encode_entity_type(od_handle) -> <<"handle">>;
 encode_entity_type(od_cluster) -> <<"cluster">>;
 encode_entity_type(od_harvester) -> <<"harvester">>;
+
+% communication with op gui
+encode_entity_type(op_file) -> <<"file">>;
+encode_entity_type(op_space) -> <<"op_space">>;
+encode_entity_type(op_user) -> <<"op_user">>;
+
 encode_entity_type(_) -> throw(?ERROR_BAD_TYPE).
 
 
@@ -47,6 +54,7 @@ encode_entity_type(_) -> throw(?ERROR_BAD_TYPE).
 %% @end
 %%--------------------------------------------------------------------
 -spec decode_entity_type(binary()) -> gs_protocol:entity_type().
+% communication with oz
 decode_entity_type(<<"user">>) -> od_user;
 decode_entity_type(<<"group">>) -> od_group;
 decode_entity_type(<<"space">>) -> od_space;
@@ -56,4 +64,10 @@ decode_entity_type(<<"handleService">>) -> od_handle_service;
 decode_entity_type(<<"handle">>) -> od_handle;
 decode_entity_type(<<"cluster">>) -> od_cluster;
 decode_entity_type(<<"harvester">>) -> od_harvester;
+
+% communication with op gui
+decode_entity_type(<<"file">>) -> op_file;
+decode_entity_type(<<"op_space">>) -> op_file;
+decode_entity_type(<<"op_file">>) -> op_file;
+
 decode_entity_type(_) -> throw(?ERROR_BAD_TYPE).

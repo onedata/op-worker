@@ -15,8 +15,11 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, read_dir_plus/4, read_dir_plus/5,
-    get_child_attr/3, get_children_count/2]).
+-export([
+    mkdir/2, mkdir/3, mkdir/4,
+    ls/4, ls/5, ls_by_key/5, read_dir_plus/4, read_dir_plus/5,
+    get_child_attr/3, get_children_count/2
+]).
 
 %%%===================================================================
 %%% API
@@ -89,6 +92,23 @@ ls(SessId, FileKey, Offset, Limit, Token) ->
         fun(#file_children{child_links = List, index_token = Token2, is_last = IL}) ->
             {ok, [{Guid_, FileName}
                 || #child_link{guid = Guid_, name = FileName} <- List], Token2, IL}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists some contents of a directory.
+%% Returns up to Limit of entries. Uses token to choose starting entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec ls_by_key(session:id(), fslogic_worker:file_guid_or_path(),
+    Offset :: integer(), Limit :: integer(), StartId :: file_meta:name()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
+ls_by_key(SessId, FileKey, Offset, Limit, StartId) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #get_file_children_by_key{offset = Offset, size = Limit, start_id = StartId},
+        fun(#file_children{child_links = List}) ->
+            {ok, [{Guid_, FileName} || #child_link{guid = Guid_, name = FileName} <- List]}
         end).
 
 %%--------------------------------------------------------------------

@@ -376,6 +376,12 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
 handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size,
     index_token = Token}, FileCtx) ->
     dir_req:read_dir(UserCtx, FileCtx, Offset, Size, Token);
+handle_file_request(UserCtx, #get_file_children_by_key{
+    offset = Offset,
+    size = Size,
+    start_id = StartId
+}, FileCtx) ->
+    dir_req:read_dir_by_key(UserCtx, FileCtx, Offset, Size, StartId);
 handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
     size = Size, index_token = Token}, FileCtx) ->
     dir_req:read_dir_plus(UserCtx, FileCtx, Offset, Size, Token);

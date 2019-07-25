@@ -394,19 +394,8 @@ get(#op_req{gri = #gri{aspect = list}, auth = #auth{
 
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     case space_logic:get(Auth#auth.session_id, SpaceId) of
-        {ok, #document{value = #od_space{name = Name, providers = ProvidersIds}}} ->
-            Providers = lists:map(fun(ProviderId) ->
-                {ok, ProviderName} = provider_logic:get_name(ProviderId),
-                #{
-                    <<"providerId">> => ProviderId,
-                    <<"providerName">> => ProviderName
-                }
-            end, maps:keys(ProvidersIds)),
-            {ok, #{
-                <<"name">> => Name,
-                <<"providers">> => Providers,
-                <<"spaceId">> => SpaceId
-            }};
+        {ok, #document{value = Space}} ->
+            {ok, Space};
         {error, _} = Error ->
             Error
     end;

@@ -26,6 +26,9 @@
 %% Prefix of paths requested by websocket clients.
 -define(WEBSOCKET_PREFIX_PATH, "/ws/").
 
+% Graph Sync endpoints
+-define(GUI_GRAPH_SYNC_WS_PATH, "/graph_sync/gui").
+
 %% GUI routing plugin - module of such name is expected in
 %% the application including gui.
 %% @todo this could be configurable from env - do we need so?

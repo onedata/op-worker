@@ -71,6 +71,7 @@ operation_supported(create, xattrs, private) -> true;
 operation_supported(create, json_metadata, private) -> true;
 operation_supported(create, rdf_metadata, private) -> true;
 
+operation_supported(get, instance, private) -> true;
 operation_supported(get, list, private) -> true;
 operation_supported(get, attrs, private) -> true;
 operation_supported(get, xattrs, private) -> true;
@@ -126,6 +127,9 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = json_metadata}}) -> #{
 data_spec(#op_req{operation = create, gri = #gri{aspect = rdf_metadata}}) -> #{
     required => #{<<"application/rdf+xml">> => {binary, any}}
 };
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) -> #{
     optional => #{
@@ -200,7 +204,10 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
 ->
     check_space_membership(Req#op_req.auth, Guid);
 
-authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
+authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= list
+->
     check_space_membership(Req#op_req.auth, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
@@ -226,7 +233,10 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, 
 ->
     assert_space_supported_locally(Req#op_req.auth, Guid);
 
-validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
+validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= list
+->
     assert_space_supported_locally(Req#op_req.auth, Guid);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
@@ -278,6 +288,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
+    ?run(lfm:stat(Auth#auth.session_id, {guid, FileGuid}));
+
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
     SessionId = Auth#auth.session_id,
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),

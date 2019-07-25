@@ -72,7 +72,9 @@
 -export([get_canonical_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
-    get_parent_guid/2, get_child/3, get_file_children/4, get_file_children/5, get_logical_path/2,
+    get_parent_guid/2, get_child/3,
+    get_file_children/4, get_file_children/5, get_file_children_by_key/5,
+    get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
@@ -714,20 +716,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            SessionId = user_ctx:get_session_id(UserCtx),
-            #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
-            case Offset < length(Spaces) of
-                true ->
-                    SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
-                    Children = lists:map(fun(SpaceId) ->
-                        {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-                        SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                        new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
-                    end, SpacesChunk),
-                    {Children, FileCtx};
-                false ->
-                    {[], FileCtx}
-            end;
+            {get_user_spaces(UserCtx, Offset, Limit), FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
@@ -742,6 +731,32 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
                 {ok, ChildrenLinks, _} ->
                     {lists:map(MapFun, ChildrenLinks), FileCtx2}
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of file children (starting from specified key).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children_by_key(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(),
+    Limit :: non_neg_integer(), StartId :: file_meta:name()) ->
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
+get_file_children_by_key(FileCtx, UserCtx, Offset, Limit, StartId) ->
+    case is_user_root_dir_const(FileCtx, UserCtx) of
+        true ->
+            {get_user_spaces(UserCtx, Offset, Limit), FileCtx};
+        false ->
+            {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
+            SpaceId = get_space_id_const(FileCtx2),
+            ShareId = get_share_id_const(FileCtx2),
+            MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+            end,
+
+            {ok, ChildrenLinks, _} = file_meta:list_children_by_key(
+                FileDoc, StartId, Limit
+            ),
+            {lists:map(MapFun, ChildrenLinks), FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -1319,4 +1334,23 @@ get_file_size_from_remote_locations(FileCtx) ->
                 #document{value = #file_location{size = Size}} ->
                     {Size, FileCtx2}
             end
+    end.
+
+%% @private
+-spec get_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
+    Limit :: non_neg_integer()) -> Children :: [ctx()].
+get_user_spaces(UserCtx, Offset, Limit) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+    case Offset < length(Spaces) of
+        true ->
+            SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
+            Children = lists:map(fun(SpaceId) ->
+                {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+                SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
+            end, SpacesChunk),
+            Children;
+        false ->
+            []
     end.

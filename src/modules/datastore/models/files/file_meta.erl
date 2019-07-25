@@ -35,7 +35,8 @@
 -export([get_parent/1, get_parent_uuid/1]).
 -export([get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
-    list_children_by_key/4, list_children_by_key/5]).
+    list_children_by_key/3, list_children_by_key/4, list_children_by_key/5
+]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -437,6 +438,17 @@ list_children(Entry, Offset, Size) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Size, Token) ->
     list_children_internal(Entry, #{offset => Offset, size => Size, token => Token}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv list_children_internal(Entry, #{prev_link_name => PrevLinkKey,
+%%  prev_tree_id => PrevProviderID, size => Size}).
+%% @end
+%%--------------------------------------------------------------------
+-spec list_children_by_key(entry(), name(), non_neg_integer()) ->
+    {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
+list_children_by_key(Entry, PrevLinkKey, Size) ->
+    list_children_internal(Entry, #{prev_link_name => PrevLinkKey, size => Size}).
 
 %%--------------------------------------------------------------------
 %% @doc

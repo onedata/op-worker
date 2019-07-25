@@ -44,6 +44,12 @@
     index_token :: undefined | binary()
 }).
 
+-record(get_file_children_by_key, {
+    offset :: file_meta:offset(),
+    size :: file_meta:size(),
+    start_id :: file_meta:name()
+}).
+
 -record(get_file_children_attrs, {
     offset :: file_meta:offset(),
     size :: file_meta:size(),
@@ -151,7 +157,8 @@
 }).
 
 -type file_request_type() ::
-    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
+    #get_file_attr{} | #get_file_children{} | #get_file_children_by_key{} |
+    #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |

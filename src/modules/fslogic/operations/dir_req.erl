@@ -18,7 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([mkdir/4, read_dir/5, read_dir_plus/5]).
+-export([mkdir/4, read_dir/5, read_dir_by_key/5, read_dir_plus/5]).
 
 %%%===================================================================
 %%% API
@@ -49,6 +49,19 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
         [traverse_ancestors, ?list_container],
         [UserCtx, FileCtx, Offset, Limit, Token],
         fun read_dir_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @equiv read_dir_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_by_key(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    StartId :: file_meta:name()) -> fslogic_worker:fuse_response().
+read_dir_by_key(UserCtx, FileCtx, Offset, Limit, StartId) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?list_container],
+        [UserCtx, FileCtx, Offset, Limit, StartId],
+        fun read_dir_by_key_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv read_dir_plus_insecure/5 with permission checks
@@ -133,6 +146,35 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
             child_links = ChildrenLinks,
             index_token = NewToken,
             is_last = IsLast
+        }
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Lists directory starting from specified StartId.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_by_key_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    StartId :: file_meta:name()) -> fslogic_worker:fuse_response().
+read_dir_by_key_insecure(UserCtx, FileCtx, Offset, Limit, StartId) ->
+    {Children, FileCtx2} = file_ctx:get_file_children_by_key(
+        FileCtx, UserCtx, Offset, Limit, StartId
+    ),
+    fslogic_times:update_atime(FileCtx2),
+
+    ChildrenLinks = lists:map(fun(ChildFile) ->
+        ChildGuid = file_ctx:get_guid_const(ChildFile),
+        {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
+        #child_link{name = ChildName, guid = ChildGuid}
+    end, Children),
+
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children{
+            child_links = ChildrenLinks,
+            index_token = <<"">>,
+            is_last = length(Children) < Limit
         }
     }.
 
