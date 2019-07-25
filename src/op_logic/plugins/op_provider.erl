@@ -20,6 +20,7 @@
 -include("global_definitions.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 -export([gather_configuration/0]).
 
@@ -35,7 +36,6 @@
 ]).
 -export([create/1, get/2, update/1, delete/1]).
 
--define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
 
 %%%===================================================================
 %%% API
@@ -62,21 +62,22 @@ gather_configuration() ->
         undefined -> undefined;
         _ -> oneprovider:get_oz_domain()
     end,
-    CompOzVersions = application:get_env(?APP_NAME, compatible_oz_versions, []),
-    CompOpVersions = application:get_env(?APP_NAME, compatible_op_versions, []),
-    CompOcVersions = application:get_env(?APP_NAME, compatible_oc_versions, []),
+    Version = oneprovider:get_version(),
+    {ok, CompOzVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEZONE),
+    {ok, CompOpVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEPROVIDER),
+    {ok, CompOcVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONECLIENT),
 
     #{
         <<"providerId">> => gs_protocol:undefined_to_null(ProviderId),
         <<"name">> => gs_protocol:undefined_to_null(Name),
         <<"domain">> => gs_protocol:undefined_to_null(Domain),
         <<"onezoneDomain">> => gs_protocol:undefined_to_null(OnezoneDomain),
-        <<"version">> => oneprovider:get_version(),
+        <<"version">> => Version,
         <<"build">> => oneprovider:get_build(),
         <<"rtransferPort">> => ?RTRANSFER_PORT,
-        <<"compatibleOnezoneVersions">> => ?to_binaries(CompOzVersions),
-        <<"compatibleOneproviderVersions">> => ?to_binaries(CompOpVersions),
-        <<"compatibleOneclientVersions">> => ?to_binaries(CompOcVersions)
+        <<"compatibleOnezoneVersions">> => CompOzVersions,
+        <<"compatibleOneproviderVersions">> => CompOpVersions,
+        <<"compatibleOneclientVersions">> => CompOcVersions
     }.
 
 
