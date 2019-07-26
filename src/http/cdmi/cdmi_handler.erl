@@ -480,7 +480,7 @@ resolve_resource_by_id(Req) ->
     {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
             case http_auth:authenticate(Req) of
-                {ok, #auth{subject = ?SUB(user), session_id = SessionId} = Auth0} ->
+                {ok, ?USER = #auth{session_id = SessionId} = Auth0} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->
                             {Auth0, FilePath};

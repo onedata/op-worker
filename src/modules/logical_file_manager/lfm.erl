@@ -125,7 +125,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ls_by_startid(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer(), StartId :: file_meta:name()) ->
+    Offset :: integer(), Limit :: integer(), StartId :: undefined | file_meta:name()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
 ls_by_startid(SessId, FileKey, Offset, Limit, StartId) ->
     ?run(fun() -> lfm_dirs:ls_by_by_startid(SessId, FileKey, Offset, Limit, StartId) end).

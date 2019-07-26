@@ -126,7 +126,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, Entity) ->
     gs_protocol:rpc_result().
 handle_rpc(_, #auth{session_id = SessionId}, <<"getDirChildren">>, Data) ->
     FileGuid = maps:get(<<"guid">>, Data),
-    StartId = maps:get(<<"index">>, Data),
+    StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, 0),
     Limit = maps:get(<<"limit">>, Data),
     case lfm:ls_by_startid(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of

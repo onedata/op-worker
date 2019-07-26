@@ -79,6 +79,8 @@ operation_supported(get, xattrs, private) -> true;
 operation_supported(get, json_metadata, private) -> true;
 operation_supported(get, rdf_metadata, private) -> true;
 
+operation_supported(delete, instance, private) -> true;
+
 operation_supported(_, _, _) -> false.
 
 
@@ -177,6 +179,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = json_metadata}}) -> #{
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
+    undefined;
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
 
 
@@ -229,17 +234,17 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= instance;
-    As =:= list
-->
-    check_space_membership(Req#op_req.auth, Guid);
-
-authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= list;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_space_membership(Req#op_req.auth, Guid).
+    check_space_membership(Req#op_req.auth, Guid);
+
+authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -262,17 +267,17 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, 
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= instance;
-    As =:= list
-->
-    assert_space_supported_locally(Req#op_req.auth, Guid);
-
-validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= list;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_space_supported_locally(Req#op_req.auth, Guid).
+    assert_space_supported_locally(Req#op_req.auth, Guid);
+
+validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}}, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -427,8 +432,8 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
+    ?run(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%%===================================================================

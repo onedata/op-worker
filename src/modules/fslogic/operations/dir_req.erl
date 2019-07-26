@@ -56,7 +56,7 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
 %%--------------------------------------------------------------------
 -spec read_dir_by_startid(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
-    StartId :: file_meta:name()) -> fslogic_worker:fuse_response().
+    StartId :: undefined | file_meta:name()) -> fslogic_worker:fuse_response().
 read_dir_by_startid(UserCtx, FileCtx, Offset, Limit, StartId) ->
     check_permissions:execute(
         [traverse_ancestors, ?list_container],
@@ -157,7 +157,7 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
 %%--------------------------------------------------------------------
 -spec read_dir_by_startid_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
-    StartId :: file_meta:name()) -> fslogic_worker:fuse_response().
+    StartId :: undefined | file_meta:name()) -> fslogic_worker:fuse_response().
 read_dir_by_startid_insecure(UserCtx, FileCtx, Offset, Limit, StartId) ->
     {Children, FileCtx2} = file_ctx:get_file_children_by_startid(
         FileCtx, UserCtx, Offset, Limit, StartId

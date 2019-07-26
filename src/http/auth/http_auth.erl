@@ -40,7 +40,7 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, #auth{subject = ?SUB(user, UserId), session_id = SessionId}} ->
+        {ok, ?USER(UserId) = #auth{session_id = SessionId}} ->
             {true, Req, State#{
                 user_id => UserId,
                 auth => SessionId
