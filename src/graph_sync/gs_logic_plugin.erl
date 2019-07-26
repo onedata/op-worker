@@ -45,6 +45,8 @@
     {ok, aai:auth()} | gs_protocol:error().
 verify_handshake_auth(undefined) ->
     {ok, ?NOBODY};
+verify_handshake_auth(nobody) ->
+    {ok, ?NOBODY};
 verify_handshake_auth({macaroon, Macaroon, _DischargeMacaroons}) ->
     Credentials = #macaroon_auth{macaroon = Macaroon},
     case user_identity:get_or_fetch(Credentials) of
@@ -104,16 +106,16 @@ verify_auth_override(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(aai:auth(), gs_protocol:auth_hint(),
-    gs_protocol:gri(), gs_protocol:operation(), gs_protocol:data()) ->
+    gs_protocol:gri(), gs_protocol:operation(), gs_protocol:versioned_entity()) ->
     {true, gs_protocol:gri()} | false.
-is_authorized(Auth, AuthHint, GRI, Operation, Entity) ->
+is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
     OpReq = #op_req{
         auth = Auth,
         operation = Operation,
         gri = GRI,
         auth_hint = AuthHint
     },
-    op_logic:is_authorized(OpReq, Entity).
+    op_logic:is_authorized(OpReq, VersionedEntity).
 
 
 %%--------------------------------------------------------------------
@@ -159,16 +161,17 @@ handle_rpc(_, _, _, _) ->
 %%--------------------------------------------------------------------
 -spec handle_graph_request(aai:auth(), gs_protocol:auth_hint(),
     gs_protocol:gri(), gs_protocol:operation(), gs_protocol:data(),
-    gs_protocol:entity()) -> gs_protocol:graph_request_result().
-handle_graph_request(Auth, AuthHint, GRI, Operation, Data, Entity) ->
+    gs_protocol:versioned_entity()) -> gs_protocol:graph_request_result().
+handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
     OpReq = #op_req{
         auth = Auth,
         operation = Operation,
         gri = GRI,
         data = Data,
-        auth_hint = AuthHint
+        auth_hint = AuthHint,
+        return_revision = true
     },
-    op_logic:handle(OpReq, Entity).
+    op_logic:handle(OpReq, VersionedEntity).
 
 
 %%--------------------------------------------------------------------

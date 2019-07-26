@@ -25,7 +25,9 @@
     gri :: op_logic:gri(),
     operation = create :: op_logic:operation(),
     data = #{} :: op_logic:data(),
-    auth_hint = undefined :: undefined | op_logic:auth_hint()
+    auth_hint = undefined :: undefined | op_logic:auth_hint(),
+    % applicable for create/get requests - returns the revision of resource
+    return_revision = false :: boolean()
 }).
 
 -endif.

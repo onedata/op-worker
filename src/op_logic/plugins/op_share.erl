@@ -100,9 +100,9 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     id = ShareId,
@@ -111,7 +111,7 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     fetch_share(Auth, ShareId);
 
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = update, auth = Auth, gri = #gri{
     id = ShareId,
@@ -120,7 +120,7 @@ fetch_entity(#op_req{operation = update, auth = Auth, gri = #gri{
     fetch_share(Auth, ShareId);
 
 fetch_entity(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = ShareId,
@@ -129,7 +129,7 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     fetch_share(Auth, ShareId);
 
 fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined}.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -261,7 +261,7 @@ create(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 get(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
     ShareId = resolve_share_id(Auth, DirGuid),
     case fetch_share(Auth, ShareId) of
-        {ok, Share} ->
+        {ok, {Share, _}} ->
             get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
@@ -329,11 +329,11 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 
 %% @private
 -spec fetch_share(aai:auth(), od_share:id()) ->
-    {ok, #od_share{}} | ?ERROR_NOT_FOUND.
+    {ok, {#od_share{}, op_logic:revision()}} | ?ERROR_NOT_FOUND.
 fetch_share(#auth{session_id = SessionId}, ShareId) ->
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = Share}} ->
-            {ok, Share};
+            {ok, {Share, 1}};
         _ ->
             ?ERROR_NOT_FOUND
     end.

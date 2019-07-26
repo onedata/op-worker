@@ -191,9 +191,9 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(_) ->
-    {ok, undefined}.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
