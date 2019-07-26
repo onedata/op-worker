@@ -155,6 +155,36 @@ handle_rpc(_, #auth{session_id = SessionId}, <<"getFileDownloadUrl">>, Data) ->
             ]),
             ?ERROR_POSIX(Errno)
     end;
+handle_rpc(_, #auth{session_id = SessionId}, <<"moveFile">>, Data) ->
+    FileGuid = maps:get(<<"guid">>, Data),
+    TargetParentGuid = maps:get(<<"targetParentGuid">>, Data),
+    TargetName = maps:get(<<"targetName">>, Data),
+    case lfm:mv(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
+        {ok, NewGuid} ->
+            #{<<"id">> => gs_protocol:gri_to_string(#gri{
+                type = op_file,
+                id = NewGuid,
+                aspect = instance,
+                scope = private
+            })};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
+handle_rpc(_, #auth{session_id = SessionId}, <<"copyFile">>, Data) ->
+    FileGuid = maps:get(<<"guid">>, Data),
+    TargetParentGuid = maps:get(<<"targetParentGuid">>, Data),
+    TargetName = maps:get(<<"targetName">>, Data),
+    case lfm:cp(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
+        {ok, NewGuid} ->
+            #{<<"id">> => gs_protocol:gri_to_string(#gri{
+                type = op_file,
+                id = NewGuid,
+                aspect = instance,
+                scope = private
+            })};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
 handle_rpc(_, _, _, _) ->
     ?ERROR_RPC_UNDEFINED.
 
