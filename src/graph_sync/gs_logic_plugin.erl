@@ -199,7 +199,18 @@ ls(#auth{session_id = SessionId} = Auth, Data) ->
             <<"limit">> => {integer, {not_lower_than, 1}}
         },
         optional => #{
-            <<"index">> => {binary, non_empty},
+            <<"index">> => {any, fun
+                (null) ->
+                    {true, undefined};
+                (undefined) ->
+                    true;
+                (<<>>) ->
+                    throw(?ERROR_BAD_VALUE_EMPTY(<<"index">>));
+                (IndexBin) when is_binary(IndexBin) ->
+                    true;
+                (_) ->
+                    false
+            end},
             <<"offset">> => {integer, {not_lower_than, 0}}
         }
     }),
@@ -287,12 +298,12 @@ cp(#auth{session_id = SessionId} = Auth, Data) ->
 
 %% @private
 -spec assert_space_membership_and_local_support(aai:auth(), file_id:file_guid()) ->
-    ok | ?ERROR_UNAUTHORIZED.
+    ok | no_return().
 assert_space_membership_and_local_support(Auth, Guid) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     case op_logic_utils:is_eff_space_member(Auth, SpaceId) of
         true ->
             op_logic_utils:assert_space_supported_locally(SpaceId);
         false ->
-            ?ERROR_UNAUTHORIZED
+            throw(?ERROR_UNAUTHORIZED)
     end.

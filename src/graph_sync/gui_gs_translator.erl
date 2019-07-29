@@ -16,6 +16,7 @@
 -behaviour(gs_translator_behaviour).
 
 -include("op_logic.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
@@ -49,11 +50,12 @@ handshake_attributes(_Client) ->
 %% {@link gs_translator_behaviour} callback translate_value/3.
 %% @end
 %%--------------------------------------------------------------------
+% TODO remove turning off dialyzer for this fun after implementing clause
+% that doesn't throw an error
+-dialyzer({nowarn_function, translate_value/3}).
 -spec translate_value(gs_protocol:protocol_version(), gs_protocol:gri(),
     Value :: term()) -> Result | fun((aai:auth()) -> Result) when
     Result :: gs_protocol:data() | gs_protocol:error().
-translate_value(_, _, _) ->
-    #{};
 translate_value(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync create result for:~n
     ProtocolVersion: ~p~n
@@ -114,8 +116,19 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
             {<<"file">>, SizeAttr}
     end,
 
-    fun(?USER = #auth{session_id = SessionId}) ->
-        {ok, ParentGuid} = lfm:get_parent(SessionId, {guid, Guid}),
+    fun(?USER = #auth{session_id = SessId}) ->
+        Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
+            true ->
+                null;
+            false ->
+                {ok, ParentGuid} = ?check(lfm:get_parent(SessId, {guid, Guid})),
+                gs_protocol:gri_to_string(#gri{
+                    type = op_file,
+                    id = ParentGuid,
+                    aspect = instance,
+                    scope = private
+                })
+        end,
 
         #{
             <<"name">> => Name,
@@ -123,12 +136,7 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
             <<"type">> => Type,
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
-            <<"parent">> => gs_protocol:gri_to_string(#gri{
-                type = op_file,
-                id = ParentGuid,
-                aspect = instance,
-                scope = private
-            })
+            <<"parent">> => Parent
         }
     end.
 
