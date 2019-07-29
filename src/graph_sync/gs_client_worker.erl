@@ -43,7 +43,8 @@
 -export_type([client/0, result/0]).
 
 -record(state, {
-    client_ref = undefined :: undefined | gs_client:client_ref()
+    client_ref = undefined :: undefined | gs_client:client_ref(),
+    promises = #{} :: #{gs_protocol:message_id() => pid()}
 }).
 -type state() :: #state{}.
 -type connection_ref() :: pid().
@@ -53,7 +54,7 @@
 %% API
 -export([start_link/0]).
 -export([force_terminate/0]).
--export([request/1, request/2]).
+-export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
 -export([process_push_message/1]).
 
@@ -93,8 +94,7 @@ force_terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles a Graph Sync request by contacting Onezone or serving the response
-%% from cache if possible. Uses default client (this provider).
+%% @equiv request(?ROOT_SESS_ID, Req).
 %% @end
 %%--------------------------------------------------------------------
 -spec request(gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
@@ -104,15 +104,25 @@ request(Req) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% @equiv request(Client, Req, ?GS_REQUEST_TIMEOUT).
+%% @end
+%%--------------------------------------------------------------------
+-spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
+request(Client, Req) ->
+    request(Client, Req, ?GS_REQUEST_TIMEOUT).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Handles a Graph Sync request by contacting Onezone or serving the response
 %% from cache if possible.
 %% @end
 %%--------------------------------------------------------------------
--spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req()) ->
+-spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
     result().
-request(Client, Req) ->
+request(Client, Req, Timeout) ->
     try
-        do_request(Client, Req)
+        do_request(Client, Req, Timeout)
     catch
         throw:Error = {error, _} ->
             Error;
@@ -200,12 +210,18 @@ init([]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call(#gs_req{}, _From, #state{client_ref = undefined} = State) ->
+handle_call({async_request, _, _}, _From, #state{client_ref = undefined} = State) ->
     {reply, ?ERROR_NO_CONNECTION_TO_OZ, State};
 
-handle_call(#gs_req{} = GsReq, _From, #state{client_ref = ClientRef} = State) ->
-    Result = gs_client:sync_request(ClientRef, GsReq),
-    {reply, Result, State};
+handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = ClientRef, promises = Promises} = State) ->
+    ReqId = gs_client:async_request(ClientRef, GsReq),
+    % Async message triggering a check if the request has timed out
+    erlang:send_after(Timeout, self(), {check_timeout, ReqId}),
+    {reply, {ok, ReqId}, State#state{
+        promises = Promises#{
+            ReqId => From
+        }
+    }};
 
 handle_call({terminate, Reason}, _From, State) ->
     ?warning("Connection to Onezone terminated"),
@@ -238,6 +254,31 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+% Received from gs_client as a result of async_request - forwards the response
+% to the caller pid.
+handle_info({response, ReqId, Response}, #state{promises = Promises} = State) ->
+    case maps:take(ReqId, Promises) of
+        {Pid, NewPromises} ->
+            Pid ! {response, ReqId, Response},
+            {noreply, State#state{promises = NewPromises}};
+        error ->
+            % Possible if 'check_timeout' for the request has fired and
+            % ?ERROR_TIMEOUT was sent back to the caller pid, in such case just
+            % ignore the result
+            {noreply, State}
+    end;
+% Async check if the request has timed out (there has been no response received)
+% in such case, returns ?ERROR_TIMEOUT to the pid waiting for the response.
+handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
+    case maps:take(ReqId, Promises) of
+        {Pid, NewPromises} ->
+            Pid ! {response, ReqId, ?ERROR_TIMEOUT},
+            {noreply, State#state{promises = NewPromises}};
+        error ->
+            % There is no promise for the ReqId anymore, which means the request
+            % has already been handled - ignore
+            {noreply, State}
+    end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
     {stop, normal, State};
@@ -293,9 +334,10 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     invalidate_cache(GRI),
     ?debug("Entity deleted in OZ: ~s", [gs_protocol:gri_to_string(GRI)]);
 
-process_push_message(#gs_push_graph{gri = GRI, data = Data, change_type = updated}) ->
-    Doc = gs_client_translator:translate(GRI, Data),
-    cache_record(get_connection_pid(), GRI, Doc).
+process_push_message(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
+    Revision = maps:get(<<"revision">>, Resource),
+    Doc = gs_client_translator:translate(GRI, Resource),
+    coalesce_cache(get_connection_pid(), GRI, Doc, Revision).
 
 %%%===================================================================
 %%% Internal functions
@@ -326,34 +368,39 @@ start_gs_connection() ->
     end.
 
 
--spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
-do_request(Client, #gs_req_rpc{} = RpcReq) ->
-    case call_onezone(Client, RpcReq) of
+-spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
+    result().
+do_request(Client, #gs_req_rpc{} = RpcReq, Timeout) ->
+    case call_onezone(Client, RpcReq, Timeout) of
         {ok, #gs_resp_rpc{result = Res}} ->
             {ok, Res};
         {error, _} = Error ->
             Error
     end;
-do_request(Client, #gs_req_graph{operation = get} = GraphReq) ->
+do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
     case maybe_serve_from_cache(Client, GraphReq) of
         {error, _} = Err1 ->
             Err1;
         {true, Doc} ->
             {ok, Doc};
         false ->
-            case call_onezone(Client, GraphReq) of
+            case call_onezone(Client, GraphReq, Timeout) of
                 {error, _} = Err2 ->
                     Err2;
                 {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
                     GRIStr = maps:get(<<"gri">>, Resource),
+                    Revision = maps:get(<<"revision">>, Resource),
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Resource)),
-                    cache_record(get_connection_pid(), NewGRI, Doc),
-                    {ok, Doc}
+                    Doc = gs_client_translator:translate(NewGRI, Resource),
+                    case coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
+                        {ok, NewestDoc} -> {ok, NewestDoc};
+                        % In case a stale record is detected, repeat the request
+                        {error, stale_record} -> do_request(Client, GraphReq, Timeout)
+                    end
             end
     end;
-do_request(Client, #gs_req_graph{operation = create} = GraphReq) ->
-    case call_onezone(Client, GraphReq) of
+do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
+    case call_onezone(Client, GraphReq, Timeout) of
         {error, _} = Error ->
             Error;
         {ok, GsRespGraph} ->
@@ -362,16 +409,20 @@ do_request(Client, #gs_req_graph{operation = create} = GraphReq) ->
                     ok;
                 #gs_resp_graph{data_format = value, data = Data} ->
                     {ok, Data};
-                #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Map} ->
+                #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Resource} ->
                     NewGRI = gs_protocol:string_to_gri(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, maps:remove(<<"gri">>, Map)),
-                    cache_record(get_connection_pid(), NewGRI, Doc),
-                    {ok, {NewGRI, Doc}}
+                    Revision = maps:get(<<"revision">>, Resource),
+                    Doc = gs_client_translator:translate(NewGRI, Resource),
+                    case coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
+                        {ok, NewestDoc} -> {ok, {NewGRI, NewestDoc}};
+                        % In case a stale record is detected, repeat the request
+                        {error, stale_record} -> do_request(Client, GraphReq, Timeout)
+                    end
             end
     end;
 % covers 'delete' and 'update' operations
-do_request(Client, #gs_req_graph{} = GraphReq) ->
-    case call_onezone(Client, GraphReq) of
+do_request(Client, #gs_req_graph{} = GraphReq, Timeout) ->
+    case call_onezone(Client, GraphReq, Timeout) of
         {error, _} = Error ->
             Error;
         {ok, #gs_resp_graph{}} ->
@@ -379,23 +430,23 @@ do_request(Client, #gs_req_graph{} = GraphReq) ->
     end.
 
 
--spec call_onezone(client(), gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req()) ->
-    {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-    gs_protocol:error().
-call_onezone(Client, Request) ->
+-spec call_onezone(client(), gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(),
+    timeout()) -> {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
+gs_protocol:error().
+call_onezone(Client, Request, Timeout) ->
     case get_connection_pid() of
         undefined ->
             ?ERROR_NO_CONNECTION_TO_OZ;
         Pid ->
-            call_onezone(Pid, Client, Request)
+            call_onezone(Pid, Client, Request, Timeout)
     end.
 
 
 -spec call_onezone(connection_ref(), client(),
-    gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req()) ->
+    gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(), timeout()) ->
     {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
     gs_protocol:error().
-call_onezone(ConnRef, Client, Request) ->
+call_onezone(ConnRef, Client, Request, Timeout) ->
     try
         SubType = case Request of
             #gs_req_graph{} -> graph;
@@ -407,11 +458,23 @@ call_onezone(ConnRef, Client, Request) ->
             auth_override = resolve_authorization(Client),
             request = Request
         },
-        gen_server2:call(ConnRef, GsReq, ?GS_REQUEST_TIMEOUT)
+        case gen_server2:call(ConnRef, {async_request, GsReq, Timeout}) of
+            {error, _} = Error ->
+                Error;
+            {ok, ReqId} ->
+                receive
+                    {response, ReqId, Result} ->
+                        Result
+                after
+                % the gen_server uses Timeout internally, allow some larger margin
+                    Timeout + 5000 ->
+                        ?ERROR_TIMEOUT
+                end
+        end
     catch
-        exit:{timeout, _} -> ?ERROR_NO_CONNECTION_TO_OZ;
+        exit:{timeout, _} -> ?ERROR_TIMEOUT;
         exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_OZ;
-        throw:{error, _} = Error -> Error;
+        throw:{error, _} = Err -> Err;
         Type:Reason ->
             ?error_stacktrace("Unexpected error during call to gs_client_worker - ~p:~p", [
                 Type, Reason
@@ -430,7 +493,7 @@ maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI
             #{connection_ref := CachedConnRef, scope := CachedScope} = get_cache_state(CachedDoc),
             #gri{scope = Scope} = GRI,
             ConnRef = get_connection_pid(),
-            case (is_pid(ConnRef) andalso ConnRef =/= CachedConnRef) orelse is_scope_lower(CachedScope, Scope) of
+            case (is_pid(ConnRef) andalso ConnRef =/= CachedConnRef) orelse cmp_scope(CachedScope, Scope) == lower of
                 true ->
                     % There was a reconnect since last update or cached scope is
                     % lower than requested -> invalidate cache
@@ -456,51 +519,61 @@ maybe_serve_from_cache(_, _) ->
     false.
 
 
--spec cache_record(connection_ref(), gs_protocol:gri(), doc()) ->
-    ok.
-cache_record(ConnRef, GRI = #gri{type = Type, aspect = instance, scope = Scope}, Doc) ->
-    ShouldUpdateCache = case get_from_cache(GRI) of
-        false ->
-            true;
-        {true, CachedDoc} ->
-            % In case of higher scope, unsubscribe for the lower and update cache.
-            % In case of the same scope, just overwrite the cache.
-            % In case of lower scope, do not update cache.
-            #{scope := OldScope} = get_cache_state(CachedDoc),
-            case is_scope_lower(OldScope, Scope) of
-                true ->
+-spec coalesce_cache(connection_ref(), gs_protocol:gri(), doc(), gs_protocol:revision()) ->
+    {ok, doc()} | {error, stale_record}.
+coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = Record}, Rev) ->
+    #gri{type = Type, id = Id, scope = Scope} = GRI,
+    CacheUpdateFun = fun(CachedRecord) ->
+        #{scope := CachedScope} = CacheState = get_cache_state(CachedRecord),
+        CachedRev = maps:get(revision, CacheState, 0),
+        case cmp_scope(Scope, CachedScope) of
+            _ when Rev < CachedRev ->
+                % In case the fetched revision is lower, return 'stale_record'
+                % error, which will cause the request to be repeated
+                ?debug("Stale record ~s: received rev. ~B, but rev. ~B is already cached", [gs_protocol:gri_to_string(GRI), Rev, CachedRev]),
+                {error, stale_record};
+
+            greater when Rev >= CachedRev ->
+                % doc with greater scope arrived (revision is not lower than the
+                % one in cache), unsubscribe for the lower scope and update the cache
+                spawn(fun() ->
+                    % spawn an async process as we are within the datastore:update process
                     call_onezone(ConnRef, ?ROOT_SESS_ID, #gs_req_unsub{
-                        gri = GRI#gri{scope = OldScope}
-                    }),
-                    true;
-                false ->
-                    not is_scope_lower(Scope, OldScope)
-            end
+                        gri = GRI#gri{scope = CachedScope}
+                    }, ?GS_REQUEST_TIMEOUT)
+                end),
+                ?debug("Cached ~s (rev. ~B)", [gs_protocol:gri_to_string(GRI), Rev]),
+                {ok, put_cache_state(Record, #{
+                    scope => Scope, connection_ref => ConnRef, revision => Rev
+                })};
+
+            _ when Rev > CachedRev ->
+                % A doc arrived that has a greater revision, overwrite the
+                % cache, no matter the scopes
+                ?debug("Cached ~s (rev. ~B)", [gs_protocol:gri_to_string(GRI), Rev]),
+                {ok, put_cache_state(Record, #{
+                    scope => Scope, connection_ref => ConnRef, revision => Rev
+                })};
+
+            _ when Rev == CachedRev ->
+                % Discard updates in case the fetched scope or rev are not
+                % greater than those in cache
+                {ok, CachedRecord}
+        end
     end,
-    case ShouldUpdateCache of
-        false ->
-            ok;
-        true ->
-            CacheState = #{
-                scope => Scope,
-                connection_ref => ConnRef
-            },
-            Type:save_to_cache(put_cache_state(CacheState, Doc)),
-            ?debug("Cached ~s", [gs_protocol:gri_to_string(GRI)]),
-            ok
-    end;
-cache_record(_ConnRef, _GRI, _Doc) ->
+    Type:update_cache(Id, CacheUpdateFun, Doc#document{value = put_cache_state(Record, #{
+        scope => Scope, connection_ref => ConnRef, revision => Rev
+    })});
+coalesce_cache(_ConnRef, _GRI, Doc, _Revision) ->
     % Only 'instance' aspects are cached by provider.
-    ok.
+    {ok, Doc}.
 
 
 -spec get_from_cache(gs_protocol:gri()) -> {true, doc()} | false.
 get_from_cache(#gri{type = Type, id = Id}) ->
     case Type:get_from_cache(Id) of
-        {ok, Doc} ->
-            {true, Doc};
-        _ ->
-            false
+        {ok, Doc} -> {true, Doc};
+        _ -> false
     end.
 
 
@@ -514,7 +587,7 @@ resolve_authorization(?ROOT_SESS_ID) ->
     undefined;
 
 resolve_authorization(?GUEST_SESS_ID) ->
-    undefined;
+    nobody;
 
 resolve_authorization(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
@@ -543,56 +616,60 @@ resolve_authorization(#macaroon_auth{} = Auth) ->
     {macaroon, MacaroonBin, BoundMacaroons}.
 
 
--spec put_cache_state(cache_state(), doc()) -> doc().
-put_cache_state(CacheState, Doc = #document{value = User = #od_user{}}) ->
-    Doc#document{value = User#od_user{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Group = #od_group{}}) ->
-    Doc#document{value = Group#od_group{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Space = #od_space{}}) ->
-    Doc#document{value = Space#od_space{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Share = #od_share{}}) ->
-    Doc#document{value = Share#od_share{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Provider = #od_provider{}}) ->
-    Doc#document{value = Provider#od_provider{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = HService = #od_handle_service{}}) ->
-    Doc#document{value = HService#od_handle_service{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Handle = #od_handle{}}) ->
-    Doc#document{value = Handle#od_handle{cache_state = CacheState}};
-put_cache_state(CacheState, Doc = #document{value = Harvester = #od_harvester{}}) ->
-    Doc#document{value = Harvester#od_harvester{cache_state = CacheState}}.
+-spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().
+put_cache_state(User = #od_user{}, CacheState) ->
+    User#od_user{cache_state = CacheState};
+put_cache_state(Group = #od_group{}, CacheState) ->
+    Group#od_group{cache_state = CacheState};
+put_cache_state(Space = #od_space{}, CacheState) ->
+    Space#od_space{cache_state = CacheState};
+put_cache_state(Share = #od_share{}, CacheState) ->
+    Share#od_share{cache_state = CacheState};
+put_cache_state(Provider = #od_provider{}, CacheState) ->
+    Provider#od_provider{cache_state = CacheState};
+put_cache_state(HService = #od_handle_service{}, CacheState) ->
+    HService#od_handle_service{cache_state = CacheState};
+put_cache_state(Handle = #od_handle{}, CacheState) ->
+    Handle#od_handle{cache_state = CacheState};
+put_cache_state(Harvester = #od_harvester{}, CacheState) ->
+    Harvester#od_harvester{cache_state = CacheState}.
 
 
--spec get_cache_state(doc()) -> cache_state().
-get_cache_state(#document{value = #od_user{cache_state = CacheState}}) ->
+-spec get_cache_state(Record :: tuple() | doc()) -> cache_state().
+get_cache_state(#document{value = Record}) ->
+    get_cache_state(Record);
+get_cache_state(#od_user{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_group{cache_state = CacheState}}) ->
+get_cache_state(#od_group{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_space{cache_state = CacheState}}) ->
+get_cache_state(#od_space{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_share{cache_state = CacheState}}) ->
+get_cache_state(#od_share{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_provider{cache_state = CacheState}}) ->
+get_cache_state(#od_provider{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_handle_service{cache_state = CacheState}}) ->
+get_cache_state(#od_handle_service{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_handle{cache_state = CacheState}}) ->
+get_cache_state(#od_handle{cache_state = CacheState}) ->
     CacheState;
-get_cache_state(#document{value = #od_harvester{cache_state = CacheState}}) ->
+get_cache_state(#od_harvester{cache_state = CacheState}) ->
     CacheState.
 
 
--spec is_scope_lower(gs_protocol:scope(), gs_protocol:scope()) -> boolean().
-is_scope_lower(public, public) -> false;
-is_scope_lower(public, _) -> true;
+-spec cmp_scope(gs_protocol:scope(), gs_protocol:scope()) -> lower | same | greater.
+cmp_scope(public, public) -> same;
+cmp_scope(public, _) -> lower;
 
-is_scope_lower(shared, public) -> false;
-is_scope_lower(shared, shared) -> false;
-is_scope_lower(shared, _) -> true;
+cmp_scope(shared, public) -> greater;
+cmp_scope(shared, shared) -> same;
+cmp_scope(shared, _) -> lower;
 
-is_scope_lower(protected, private) -> true;
-is_scope_lower(protected, _) -> false;
+cmp_scope(protected, private) -> lower;
+cmp_scope(protected, protected) -> same;
+cmp_scope(protected, _) -> greater;
 
-is_scope_lower(private, _) -> false.
+cmp_scope(private, private) -> same;
+cmp_scope(private, _) -> greater.
 
 
 -spec is_authorized(client(), gs_protocol:auth_hint(), gs_protocol:gri(), doc()) ->

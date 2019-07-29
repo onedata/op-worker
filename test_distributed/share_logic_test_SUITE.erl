@@ -218,54 +218,42 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
-    ChangedData1 = Share1PublicData#{<<"name">> => <<"changedName">>},
+    ChangedData1 = Share1PublicData#{
+        <<"revision">> => 2,
+        <<"name">> => <<"changedName">>
+    },
     PushMessage1 = #gs_push_graph{gri = Share1PublicGRI, data = ChangedData1, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
 
     ?assertMatch(
         {ok, #document{key = ?SHARE_1, value = #od_share{
-            name = <<"changedName">>
+            name = <<"changedName">>,
+            cache_state = #{revision := 2}
         }}},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % private scope
+    logic_tests_common:invalidate_cache(Config, od_share, ?SHARE_1),
     ?assertMatch(
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
-    ChangedData2 = Share1PrivateData#{<<"name">> => <<"changedName2">>},
+    ChangedData2 = Share1PrivateData#{
+        <<"revision">> => 3,
+        <<"name">> => <<"changedName2">>
+    },
     PushMessage2 = #gs_push_graph{gri = Share1PrivateGRI, data = ChangedData2, change_type = updated},
     rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
     ?assertMatch(
         {ok, #document{key = ?SHARE_1, value = #od_share{
-            name = <<"changedName2">>
+            name = <<"changedName2">>,
+            cache_state = #{revision := 3}
         }}},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    % Update of public scope should not affect the cache
-    ChangedData3 = Share1PublicData#{<<"name">> => <<"changedName3">>},
-    PushMessage3 = #gs_push_graph{gri = Share1PublicGRI, data = ChangedData3, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
-
-    ?assertMatch(
-        {ok, #document{key = ?SHARE_1, value = #od_share{
-            name = <<"changedName2">>
-        }}},
-        rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ?assertMatch(
-        {ok, #document{key = ?SHARE_1, value = #od_share{
-            name = <<"changedName2">>
-        }}},
-        rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

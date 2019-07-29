@@ -83,6 +83,7 @@ subscribe_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ChangedData1 = Harvester1PrivateData#{
+        <<"revision">> => 6,
         <<"indices">> => ?HARVESTER_INDICES2(?HARVESTER_1),
         <<"spaces">> => ?HARVESTER_SPACES2(?HARVESTER_1)
     },
@@ -92,7 +93,8 @@ subscribe_test(Config) ->
     ?assertMatch(
         {ok, #document{key = ?HARVESTER_1, value = #od_harvester{
             indices = ?HARVESTER_INDICES2(?HARVESTER_1),
-            spaces = ?HARVESTER_SPACES2(?HARVESTER_1)
+            spaces = ?HARVESTER_SPACES2(?HARVESTER_1),
+            cache_state = #{revision := 6}
         }}},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
@@ -109,6 +111,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
+    logic_tests_common:invalidate_cache(Config, od_harvester, ?HARVESTER_1),
     ?assertMatch(
         {ok, ?HARVESTER_PRIVATE_DATA_MATCHER(?HARVESTER_1)},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])

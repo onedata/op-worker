@@ -18,12 +18,15 @@
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.
 -define(DOWNLOAD_BUFFER_SIZE, application:get_env(?APP_NAME, gui_download_buffer, 4194304)). % 4MB
+
+-define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
 
 -export([get_file_download_url/2, handle/2]).
 
@@ -66,7 +69,7 @@ handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
         false ->
-            cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req);
+            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         {true, SessionId, FileId} ->
             Req2 = gui_cors:allow_origin(oneprovider:get_oz_url(), Req),
             Req3 = gui_cors:allow_frame_origin(oneprovider:get_oz_url(), Req2),
@@ -89,14 +92,14 @@ handle(<<"GET">>, Req) ->
     cowboy_req:req().
 handle_http_download(Req, SessionId, FileId) ->
     try
-        {ok, FileHandle} = lfm:open(
-            SessionId, {guid, FileId}, read),
+        {ok, FileHandle} = lfm:open(SessionId, {guid, FileId}, read),
         try
-            {ok, #file_attr{size = Size, name = FileName}} =
-                lfm:stat(SessionId, {guid, FileId}),
+            {ok, #file_attr{
+                size = Size, name = FileName
+            }} = lfm:stat(SessionId, {guid, FileId}),
             Headers = attachment_headers(FileName),
             % Reply with attachment headers and a streaming function
-            Req2 = cowboy_req:stream_reply(200, Headers#{
+            Req2 = cowboy_req:stream_reply(?HTTP_200_OK, Headers#{
                 <<"content-length">> => integer_to_binary(Size)
             }, Req),
             stream_file(Req2, FileHandle, Size)
@@ -106,14 +109,14 @@ handle_http_download(Req, SessionId, FileId) ->
                 ?error_stacktrace("Error while processing file download "
                 "for user ~p - ~p:~p", [UserId2, Type2, Reason2]),
                 lfm:release(FileHandle), % release if possible
-                cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req)
+                cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
         end
     catch
         Type:Reason ->
             {ok, UserId} = session:get_user_id(SessionId),
             ?error_stacktrace("Error while processing file download "
             "for user ~p - ~p:~p", [UserId, Type, Reason]),
-            cowboy_req:reply(500, #{<<"connection">> => <<"close">>}, Req)
+            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
     end.
 
 
