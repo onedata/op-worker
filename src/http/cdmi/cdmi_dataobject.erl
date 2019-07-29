@@ -65,7 +65,7 @@
 -spec get_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {stop, cowboy_req:req(), cdmi_handler:cdmi_req()}.
 get_binary(Req, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = FileGuid, size = Size}
 } = CdmiReq) ->
     % prepare response
@@ -88,7 +88,7 @@ get_binary(Req, #cdmi_req{
 -spec get_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_handler:cdmi_req()}.
 get_cdmi(Req, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = FileGuid},
     options = Options
 } = CdmiReq) ->
@@ -134,7 +134,7 @@ get_cdmi(Req, #cdmi_req{
 -spec put_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 put_binary(Req, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_path = Path,
     file_attrs = Attrs
 } = CdmiReq) ->
@@ -175,7 +175,7 @@ put_binary(Req, #cdmi_req{
 -spec put_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 put_cdmi(Req, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_path = Path,
     file_attrs = Attrs,
     options = Options
@@ -270,7 +270,7 @@ put_cdmi(Req, #cdmi_req{
 -spec delete_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 delete_cdmi(Req, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
     ?check(lfm:unlink(SessionId, {guid, Guid}, false)),
@@ -286,7 +286,7 @@ delete_cdmi(Req, #cdmi_req{
 -spec prepare_create_file_cdmi_response(cowboy_req:req(), cdmi_handler:cdmi_req(),
     lfm:file_key()) -> {true, cowboy_req:req(), cdmi_handler:cdmi_req()}.
 prepare_create_file_cdmi_response(Req1, #cdmi_req{
-    auth = #auth{session_id = SessionId}
+    auth = ?USER(_UserId, SessionId)
 } = CdmiReq, FileKey) ->
     {ok, Attrs} = ?check(lfm:stat(SessionId, FileKey)),
     CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
@@ -299,7 +299,7 @@ prepare_create_file_cdmi_response(Req1, #cdmi_req{
 -spec get_file_info([RequestedInfo :: binary()], cdmi_handler:cdmi_req()) ->
     map() | no_return().
 get_file_info(RequestedInfo, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_path = Path,
     file_attrs = #file_attr{guid = Guid, size = FileSize} = Attrs
 }) ->

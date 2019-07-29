@@ -31,7 +31,7 @@
 -spec is_eff_space_member(aai:auth(), op_space:id()) -> boolean().
 is_eff_space_member(?NOBODY, _SpaceId) ->
     false;
-is_eff_space_member(?USER(UserId) = #auth{session_id = SessionId}, SpaceId) ->
+is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->
     user_logic:has_eff_space(SessionId, UserId, SpaceId).
 
 

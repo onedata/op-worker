@@ -40,7 +40,7 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {ok, ?USER(UserId) = #auth{session_id = SessionId}} ->
+        {ok, ?USER(UserId, SessionId)} ->
             {true, Req, State#{
                 user_id => UserId,
                 auth => SessionId
@@ -62,28 +62,29 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(req()) -> aai:auth() | {error, term()}.
+-spec authenticate(#macaroon_auth{} | cowboy_req:req()) ->
+    aai:auth() | {error, term()}.
+authenticate(#macaroon_auth{} = Credentials) ->
+    case user_identity:get_or_fetch(Credentials) of
+        {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
+            case session_manager:reuse_or_create_rest_session(Iden, Credentials) of
+                {ok, SessionId} ->
+                    {ok, ?USER(UserId, SessionId)};
+                {error, {invalid_identity, _}} ->
+                    user_identity:delete(Credentials),
+                    authenticate(Credentials)
+            end;
+        Error ->
+            Error
+    end;
 authenticate(Req) ->
-    case resolve_auth(Req) of
+    case resolve_credentials(Req) of
         {error, not_found} ->
             {ok, ?NOBODY};
         Credentials ->
-            case user_identity:get_or_fetch(Credentials) of
-                {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
-                    case session_manager:reuse_or_create_rest_session(Iden, Credentials) of
-                        {ok, SessionId} ->
-                            {ok, #auth{
-                                subject = ?SUB(user, UserId),
-                                session_id = SessionId
-                            }};
-                        {error, {invalid_identity, _}} ->
-                            user_identity:delete(Credentials),
-                            authenticate(Req)
-                    end;
-                Error ->
-                    Error
-            end
+            authenticate(Credentials)
     end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -96,8 +97,8 @@ authenticate(Req) ->
 %% Resolves authorization carried by request (if any).
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_auth(req()) -> user_identity:credentials() | {error, not_found}.
-resolve_auth(Req) ->
+-spec resolve_credentials(req()) -> user_identity:credentials() | {error, not_found}.
+resolve_credentials(Req) ->
     case parse_macaroon_from_header(Req) of
         undefined -> {error, not_found};
         Macaroon -> #macaroon_auth{macaroon = Macaroon}

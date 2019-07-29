@@ -221,7 +221,7 @@ is_authorized(Req, CdmiReq) ->
 resource_exists(Req, #cdmi_req{resource = {capabilities, _}} = CdmiReq) ->
     {true, Req, CdmiReq};
 resource_exists(Req, #cdmi_req{
-    auth = #auth{session_id = SessionId},
+    auth = ?USER(_UserId, SessionId),
     file_path = Path,
     resource = Type
 } = CdmiReq) ->
@@ -480,7 +480,7 @@ resolve_resource_by_id(Req) ->
     {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
             case http_auth:authenticate(Req) of
-                {ok, ?USER = #auth{session_id = SessionId} = Auth0} ->
+                {ok, ?USER(_UserId, SessionId) = Auth0} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->
                             {Auth0, FilePath};

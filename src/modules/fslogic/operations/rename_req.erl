@@ -95,7 +95,7 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
     TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
-    case copy_utils:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
+    case file_copy:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
         {ok, NewCopiedGuid, ChildEntries} ->
             case lfm:rm_recursive(SessId, {guid, SourceGuid}) of
                 ok ->

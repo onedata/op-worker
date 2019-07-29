@@ -378,10 +378,7 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{gri = #gri{aspect = list}, auth = #auth{
-    subject = ?SUB(user, UserId),
-    session_id = SessionId}
-}, _) ->
+get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
             {ok ,lists:map(fun(SpaceId) ->

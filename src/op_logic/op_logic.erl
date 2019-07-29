@@ -247,6 +247,8 @@ maybe_fetch_entity(#req_ctx{plugin = Plugin, req = Req} = ReqCtx) ->
     case Plugin:fetch_entity(Req) of
         {ok, {_Entity, _Revision} = VersionedEntity} ->
             ReqCtx#req_ctx{versioned_entity = VersionedEntity};
+        ?ERROR_FORBIDDEN ->
+            throw(?ERROR_FORBIDDEN);
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND)
     end.

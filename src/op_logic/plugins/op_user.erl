@@ -76,12 +76,24 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link op_logic_behaviour} callback fetch_entity/1.
+%%
+%% For now fetches only records for authorized users.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
     {ok, op_logic:versioned_entity()} | op_logic:error().
+fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
+    case user_logic:get(SessionId, UserId) of
+        {ok, #document{value = User, revs = [DbRev]}} ->
+            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
+            {ok, {User, Revision}};
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN;
+        _ ->
+            ?ERROR_NOT_FOUND
+    end;
 fetch_entity(_) ->
-    {ok, {undefined, 1}}.
+    ?ERROR_FORBIDDEN.
 
 
 %%--------------------------------------------------------------------
@@ -137,15 +149,10 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{auth = Auth, gri = #gri{id = UserId, aspect = instance}}, _) ->
-    case user_logic:get(Auth#auth.session_id, UserId) of
-        {ok, #document{value = User}} ->
-            {ok, User};
-        Error ->
-            Error
-    end;
-get(#op_req{auth = Auth, gri = #gri{id = UserId, aspect = eff_spaces}}, _) ->
-    user_logic:get_eff_spaces(Auth#auth.session_id, UserId).
+get(#op_req{gri = #gri{aspect = instance}}, User) ->
+    {ok, User};
+get(#op_req{gri = #gri{aspect = eff_spaces}}, User) ->
+    user_logic:get_eff_spaces(User).
 
 
 %%--------------------------------------------------------------------

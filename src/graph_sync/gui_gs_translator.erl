@@ -50,12 +50,8 @@ handshake_attributes(_Client) ->
 %% {@link gs_translator_behaviour} callback translate_value/3.
 %% @end
 %%--------------------------------------------------------------------
-% TODO remove turning off dialyzer for this fun after implementing clause
-% that doesn't throw an error
--dialyzer({nowarn_function, translate_value/3}).
 -spec translate_value(gs_protocol:protocol_version(), gs_protocol:gri(),
-    Value :: term()) -> Result | fun((aai:auth()) -> Result) when
-    Result :: gs_protocol:data() | gs_protocol:error().
+    Value :: term()) -> no_return().
 translate_value(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync create result for:~n
     ProtocolVersion: ~p~n
@@ -73,7 +69,7 @@ translate_value(ProtocolVersion, GRI, Data) ->
 %%--------------------------------------------------------------------
 -spec translate_resource(gs_protocol:protocol_version(), gs_protocol:gri(),
     ResourceData :: term()) -> Result | fun((aai:auth()) -> Result) when
-    Result :: gs_protocol:data() | gs_protocol:error().
+    Result :: gs_protocol:data() | gs_protocol:error() | no_return().
 translate_resource(_, GRI = #gri{type = op_file}, Data) ->
     translate_file(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_space}, Data) ->
@@ -95,12 +91,7 @@ translate_resource(ProtocolVersion, GRI, Data) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Translates GET result for file related aspects.
-%% @end
-%%--------------------------------------------------------------------
 -spec translate_file(gs_protocol:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
@@ -116,7 +107,7 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
             {<<"file">>, SizeAttr}
     end,
 
-    fun(?USER = #auth{session_id = SessId}) ->
+    fun(?USER(_UserId, SessId)) ->
         Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
             true ->
                 null;
@@ -141,23 +132,13 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Translates GET result for space related aspects.
-%% @end
-%%--------------------------------------------------------------------
 -spec translate_space(gs_protocol:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
-    name = Name,
-    providers = Providers
-}) ->
-    RootDir = case maps:is_key(oneprovider:get_id(), Providers) of
+translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
+    RootDir = case space_logic:is_supported(Space, oneprovider:get_id()) of
         true ->
-            Guid = file_id:pack_guid(
-                fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId
-            ),
+            Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
             gs_protocol:gri_to_string(#gri{
                 type = op_file,
                 id = Guid,
@@ -169,17 +150,12 @@ translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, #od_spac
     end,
 
     #{
-        <<"name">> => Name,
+        <<"name">> => Space#od_space.name,
         <<"rootDir">> => RootDir
     }.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Translates GET result for user related aspects.
-%% @end
-%%--------------------------------------------------------------------
 -spec translate_user(gs_protocol:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_user(GRI = #gri{aspect = instance, scope = private}, #od_user{

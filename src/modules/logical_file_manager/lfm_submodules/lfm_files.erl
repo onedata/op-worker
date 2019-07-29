@@ -114,7 +114,7 @@ cp(SessId, FileKey, TargetPath) ->
 cp(SessId, FileKey, TargetParentKey, TargetName) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {guid, TargetParentGuid} = guid_utils:ensure_guid(SessId, TargetParentKey),
-    case copy_utils:copy(SessId, Guid, TargetParentGuid, TargetName) of
+    case file_copy:copy(SessId, Guid, TargetParentGuid, TargetName) of
         {ok, NewGuid, _} ->
             {ok, NewGuid};
         Error ->

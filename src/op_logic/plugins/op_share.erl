@@ -330,7 +330,7 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 %% @private
 -spec fetch_share(aai:auth(), od_share:id()) ->
     {ok, {#od_share{}, op_logic:revision()}} | ?ERROR_NOT_FOUND.
-fetch_share(#auth{session_id = SessionId}, ShareId) ->
+fetch_share(?USER(_UserId, SessionId), ShareId) ->
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = Share}} ->
             {ok, {Share, 1}};
@@ -342,7 +342,7 @@ fetch_share(#auth{session_id = SessionId}, ShareId) ->
 %% @private
 -spec resolve_share_id(aai:auth(), file_id:file_guid()) ->
     od_share:id() | ?ERROR_NOT_FOUND.
-resolve_share_id(#auth{session_id = SessionId}, DirGuid) ->
+resolve_share_id(?USER(_UserId, SessionId), DirGuid) ->
     case lfm:stat(SessionId, {guid, DirGuid}) of
         {ok, #file_attr{shares = [ShareId]}} ->
             ShareId;
