@@ -43,7 +43,7 @@
 get_file_download_url(SessionId, FileGuid) ->
     case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
         {ok, true} ->
-            Hostname = op_gui_session:get_requested_host(),
+            Hostname = oneprovider:get_domain(),
             {ok, Code} = file_download_code:create(SessionId, FileGuid),
             URL = str_utils:format_bin("https://~s~s/~s", [
                 Hostname, ?FILE_DOWNLOAD_PATH, Code

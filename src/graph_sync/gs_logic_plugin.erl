@@ -255,12 +255,12 @@ move(#auth{session_id = SessionId} = Auth, Data) ->
 
     case lfm:mv(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
         {ok, NewGuid} ->
-            #{<<"id">> => gs_protocol:gri_to_string(#gri{
+            {ok, #{<<"id">> => gs_protocol:gri_to_string(#gri{
                 type = op_file,
                 id = NewGuid,
                 aspect = instance,
                 scope = private
-            })};
+            })}};
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
@@ -285,12 +285,12 @@ cp(#auth{session_id = SessionId} = Auth, Data) ->
 
     case lfm:cp(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
         {ok, NewGuid} ->
-            #{<<"id">> => gs_protocol:gri_to_string(#gri{
+            {ok, #{<<"id">> => gs_protocol:gri_to_string(#gri{
                 type = op_file,
                 id = NewGuid,
                 aspect = instance,
                 scope = private
-            })};
+            })}};
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
