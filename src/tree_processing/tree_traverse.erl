@@ -29,7 +29,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
--export([init/4, init/5, run/2, run/3]).
+-export([init/4, init/5, run/2, run/3, cancel/2]).
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
@@ -114,6 +114,12 @@ run(Pool, FileCtx, Opts) ->
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
     run(Pool, Doc, Opts).
 
+-spec cancel(traverse:pool() | atom(), traverse:id()) -> ok | {error, term()}.
+cancel(Pool, TaskID) when is_atom(Pool) ->
+    cancel(atom_to_binary(Pool, utf8), TaskID);
+cancel(Pool, TaskID) ->
+    traverse:cancel(Pool, TaskID, oneprovider:get_id_or_undefined()).
+
 %%%===================================================================
 %%% Getters/Setters API
 %%%===================================================================
@@ -191,8 +197,7 @@ do_master_job(#tree_traverse{
         {undefined, _} -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize);
         _ -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize, Token)
     end,
-
-    #{token := Token2, last_name := LN2, last_tree := LT2} = ExtendedInfo,
+    #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
 
     {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
         uuid = UUID}, {Slaves, Masters} = Acc) ->
@@ -208,7 +213,7 @@ do_master_job(#tree_traverse{
         end
     end, {[], []}, Children),
 
-    FinalMasterJobs = case Token2#link_token.is_last of
+    FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
         true -> lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
