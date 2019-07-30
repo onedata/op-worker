@@ -33,6 +33,8 @@
 -define(CANONICAL_STORAGE_PATH, <<"canonical">>).
 -define(FLAT_STORAGE_PATH, <<"flat">>).
 
+-define(DEFAULT_HELPER_TIMEOUT, 120000).
+
 %% This type determines the filename and path generation
 %% on the storage. Currently 2 modes are supported:
 %% - 'canonical' - posix-style

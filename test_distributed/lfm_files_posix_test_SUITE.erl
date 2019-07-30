@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%% @doc
-%%% This file contains tests of logical_file_manager API on posix storage.
+%%% This file contains tests of lfm API on posix storage.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files_posix_test_SUITE).

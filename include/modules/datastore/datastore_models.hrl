@@ -17,14 +17,15 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
--type indexes_value() :: #{indexes:index_id() => indexes:index()}.
 
 % Graph Sync cache metadata, common for all od_* records (synchronized by
 % Graph Sync).
 -type cache_state() :: #{
-    %% maximum scope that is currently cached
+    % maximum scope that is currently cached
     scope => gs_protocol:scope(),
-    %% connection identifier to verify if the cache is not outdated.
+    % revision (version of the record that increments with every update)
+    revision => gs_protocol:revision(),
+    % connection identifier to verify if the cache is not outdated.
     connection_ref => pid()
 }.
 
@@ -526,11 +527,6 @@
     space_id :: undefined | od_space:id(),
     file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
     value = #{} :: json_utils:json_term()
-}).
-
-%% Model that holds database views
--record(indexes, {
-    value = #{} :: indexes_value()
 }).
 
 %% Model that manages caches of files' permissions

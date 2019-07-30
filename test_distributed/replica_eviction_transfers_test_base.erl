@@ -21,6 +21,7 @@
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
+% TODO VFS-5617
 %% API
 -export([
     evict_empty_dir/3,
@@ -34,7 +35,9 @@
     rerun_replica_eviction/3,
     rerun_replica_eviction_by_other_user/3,
     rerun_dir_eviction/3,
-    cancel_replica_eviction_on_target_nodes/2,
+    rerun_index_eviction/2,
+    cancel_replica_eviction_on_target_nodes_by_scheduling_user/2,
+    cancel_replica_eviction_on_target_nodes_by_other_user/2,
     fail_to_evict_file_replica_without_permissions/3,
     eviction_should_succeed_when_remote_provider_modified_file_replica/3,
     eviction_should_fail_when_evicting_provider_modified_file_replica/3,
@@ -470,7 +473,7 @@ rerun_replica_eviction(Config, Type, FileKeyType) ->
         Config3, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
-                function = fun transfers_test_mechanism:rerun_transfers/2
+                function = fun transfers_test_mechanism:rerun_evictions/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -545,7 +548,7 @@ rerun_replica_eviction_by_other_user(Config, Type, FileKeyType) ->
             setup = undefined,
             scenario = #scenario{
                 user = User2,
-                function = fun transfers_test_mechanism:rerun_transfers/2
+                function = fun transfers_test_mechanism:rerun_evictions/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -616,7 +619,7 @@ rerun_dir_eviction(Config, Type, FileKeyType) ->
         Config3, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
-                function = fun transfers_test_mechanism:rerun_transfers/2
+                function = fun transfers_test_mechanism:rerun_evictions/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -638,7 +641,102 @@ rerun_dir_eviction(Config, Type, FileKeyType) ->
         }
     ).
 
-cancel_replica_eviction_on_target_nodes(Config, Type) ->
+rerun_index_eviction(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
+    SpaceId = ?SPACE_ID,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    Config2 = transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                files_structure = [{0, 1}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }}),
+
+    [{FileGuid, _}] = ?config(?FILES_KEY, Config2),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+
+    % set xattr on file to be replicated
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    XattrValue = 1,
+    Xattr = #xattr{name = XattrName, value = XattrValue},
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction, [], [ProviderId2]),
+    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
+    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+
+    transfers_test_utils:mock_replica_eviction_failure(WorkerP2),
+
+    Config3 = transfers_test_mechanism:run_test(
+        Config2, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                space_id = SpaceId,
+                function = fun transfers_test_mechanism:evict_replicas_from_index/2,
+                query_view_params = [{key, XattrValue}],
+                index_name = IndexName
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => failed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    failed_files => 1,
+                    files_evicted =>  0
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                assert_transferred_file_model = false
+            }
+        }
+    ),
+    Config4 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config3),
+    transfers_test_utils:unmock_replica_eviction_failure(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config4, #transfer_test_spec{
+            setup = undefined,
+            scenario = #scenario{
+                function = fun transfers_test_mechanism:rerun_index_evictions/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted =>  1
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
+                ],
+                assert_transferred_file_model = false
+            }
+        }
+    ).
+
+
+cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
@@ -662,7 +760,54 @@ cancel_replica_eviction_on_target_nodes(Config, Type) ->
                 type = Type,
                 schedule_node = WorkerP1,
                 evicting_nodes = [WorkerP2],
-                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes/2
+                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes_by_scheduling_user/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    eviction_status => cancelled,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    failed_files => 0,
+                    files_evicted => fun(X) -> X < 111 end
+                },
+                distribution = undefined,
+                assertion_nodes = [WorkerP1, WorkerP2],
+                timeout = timer:minutes(6),
+                attempts = 600
+            }
+        }
+    ).
+
+cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    User1 = <<"user1">>,
+    User2 = <<"user2">>,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 120,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                user = User1,
+                cancelling_user = User2,
+                type = Type,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:cancel_replica_eviction_on_target_nodes_by_other_user/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -809,10 +954,10 @@ eviction_should_fail_when_evicting_provider_modified_file_replica(Config, Type, 
     SessionId2 = ?USER_SESSION(WorkerP2, ?DEFAULT_USER, Config2),
     ok = test_utils:mock_new(WorkerP2, replica_deletion_req),
     ok = test_utils:mock_expect(WorkerP2, replica_deletion_req, delete_blocks, fun(FileCtx, Blocks, AllowedVV) ->
-        {ok, Handle} = logical_file_manager:open(SessionId2, {guid, FileGuid}, write),
-        {ok, _, 1} = logical_file_manager:write(Handle, 1, <<"#">>),
-        ok = logical_file_manager:fsync(Handle),
-        ok = logical_file_manager:release(Handle),
+        {ok, Handle} = lfm:open(SessionId2, {guid, FileGuid}, write),
+        {ok, _, 1} = lfm:write(Handle, 1, <<"#">>),
+        ok = lfm:fsync(Handle),
+        ok = lfm:release(Handle),
         % meck:passthrough does not work for functions that use other mocked functions inside
         erlang:apply(meck_util:original_name(replica_deletion_req), delete_blocks, [FileCtx, Blocks, AllowedVV])
     end),
@@ -1595,7 +1740,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    transfers_test_utils:remove_all_indexes(Workers, ?SPACE_ID),
+    transfers_test_utils:remove_all_indices(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->

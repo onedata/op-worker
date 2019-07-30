@@ -14,10 +14,11 @@
 
 -include("global_definitions.hrl").
 -include("rest_test_utils.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([
@@ -28,6 +29,7 @@
 
 -export([
     invalid_request_should_fail/1,
+    unauthorized_request_should_fail/1,
     changes_stream_file_meta_create_test/1,
     changes_stream_file_meta_change_test/1,
     changes_stream_xattr_test/1,
@@ -42,6 +44,7 @@
 all() ->
     ?ALL([
         invalid_request_should_fail,
+        unauthorized_request_should_fail,
         changes_stream_file_meta_create_test,
         changes_stream_file_meta_change_test,
         changes_stream_xattr_test,
@@ -68,15 +71,30 @@ invalid_request_should_fail(Config) ->
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     lists:foreach(fun({Json, ExpError}) ->
-        ?assertMatch(ExpError, get_changes(Config, WorkerP1, SpaceId, Json))
+        ExpRestError = rest_test_utils:get_rest_error(ExpError),
+        ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json))
     end, [
-        {<<"ASD">>, ?ERROR_INVALID_CHANGES_REQ},
-        {#{}, ?ERROR_INVALID_CHANGES_REQ},
-        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_INVALID_FORMAT(<<"fielMeta">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_INVALID_FORMAT(<<"fileMeta">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"HEH">>)},
-        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_INVALID_FIELD(<<"fileMeta">>, <<"always">>)}
+        {<<"ASD">>, ?ERROR_BAD_VALUE_JSON(<<"changes specification">>)},
+        {#{}, ?ERROR_BAD_VALUE_EMPTY(<<"changes specification">>)},
+        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_BAD_DATA(<<"fielMeta">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"fileMeta.fields">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
+            <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+            <<"provider_id">>, <<"shares">>, <<"deleted">>
+        ])},
+        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"fileMeta.always">>)}
     ]).
+
+
+unauthorized_request_should_fail(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Json = #{<<"fileMeta">> => #{
+        <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
+    }},
+
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json)).
 
 
 changes_stream_file_meta_create_test(Config) ->
@@ -484,8 +502,8 @@ init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     ct:timetrap(timer:minutes(3)),
     Workers = ?config(op_worker_nodes, Config),
     Pid = self(),
-    ok = test_utils:mock_new(Workers, changes),
-    ok = test_utils:mock_expect(Workers, changes, init_stream,
+    ok = test_utils:mock_new(Workers, changes_stream_handler),
+    ok = test_utils:mock_expect(Workers, changes_stream_handler, init_stream,
         fun(State) ->
             State1 = meck:passthrough([State]),
             StreamPid = maps:get(changes_stream, State1, undefined),
@@ -494,6 +512,19 @@ init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
         end),
     init_per_testcase(all, Config);
 
+init_per_testcase(unauthorized_request_should_fail, Config) ->
+    Workers = [_, Worker] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user1">>,
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId}, Config),
+
+    OldPrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]),
+    NewPrivs = OldPrivs -- [?SPACE_VIEW_CHANGES_STREAM],
+
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, NewPrivs),
+
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
@@ -501,7 +532,15 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, changes),
+    test_utils:mock_unload(Workers, changes_stream_handler),
+    end_per_testcase(all, Config);
+
+end_per_testcase(unauthorized_request_should_fail, Config) ->
+    UserId = <<"user1">>,
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId}, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, <<"user1">>, OldPrivs),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->

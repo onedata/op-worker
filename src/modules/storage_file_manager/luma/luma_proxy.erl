@@ -44,8 +44,10 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
-            case helper:validate_user_ctx(Helper, UserCtx) of
-                ok -> {ok, ensure_binary_values(UserCtx)};
+            UserCtxBinaries = integers_to_binary(UserCtx),
+            HelperName = helper:get_name(Helper),
+            case helper_params:validate_user_ctx(HelperName, UserCtxBinaries) of
+                ok -> {ok, UserCtxBinaries};
                 {error, Reason} -> {error, Reason}
             end;
         {ok, Code, _RespHeaders, RespBody} ->
@@ -79,9 +81,10 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
-            case helper:validate_group_ctx(Helper, GroupCtx) of
+            GroupCtxBinaries = integers_to_binary(GroupCtx),
+            case helper_params:validate_group_ctx(Helper, GroupCtxBinaries) of
                 ok ->
-                    {ok, ensure_binary_values(GroupCtx)};
+                    {ok, GroupCtxBinaries};
                 Error = {error, Reason} ->
                     ?error_stacktrace("Invalid group ctx returned from map_group request: ~p", [Reason]),
                     Error
@@ -173,7 +176,7 @@ get_group_request_body(GroupId, SpaceId, #document{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs user details list.
+%% Constructs user details map.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_details(session:id(), od_user:id()) -> UserDetails :: map().
@@ -250,11 +253,12 @@ should_filter(_) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Ensures that all values in map are binaries
+%% Converts all integer values in a map to binary.
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_binary_values(map()) -> map().
-ensure_binary_values(Map) ->
-    maps:fold(fun(Key, Value, AccIn) ->
-        AccIn#{Key => str_utils:to_binary(Value)}
-    end, #{}, Map).
+-spec integers_to_binary(map()) -> map().
+integers_to_binary(Map) ->
+    maps:map(fun
+        (_, Value) when is_integer(Value) -> integer_to_binary(Value);
+        (_, Value) -> Value
+    end, Map).

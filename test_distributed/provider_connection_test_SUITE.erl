@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

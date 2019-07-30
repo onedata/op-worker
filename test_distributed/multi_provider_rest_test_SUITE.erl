@@ -13,9 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest/http_status.hrl").
+-include("http/rest.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -27,6 +25,8 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([
@@ -289,7 +289,7 @@ posix_mode_get(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
 
     % then
     DecodedBody = json_utils:decode(Body),
@@ -311,11 +311,11 @@ posix_mode_put(Config) ->
     % when
     NewMode = 8#777,
     Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary>>, put,
+    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, put,
         ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
 
     % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
         #{
@@ -333,7 +333,7 @@ attributes_list(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
 
     % then
     {ok, #file_attr{
@@ -372,7 +372,7 @@ xattr_get(Config) ->
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?attribute=k1">>, get, ?USER_1_AUTH_HEADERS(Config), []),
 
     % then
     DecodedBody = json_utils:decode(Body),
@@ -392,11 +392,11 @@ xattr_put(Config) ->
 
     % when
     Body = json_utils:encode(#{<<"k1">> => <<"v1">>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, put,
+    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, put,
         ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
 
     % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?attribute=k1">>, get, ?USER_1_AUTH_HEADERS(Config), []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
         #{
@@ -415,7 +415,7 @@ xattr_list(Config) ->
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k2">>, value = <<"v2">>}),
 
     % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
 
     % then
     DecodedBody = json_utils:decode(Body),
@@ -425,19 +425,21 @@ xattr_list(Config) ->
     }, DecodedBody).
 
 metric_get(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space2">>,
+    UserId = <<"user1">>,
 
     Prov1ID = rpc:call(WorkerP1, oneprovider, get_id, []),
     Prov2ID = rpc:call(WorkerP2, oneprovider, get_id, []),
 
     MonitoringId = #monitoring_id{
         main_subject_type = space,
-        main_subject_id = <<"space2">>,
+        main_subject_id = SpaceId,
         metric_type = storage_quota,
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space2">>, MonitoringId, time_utils:system_time_seconds()])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [SpaceId, MonitoringId, time_utils:system_time_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
         #document{
@@ -448,8 +450,21 @@ metric_get(Config) ->
         }
     ])),
 
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    AllPrivs = privileges:space_privileges(),
+
+    % viewing metrics without SPACE_VIEW_STATISTICS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, AllPrivs -- [?SPACE_VIEW_STATISTICS]),
+    ?assertMatch(
+        {ok, 403, _, _},
+        rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), [])
+    ),
+
+    % viewing metrics with SPACE_VIEW_STATISTICS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, [?SPACE_VIEW_STATISTICS]),
+    {ok, 200, _, Body} = ?assertMatch(
+        {ok, 200, _, _},
+        rest_test_utils:request(WorkerP1, <<"metrics/space/space2?metric=storage_quota">>, get, ?USER_1_AUTH_HEADERS(Config), [])
+    ),
     DecodedBody = json_utils:decode(Body),
 
     % then
@@ -596,7 +611,7 @@ create_share_base(Config, RestPathType) ->
 
     % request without share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_INVALID_NAME,
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
         {SupportingProviderNode, SharedDirRestPath, post, Headers, <<"">>}
     )),
 
@@ -605,13 +620,13 @@ create_share_base(Config, RestPathType) ->
 
     % creating share for file should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_A_DIRECTORY,
+        ?ERROR_POSIX(?ENOTDIR),
         {SupportingProviderNode, FileRestPath, post, Headers, Payload}
     )),
 
     % creating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, post, Headers, Payload}
     )),
 
@@ -632,7 +647,7 @@ create_share_base(Config, RestPathType) ->
 
     % creating share for directory that has existing share should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SHARE_ALREADY_EXISTS,
+        ?ERROR_POSIX(?EEXIST),
         {SupportingProviderNode, SharedDirRestPath, post, Headers, Payload}
     )),
 
@@ -699,7 +714,7 @@ get_file_share_base(Config, RestPathType) ->
 
     % getting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, get, Headers, <<>>}
     )),
 
@@ -765,7 +780,7 @@ get_share_public_id(Config) ->
 
     % getting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, RestPath, get, Headers, <<>>}
     )),
 
@@ -849,7 +864,7 @@ delete_file_share_base(Config, RestPathType) ->
 
     % deleting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, SharedDirRestPath, delete, Headers, <<>>}
     )),
 
@@ -899,7 +914,7 @@ delete_share_public_id(Config) ->
 
     % deleting share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
         {OtherProviderNode, RestPath, delete, Headers, <<>>}
     )),
 
@@ -974,18 +989,18 @@ update_share_name_base(Config, RestPathType) ->
 
     % request without new share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_INVALID_NAME,
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
         {SupportingProviderNode, SharedDirRestPath, patch, Headers, <<"">>}
     )),
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
-        {OtherProviderNode, SharedDirRestPath, patch, Headers, <<>>}
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
+        {OtherProviderNode, SharedDirRestPath, patch, Headers, Payload}
     )),
 
     % updating share name should succeed
-    {ok, 200, _, _} = ?assertMatch({ok, 200, _, _},
+    {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, patch, Headers, Payload)),
 
     % check that share has been renamed
@@ -1028,18 +1043,18 @@ update_share_name_public_id(Config) ->
 
     % request without new share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_INVALID_NAME,
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
         {SupportingProviderNode, RestPath, patch, Headers, <<>>}
     )),
 
     % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED,
-        {OtherProviderNode, RestPath, patch, Headers, <<>>}
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
+        {OtherProviderNode, RestPath, patch, Headers, Payload}
     )),
 
     % updating share name should succeed
-    {ok, 200, _, _} = ?assertMatch({ok, 200, _, _},
+    {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(SupportingProviderNode, RestPath, patch, Headers, Payload)),
 
     % check that share has been renamed
@@ -1053,12 +1068,12 @@ set_get_json_metadata(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -1070,7 +1085,7 @@ set_get_json_metadata(Config) ->
 
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?filter_type=keypath&filter=key">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
 
 set_get_json_metadata_id(Config) ->
@@ -1081,12 +1096,12 @@ set_get_json_metadata_id(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary>>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary>>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -1098,7 +1113,7 @@ set_get_json_metadata_id(Config) ->
 
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
 
 set_get_rdf_metadata(Config) ->
@@ -1106,12 +1121,12 @@ set_get_rdf_metadata(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=rdf">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/rdf/space2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=rdf">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/rdf/space2">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
     ?assertMatch(<<"some_xml">>, Body).
 
@@ -1123,12 +1138,12 @@ set_get_rdf_metadata_id(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata-id/rdf/", ObjectId/binary>>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata-id/rdf/", ObjectId/binary>>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
     ?assertMatch(<<"some_xml">>, Body).
 
@@ -1138,16 +1153,16 @@ set_get_json_metadata_inherited(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir">>),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2/dir?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2/dir">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2/dir?metadata_type=json&inherited=true">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2/dir?inherited=true">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -1172,24 +1187,24 @@ set_get_xattr_inherited(Config) ->
     XattrChild2 = json_utils:encode(#{<<"k3">> => <<"v3">>}),
 
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\":5}">>)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrSpace)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrDir)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?extended=true">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild2)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"attributes/space2/dir_test/child?inherited=true&extended=true">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(#{
@@ -1204,35 +1219,35 @@ set_get_json_metadata_using_filter(Config) ->
 
     % when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key1">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key1">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(<<"value1">>, DecodedBody),
     {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key3.[1]">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key3.[1]">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     DecodedBody2 = json_utils:decode(Body2),
     ?assertMatch(<<"v2">>, DecodedBody2),
 
     %when
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key1">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key1">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"value11\"">>)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key2">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key2">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key22\": \"value22\"}">>)),
     ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json&filter_type=keypath&filter=key3.[0]">>, put,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key3.[0]">>, put,
             ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"v11\"">>)),
 
     %then
     {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
+        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
             ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
     ?assertMatch(
         #{
@@ -1250,10 +1265,10 @@ primitive_json_metadata_test(Config) ->
 
     lists:foreach(fun(Primitive) ->
         ?assertMatch({ok, 204, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
+            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Primitive)),
         ?assertMatch({ok, 200, _, Primitive},
-            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, get,
+            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), []))
     end, Primitives).
 
@@ -1264,13 +1279,13 @@ empty_metadata_invalid_json_test(Config) ->
 
     lists:foreach(fun(InvalidJson) ->
         ?assertMatch({ok, 400, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/space2?metadata_type=json">>, put,
+            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
                 ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), InvalidJson))
     end, InvalidJsons).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
-    [P2, P1] = ?config(op_worker_nodes, Config),
+    Workers = [P2, P1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P2)}}, Config),
     Space = <<"space4">>,
@@ -1339,7 +1354,15 @@ list_transfers(Config) ->
     ?assertMatch(true, length(Ended(P2)) =:= FilesNum, ?ATTEMPTS),
 
     ?assertMatch(AllTransfers, lists:sort(Ended(P1)), ?ATTEMPTS),
-    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS).
+    ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS),
+
+    AllPrivs = privileges:space_privileges(),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+
+    % listing transfers without SPACE_VIEW_TRANSFERS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space4">>, <<"user1">>, AllPrivs -- [?SPACE_VIEW_TRANSFERS]),
+    ?assertMatch(ErrorForbidden, Ended(P1), ?ATTEMPTS),
+    ?assertMatch(ErrorForbidden, Ended(P2), ?ATTEMPTS).
 
 track_transferred_files(Config) ->
     [Provider1, Provider2] = ?config(op_worker_nodes, Config),
@@ -1469,7 +1492,13 @@ init_per_testcase(metric_get, Config) ->
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
     end),
-    init_per_testcase(all, Config);
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space2">>, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
+
+init_per_testcase(list_transfers, Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
+    init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
 init_per_testcase(Case, Config) when Case =:= create_share orelse
         Case =:= create_share_id orelse
@@ -1492,8 +1521,16 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config2).
 
 end_per_testcase(metric_get = Case, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(list_transfers = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    OldPrivs = ?config(old_privs, Config),
+    initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
@@ -1697,18 +1734,26 @@ get_ended_transfers_for_file(Worker, FileGuid) ->
     Transfers.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize) ->
-    Result = list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []),
-    % Make sure there are no duplicates
-    ?assertEqual(lists:sort(Result), lists:usort(Result)),
-    Result.
+    case list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, <<"null">>, []) of
+        Result when is_list(Result) ->
+            % Make sure there are no duplicates
+            ?assertEqual(lists:sort(Result), lists:usort(Result)),
+            Result;
+        Error ->
+            Error
+    end.
 
 list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, StartId, Acc) ->
-    {Transfers, NextPageToken} = list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize),
-    case NextPageToken of
-        <<"null">> ->
-            Acc ++ Transfers;
-        _ ->
-            list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)
+    case list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize) of
+        {ok, {Transfers, NextPageToken}} ->
+            case NextPageToken of
+                <<"null">> ->
+                    Acc ++ Transfers;
+                _ ->
+                    list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)
+            end;
+        Error ->
+            Error
     end.
 
 list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
@@ -1724,13 +1769,15 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
     Url = str_utils:format_bin("spaces/~s/transfers?state=~s~s~s", [
         Space, State, TokenParam, LimitParam
     ]),
-    {ok, _, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
-        Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>
-    )),
-    ParsedBody = json_utils:decode(Body),
-    Transfers = maps:get(<<"transfers">>, ParsedBody),
-    NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
-    {Transfers, NextPageToken}.
+    case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of
+        {ok, 200, _, Body} ->
+            ParsedBody = json_utils:decode(Body),
+            Transfers = maps:get(<<"transfers">>, ParsedBody),
+            NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
+            {ok, {Transfers, NextPageToken}};
+        {ok, Code, _, Body} ->
+            {Code, json_utils:decode(Body)}
+    end.
 
 mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessId, ShareId) ->
     case OtherProviderNode =/= SupportingProviderNode of

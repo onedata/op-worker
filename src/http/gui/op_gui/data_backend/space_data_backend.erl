@@ -74,36 +74,38 @@ find_record(<<"space">>, SpaceId) ->
             op_gui_error:unauthorized()
     end;
 
-find_record(RecordType, RecordId) ->
+find_record(<<"space-provider-list">>, SpaceId) ->
     SessionId = op_gui_session:get_session_id(),
-    SpaceId = case RecordType of
+    UserId = op_gui_session:get_user_id(),
+    case user_logic:has_eff_space(SessionId, UserId, SpaceId) of
+        false -> op_gui_error:unauthorized();
+        true -> {ok, space_provider_list_record(SpaceId)}
+    end;
+
+find_record(RecordType, RecordId) ->
+    {SpaceId, AdditionalPrivs} = case RecordType of
         <<"space-user-list">> ->
-            RecordId;
+            {RecordId, []};
         <<"space-group-list">> ->
-            RecordId;
-        <<"space-provider-list">> ->
-            RecordId;
+            {RecordId, []};
         <<"space-transfer-link-state">> ->
-            RecordId;
+            {RecordId, [?SPACE_VIEW_TRANSFERS]};
         <<"space-on-the-fly-transfer-list">> ->
-            RecordId;
+            {RecordId, [?SPACE_VIEW_TRANSFERS]};
         <<"space-transfer-stat">> ->
             {_, _, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id;
+            {Id, [?SPACE_VIEW_TRANSFERS]};
         <<"space-transfer-time-stat">> ->
             {_, _, _, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id;
+            {Id, [?SPACE_VIEW_TRANSFERS]};
         <<"space-transfer-list">> ->
             {_, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id
+            {Id, [?SPACE_VIEW_TRANSFERS]}
     end,
     UserId = op_gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
-    Authorized = space_logic:has_eff_privilege(
-        SessionId, SpaceId, UserId, ?SPACE_VIEW
-    ),
-    case Authorized of
+    case space_logic:has_eff_privileges(SpaceId, UserId, [?SPACE_VIEW | AdditionalPrivs]) of
         false ->
             op_gui_error:unauthorized();
         true ->
@@ -112,8 +114,6 @@ find_record(RecordType, RecordId) ->
                     {ok, space_user_list_record(RecordId)};
                 <<"space-group-list">> ->
                     {ok, space_group_list_record(RecordId)};
-                <<"space-provider-list">> ->
-                    {ok, space_provider_list_record(RecordId)};
                 <<"space-on-the-fly-transfer-list">> ->
                     {ok, space_on_the_fly_transfer_list_record(RecordId)};
                 <<"space-transfer-stat">> ->
@@ -205,10 +205,9 @@ delete_record(<<"space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
-    SessionId = op_gui_session:get_session_id(),
     % Check if that user has view privileges in that space
     HasViewPrivileges = space_logic:has_eff_privilege(
-        SessionId, SpaceId, op_gui_session:get_user_id(), ?SPACE_VIEW
+        SpaceId, op_gui_session:get_user_id(), ?SPACE_VIEW
     ),
     space_record(SpaceId, HasViewPrivileges).
 
@@ -236,7 +235,6 @@ space_record(SpaceId, HasViewPrivileges) ->
                 fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId
             )
     end,
-
     % Depending on view privileges, show or hide info about members, privileges,
     % providers and transfers.
     {
@@ -280,7 +278,7 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"hasViewPrivilege">>, HasViewPrivileges},
         {<<"userList">>, RelationWithViewPrivileges},
         {<<"groupList">>, RelationWithViewPrivileges},
-        {<<"providerList">>, RelationWithViewPrivileges},
+        {<<"providerList">>, SpaceId},
         {<<"onTheFlyTransferList">>, RelationWithViewPrivileges},
         {<<"transferOnTheFlyStat">>, TransferOnTheFlyStatId},
         {<<"transferJobStat">>, TransferJobStatId},

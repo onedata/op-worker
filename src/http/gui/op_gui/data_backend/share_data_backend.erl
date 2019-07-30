@@ -169,7 +169,7 @@ delete_record(<<"share-public">>, _ShareId) ->
     op_gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"share">>, ShareId) ->
     SessionId = op_gui_session:get_session_id(),
-    case logical_file_manager:remove_share(SessionId, ShareId) of
+    case lfm:remove_share(SessionId, ShareId) of
         ok ->
             ok;
         {error, ?EACCES} ->

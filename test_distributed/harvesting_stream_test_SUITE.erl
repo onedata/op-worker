@@ -199,7 +199,8 @@ main_harvesting_stream_should_not_be_started_if_space_is_not_supported(Config) -
     mock_harvester_logic_get(Nodes, HarvestersConfig),
     Harvesters = maps:keys(HarvestersConfig),
     {ok, DS = #document{value = ODS}} = get_space_doc(Node, Space),
-    save_space_doc(Node, DS#document{value = ODS#od_space{harvesters = Harvesters}}),
+    % trigger od_space posthooks
+    put_into_cache(Node, DS#document{value = ODS#od_space{harvesters = Harvesters}}),
     wait_until_od_space_posthook_is_executed(Space),
     ?assertMatch(0, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS).
 
@@ -1298,12 +1299,13 @@ update_harvesters_structure(Config, HarvestersConfig, SpacesConfig) ->
 
     maps:fold(fun(SpaceId, Harvesters, _) ->
         {ok, DS = #document{value = ODS}} = get_space_doc(Node, SpaceId),
-        % trigger call to od_space:save_to_cache
-        save_space_doc(Node, DS#document{value = ODS#od_space{harvesters = Harvesters}})
+        % trigger od_space posthooks
+        put_into_cache(Node, DS#document{value = ODS#od_space{harvesters = Harvesters}})
     end, undefined, SpacesConfig),
 
     maps:fold(fun(_HarvesterId, HarvesterDoc, _) ->
-        save_harvester_doc(Node, HarvesterDoc)
+        % trigger od_harvester posthooks
+        put_into_cache(Node, HarvesterDoc)
     end, undefined, HarvestersConfig).
 
 count_main_harvesting_streams(SpacesConfig, HarvestersConfig) ->
@@ -1406,7 +1408,7 @@ count_active_children(Nodes, Ref) ->
     lists:foldl(fun(Node, Sum) ->
         Result = rpc:call(Node, supervisor, count_children, [Ref]),
         Sum + proplists:get_value(active, Result)
-    end, 0, Nodes).
+    end, 0, utils:ensure_list(Nodes)).
 
 whereis(Node, Name) ->
     rpc:call(Node, erlang, whereis, [Name]).
@@ -1414,11 +1416,8 @@ whereis(Node, Name) ->
 get_space_doc(Node, SpaceId) ->
     rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, SpaceId]).
 
-save_space_doc(Node, Doc) ->
-    rpc:call(Node, od_space, save_to_cache, [Doc]).
-
-save_harvester_doc(Node, Doc) ->
-    rpc:call(Node, od_harvester, save_to_cache, [Doc]).
+put_into_cache(Node, Doc) ->
+    rpc:call(Node, initializer, put_into_cache, [Doc]).
 
 add_mocked_od_space_synchronization_posthook(Nodes) ->
     Self = self(),

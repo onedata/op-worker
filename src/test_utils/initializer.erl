@@ -34,6 +34,7 @@
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
+-export([put_into_cache/1]).
 
 -define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
 
@@ -318,11 +319,17 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, UserCtx} = helper:new_posix_user_ctx(0, 0),
-    {ok, Helper} = helper:new_posix_helper(list_to_binary(TmpDir), #{}, UserCtx,
-        ?CANONICAL_STORAGE_PATH),
+    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
+    Args = #{<<"mountPoint">> => list_to_binary(TmpDir)},
+    {ok, Helper} = helper:new_helper(
+        ?POSIX_HELPER_NAME,
+        Args,
+        UserCtx,
+        false,
+        ?CANONICAL_STORAGE_PATH
+    ),
     StorageDoc = storage:new(
-        <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
+        <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
         [Helper]),
     {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
@@ -500,7 +507,7 @@ mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
     test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
-        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = #od_share{
+        {ok, _} = put_into_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid,
@@ -518,7 +525,7 @@ mock_share_logic(Config) ->
     test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
         ok = od_share:invalidate_cache(ShareId),
-        {ok, _} = od_share:save_to_cache(#document{key = ShareId, value = Share#od_share{name = NewName}}),
+        {ok, _} = put_into_cache(#document{key = ShareId, value = Share#od_share{name = NewName}}),
         ok
     end).
 
@@ -526,6 +533,13 @@ mock_share_logic(Config) ->
 unmock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, share_logic).
+
+
+%% Puts an od_* document in the provider's cache, which triggers posthooks
+-spec put_into_cache(datastore_doc:doc()) -> {ok, datastore_doc:doc()}.
+put_into_cache(Doc = #document{key = Id, value = Record}) ->
+    Type = element(1, Record),
+    Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
 %%%===================================================================
@@ -956,9 +970,15 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesHarveste
         {ok, maps:keys(Providers)}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(Client, SpaceId, UserId, Privilege) ->
-        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(Client, SpaceId),
+    test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(SpaceId, UserId, Privilege) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
         lists:member(Privilege, maps:get(UserId, EffUsers, []))
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, has_eff_privileges, fun(SpaceId, UserId, Privileges) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
+        UserPrivileges = maps:get(UserId, EffUsers, []),
+        lists:all(fun(Privilege) -> lists:member(Privilege, UserPrivileges) end, Privileges)
     end),
 
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
@@ -1230,10 +1250,10 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
         Doc = #document{
             key = HarvesterId,
             value = #od_harvester{
-                spaces = proplists:get_value(<<"spaces">>, Setup),
-                indices = proplists:get_value(<<"indices">>, Setup)
+                spaces = proplists:get_value(<<"spaces">>, Setup, []),
+                indices = proplists:get_value(<<"indices">>, Setup, [])
             }},
-        od_harvester:save_to_cache(Doc),
+        {ok, _} = put_into_cache(Doc),
         {ok, Doc}
     end).
 

@@ -39,7 +39,7 @@
 }).
 
 %% API
--export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
 -export([actual_timestamp/0]).
 
 %% datastore_model callbacks
@@ -58,9 +58,9 @@ actual_timestamp() ->
     erlang:universaltime().
 
 
--spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
-save_to_cache(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+-spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
+update_cache(Id, Diff, Default) ->
+    datastore_model:update(?CTX, Id, Diff, Default).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.

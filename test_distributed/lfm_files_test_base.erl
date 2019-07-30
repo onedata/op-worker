@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains base functions for tests of logical_file_manager API.
+%%% This file contains base functions for tests of lfm API.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files_test_base).
@@ -1192,7 +1192,7 @@ create_share_file(Config) ->
   {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#700),
 
   % Files cannot be shared
-  ?assertMatch({error, ?EINVAL}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+  ?assertMatch({error, ?ENOTDIR}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
 
 remove_share(Config) ->
   [W | _] = Workers = ?config(op_worker_nodes, Config),

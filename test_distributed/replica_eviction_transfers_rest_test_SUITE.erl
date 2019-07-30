@@ -12,7 +12,6 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -35,7 +34,9 @@
     rerun_replica_eviction/1,
     rerun_replica_eviction_by_other_user/1,
     rerun_dir_eviction/1,
-    cancel_replica_eviction_on_target_nodes/1,
+    rerun_index_eviction/1,
+    cancel_replica_eviction_on_target_nodes_by_scheduling_user/1,
+    cancel_replica_eviction_on_target_nodes_by_other_user/1,
     fail_to_evict_file_replica_without_permissions/1,
     eviction_should_succeed_when_remote_provider_modified_file_replica/1,
     eviction_should_fail_when_evicting_provider_modified_file_replica/1,
@@ -69,7 +70,9 @@ all() -> [
     rerun_replica_eviction,
     rerun_replica_eviction_by_other_user,
     rerun_dir_eviction,
-    cancel_replica_eviction_on_target_nodes,
+    rerun_index_eviction,
+    cancel_replica_eviction_on_target_nodes_by_scheduling_user,
+    cancel_replica_eviction_on_target_nodes_by_other_user,
 %%    fail_to_evict_file_replica_without_permissions %todo VFS-4844,
     eviction_should_succeed_when_remote_provider_modified_file_replica,
     eviction_should_fail_when_evicting_provider_modified_file_replica,
@@ -136,8 +139,14 @@ rerun_replica_eviction_by_other_user(Config) ->
 rerun_dir_eviction(Config) ->
     replica_eviction_transfers_test_base:rerun_dir_eviction(Config, rest, guid).
 
-cancel_replica_eviction_on_target_nodes(Config) ->
-    replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes(Config, rest).
+rerun_index_eviction(Config) ->
+    replica_eviction_transfers_test_base:rerun_index_eviction(Config, rest).
+
+cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config) ->
+    replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, rest).
+
+cancel_replica_eviction_on_target_nodes_by_other_user(Config) ->
+    replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes_by_other_user(Config, rest).
 
 fail_to_evict_file_replica_without_permissions(Config) ->
     replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, path).

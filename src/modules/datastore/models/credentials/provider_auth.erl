@@ -19,7 +19,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("ctool/include/auth/onedata_macaroons.hrl").
+-include_lib("ctool/include/aai/macaroons.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
@@ -305,7 +305,7 @@ cache_macaroon(Type, Macaroon) ->
     ok.
 
 
--spec caveats_for_macaroon(Type :: auth | identity) -> [onedata_macaroons:caveat()].
+-spec caveats_for_macaroon(Type :: auth | identity) -> [macaroons:caveat()].
 caveats_for_macaroon(auth) -> [
     ?TIME_CAVEAT(provider_logic:zone_time_seconds(), ?MACAROON_TTL)
 ];
@@ -315,12 +315,12 @@ caveats_for_macaroon(identity) -> [
 ].
 
 
--spec add_caveats(Macaroon :: binary(), [onedata_macaroons:caveat()]) ->
+-spec add_caveats(Macaroon :: binary(), [macaroons:caveat()]) ->
     NewMacaroon :: binary().
 add_caveats(MacaroonBin, Caveats) ->
-    {ok, Macaroon} = onedata_macaroons:deserialize(MacaroonBin),
+    {ok, Macaroon} = macaroons:deserialize(MacaroonBin),
     NewMacaroon = lists:foldl(fun(Caveat, MacaroonAcc) ->
-        onedata_macaroons:add_caveat(MacaroonAcc, Caveat)
+        macaroons:add_caveat(MacaroonAcc, Caveat)
     end, Macaroon, Caveats),
-    {ok, NewMacaroonBin} = onedata_macaroons:serialize(NewMacaroon),
+    {ok, NewMacaroonBin} = macaroons:serialize(NewMacaroon),
     NewMacaroonBin.

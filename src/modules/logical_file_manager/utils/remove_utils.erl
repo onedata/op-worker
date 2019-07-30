@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec rm(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 rm(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
@@ -59,7 +59,7 @@ rm(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_dir(session:id(), Guid :: fslogic_worker:file_guid()) ->
-    true | false | logical_file_manager:error_reply().
+    true | false | lfm:error_reply().
 is_dir(SessId, Guid) ->
     case lfm_attrs:stat(SessId, {guid, Guid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
@@ -75,7 +75,7 @@ is_dir(SessId, Guid) ->
 %%--------------------------------------------------------------------
 -spec rm_children(session:id(), Guid :: fslogic_worker:file_guid(),
     Offset :: non_neg_integer(), Chunk :: non_neg_integer(), ok | {error, term()}) ->
-    ok | logical_file_manager:error_reply().
+    ok | lfm:error_reply().
 rm_children(SessId, Guid, Offset, Chunk, Answer) ->
     case lfm_dirs:ls(SessId, {guid, Guid}, Offset, Chunk) of
         {ok, Children} ->

@@ -73,7 +73,7 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
         {_, undefined} ->
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
         {TheSameType, TheSameType} ->
-            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+            ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
         {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
             throw(?EISDIR);
@@ -97,7 +97,7 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
     case copy_utils:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
         {ok, NewCopiedGuid, ChildEntries} ->
-            case logical_file_manager:rm_recursive(SessId, {guid, SourceGuid}) of
+            case lfm:rm_recursive(SessId, {guid, SourceGuid}) of
                 ok ->
                     RenameChildEntries = lists:map(
                         fun({OldGuid, NewGuid, NewParentGuid, NewName}) ->
@@ -296,7 +296,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok;
         _ ->
             SessId = user_ctx:get_session_id(UserCtx),
-            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false)
+            ok = lfm:unlink(SessId, {guid, TargetGuid}, false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
     fslogic_times:update_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
@@ -350,7 +350,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
           rename_file_on_flat_storage(UserCtx, SourceFileCtx,
               TargetParentFileCtx, TargetName, TargetGuid);
       _ ->
-        ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+        ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
         copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(_, _, _, _,
@@ -559,7 +559,7 @@ get_child_type(ParentFileCtx, ChildName, UserCtx) ->
     {file_meta:type(), ChildGuid :: fslogic_worker:file_guid()} |
     {undefined, undefined}.
 remotely_get_child_type(SessId, ParentGuid, ChildName) ->
-    case logical_file_manager:get_child_attr(SessId, ParentGuid, ChildName) of
+    case lfm:get_child_attr(SessId, ParentGuid, ChildName) of
         {ok, #file_attr{type = Type, guid = ChildGuid}} ->
             {Type, ChildGuid};
         {error, ?ENOENT} ->

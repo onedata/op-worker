@@ -52,12 +52,13 @@
 
 -record(scenario, {
     user = ?DEFAULT_USER,
+    cancelling_user = ?DEFAULT_USER,
     type = lfm :: lfm | rest,
     file_key_type = guid :: guid | path,
     schedule_node :: node(),
     replicating_nodes :: [node()],
     evicting_nodes :: [node()],
-    function :: function,
+    function :: function(),
     index_name :: binary(),
     query_view_params :: list(),
     space_id :: od_space:id()
@@ -133,7 +134,7 @@ end).
         ListResult = rpc:call(Worker, index, list, [SpaceId]),
         GetResult = rpc:call(Worker, index, get, [IndexName, SpaceId]),
         case {ListResult, GetResult} of
-            {{ok, Indexes}, {ok, __Doc}} -> lists:member(IndexName, Indexes);
+            {{ok, Indices}, {ok, __Doc}} -> lists:member(IndexName, Indices);
             Other -> Other
         end
     end, Attempts)).

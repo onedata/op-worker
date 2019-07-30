@@ -26,7 +26,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns new luma_config record. CacheTimeout is passed in minutes
+%% Returns new luma_config record.
 %% @end
 %%-------------------------------------------------------------------
 -spec new(url(), api_key()) -> config().

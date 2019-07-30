@@ -12,7 +12,7 @@
 -module(lfm_context).
 -author("Tomasz Lichon").
 
-%% Internal opaque file-handle used by logical_file_manager
+%% Internal opaque file-handle used by lfm
 -record(lfm_context, {
     handle_id :: lfm_context:handle_id(),
     provider_id :: oneprovider:id(),

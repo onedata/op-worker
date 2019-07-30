@@ -58,14 +58,19 @@ space_unsupported(Name) ->
 %%--------------------------------------------------------------------
 -spec init([term()]) -> {ok, harvesting_stream:state()}.
 init([SpaceId, HarvesterId, IndexId, Until]) ->
-    {ok, LastSeenSeq} = harvesting_state:get_seen_seq(SpaceId, HarvesterId, IndexId),
-    {ok, #hs_state{
-        name = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
-        space_id = SpaceId,
-        until = Until + 1,   % until is exclusive in couchbase_changes_stream
-        destination = harvesting_destination:init(HarvesterId, IndexId),
-        last_seen_seq = LastSeenSeq
-    }}.
+    case harvesting_state:get_seen_seq(SpaceId, HarvesterId, IndexId) of
+        {ok, LastSeenSeq} ->
+            {ok, #hs_state{
+                name = ?AUX_HARVESTING_STREAM(SpaceId, HarvesterId, IndexId),
+                space_id = SpaceId,
+                until = Until + 1,   % until is exclusive in couchbase_changes_stream
+                destination = harvesting_destination:init(HarvesterId, IndexId),
+                last_seen_seq = LastSeenSeq
+            }};
+        {error, not_found} ->
+            % space must have been deleted in the meantime
+            {stop, normal}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
