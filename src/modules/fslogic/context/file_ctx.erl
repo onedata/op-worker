@@ -53,6 +53,7 @@
 }).
 
 -type ctx() :: #file_ctx{}.
+-export_type([ctx/0]).
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).

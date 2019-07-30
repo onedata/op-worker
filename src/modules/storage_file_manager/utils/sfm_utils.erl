@@ -115,7 +115,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %% Creation is performed with root credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx()) -> file_ctx:ctx().
+-spec create_delayed_storage_file(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
 create_delayed_storage_file(FileCtx) ->
     create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID), false).
 
