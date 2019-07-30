@@ -280,7 +280,7 @@ should_check_autocleaning(CurrentTimestamp, LastCheckTimestamp) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec get_run_report(autocleaning:run_id(), autocleaning_run:record()) -> {ok, maps:maps()}.
+-spec get_run_report(autocleaning:run_id(), autocleaning_run:record()) -> {ok, map()}.
 get_run_report(ARId, #autocleaning_run{
     started_at = StartedAt,
     stopped_at = StoppedAt,
