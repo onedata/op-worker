@@ -1019,14 +1019,15 @@ init_per_testcase(_Case, Config) ->
 
     lists:foreach(fun(W) ->
         lists:foreach(fun(SpaceId) ->
-            {ok, D} = rpc:call(W, space_logic, get, [?ROOT_SESS_ID, SpaceId]),
-            {ok, Harvesters} = space_logic:get_harvesters(D),
+            {ok, SpaceDoc} = rpc:call(W, space_logic, get, [?ROOT_SESS_ID, SpaceId]),
+            {ok, Harvesters} = space_logic:get_harvesters(SpaceDoc),
             lists:foreach(fun(HarvesterId) ->
-                {ok, HD} = rpc:call(W, harvester_logic, get, [HarvesterId]),
-                rpc:call(W, od_harvester, save_to_cache, [HD])
+                {ok, HarvesterDoc} = rpc:call(W, harvester_logic, get, [HarvesterId]),
+                % trigger od_harvester posthooks
+                rpc:call(W, initializer, put_into_cache, [HarvesterDoc])
             end, Harvesters),
-            % trigger od_provider posthooks
-            rpc:call(W, od_space, save_to_cache, [D])
+            % trigger od_space posthooks
+            rpc:call(W, initializer, put_into_cache, [SpaceDoc])
         end, ?SPACE_IDS)
     end, Workers),
     set_mock_harvest_metadata_failure(Workers, false),

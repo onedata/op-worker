@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("rest_test_utils.hrl").
--include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

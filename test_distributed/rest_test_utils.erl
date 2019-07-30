@@ -12,7 +12,7 @@
 -module(rest_test_utils).
 -author("Jakub Kudzia").
 
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

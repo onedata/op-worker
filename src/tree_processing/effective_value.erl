@@ -19,7 +19,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get_or_calculate/5, get_or_calculate/6, get_or_calculate/7,
+-export([get_or_calculate/3, get_or_calculate/4, get_or_calculate/5, get_or_calculate/6, get_or_calculate/7,
     invalidate/1]).
 
 -type initial_calculation_info() :: term(). % Function that calculates value returns additional information
@@ -38,6 +38,27 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, undefined)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback()) ->
+    {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
+get_or_calculate(Cache, FileDoc, CalculateCallback) ->
+    get_or_calculate(Cache, FileDoc, CalculateCallback, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, [])
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
+    initial_calculation_info()) ->
+    {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
+get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo) ->
+    get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, []).
 
 %%--------------------------------------------------------------------
 %% @doc

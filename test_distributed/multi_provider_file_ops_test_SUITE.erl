@@ -636,7 +636,7 @@ remove_file_on_remote_provider_ceph(Config0) ->
     
 evict_on_ceph(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
-    Type = lfm,
+    Type = rest,
     FileKeyType = path,
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers_not1, Config),

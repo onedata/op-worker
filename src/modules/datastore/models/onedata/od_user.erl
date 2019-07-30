@@ -45,7 +45,7 @@
 }).
 
 %% API
--export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
@@ -56,15 +56,9 @@
 %%% API
 %%%===================================================================
 
--spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
-save_to_cache(Doc) ->
-    case datastore_model:save(?CTX, Doc) of
-        {ok, #document{key = UserId, value = #od_user{eff_spaces = EffSpaces}}} ->
-            file_meta:setup_onedata_user(UserId, EffSpaces),
-            {ok, UserId};
-        Error ->
-            Error
-    end.
+-spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
+update_cache(Id, Diff, Default) ->
+    datastore_model:update(?CTX, Id, Diff, Default).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -88,12 +82,19 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(save, _, {ok, Doc = #document{key = UserId}}) ->
-    ok = permissions_cache:invalidate(),
-    ok = files_to_chown:chown_pending_files(UserId),
-    {ok, Doc};
+run_after(create, _, {ok, Doc}) ->
+    run_after(Doc);
+run_after(update, _, {ok, Doc}) ->
+    run_after(Doc);
 run_after(_Function, _Args, Result) ->
     Result.
+
+-spec run_after(doc()) -> {ok, doc()}.
+run_after(Doc = #document{key = UserId, value = #od_user{eff_spaces = EffSpaces}}) ->
+    ok = file_meta:setup_onedata_user(UserId, EffSpaces),
+    ok = permissions_cache:invalidate(),
+    ok = files_to_chown:chown_pending_files(UserId),
+    {ok, Doc}.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -125,9 +126,7 @@ get_record_version() ->
 %%--------------------------------------------------------------------
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
-    [fun(Function, Args, Result) ->
-        od_user:run_after(Function, Args, Result)
-    end].
+    [fun run_after/3].
 
 %%--------------------------------------------------------------------
 %% @doc

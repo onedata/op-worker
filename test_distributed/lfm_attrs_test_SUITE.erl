@@ -49,7 +49,7 @@
     file_traverse_job_test/1]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
+-export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1]).
 
 all() ->
     ?ALL([
@@ -695,10 +695,10 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
 %%% Pool callbacks
 %%%===================================================================
 
-do_master_job(Job) ->
-    tree_traverse:do_master_job(Job).
+do_master_job(Job, TaskID) ->
+    tree_traverse:do_master_job(Job, TaskID).
 
-do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}) ->
+do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}, _TaskID) ->
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 

@@ -37,6 +37,10 @@
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
 
+-define(HARVEST_METADATA_TIMEOUT, application:get_env(
+    ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
+)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -259,7 +263,7 @@ harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
             <<"maxStreamSeq">> => MaxStreamSeq,
             <<"batch">> => Batch
         }
-    }).
+    }, ?HARVEST_METADATA_TIMEOUT).
 
 -spec get_harvesters(od_space:doc() | od_space:id()) ->
     {ok, [od_harvester:id()]} | gs_protocol:error().

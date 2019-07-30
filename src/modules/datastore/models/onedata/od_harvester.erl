@@ -35,7 +35,7 @@
 }).
 
 %% API
--export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0]).
@@ -44,9 +44,9 @@
 %%% API
 %%%===================================================================
 
--spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
-save_to_cache(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+-spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
+update_cache(Id, Diff, Default) ->
+    datastore_model:update(?CTX, Id, Diff, Default).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -65,29 +65,30 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Harvester create/update posthook.
+%% Harvester update posthook.
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(save, _, Result = {ok, #document{
-    key = HarvesterId,
-    value = #od_harvester{
-        spaces = Spaces,
-        indices = Indices
-}}}) ->
+run_after(create, _, {ok, Doc}) ->
+    run_after(Doc);
+run_after(update, _, {ok, Doc}) ->
+    run_after(Doc);
+run_after(_Function, _Args, Result) ->
+    Result.
+
+-spec run_after(doc()) -> {ok, doc()}.
+run_after(Doc = #document{key = HrvId, value = #od_harvester{spaces = Spaces, indices = Indices}}) ->
     lists:foreach(fun(SpaceId) ->
         case provider_logic:supports_space(SpaceId) of
             true ->
                 spawn(fun() ->
-                    main_harvesting_stream:revise_harvester(SpaceId, HarvesterId, Indices)
+                    main_harvesting_stream:revise_harvester(SpaceId, HrvId, Indices)
                 end);
             false ->
                 ok
         end
     end, Spaces),
-    Result;
-run_after(_Function, _Args, Result) ->
-    Result.
+    {ok, Doc}.
 
 %%%===================================================================
 %%% datastore_model callbacks

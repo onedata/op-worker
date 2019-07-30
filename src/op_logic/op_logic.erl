@@ -49,7 +49,7 @@
 -type auth_hint() :: gs_protocol:auth_hint().
 
 -type create_result() :: gs_protocol:graph_create_result().
--type get_result() :: gs_protocol:graph_get_result().
+-type get_result() :: gs_protocol:graph_get_result() | {ok, term()} | {ok, gri(), term()}.
 -type delete_result() :: gs_protocol:graph_delete_result().
 -type update_result() :: gs_protocol:graph_update_result().
 -type result() :: create_result() | get_result() | update_result() | delete_result().
