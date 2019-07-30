@@ -41,7 +41,7 @@
 | {check_type(), 'or', check_type()}.
 -type access_definition() :: root | check_type() | {check_type(), file_ctx:ctx()}.
 
--export_type([check_type/0, item_definition/0, raw_access_definition/0]).
+-export_type([check_type/0, item_definition/0, raw_access_definition/0, access_definition/0]).
 
 %%%===================================================================
 %%% API

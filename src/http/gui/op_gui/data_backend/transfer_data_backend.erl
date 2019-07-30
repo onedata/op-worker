@@ -670,7 +670,7 @@ transfer_current_stat_record(#document{key = TransferId, value = #transfer{
 %% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------
--spec get_status(transfer:record()) ->
+-spec get_status(transfer:transfer()) ->
     transfer:status() | evicting | replicating.
 get_status(T = #transfer{
     replication_status = completed,

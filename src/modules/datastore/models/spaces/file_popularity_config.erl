@@ -18,8 +18,8 @@
 
 -type id() :: od_space:id().
 -type record() :: #file_popularity_config{}.
--type diff() :: datastore:doc(record()).
--type doc() :: datastore_model:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+-type doc() :: datastore_doc:doc(record()).
 -type error() :: {error, term()}.
 
 -export_type([id/0]).

@@ -45,7 +45,7 @@
 -type event_handler() :: fun((Evts :: [event:type()], ctx()) -> ok).
 -type aggregation_rule() :: fun((OldEvt :: event:type(), Evt :: event:type()) ->
     NewEvt :: event:type()).
--type transition_rule() :: fun((metadata(), Evt :: event:object()) -> metadata()).
+-type transition_rule() :: fun((metadata(), Evt :: event:type()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
 -type subscriptions() :: #{subscription:id() => subscription_manager:key() | local}.
@@ -429,7 +429,7 @@ spawn_event_handler(Force, #state{stream = Stm} = State) ->
 %% Processes event on the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec process_event(Evt :: event:object(), State :: #state{}) -> NewState :: #state{}.
+-spec process_event(Evt :: event:type(), State :: #state{}) -> NewState :: #state{}.
 process_event(Evt, #state{events = Evts, metadata = Meta, stream = Stm} = State) ->
     EvtKey = event_type:get_aggregation_key(Evt),
     NewEvts = case maps:find(EvtKey, Evts) of

@@ -21,6 +21,8 @@
 -type timestamp() :: non_neg_integer().
 -type timestamps() :: #{od_provider:id() => non_neg_integer()}.
 
+-export_type([histograms/0]).
+
 %% API
 -export([
     new/2, update/6,

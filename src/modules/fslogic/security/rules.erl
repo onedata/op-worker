@@ -51,7 +51,7 @@ check_normal_or_default_def(Type, UserCtx, FileCtx) ->
 %% 'share_id'.
 %% @end
 %%--------------------------------------------------------------------
--spec check_normal_def(check_permissions:access_definition(),  user_ctx:user_ctx(),
+-spec check_normal_def(check_permissions:access_definition(),  user_ctx:ctx(),
     file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
     case file_ctx:is_root_dir_const(SubjectCtx) of

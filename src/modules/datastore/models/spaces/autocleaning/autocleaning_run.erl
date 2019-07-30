@@ -22,7 +22,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type error() :: {error, term()}.
 
--export_type([id/0, status/0]).
+-export_type([id/0, status/0, record/0, doc/0]).
 
 %% API
 -export([get/1, update/2, delete/1, delete/2, create/2,

@@ -120,7 +120,7 @@ maybe_sync_storage_file_and_children(Job0 = #space_strategy_job{
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_sync_storage_file(space_strategy:job()) ->
-    {space_strategy:job_result(), file:ctx(), space_strategy:job()} | no_return().
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
 maybe_sync_storage_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
@@ -176,7 +176,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_import_file(space_strategy:job()) ->
-    {space_strategy:job_result(), file:ctx(), space_strategy:job()} | no_return().
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
 maybe_import_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
@@ -211,7 +211,7 @@ maybe_import_file(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec sync_if_file_is_not_being_replicated(space_strategy:job(), file_ctx:ctx(), file_meta:type()) ->
-    {space_strategy:job_result(), file:ctx(), space_strategy:job()} | no_return().
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
 sync_if_file_is_not_being_replicated(Job, FileCtx, ?DIRECTORY_TYPE) ->
     maybe_sync_file_with_existing_metadata(Job, FileCtx);
 sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{

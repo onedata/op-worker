@@ -21,9 +21,9 @@
 -type id() :: od_space:id().
 -type record() :: #autocleaning{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type run_id() :: autocleaning_run:id().
--type config() :: autocleanig_config:config().
+-type config() :: autocleaning_config:config().
 -type error() :: {error, term()}.
 
 -export_type([id/0, run_id/0, record/0, doc/0, config/0]).
@@ -32,7 +32,7 @@
 -export([get/1, is_enabled/1, get_config/1, get_current_run/1,
     create_or_update/2, maybe_mark_current_run/2, mark_run_finished/1, delete/1]).
 
-%% datastore_model callbacks
+%% datastore_model callback`s
 -export([get_ctx/0, get_record_struct/1]).
 
 

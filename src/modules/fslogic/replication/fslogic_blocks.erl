@@ -17,6 +17,8 @@
 -type block() :: #file_block{}.
 -type blocks() :: [block()].
 
+-export_type([block/0, blocks/0]).
+
 %% Blocks API
 -export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1,
     size/1]).

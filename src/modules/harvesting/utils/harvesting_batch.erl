@@ -71,7 +71,7 @@
 -define(SUBMIT, <<"submit">>).
 -define(DELETE, <<"delete">>).
 
--export_type([batch/0, accumulator/0]).
+-export_type([batch/0, accumulator/0, batch_entries/0]).
 
 %%%===================================================================
 %%% API functions

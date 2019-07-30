@@ -338,8 +338,7 @@ get_auth(#document{value = Session}) ->
 %% Sets direct_io property of session.
 %% @end
 %%--------------------------------------------------------------------
--spec set_direct_io(id(), boolean()) ->
-    ok | datastore:update_error().
+-spec set_direct_io(id(), boolean()) -> ok | {error, term()}.
 set_direct_io(SessId, DirectIO) ->
     Diff = fun(Sess) ->
         {ok, Sess#session{direct_io = DirectIO}}

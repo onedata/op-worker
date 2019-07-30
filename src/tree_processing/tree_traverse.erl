@@ -53,7 +53,7 @@
     target_provider_id => oneprovider:id()
 }.
 
--export_type([slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
+-export_type([master_job/0, slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
 
 %%%===================================================================
 %%% Main API
@@ -141,7 +141,7 @@ set_traverse_info(TraverseJob, TraverseInfo) ->
 %% Provides file_meta document from master job record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_doc(master_job()) -> file_meta:job().
+-spec get_doc(master_job()) -> file_meta:doc().
 get_doc(#tree_traverse{doc = Doc}) ->
     Doc.
 
@@ -232,7 +232,7 @@ get_job(DocOrID) ->
 %% Provides information needed for task document synchronization basing on file_meta scope.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sync_info(master_job()) -> {ok, traverse:ctx_sync_info()}.
+-spec get_sync_info(master_job()) -> {ok, traverse:sync_info()}.
 get_sync_info(#tree_traverse{
     doc = #document{scope = Scope}
 }) ->

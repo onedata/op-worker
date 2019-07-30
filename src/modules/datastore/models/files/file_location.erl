@@ -27,12 +27,12 @@
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
--type id() :: datastore:id().
+-type id() :: datastore:key().
 -type record() :: #file_location{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0, doc/0]).
+-export_type([id/0, doc/0, diff/0, record/0]).
 
 -define(CTX, #{
     model => ?MODULE,

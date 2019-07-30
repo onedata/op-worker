@@ -74,7 +74,7 @@ apply_batch(Docs, BatchRange) ->
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(datastore:doc()) -> ok | {error, datastore:seq(), term()}.
+-spec apply(datastore:doc()) -> ok | {error, datastore_doc:seq(), term()}.
 apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     try
         DocToHandle = case Value of
@@ -305,7 +305,7 @@ parallel_apply(DocsList, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_answers([pid()], reference()) ->
-    ok | timeout | {error, datastore:seq(), term()}.
+    ok | timeout | {error, datastore_doc:seq(), term()}.
 gather_answers(SlavesList, Ref) ->
     gather_answers(SlavesList, Ref, ok).
 
@@ -316,8 +316,8 @@ gather_answers(SlavesList, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_answers([pid()], reference(),
-    ok | {error, datastore:seq(), term()}) ->
-    ok | timeout | {error, datastore:seq(), term()}.
+    ok | {error, datastore_doc:seq(), term()}) ->
+    ok | timeout | {error, datastore_doc:seq(), term()}.
 gather_answers([], _Ref, Ans) ->
     Ans;
 gather_answers(Pids, Ref, TmpAns) ->

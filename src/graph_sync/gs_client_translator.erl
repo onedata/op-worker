@@ -32,7 +32,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec translate(gs_protocol:gri(), Result :: gs_protocol:data()) ->
-    datastore:document().
+    datastore_doc:document().
 translate(#gri{type = od_provider, aspect = current_time}, #{<<"timeMillis">> := TimeMillis}) ->
     TimeMillis;
 
@@ -234,8 +234,8 @@ translate(GRI, Result) ->
 %% within given scope.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_scope_mask(datastore:document(), gs_protocol:scope()) ->
-    datastore:document().
+-spec apply_scope_mask(datastore_doc:document(), gs_protocol:scope()) ->
+    datastore_doc:document().
 apply_scope_mask(Doc = #document{value = User = #od_user{}}, protected) ->
     Doc#document{
         value = User#od_user{

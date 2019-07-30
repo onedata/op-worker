@@ -56,6 +56,7 @@
 -type error() :: gs_protocol:error().
 
 -export_type([
+    req/0,
     client/0,
     op_plugin/0,
     operation/0,

@@ -47,7 +47,7 @@
 }).
 -type state() :: #state{}.
 -type connection_ref() :: pid().
--type doc() :: datastore:document().
+-type doc() :: datastore_doc:document().
 
 
 %% API

@@ -113,7 +113,7 @@
     verify_msg = true :: boolean(),
 
     % routing information base - structure necessary for routing.
-    rib :: router:rib()
+    rib :: router:rib() | undefined
 }).
 
 -type state() :: #state{}.

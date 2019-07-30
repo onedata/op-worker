@@ -40,7 +40,7 @@ start_link() ->
 %% Starts the event stream supervised by event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_stream(StmsSup :: pid(), Mgr :: pid(), Sub :: event:subscription(),
+-spec start_stream(StmsSup :: pid(), Mgr :: pid(), Sub :: term(),
     SessId :: session:id()) -> supervisor:startchild_ret().
 start_stream(StmsSup, Mgr, Sub, SessId) ->
     supervisor:start_child(StmsSup, [Mgr, Sub, SessId]).

@@ -381,7 +381,7 @@ unsubscribe(Worker, SessId, SubId) ->
 %% Emits an event to event manager associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:object()) -> ok.
+-spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:type()) -> ok.
 emit(Worker, SessId, Evt) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt, SessId])).
 

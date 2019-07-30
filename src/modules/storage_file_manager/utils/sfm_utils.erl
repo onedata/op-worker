@@ -446,7 +446,7 @@ create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = S
 %% @end
 %%-------------------------------------------------------------------
 -spec handle_eexists(boolean(), storage_file_manager:handle(),
-    file_meta:posix_permissions(), user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+    file_meta:posix_permissions(), file_ctx:ctx(),  user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
     {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
     {ok, file_ctx:set_file_id(FileCtx, StorageFileId)}.

@@ -393,7 +393,7 @@
         OldChanges :: [replica_changes:change()],
         NewChanges :: [replica_changes:change()]
     },
-    last_rename :: replica_changes:last_rename(),
+    last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
     last_replication_timestamp :: non_neg_integer() | undefined
 }).
@@ -499,10 +499,10 @@
 %% Record that holds monitoring id
 -record(monitoring_id, {
     main_subject_type = undefined :: atom(),
-    main_subject_id = <<"">> :: datastore:id(),
+    main_subject_id = <<"">> :: datastore:key(),
     metric_type = undefined :: atom(),
     secondary_subject_type = undefined :: atom(),
-    secondary_subject_id = <<"">> :: datastore:id(),
+    secondary_subject_id = <<"">> :: datastore:key(),
     provider_id = oneprovider:get_id_or_undefined() :: oneprovider:id()
 }).
 
@@ -699,7 +699,7 @@
     % Information about execution environment and processing task
     pool :: traverse:pool(),
     callback_module :: traverse:callback_module(),
-    task_id :: traverse_task:key(),
+    task_id :: traverse:id(),
     % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
     % Information needed to restart directory listing

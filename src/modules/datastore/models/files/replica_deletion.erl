@@ -64,7 +64,7 @@
 -type report_id() :: autocleaning_controller:batch_id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 
--export_type([id/0, type/0, report_id/0, result/0]).
+-export_type([id/0, record/0, doc/0, action/0, type/0, report_id/0, result/0]).
 
 -define(CTX, #{
     model => ?MODULE,

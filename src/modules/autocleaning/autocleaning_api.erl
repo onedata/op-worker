@@ -151,7 +151,7 @@ get_configuration(SpaceId) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec get_run_report(autocleanint_run:id() | autocleanint_run:doc()) ->
+-spec get_run_report(autocleaning_run:id() | autocleaning_run:doc()) ->
     {ok, maps:map()} | {error, term()}.
 get_run_report(#document{key = ARId, value = AR}) ->
     get_run_report(ARId, AR);

@@ -46,8 +46,8 @@
 -type file_guid() :: file_id:file_guid().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
--export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
-    posix_permissions/0, file_guid/0, file_guid_or_path/0]).
+-export_type([request/0, response/0, file/0, ext_file/0, open_flag/0, posix_permissions/0,
+    file_guid/0, file_guid_or_path/0, fuse_response/0, provider_response/0, proxyio_response/0]).
 
 % requests
 -define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).

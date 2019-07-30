@@ -61,7 +61,7 @@ add_subscriber(Sub, SessId) ->
 %% Returns list of event subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers(Key :: key() | event:base_or_aggregated() | event:type()) ->
+-spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type()) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
 get_subscribers(<<_/binary>> = Key) ->
     case file_subscription:get(Key) of

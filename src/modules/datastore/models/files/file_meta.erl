@@ -46,7 +46,7 @@
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type doc() :: datastore:doc().
--type diff() :: datastore:diff(file_meta()).
+-type diff() :: datastore_doc:diff(file_meta()).
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().

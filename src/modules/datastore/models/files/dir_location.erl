@@ -22,7 +22,7 @@
 
 -type key() :: file_meta:uuid().
 -type dir_location() :: #dir_location{}.
--type doc() :: datastore:doc(dir_location()).
+-type doc() :: datastore_doc:doc(dir_location()).
 
 -export_type([key/0, dir_location/0, doc/0]).
 

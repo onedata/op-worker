@@ -22,7 +22,7 @@
 -type response_ref() :: {integer(), integer(), integer()}.
 -type response() :: {response_ref(), Result :: term()}.
 
--export_type([helper_handle/0, file_handle/0, response_ref/0, response/0]).
+-export_type([helper_handle/0, file_handle/0, file_type/0, open_flag/0, response_ref/0, response/0]).
 
 %% API
 -export([init/0]).
@@ -44,7 +44,7 @@
 %% IMPORTANT! Helper handle is valid only within local Erlang VM.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(helpers:name(), helpers:args()) ->
+-spec get_handle(helper:name(), helper:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
 get_handle(_Name, _Params) ->
     erlang:nif_error(helpers_nif_not_loaded).
@@ -123,7 +123,7 @@ chmod(_Handle, _FileId, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec chown(helper_handle(), helpers:file_id(), posix_user:uid(), posix_user:gid()) ->
+-spec chown(helper_handle(), helpers:file_id(), luma:uid(), luma:gid()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 chown(_Handle, _FileId, _Uid, _Gid) ->
     erlang:nif_error(helpers_nif_not_loaded).

@@ -24,7 +24,7 @@
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1]).
 
--type id() :: datastore:id().
+-type id() :: datastore:key().
 -type record() :: #file_local_blocks{}.
 -type doc() :: datastore_doc:doc(record()).
 -type one_or_many(Type) :: Type | [Type].

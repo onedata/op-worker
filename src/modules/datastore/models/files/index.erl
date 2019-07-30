@@ -31,18 +31,18 @@
 ]).
 
 -type id() :: binary().
--type diff() :: datastore:diff(index()).
+-type diff() :: datastore_doc:diff(index()).
 -type doc() :: datastore_doc:doc(index()).
 
 -type name() :: binary().
--type key() :: datastore_utils:key().
+-type key() :: datastore:key().
 -type index() :: #index{}.
 -type index_function() :: binary().
 -type options() :: proplists:proplist().
 -type query_options() :: [couchbase_driver:view_opt()].
 -type providers() :: [od_provider:id(), ...].
 
--export_type([name/0, index/0, index_function/0, doc/0, options/0, providers/0, query_options/0]).
+-export_type([id/0, name/0, key/0, index/0, index_function/0, doc/0, options/0, providers/0, query_options/0]).
 
 -define(CTX, #{
     model => ?MODULE,

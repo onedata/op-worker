@@ -405,15 +405,15 @@ handle_call_async(?REVISE_SPACE_HARVESTERS(Harvesters), State) ->
 
 
 -spec build_destinations_per_seqs([od_harvester:id()], harvesting_state:doc()) ->
-    #{couchbase_changes:seq() => harvesting_state:destination()}.
+    #{couchbase_changes:seq() => harvesting_destination:destination()}.
 build_destinations_per_seqs(CurrentHarvesterIds, HDoc) ->
     lists:foldl(fun(HarvesterId, DestinationsPerSeqsIn) ->
         build_destinations_per_seqs(HarvesterId, HDoc, DestinationsPerSeqsIn)
     end, #{}, CurrentHarvesterIds).
 
 -spec build_destinations_per_seqs(od_harvester:id(), harvesting_state:doc(),
-    #{couchbase_changes:seq() => harvesting_state:destination()}) ->
-    #{couchbase_changes:seq() => harvesting_state:destination()}.
+    #{couchbase_changes:seq() => harvesting_destination:destination()}) ->
+    #{couchbase_changes:seq() => harvesting_destination:destination()}.
 build_destinations_per_seqs(HarvesterId, HDoc, DestinationsPerSeqsIn) ->
     case harvester_logic:get_indices(HarvesterId) of
         {ok, Indices} ->

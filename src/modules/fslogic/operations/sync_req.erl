@@ -28,7 +28,7 @@
 -type fuse_response() :: fslogic_worker:fuse_response().
 -type provider_response() :: fslogic_worker:provider_response().
 
--export_type([block/0, transfer_id/0, provider_id/0]).
+-export_type([block/0, transfer_id/0, provider_id/0, query_view_params/0, provider_response/0]).
 
 %% API
 -export([

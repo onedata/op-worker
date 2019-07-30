@@ -25,9 +25,9 @@
 -type datastore() :: {DSName :: string(), StoreType :: atom(), Params :: list()}.
 -type rra() :: {ConsolidationFunction :: atom(), XffFactor :: float(),
     PDPsPerCDP :: non_neg_integer(), CDPsPerRRA :: non_neg_integer()}.
--type options() :: proplists:proplists().
+-type options() :: proplists:proplist().
 
--export_type([datastore/0, options/0]).
+-export_type([datastore/0, rra/0, options/0]).
 
 %%%===================================================================
 %%% API functions

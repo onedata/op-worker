@@ -214,7 +214,7 @@ get_luma_config_map(#document{value = Storage}) ->
 %% Selects storage helper by its name form the list of configured storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec select_helper(record() | doc(), helpers:name() | [helpers:name()]) ->
+-spec select_helper(record() | doc(), helper:name() | [helper:name()]) ->
     {ok, helper() | [helper()]} | {error, Reason :: term()}.
 select_helper(Storage, HelperNames) when is_list(HelperNames) ->
     Helpers = lists:filter(fun(Helper) ->

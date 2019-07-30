@@ -133,7 +133,7 @@ get_all_blocks(LocationList) ->
 
 -spec get_duplicated_blocks_per_provider(fslogic_blocks:blocks(),
     version_vector:version_vector(), [file_location:doc()]) ->
-    [{od_provider:id(), fslogic_block:blocks()}].
+    [{od_provider:id(), fslogic_blocks:blocks()}].
 get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
     lists:filtermap(fun(Doc = #document{
         value = #file_location{

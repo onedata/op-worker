@@ -24,7 +24,7 @@
 -type id() :: datastore:key().
 -type record() :: #helper_handle{}.
 -type doc() :: datastore_doc:doc(record()).
--export_type([doc/0]).
+-export_type([id/0, doc/0]).
 
 -define(CTX, #{
     model => ?MODULE,
