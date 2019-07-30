@@ -50,7 +50,7 @@ get_handle(_Name, _Params) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec refresh_params(helper_handle(), maps:map()) ->
+-spec refresh_params(helper_handle(), map()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 refresh_params(_Handle, _Args) ->
     erlang:nif_error(helpers_nif_not_loaded).
@@ -167,7 +167,7 @@ open(_Handle, _FileId, _Flags) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec refresh_helper_params(file_handle(), maps:map()) ->
+-spec refresh_helper_params(file_handle(), map()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 refresh_helper_params(_Handle, _Args) ->
     erlang:nif_error(helpers_nif_not_loaded).

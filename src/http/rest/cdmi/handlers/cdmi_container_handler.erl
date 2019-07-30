@@ -38,7 +38,7 @@
 %% @equiv pre_handler:terminate/3
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), maps:map()) -> ok.
+-spec terminate(Reason :: term(), req(), map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
@@ -46,7 +46,7 @@ terminate(_, _, _) ->
 %% @equiv pre_handler:allowed_methods/2
 %% @end
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), map() | {error, term()}) -> {[binary()], req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
@@ -54,7 +54,7 @@ allowed_methods(Req, State) ->
 %% @equiv pre_handler:malformed_request/2
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_request(req(), maps:map()) -> {boolean(), req(), maps:map()}.
+-spec malformed_request(req(), map()) -> {boolean(), req(), map()}.
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_request(Req, State).
 
@@ -62,7 +62,7 @@ malformed_request(Req, State) ->
 %% @equiv pre_handler:is_authorized/2
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
+-spec is_authorized(req(), map()) -> {true | {false, binary()} | stop, req(), map()}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 
@@ -70,7 +70,7 @@ is_authorized(Req, State) ->
 %% @equiv pre_handler:resource_exists/2
 %% @end
 %%--------------------------------------------------------------------
--spec resource_exists(req(), maps:map()) -> {boolean(), req(), maps:map()}.
+-spec resource_exists(req(), map()) -> {boolean(), req(), map()}.
 resource_exists(Req, State) ->
     cdmi_existence_checker:container_resource_exists(Req, State).
 
@@ -78,8 +78,8 @@ resource_exists(Req, State) ->
 %% @equiv pre_handler:content_types_provided/2
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), maps:map()) ->
-    {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_provided(req(), map()) ->
+    {[{binary(), atom()}], req(), map()}.
 content_types_provided(Req, #{cdmi_version := undefined} = State) ->
     {[
         {<<"application/cdmi-container">>, error_no_version}
@@ -93,8 +93,8 @@ content_types_provided(Req, State) ->
 %% @equiv pre_handler:content_types_accepted/2
 %% @end
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), maps:map()) ->
-    {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_accepted(req(), map()) ->
+    {[{binary(), atom()}], req(), map()}.
 content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
     {[
         {<<"application/cdmi-container">>, error_no_version},
@@ -113,7 +113,7 @@ content_types_accepted(Req, State) ->
 %% @equiv pre_handler:delete_resource/2
 %% @end
 %%--------------------------------------------------------------------
--spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
+-spec delete_resource(req(), map()) -> {term(), req(), map()}.
 delete_resource(Req, State = #{auth := Auth, path := Path}) ->
     ok = lfm:rm_recursive(Auth, {path, Path}),
     {true, Req, State}.
@@ -127,7 +127,7 @@ delete_resource(Req, State = #{auth := Auth, path := Path}) ->
 %% Handles GET with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi(req(), maps:map()) -> {term(), req(), maps:map()}.
+-spec get_cdmi(req(), map()) -> {term(), req(), map()}.
 get_cdmi(Req, #{options := Options} = State) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
     Answer = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
@@ -140,7 +140,7 @@ get_cdmi(Req, #{options := Options} = State) ->
 %% Handles PUT with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put_cdmi(req(), maps:map()) -> {term(), req(), maps:map()}.
+-spec put_cdmi(req(), map()) -> {term(), req(), map()}.
 put_cdmi(_, #{cdmi_version := undefined}) ->
     throw(?ERROR_NO_VERSION_GIVEN);
 put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
@@ -185,7 +185,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
 %% Handles PUT without cdmi content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put_binary(req(), maps:map()) -> {term(), req(), maps:map()}.
+-spec put_binary(req(), map()) -> {term(), req(), map()}.
 put_binary(Req, State = #{auth := Auth, path := Path}) ->
     {ok, _} = lfm:mkdir(Auth, Path),
     {true, Req, State}.
@@ -196,7 +196,7 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
 %% wrong path as it ends with '/'
 %% @end
 %%--------------------------------------------------------------------
--spec error_wrong_path(req(), maps:map()) -> no_return().
+-spec error_wrong_path(req(), map()) -> no_return().
 error_wrong_path(_Req, _State) ->
     throw(?ERROR_WRONG_PATH).
 
@@ -205,7 +205,7 @@ error_wrong_path(_Req, _State) ->
 %% Handles PUT with cdmi content type, without CDMI version given
 %% @end
 %%--------------------------------------------------------------------
--spec error_no_version(req(), maps:map()) -> no_return().
+-spec error_no_version(req(), map()) -> no_return().
 error_no_version(_Req, _State) ->
     throw(?ERROR_NO_VERSION_GIVEN).
 

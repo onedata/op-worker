@@ -215,7 +215,7 @@ delete(_) ->
 
 %% @private
 -spec get_metric(session:id(), od_space:id(), undefined | od_user:id(),
-    metric_type(), step()) -> {ok, [maps:map()]} | {error, term()}.
+    metric_type(), step()) -> {ok, [map()]} | {error, term()}.
 get_metric(SessionId, SpaceId, UserId, Metric, Step) ->
     case space_logic:get_provider_ids(SessionId, SpaceId) of
         {ok, Providers} ->

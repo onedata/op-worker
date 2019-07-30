@@ -78,7 +78,7 @@ get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
 %% Calls {@link helpers_nif:refresh_params/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_params(helper_handle() | file_handle(), maps:map()) ->
+-spec refresh_params(helper_handle() | file_handle(), map()) ->
     ok | {error, Reason :: term()}.
 refresh_params(#helper_handle{} = Handle, Args) ->
     ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
@@ -276,7 +276,7 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 %% Calls {@link helpers_nif:refresh_params/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_helper_params(file_handle(), maps:map()) ->
+-spec refresh_helper_params(file_handle(), map()) ->
     ok | {error, Reason :: term()}.
 refresh_helper_params(Handle, Args) ->
     ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).

@@ -30,7 +30,7 @@
 %% Processes file written events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_written_events(Evts :: [event:type()], UserCtxMap :: maps:map()) ->
+-spec handle_file_written_events(Evts :: [event:type()], UserCtxMap :: map()) ->
     [ok | {error, Reason :: term()}].
 handle_file_written_events(Evts, #{session_id := SessId} = UserCtxMap) ->
     Results = lists:map(fun(Evt) ->
@@ -50,7 +50,7 @@ handle_file_written_events(Evts, #{session_id := SessId} = UserCtxMap) ->
 %% Processes file read events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_read_events(Evts :: [event:type()], UserCtxMap :: maps:map()) ->
+-spec handle_file_read_events(Evts :: [event:type()], UserCtxMap :: map()) ->
     [ok | {error, Reason :: term()}].
 handle_file_read_events(Evts, #{session_id := SessId} = _UserCtxMap) ->
     lists:map(fun(Ev) ->

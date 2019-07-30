@@ -27,20 +27,20 @@
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), maps:map()) -> ok.
+-spec terminate(Reason :: term(), req(), map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), map() | {error, term()}) -> {[binary()], req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:malformed_request/2
 %%--------------------------------------------------------------------
--spec malformed_request(req(), maps:map()) -> {boolean(), req(), maps:map()}.
+-spec malformed_request(req(), map()) -> {boolean(), req(), map()}.
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_objectid_request(Req, State).

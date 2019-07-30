@@ -162,7 +162,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), term()) ->
-    {cowboy_rest, cowboy_req:req(), maps:map()}.
+    {cowboy_rest, cowboy_req:req(), map()}.
 init(Req, _Opts) ->
     {cowboy_rest, Req, #{}}.
 
@@ -170,7 +170,7 @@ init(Req, _Opts) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), maps:map()) -> ok.
+-spec terminate(Reason :: term(), req(), map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     couchbase_changes:cancel_stream(Stream),
     Pid ! {Ref, stream_ended};
@@ -183,7 +183,7 @@ terminate(_, _, #{}) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), map() | {error, term()}) -> {[binary()], req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"POST">>], Req, State}.
 
@@ -191,7 +191,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
+-spec is_authorized(req(), map()) -> {true | {false, binary()} | halt, req(), map()}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 
@@ -199,7 +199,7 @@ is_authorized(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
+-spec content_types_accepted(req(), map()) -> {[{binary(), atom()}], req(), map()}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/json">>, stream_space_changes}
@@ -222,7 +222,7 @@ content_types_accepted(Req, State) ->
 %% @param timeout Time of inactivity after which close stream.
 %% @param last_seq
 %%--------------------------------------------------------------------
--spec stream_space_changes(req(), maps:map()) -> {term(), req(), maps:map()}.
+-spec stream_space_changes(req(), map()) -> {term(), req(), map()}.
 stream_space_changes(Req, State) ->
     try parse_params(Req, State) of
         {Req2, State2} ->
@@ -316,7 +316,7 @@ parse_last_seq(SpaceId, Params) ->
 
 
 %% @private
--spec parse_body(binary(), maps:map()) -> maps:map() | no_return().
+-spec parse_body(binary(), map()) -> map() | no_return().
 parse_body(Body, State) ->
     Json = json_utils:decode(Body),
     case is_map(Json) of
@@ -375,7 +375,7 @@ parse_body(Body, State) ->
 
 
 %% @private
--spec parse_always_flag(binary(), maps:map()) -> true | false | no_return().
+-spec parse_always_flag(binary(), map()) -> true | false | no_return().
 parse_always_flag(RecName, Spec) ->
     case maps:get(<<"always">>, Spec, ?DEFAULT_ALWAYS) of
         true ->
@@ -438,7 +438,7 @@ times_field_idx(_FieldName) ->
 %% Init changes stream.
 %% @end
 %%--------------------------------------------------------------------
--spec init_stream(State :: maps:map()) -> maps:map().
+-spec init_stream(State :: map()) -> map().
 init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
@@ -459,7 +459,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(req(), maps:map()) -> ok.
+-spec stream_loop(req(), map()) -> ok.
 stream_loop(Req, State = #{
     timeout := Timeout,
     ref := Ref
@@ -564,7 +564,7 @@ send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_all_docs_changes(file_meta:uuid(), datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_all_docs_changes(FileUuid, ChangedDoc, State) ->
     lists:foldl(fun(ChangesReq, Acc) ->
         maps:merge(Acc, get_requested_changes(ChangesReq, FileUuid, ChangedDoc, State))
@@ -573,7 +573,7 @@ get_all_docs_changes(FileUuid, ChangedDoc, State) ->
 
 %% @private
 -spec get_requested_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_requested_changes(#change_req{record = times} = Req, FileUuid, ChangedDoc, State) ->
     get_times_changes(Req, FileUuid, ChangedDoc, State);
 get_requested_changes(#change_req{record = file_meta} = Req, FileUuid, ChangedDoc, State) ->
@@ -586,7 +586,7 @@ get_requested_changes(#change_req{record = custom_metadata} = Req, FileUuid, Cha
 
 %% @private
 -spec get_times_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_times_changes(#change_req{
     fields = Fields,
     exists = Exists
@@ -605,7 +605,7 @@ get_times_changes(_, _, _, _) ->
 
 %% @private
 -spec get_custom_meta_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_custom_meta_changes(#change_req{
     fields = Fields,
     exists = Exists
@@ -624,7 +624,7 @@ get_custom_meta_changes(_, _, _, _) ->
 
 %% @private
 -spec get_file_meta_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_file_meta_changes(#change_req{
     fields = Fields,
     exists = Exists
@@ -643,7 +643,7 @@ get_file_meta_changes(_, _, _, _) ->
 
 %% @private
 -spec get_file_location_changes(change_req(), file_meta:uuid(), datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_file_location_changes(#change_req{
     fields = Fields,
     exists = Exists
@@ -662,7 +662,7 @@ get_file_location_changes(_, _, _, _) ->
 
 %% @private
 -spec get_record_changes(boolean(), [term()], [term()], datastore:doc(), map()) ->
-    maps:map().
+    map().
 get_record_changes(Changed, FieldsNames, ExistsNames, #document{
     revs = [Rev | _],
     mutators = Mutators,

@@ -58,7 +58,7 @@
     size = 0
 }).
 
--type seq() :: custom_metadata:seq() | undefined.
+-type seq() :: couchbase_changes:seq() | undefined.
 -type operation() :: binary(). % ?SUBMIT | ?DELETE
 -type file_id() :: file_id:objectid().
 -type doc() :: custom_metadata:doc().

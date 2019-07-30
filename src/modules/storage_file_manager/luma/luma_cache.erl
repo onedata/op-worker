@@ -396,7 +396,7 @@ for_each(RootId, StorageId, Callback, Acc0) ->
 tree_root(RootPrefix, StorageId) ->
     <<RootPrefix/binary, StorageId/binary>>.
 
--spec add_if_not_empty(binary(), binary(), maps:map()) -> maps:map().
+-spec add_if_not_empty(binary(), binary(), map()) -> map().
 add_if_not_empty(_Key, <<"">>, Map) -> Map;
 add_if_not_empty(Key, Value, Map) -> Map#{Key => Value}.
 

@@ -26,7 +26,7 @@
 %% Find sub-json in json tree
 %% @end
 %%--------------------------------------------------------------------
--spec find(Json :: maps:map(), [binary()]) -> maps:map() | no_return().
+-spec find(Json :: map(), [binary()]) -> map() | no_return().
 find(Json, []) ->
     Json;
 find(Json, [Name | Rest]) ->
@@ -57,7 +57,7 @@ find(Json, [Name | Rest]) ->
 %% Insert sub-json to json tree
 %% @end
 %%--------------------------------------------------------------------
--spec insert(Json :: maps:map() | undefined, JsonToInsert :: maps:map(), [binary()]) -> maps:map() | no_return().
+-spec insert(Json :: map() | undefined, JsonToInsert :: map(), [binary()]) -> map() | no_return().
 insert(_Json, JsonToInsert, []) ->
     JsonToInsert;
 insert(undefined, JsonToInsert, [Name | Rest]) ->
@@ -93,7 +93,7 @@ insert(Json, JsonToInsert, [Name | Rest]) ->
 %% Merge given list of json so that the resulting json would contain inherited entries
 %% @end
 %%--------------------------------------------------------------------
--spec merge(Jsons :: [maps:map()]) -> maps:map().
+-spec merge(Jsons :: [map()]) -> map().
 merge([]) ->
     #{};
 merge([Json | _]) when not is_map(Json) ->

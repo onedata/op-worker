@@ -240,7 +240,7 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
 
 
 %% @private
--spec transfer_to_json(transfer:transfer()) -> maps:map().
+-spec transfer_to_json(transfer:transfer()) -> map().
 transfer_to_json(#transfer{
     file_uuid = FileUuid,
     space_id = SpaceId,

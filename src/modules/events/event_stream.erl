@@ -38,7 +38,7 @@
     emission_time/0]).
 
 -type key() :: atom().
--type ctx() :: maps:map().
+-type ctx() :: map().
 -type metadata() :: term().
 -type init_handler() :: fun((subscription:id(), session:id()) -> ctx()).
 -type terminate_handler() :: fun((ctx()) -> term()).

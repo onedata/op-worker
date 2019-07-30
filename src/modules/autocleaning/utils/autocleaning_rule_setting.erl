@@ -37,7 +37,7 @@ is_enabled(#{enabled := Enabled}) -> Enabled.
 get_value(#autocleaning_rule_setting{value = Value}) -> Value;
 get_value(#{value := Value}) -> Value.
 
--spec to_map(rule_setting()) -> maps:map().
+-spec to_map(rule_setting()) -> map().
 to_map(#autocleaning_rule_setting{
     enabled = Enabled,
     value = Value
@@ -47,7 +47,7 @@ to_map(#autocleaning_rule_setting{
         value => Value
     }.
 
--spec update(rule_setting(), maps:map()) -> rule_setting().
+-spec update(rule_setting(), map()) -> rule_setting().
 update(#autocleaning_rule_setting{
     enabled = CurrentEnabled,
     value = CurrentValue

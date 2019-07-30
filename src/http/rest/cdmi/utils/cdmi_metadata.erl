@@ -43,7 +43,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_metadata(rest_auth:auth(), lfm:file_key()) ->
-    maps:map().
+    map().
 get_user_metadata(Auth, FileKey) ->
     {ok, Names} = lfm:list_xattr(Auth, FileKey, false, true),
     Metadata = lists:filtermap(
@@ -63,7 +63,7 @@ get_user_metadata(Auth, FileKey) ->
 %% @equiv update_user_metadata(Auth, FileKey, UserMetadata, []).
 %%--------------------------------------------------------------------
 -spec update_user_metadata(rest_auth:auth(), lfm:file_key(),
-    maps:map()) -> ok.
+    map()) -> ok.
 update_user_metadata(Auth, FileKey, UserMetadata) ->
     update_user_metadata(Auth, FileKey, UserMetadata, []).
 
@@ -74,7 +74,7 @@ update_user_metadata(Auth, FileKey, UserMetadata) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_user_metadata(rest_auth:auth(), lfm:file_key(),
-    UserMetadata :: maps:map() | undefined, URIMetadataNames :: [Name :: binary()]) ->
+    UserMetadata :: map() | undefined, URIMetadataNames :: [Name :: binary()]) ->
     ok | no_return().
 update_user_metadata(_Auth, _FileKey, undefined, []) ->
     ok;
@@ -120,7 +120,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
 %% @equiv prepare_metadata(Auth, FileKey, <<>>).
 %%--------------------------------------------------------------------
 -spec prepare_metadata(rest_auth:auth(), lfm:file_key()) ->
-    maps:map().
+    map().
 prepare_metadata(Auth, FileKey) ->
     prepare_metadata(Auth, FileKey, <<>>).
 
@@ -128,7 +128,7 @@ prepare_metadata(Auth, FileKey) ->
 %% @doc Prepares cdmi user and storage system metadata.
 %%--------------------------------------------------------------------
 -spec prepare_metadata(rest_auth:auth(), lfm:file_key(), binary()) ->
-    maps:map().
+    map().
 prepare_metadata(Auth, FileKey, Prefix) ->
     {ok, Attrs} = lfm:stat(Auth, FileKey),
     prepare_metadata(Auth, FileKey, Prefix, Attrs).
@@ -137,7 +137,7 @@ prepare_metadata(Auth, FileKey, Prefix) ->
 %% @doc Prepares cdmi user and storage system metadata with given prefix.
 %%--------------------------------------------------------------------
 -spec prepare_metadata(Auth :: rest_auth:auth(), FileKey :: lfm:file_key(),
-    Prefix :: binary(), #file_attr{}) -> maps:map().
+    Prefix :: binary(), #file_attr{}) -> map().
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
     UserMetadata = maps:filter(fun(Name, _Value) ->
@@ -233,7 +233,7 @@ set_cdmi_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
 %%--------------------------------------------------------------------
 %% @doc Filters out metadata with user_metadata_forbidden_prefix.
 %%--------------------------------------------------------------------
--spec filter_user_metadata_map(maps:map()) -> maps:map().
+-spec filter_user_metadata_map(map()) -> map().
 filter_user_metadata_map(UserMetadata) when is_map(UserMetadata) ->
     maps:filter(
         fun
@@ -263,7 +263,7 @@ filter_user_metadata_keylist(_) ->
 %%--------------------------------------------------------------------
 %% @doc Filters metadata with names contained in URIMetadataNames list.
 %%--------------------------------------------------------------------
--spec filter_URI_Names(maps:map(), [CdmiName :: binary()]) -> maps:map().
+-spec filter_URI_Names(map(), [CdmiName :: binary()]) -> map().
 filter_URI_Names(UserMetadata, URIMetadataNames) ->
     maps:filter(fun(Name, _) ->
         lists:member(Name, URIMetadataNames) end, UserMetadata).
@@ -272,7 +272,7 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %% @doc Returns system metadata with given prefix, in mochijson parser format
 %%--------------------------------------------------------------------
 -spec prepare_cdmi_metadata(MetadataNames :: [binary()], lfm:file_key(),
-    rest_auth:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
+    rest_auth:auth(), #file_attr{}, Prefix :: binary()) -> map().
 prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) ->
     #{};
 prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->

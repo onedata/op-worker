@@ -38,7 +38,7 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(datastore:key(), #monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
+-spec create_rrd(datastore:key(), #monitoring_id{}, map(), non_neg_integer()) -> ok.
 create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
     case monitoring_state:exists(MonitoringId) of
         false ->

@@ -197,7 +197,7 @@ get_helpers(StorageId) ->
 %% Returns map describing luma configuration
 %% @end
 %%-------------------------------------------------------------------
--spec get_luma_config_map(record() | doc()) -> maps:map().
+-spec get_luma_config_map(record() | doc()) -> map().
 get_luma_config_map(#storage{luma_config = undefined}) ->
     #{enabled => false};
 get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->

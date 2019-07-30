@@ -23,28 +23,28 @@
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), maps:map()) -> ok.
+-spec terminate(Reason :: term(), req(), map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %% ====================================================================
 %% @doc @equiv pre_handler:allowed_methods/2
 %% ====================================================================
--spec allowed_methods(req(), maps:map()) -> {[binary()], req(), maps:map()}.
+-spec allowed_methods(req(), map()) -> {[binary()], req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %% ====================================================================
 %% @doc @equiv pre_handler:malformed_request/2
 %% ====================================================================
--spec malformed_request(req(), maps:map()) -> {boolean(), req(), maps:map()} | no_return().
+-spec malformed_request(req(), map()) -> {boolean(), req(), map()} | no_return().
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_capability_request(Req, State).
 
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
 %% ====================================================================
--spec content_types_provided(req(), maps:map()) -> {[{ContentType, Method}], req(), maps:map()} when
+-spec content_types_provided(req(), map()) -> {[{ContentType, Method}], req(), map()} when
     ContentType :: binary(),
     Method :: atom().
 content_types_provided(Req, State) ->
@@ -57,7 +57,7 @@ content_types_provided(Req, State) ->
 %% Handles GET requests for cdmi capability.
 %% @end
 %% ====================================================================
--spec get_cdmi_capability(req(), maps:map()) -> {binary(), req(), maps:map()}.
+-spec get_cdmi_capability(req(), map()) -> {binary(), req(), map()}.
 get_cdmi_capability(Req, #{options := Opts} = State) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?default_get_capability_opts),
     RawCapabilities = prepare_capability_ans(NonEmptyOpts),
@@ -71,7 +71,7 @@ get_cdmi_capability(Req, #{options := Opts} = State) ->
 %% ====================================================================
 %% @doc Return proplist contains CDMI answer
 %% ====================================================================
--spec prepare_capability_ans([Opt :: binary()]) -> maps:map().
+-spec prepare_capability_ans([Opt :: binary()]) -> map().
 prepare_capability_ans([]) ->
     #{};
 prepare_capability_ans([<<"objectType">> | Tail]) ->

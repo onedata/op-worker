@@ -36,7 +36,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(file_ctx:ctx(), custom_metadata:filter(), Inherited :: boolean()) ->
-    {ok, custom_metadata:json()} | {error, term()}.
+    {ok, map()} | {error, term()}.
 get(FileCtx, Names, false) ->
     case custom_metadata:get(file_ctx:get_uuid_const(FileCtx)) of
         {ok, #document{value = #custom_metadata{value = #{?JSON_METADATA_KEY := Json}}}} ->
@@ -78,7 +78,7 @@ get(FileCtx, Names, true) ->
 %% set_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
 %%    meta: 'new_value'
 %%--------------------------------------------------------------------
--spec set(file_ctx:ctx(), custom_metadata:json(), [binary()], Create :: boolean(), Replace :: boolean()) ->
+-spec set(file_ctx:ctx(), map(), [binary()], Create :: boolean(), Replace :: boolean()) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set(FileCtx, JsonToInsert, Names, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -125,7 +125,7 @@ remove(FileCtx) ->
 %% Returns function used for updating custom_metadata doc.
 %% @end
 %%--------------------------------------------------------------------
--spec update_custom_meta_fun(custom_metadata:json(), [binary()],
+-spec update_custom_meta_fun(map(), [binary()],
     Create :: boolean(), Replace :: boolean()) -> function().
 update_custom_meta_fun(JsonToInsert, Names, Create, Replace) ->
     fun(Meta = #custom_metadata{value = MetaValue}) ->

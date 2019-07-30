@@ -63,7 +63,7 @@
 
     % map storing #batch_counters per each started batch
     batch_counters_map = #{} :: maps:map(non_neg_integer(), batch_counters()),
-    batches_tokens = #{} :: maps:map(),
+    batches_tokens = #{} :: map(),
     % set of already finished batches, which tokens can be stored in the #autocleaning_run model
     finished_batches = ordsets:new(),
     % number of the last batch which token has already been persisted in the autocleaning model
@@ -717,7 +717,7 @@ strip_if_continuous(N, StrippedReversed, L) ->
     {N, StrippedReversed, L}.
 
 
--spec new_batch_counters(non_neg_integer()) -> maps:map().
+-spec new_batch_counters(non_neg_integer()) -> batch_counters().
 new_batch_counters(FilesToProcess) ->
     #batch_counters{
         files_to_process = FilesToProcess,

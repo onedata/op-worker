@@ -80,7 +80,7 @@ get_max_avg_open_count_per_day(FPC = #file_popularity_config{}) ->
 get_max_avg_open_count_per_day(#document{value = FPC}) ->
     get_max_avg_open_count_per_day(FPC).
 
--spec maybe_create_or_update(od_space:id(), maps:map()) -> {ok, doc()} | error().
+-spec maybe_create_or_update(od_space:id(), map()) -> {ok, doc()} | error().
 maybe_create_or_update(SpaceId, NewConfiguration) ->
     Diff = fun(FP) ->
         case apply_configuration(FP, NewConfiguration) of
@@ -116,7 +116,7 @@ default_doc(SpaceId, FPC) ->
 create_or_update(SpaceId, UpdateFun, DefaultDoc) ->
     datastore_model:update(?CTX, SpaceId, UpdateFun, DefaultDoc).
 
--spec apply_configuration(record(), maps:map()) -> record().
+-spec apply_configuration(record(), map()) -> record().
 apply_configuration(FP = #file_popularity_config{
     enabled = Enabled,
     last_open_hour_weight = LastOpenHourWeight,

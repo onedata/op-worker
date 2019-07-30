@@ -220,7 +220,7 @@
     connections = [] :: [pid()],
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory
-    memory = #{} :: maps:map(),
+    memory = #{} :: map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     direct_io = false :: boolean()
 }).
@@ -424,7 +424,7 @@
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: maps:map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
+    storage_strategies = #{} :: map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
     file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
     file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
     enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
@@ -480,7 +480,7 @@
 
 %% Model that holds state entries for DBSync worker
 -record(dbsync_batches, {
-    batches = #{} :: maps:map()
+    batches = #{} :: map()
 }).
 
 %% Model that holds files created by root, whose owner needs to be changed when
@@ -510,7 +510,7 @@
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_guid :: undefined | binary(),
-    state_buffer = #{} :: maps:map(),
+    state_buffer = #{} :: map(),
     last_update_time :: undefined | non_neg_integer()
 }).
 
@@ -523,7 +523,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
-    file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
+    file_objectid :: undefined | file_id:objectid(), % undefined only for upgraded docs
     value = #{} :: json_utils:json_term()
 }).
 

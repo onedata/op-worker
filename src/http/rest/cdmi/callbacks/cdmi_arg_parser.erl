@@ -41,7 +41,7 @@
 %%--------------------------------------------------------------------
 %% @doc Extract the CDMI version and options and put it in State.
 %%--------------------------------------------------------------------
--spec malformed_request(req(), maps:map()) -> {false, req(), maps:map()}.
+-spec malformed_request(req(), map()) -> {false, req(), map()}.
 malformed_request(Req, State) ->
     {State2, Req2} = add_version_to_state(Req, State),
     {State3, Req3} = add_opts_to_state(Req2, State2),
@@ -54,7 +54,7 @@ malformed_request(Req, State) ->
 %% version is not supported.
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_capability_request(req(), maps:map()) -> {boolean(), req(), maps:map()} | no_return().
+-spec malformed_capability_request(req(), map()) -> {boolean(), req(), map()} | no_return().
 malformed_capability_request(Req, State) ->
     {State2, Req2} = add_version_to_state(Req, State),
     {State3, Req3} = add_opts_to_state(Req2, State2),
@@ -69,7 +69,7 @@ malformed_capability_request(Req, State) ->
 %% Add them to request state and change handler to object/container/capability
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_objectid_request(req(), maps:map()) -> {false, req(), maps:map()} | no_return().
+-spec malformed_objectid_request(req(), map()) -> {false, req(), map()} | no_return().
 malformed_objectid_request(Req, State) ->
     {State2 = #{path := Path}, Req2} = add_objectid_path_to_state(Req, State),
     {State3, Req3} = add_version_to_state(Req2, State2),
@@ -98,7 +98,7 @@ get_ranges(Req, Size) ->
 %%--------------------------------------------------------------------
 %% @doc Reads whole body and decodes it as json.
 %%--------------------------------------------------------------------
--spec parse_body(req()) -> {ok, maps:map(), req()}.
+-spec parse_body(req()) -> {ok, map(), req()}.
 parse_body(Req) ->
     {ok, RawBody, Req1} = cowboy_req:read_body(Req),
     Body = case RawBody of
@@ -202,7 +202,7 @@ path => file_meta:path()}.
 %% Parses request's version adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec add_version_to_state(req(), maps:map()) ->
+-spec add_version_to_state(req(), map()) ->
     {result_state(), req()}.
 add_version_to_state(Req, State) ->
     RawVersion = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
@@ -214,7 +214,7 @@ add_version_to_state(Req, State) ->
 %% Parses request's query string options and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec add_opts_to_state(req(), maps:map()) ->
+-spec add_opts_to_state(req(), map()) ->
     {result_state(), req()}.
 add_opts_to_state(#{qs := Qs} = Req, State) ->
     {State#{options => parse_opts(Qs)}, Req}.
@@ -224,7 +224,7 @@ add_opts_to_state(#{qs := Qs} = Req, State) ->
 %% Retrieves file path from req and adds it to state.
 %% @end
 %%--------------------------------------------------------------------
--spec add_path_to_state(req(), maps:map()) ->
+-spec add_path_to_state(req(), map()) ->
     {result_state(), req()}.
 add_path_to_state(Req, State) ->
     {Path, NewReq} = cdmi_path:get_path(Req),
@@ -242,7 +242,7 @@ add_path_to_state(Req, State) ->
 %% {IdOfRootDir} -> /
 %% @end
 %%--------------------------------------------------------------------
--spec add_objectid_path_to_state(req(), maps:map()) ->
+-spec add_objectid_path_to_state(req(), map()) ->
     {result_state(), req()}.
 add_objectid_path_to_state(Req, State) ->
     % get objectid
@@ -324,7 +324,7 @@ parse_opts(RawOpts) ->
 %%--------------------------------------------------------------------
 %% @doc Validates correctness of request's body.
 %%--------------------------------------------------------------------
--spec validate_body(maps:map()) -> ok | no_return().
+-spec validate_body(map()) -> ok | no_return().
 validate_body(Body) ->
     Keys = maps:keys(Body),
     KeySet = sets:from_list(Keys),

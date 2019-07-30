@@ -136,7 +136,7 @@ maybe_start(SpaceId, SpaceQuota) ->
 %% Returns autocleaning details for given space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_configuration(od_space:id()) -> maps:map().
+-spec get_configuration(od_space:id()) -> map().
 get_configuration(SpaceId) ->
     case autocleaning:get_config(SpaceId) of
         undefined ->
@@ -152,7 +152,7 @@ get_configuration(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_run_report(autocleaning_run:id() | autocleaning_run:doc()) ->
-    {ok, maps:map()} | {error, term()}.
+    {ok, map()} | {error, term()}.
 get_run_report(#document{key = ARId, value = AR}) ->
     get_run_report(ARId, AR);
 get_run_report(ARId) ->
@@ -166,7 +166,7 @@ get_run_report(ARId) ->
 %% This function is responsible for updating auto-cleaning configuration.
 %% @end
 %%-------------------------------------------------------------------
--spec configure(od_space:id(), maps:map()) -> ok | {error, term()}.
+-spec configure(od_space:id(), map()) -> ok | {error, term()}.
 configure(SpaceId, Configuration) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -185,7 +185,7 @@ disable(SpaceId) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec status(od_space:id()) -> maps:map().
+-spec status(od_space:id()) -> map().
 status(SpaceId) ->
     CurrentSize = space_quota:current_size(SpaceId),
     InProgress = case autocleaning:get_current_run(SpaceId) of

@@ -26,7 +26,7 @@
 %%--------------------------------------------------------------------
 %% @doc Prepares map formatted answer with field names from given list of binaries
 %%--------------------------------------------------------------------
--spec prepare([FieldName :: binary()], maps:map()) -> maps:map().
+-spec prepare([FieldName :: binary()], map()) -> map().
 prepare([], _State) ->
     #{};
 prepare([<<"objectType">> | Tail], State) ->

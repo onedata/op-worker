@@ -76,7 +76,7 @@ get_current_run(SpaceId) ->
             undefined
     end.
 
--spec create_or_update(id(), maps:map()) -> ok | error().
+-spec create_or_update(id(), map()) -> ok | error().
 create_or_update(SpaceId, NewConfiguration) ->
     {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
     case autocleaning:get(SpaceId) of
@@ -128,7 +128,7 @@ delete(SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
--spec create(id(), maps:map(), non_neg_integer()) -> {ok, doc()} | error().
+-spec create(id(), map(), non_neg_integer()) -> {ok, doc()} | error().
 create(SpaceId, Configuration, SupportSize)->
     case default_doc(SpaceId, Configuration, SupportSize) of
         {ok, Doc} -> create(Doc);
@@ -143,7 +143,7 @@ create(Doc) ->
 update(SpaceId, UpdateFun) ->
     datastore_model:update(?CTX, SpaceId, UpdateFun).
 
--spec default_doc(id(), maps:map(), non_neg_integer()) -> {ok, doc()} | error().
+-spec default_doc(id(), map(), non_neg_integer()) -> {ok, doc()} | error().
 default_doc(SpaceId, Configuration, SupportSize) ->
     case autocleaning_config:create_or_update(undefined, Configuration, SupportSize) of
         {ok, NewConfig} ->
