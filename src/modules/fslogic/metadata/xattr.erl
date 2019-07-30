@@ -18,7 +18,7 @@
     set/5, list/2]).
 
 -type name() :: binary().
--type value() :: custom_metadata:json_term().
+-type value() :: binary() | [map()].
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
