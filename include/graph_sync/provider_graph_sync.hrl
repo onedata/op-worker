@@ -20,7 +20,7 @@
 -define(GS_CLIENT_WORKER_GLOBAL_NAME, graph_sync_client_worker).
 
 % Not configurable as it depends on current implementation in OP.
--define(GS_PROTOCOL_VERSION, 1).
+-define(GS_PROTOCOL_VERSION, 3).
 
 % Graph Sync config
 -define(GS_CHANNEL_PORT, application:get_env(?APP_NAME,
@@ -30,7 +30,7 @@
     graph_sync_path, "/graph_sync/provider")).
 
 -define(GS_REQUEST_TIMEOUT, application:get_env(?APP_NAME,
-    graph_sync_request_timeout, timer:seconds(6))).
+    graph_sync_request_timeout, timer:seconds(30))).
 
 -define(GS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
     graph_sync_healthcheck_interval, timer:seconds(4))).

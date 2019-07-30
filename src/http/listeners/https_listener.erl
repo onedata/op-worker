@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
 -include("http/op_gui.hrl").
+-include("http/cdmi.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("gui/include/gui.hrl").
 
@@ -24,6 +25,13 @@
 -define(ACCEPTORS_NUM, application:get_env(?APP_NAME, https_acceptors, 100)).
 -define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, https_request_timeout, timer:minutes(5))).
 -define(MAX_KEEPALIVE, application:get_env(?APP_NAME, https_max_keepalive, 30)).
+
+-define(ONEPANEL_CONNECT_OPTS, fun() -> [
+    {recv_timeout, 10000}, {ssl_options, [
+        {secure, only_verify_peercert},
+        {cacerts, get_cert_chain_pems()}
+    ]}
+] end).
 
 %% listener_behaviour callbacks
 -export([port/0, start/0, stop/0, healthcheck/0]).
@@ -58,9 +66,11 @@ start() ->
     CustomCowboyRoutes = lists:flatten([
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
+        {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
-        rest_handler:rest_routes(),
-        rest_router:top_level_routing()
+        {?CDMI_ID_PATH, cdmi_handler, by_id},
+        {?CDMI_PATH, cdmi_handler, by_path},
+        rest_handler:rest_routes()
     ]),
 
     DynamicPageRoutes = [
@@ -71,7 +81,6 @@ start() ->
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
-        {?FAVICON_PATH, [<<"GET">>], page_favicon},
         {"/", [<<"GET">>], page_redirect_to_onezone}
     ],
 

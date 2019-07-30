@@ -67,9 +67,9 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL,
     application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
-    application:get_env(?APP_NAME, rerun_transfers_delay, 0)).
+    application:get_env(?APP_NAME, rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 0)).
+    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 10000)).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).

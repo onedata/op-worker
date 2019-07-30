@@ -12,7 +12,6 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

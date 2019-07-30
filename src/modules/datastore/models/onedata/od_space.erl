@@ -36,7 +36,7 @@
 }).
 
 %% API
--export([save_to_cache/1, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0]).
@@ -47,9 +47,9 @@
 %%% API
 %%%===================================================================
 
--spec save_to_cache(doc()) -> {ok, id()} | {error, term()}.
-save_to_cache(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
+-spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
+update_cache(Id, Diff, Default) ->
+    datastore_model:update(?CTX, Id, Diff, Default).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -68,35 +68,25 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Space create/update posthook.
+%% Space update posthook.
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(create, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc),
-    maybe_revise_space_harvesters(SpaceDoc),
-    Result;
-run_after(update, [_, _, _, _], Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
-    ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc),
-    maybe_revise_space_harvesters(SpaceDoc),
-    Result;
-run_after(save, _, Result = {ok, SpaceDoc = #document{key = SpaceId}}) ->
+run_after(create, _, {ok, Doc}) ->
+    run_after(Doc);
+run_after(update, _, {ok, Doc}) ->
+    run_after(Doc);
+run_after(_Function, _Args, Result) ->
+    Result.
+
+-spec run_after(doc()) -> {ok, doc()}.
+run_after(Doc = #document{key = SpaceId}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
-    emit_monitoring_event(SpaceDoc),
-    maybe_revise_space_harvesters(SpaceDoc),
-    Result;
-run_after(update, _, {ok, SpaceDoc = #document{}}) ->
-    ok = permissions_cache:invalidate(),
-    emit_monitoring_event(SpaceDoc),
-    maybe_revise_space_harvesters(SpaceDoc);
-run_after(_Function, _Args, Result) ->
-    Result.
+    emit_monitoring_event(Doc),
+    maybe_revise_space_harvesters(Doc),
+    {ok, Doc}.
 
 %%%===================================================================
 %%% datastore_model callbacks

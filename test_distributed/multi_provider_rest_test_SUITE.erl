@@ -13,9 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest/cdmi/cdmi_errors.hrl").
--include("http/rest/cdmi/cdmi_capabilities.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

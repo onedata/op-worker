@@ -12,7 +12,6 @@
 -module(index_utils).
 -author("Bartosz Walkowicz").
 
--include("http/rest/rest_api/rest_errors.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
