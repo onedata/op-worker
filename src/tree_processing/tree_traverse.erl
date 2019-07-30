@@ -160,6 +160,8 @@ get_task(Pool, ID) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Provides information needed for document synchronization.
+%% Warning: if any traverse callback module uses other sync info than one provided by tree_traverse,
+%% dbsync_changes:get_ctx function has to be extended to parse #document and get callback module.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sync_info() -> traverse:ctx_sync_info().

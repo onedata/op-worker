@@ -37,8 +37,8 @@
     on_cancel_init/1, task_canceled/1, task_finished/1]).
 
 -define(TEST_CASES, [
-%%    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
-%%    multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test,
+    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
+    multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test,
     traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
     traverse_restart_test
@@ -331,7 +331,6 @@ traverse_external_cancel_test(Config) ->
     traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, <<"traverse_external_cancel_test">>).
 
 traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
-    % TODO - dodac sprawdzenie callbackow
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     {SessId, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(StartTaskWorker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
