@@ -164,7 +164,7 @@ get_task(Pool, ID) ->
 %% dbsync_changes:get_ctx function has to be extended to parse #document and get callback module.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sync_info() -> traverse:ctx_sync_info().
+-spec get_sync_info() -> traverse:sync_info().
 get_sync_info() ->
     Provider = oneprovider:get_id_or_undefined(),
     #{
