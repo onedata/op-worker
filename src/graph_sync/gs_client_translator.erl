@@ -309,7 +309,7 @@ apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
     }.
 
 
--spec privileges_to_atoms(maps:map(binary(), binary())) -> maps:map(binary(), atom()).
+-spec privileges_to_atoms(#{binary() => binary()}) -> #{binary() => atom()}.
 privileges_to_atoms(Map) ->
     maps:map(
         fun(_Key, Privileges) ->

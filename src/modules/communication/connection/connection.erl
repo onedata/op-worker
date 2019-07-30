@@ -96,7 +96,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 -record(state, {
-    socket :: ssl:socket(),
+    socket :: ssl:sslsocket(),
     socket_mode = active_once :: active_always | active_once,
     transport :: module(),
 
@@ -320,7 +320,7 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl:socket(),
+-spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl:sslsocket(),
     Data :: binary()} | term(), State :: state()) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
@@ -475,7 +475,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
 %% Takes over connection process and changes it to gen_server.
 %% @end
 %%--------------------------------------------------------------------
--spec takeover(pid(), ranch:ref(), inet:socket(), module(), any(), binary(),
+-spec takeover(pid(), ranch:ref(), ssl:sslsocket(), module(), any(), binary(),
     any()) -> no_return().
 takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     % Remove connection from the overall connections count so it will not be

@@ -158,7 +158,7 @@
 
 -type error() :: {error, Reason :: term()}.
 
--export_type([worker_ref/0]).
+-export_type([worker_ref/0, respond_via/0]).
 
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,

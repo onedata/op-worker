@@ -65,7 +65,7 @@
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = #{} :: maps:map(od_space:id(), od_space:alias()),
+    space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 
     % Direct relations to other entities
     eff_groups = [] :: [od_group:id()],
@@ -88,13 +88,13 @@
 -record(od_space, {
     name :: undefined | binary(),
 
-    direct_users = #{} :: maps:map(od_user:id(), [privileges:space_privilege()]),
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:space_privilege()]),
+    direct_users = #{} :: #{od_user:id() => [privileges:space_privilege()]},
+    eff_users = #{} :: #{od_user:id() => [privileges:space_privilege()]},
 
-    direct_groups = #{} :: maps:map(od_group:id(), [privileges:space_privilege()]),
-    eff_groups = #{} :: maps:map(od_group:id(), [privileges:space_privilege()]),
+    direct_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
+    eff_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
 
-    providers = #{} :: maps:map(od_provider:id(), Size :: integer()),
+    providers = #{} :: #{od_provider:id() => Size :: integer()},
 
     shares = [] :: [od_share:id()],
 
@@ -128,7 +128,7 @@
     online = false :: boolean(),
 
     % Direct relations to other entities
-    spaces = #{} :: maps:map(od_space:id(), Size :: integer()),
+    spaces = #{} :: #{od_space:id() => Size :: integer()},
 
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
@@ -142,8 +142,8 @@
     name :: od_handle_service:name() | undefined,
 
     % Effective relations to other entities
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:handle_service_privilege()]),
-    eff_groups = #{} :: maps:map(od_group:id(), [privileges:handle_service_privilege()]),
+    eff_users = #{} :: #{od_user:id() => [privileges:handle_service_privilege()]},
+    eff_groups = #{} :: #{od_group:id() => [privileges:handle_service_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
@@ -160,8 +160,8 @@
     handle_service :: od_handle_service:id() | undefined,
 
     % Effective relations to other entities
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:handle_privilege()]),
-    eff_groups = #{} :: maps:map(od_group:id(), [privileges:handle_privilege()]),
+    eff_users = #{} :: #{od_user:id() => [privileges:handle_privilege()]},
+    eff_groups = #{} :: #{od_group:id() => [privileges:handle_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
@@ -475,7 +475,7 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: maps:map([{od_provider:id(), couchbase_changes:seq()}])
+    seq = #{} :: #{od_provider:id() => couchbase_changes:seq()}
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -604,11 +604,11 @@
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
-    min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    last_update = #{} :: #{od_provider:id() => non_neg_integer()},
+    min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    mth_hist = #{} :: #{od_provider:id() => histogram:histogram()},
 
     % Only replication of files existing in given index will be scheduled
     % if this value is undefined, whole subtree will be iterated
@@ -631,11 +631,11 @@
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
-    min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
+    last_update = #{} :: #{od_provider:id() => non_neg_integer()},
+    min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    mth_hist = #{} :: #{od_provider:id() => histogram:histogram()}
 }).
 
 %% Model that holds statistics about all transfers for given space.
@@ -645,9 +645,9 @@
     % Time of last update for stats.
     timestamp = 0 :: non_neg_integer(),
     % Mapping of providers to their data input and sources
-    stats_in = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    stats_in = #{} :: #{od_provider:id() => histogram:histogram()},
     % Mapping of providers to their data output and destinations
-    stats_out = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    stats_out = #{} :: #{od_provider:id() => histogram:histogram()},
     % Providers mapping to providers they recently sent data to
     active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).

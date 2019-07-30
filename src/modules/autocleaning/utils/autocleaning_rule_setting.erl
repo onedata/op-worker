@@ -17,7 +17,7 @@
 -type rule_setting() :: #autocleaning_rule_setting{}.
 -type key() :: enabled | value.
 -type value() :: boolean() | non_neg_integer().
--type rule_setting_map() :: maps:map(key(), value()).
+-type rule_setting_map() :: #{key() => value()}.
 
 -export_type([rule_setting/0, rule_setting_map/0, value/0]).
 

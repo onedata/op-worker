@@ -62,7 +62,7 @@
     batches_counter = 0 :: non_neg_integer(),
 
     % map storing #batch_counters per each started batch
-    batch_counters_map = #{} :: maps:map(non_neg_integer(), batch_counters()),
+    batch_counters_map = #{} :: #{non_neg_integer() => batch_counters()},
     batches_tokens = #{} :: map(),
     % set of already finished batches, which tokens can be stored in the #autocleaning_run model
     finished_batches = ordsets:new(),
@@ -680,8 +680,8 @@ schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, BatchId, SpaceId)
         BatchId, autocleaning, SpaceId).
 
 
--spec increment_and_check_equality(maps:map(non_neg_integer(), batch_counters()),
-    non_neg_integer()) -> {boolean(), maps:map(non_neg_integer(), batch_counters())}.
+-spec increment_and_check_equality(#{non_neg_integer() => batch_counters()},
+    non_neg_integer()) -> {boolean(), #{non_neg_integer() => batch_counters()}}.
 increment_and_check_equality(BatchesCounters, BatchNum) ->
     BatchCounters = maps:get(BatchNum, BatchesCounters),
     case increment_and_check_equality(BatchCounters) of
