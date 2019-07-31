@@ -84,9 +84,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
     {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
     case user_logic:get(SessionId, UserId) of
-        {ok, #document{value = User, revs = [DbRev]}} ->
-            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
-            {ok, {User, Revision}};
+        {ok, #document{value = User}} ->
+            {ok, {User, 1}};
         ?ERROR_FORBIDDEN ->
             ?ERROR_FORBIDDEN;
         _ ->
