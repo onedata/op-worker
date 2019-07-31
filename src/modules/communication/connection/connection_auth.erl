@@ -20,6 +20,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% API
 -export([handle_handshake/2, get_handshake_error_msg/1]).
@@ -156,33 +157,26 @@ handle_provider_handshake(#provider_handshake_request{
     ),
     {ProviderId, SessionId}.
 
-
 %% @private
 -spec assert_client_compatibility(#client_handshake_request{}, inet:ip_address()) ->
     ok | no_return().
 assert_client_compatibility(#client_handshake_request{
-    version = OcVersionBin,
-    compatible_oneprovider_versions = CompatibleOpVersions
+    version = OcVersion
 }, IpAddress) ->
     OpVersion = oneprovider:get_version(),
-    OcVersion = binary_to_list(OcVersionBin),
-    {ok, CompatibleOcVersions} = application:get_env(?APP_NAME, compatible_oc_versions),
 
-    % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
-    % of matching whole build version we check only the prefix
-    IsOcVersionPrefix = fun(Ver) -> lists:prefix(Ver, OcVersion) end,
-    case lists:any(IsOcVersionPrefix, CompatibleOcVersions) orelse
-        lists:member(OpVersion, CompatibleOpVersions)
-    of
+    case compatibility:check_products_compatibility(
+        ?ONEPROVIDER, OpVersion, ?ONECLIENT, OcVersion
+    ) of
         true ->
             ok;
-        false ->
+        {false, CompatibleOcVersions} ->
             ?debug("Discarding connection from oneclient @ ~s because of "
             "incompatible version.~n"
-            "Oneclient version: ~s, supports providers: ~p~n"
+            "Oneclient version: ~s ~n"
             "Oneprovider version: ~s, supports clients: ~p~n", [
                 inet_parse:ntoa(IpAddress),
-                OcVersion, CompatibleOpVersions,
+                OcVersion,
                 OpVersion, CompatibleOcVersions
             ]),
             throw(incompatible_client_version)
