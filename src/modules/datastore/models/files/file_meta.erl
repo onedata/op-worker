@@ -471,7 +471,10 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
-    Opts = #{offset => Offset, size => Size},
+    Opts = case Offset of
+        0 -> #{size => Size};
+        _ -> #{offset => Offset, size => Size}
+    end,
 
     Opts2 = case Token of
         undefined -> Opts;

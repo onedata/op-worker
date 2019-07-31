@@ -62,7 +62,7 @@ save_master_job(Key, #tree_traverse{
     save(Key, Scope, Record).
 
 -spec delete_master_job(datastore:key(), datastore_doc:scope()) -> ok | {error, term()}.
-delete_master_job(<<?MAIN_JOB_PREFIX, _>> = Key, Scope) ->
+delete_master_job(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Scope) ->
     datastore_model:delete(?SYNC_CTX#{scope => Scope}, Key);
 delete_master_job(Key, _) ->
     datastore_model:delete(?CTX, Key).
@@ -89,7 +89,7 @@ get_master_job(#document{value = #tree_traverse_job{
     },
     {ok, Job, Pool, TaskID};
 get_master_job(Key) ->
-    case datastore_model:get(?CTX, Key) of
+    case datastore_model:get(?CTX#{include_deleted => true}, Key) of
         {ok, Doc} ->
             get_master_job(Doc);
         Other ->
@@ -102,12 +102,12 @@ get_master_job(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns model's context for documents that are not synced.
+%% Returns model's context used by datastore and dbsync.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
-    ?CTX.
+    ?SYNC_CTX.
 
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
@@ -141,7 +141,7 @@ save(main_job, Scope, Value) ->
     GenKey = <<?MAIN_JOB_PREFIX, RandomPart/binary>>,
     ?extract_key(datastore_model:save(?SYNC_CTX#{generated_key => true},
         #document{key = GenKey, scope = Scope, value = Value}));
-save(<<?MAIN_JOB_PREFIX, _>> = Key, Scope, Value) ->
+save(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Scope, Value) ->
     ?extract_key(datastore_model:save(?SYNC_CTX, #document{key = Key, scope = Scope, value = Value}));
 save(Key, _, Value) ->
     ?extract_key(datastore_model:save(?CTX, #document{key = Key, value = Value})).
