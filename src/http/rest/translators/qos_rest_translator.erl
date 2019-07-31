@@ -13,7 +13,7 @@
 -author("Michal Cwiertnia").
 
 -include("op_logic.hrl").
--include("http/rest/rest.hrl").
+-include("http/rest.hrl").
 
 -export([create_response/4, get_response/2]).
 

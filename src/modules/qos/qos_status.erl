@@ -95,7 +95,7 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %%%===================================================================
 
 -spec check_fulfilment_internal(qos_entry:id(), fslogic_worker:file_guid(), qos_entry:record()) ->  boolean().
-check_fulfilment_internal(QosId, FileGuid, #qos_entry{file_guid = OriginGuid, status = Status}) ->
+check_fulfilment_internal(QosId, FileGuid, #qos_entry{file_uuid = OriginGuid, status = Status}) ->
     case Status of
         ?QOS_TRAVERSE_FINISHED_STATUS ->
             RelativePath = get_relative_path(OriginGuid, FileGuid),

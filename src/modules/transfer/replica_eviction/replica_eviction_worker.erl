@@ -126,11 +126,11 @@ transfer_regular_file(FileCtx, #transfer_params{
     transfer_id = TransferId,
     supporting_provider = SupportingProvider
 }) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Uuid = file_ctx:get_uuid_const(FileCtx),
     % TODO: use actual storage id
     EvictingStorage = oneprovider:get_id_or_undefined(),
     SupportingStorage = SupportingProvider,
-    QosStorages = case file_qos:get_effective(Guid) of
+    QosStorages = case file_qos:get_effective(Uuid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS
     end,
@@ -152,7 +152,7 @@ transfer_regular_file(FileCtx, #transfer_params{
             end,
             QosList = maps:get(EvictingStorage, QosStorages),
             NewFileDoc = #document{
-                key = Guid,
+                key = Uuid,
                 scope = file_ctx:get_space_id_const(FileCtx),
                 value = #file_qos{
                     qos_list = QosList,

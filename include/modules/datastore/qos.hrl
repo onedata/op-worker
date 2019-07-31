@@ -13,18 +13,26 @@
 %%% The qos_entry document contains information about single QoS requirement like
 %%% QoS expression, number of required replicas, fulfillment status and
 %%% ID of traverse task. Such document is created when user adds QoS
-%%% requirement for file or directory. Different QoS requirements does not
-%%% influence on each other. According to this it is not possible to define
-%%% inconsistent requirements.
+%%% requirement for file or directory. Each QoS requirement is evaluated
+%%% separately. It means that it is not possible to define inconsistent
+%%% requirements. For example if one requirement says that file should
+%%% be present on storage in Poland and other requirement says that file
+%%% should be present on storage in any country expect Poland, two different
+%%% replicas will be created. On the other hand the same file replica can
+%%% fulfill multiple different QoS requirements. For example if there is
+%%% storage of type disk in Poland, then replica on such storage can fulfill
+%%% requirements that demands replica on storage in Poland and requirements
+%%% that demands replica on storage of type disk. System will create
+%%% new file replica only if currently existing replicas don't fulfill QoS
+%%% requirements.
 %%% Multiple qos_entry documents can be created for the same file or directory.
 %%% It is also possible to define exactly the same QoS requirement for
 %%% file or directory and for each of them separate document is created.
 %%% qos_entry can be related with links tree containing ID of transfers
 %%% scheduled to fulfill QoS after file or file in directory has been changed.
 %%% QoS requirement is fulfilled when:
-%%% - there is no active traverse task in qos_entry document
+%%% - there is no active traverse tasks for this QoS
 %%% - status is set to fulfilled in qos_entry document
-%%% - there is no active transfers in links tree
 %%%
 %%% The file_qos item contains aggregated information about QoS defined for file
 %%% or directory. It contains list of qos_entry IDs and mapping that maps storage_id
@@ -48,7 +56,7 @@
 -ifndef(QOS_HRL).
 -define(QOS_HRL, 1).
 
-% qos expression related macros
+% macros used for operations on QoS expression
 -define(UNION, <<"|">>).
 -define(INTERSECTION, <<"&">>).
 % TODO: for now used "-" instead of "\" as backslash is an escape character,
@@ -63,7 +71,7 @@
 
 -define(QOS_BOUNDED_CACHE_GROUP, qos_cache_group).
 
--define(CANNOT_FULFILL_QOS, cannot_fulfill_qos).
+-define(ERROR_CANNOT_FULFILL_QOS, cannot_fulfill_qos).
 
 -define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
 

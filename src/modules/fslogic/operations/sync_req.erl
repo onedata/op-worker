@@ -39,6 +39,7 @@
 ]).
 
 -export([
+    schedule_file_replication/6,
     schedule_file_replication/7
 ]).
 
@@ -145,6 +146,22 @@ get_file_distribution(_UserCtx, FileCtx) ->
             provider_file_distributions = ProviderDistributions
         }
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
+%%    IndexName, QueryViewParams, undefined)
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+    od_provider:id(), transfer:callback(), transfer:index_name(),
+    query_view_params()) -> provider_response().
+schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
+    IndexName, QueryViewParams
+) ->
+    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
+    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
+        Callback, IndexName, QueryViewParams, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc

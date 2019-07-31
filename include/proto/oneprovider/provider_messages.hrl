@@ -69,6 +69,9 @@
     callback :: transfer:callback(),
     index_name :: transfer:index_name(),
     query_view_params :: transfer:query_view_params(),
+
+    % pid of process that scheduled this replication to fulfill QoS
+    % and waits for message that transfer has been completed
     qos_job_pid :: undefined | pid()
 }).
 
@@ -186,7 +189,6 @@
 }).
 
 -record(get_qos_resp, {
-    file_guid :: fslogic_worker:file_guid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Number of required file replicas.
     status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status()

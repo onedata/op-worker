@@ -16,6 +16,7 @@
 
 -include("modules/datastore/qos.hrl").
 -include("global_definitions.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -55,8 +56,11 @@ init(SpaceId) ->
 -spec ensure_exists_on_all_nodes(od_space:id()) -> ok.
 ensure_exists_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    rpc:eval_everywhere(Nodes, ?MODULE, ensure_exists, [SpaceId]),
-    ok.
+    case rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]) of
+        {_, BadNodes} when length(BadNodes) > 0 ->
+            ?error("Failed to ensure QoS bounded cache exists on following nodes: ~p~n", [BadNodes]);
+        _ -> ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -85,9 +89,11 @@ ensure_exists(SpaceId) ->
 -spec invalidate_on_all_nodes(od_space:id()) -> ok.
 invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    rpc:eval_everywhere(Nodes, ?MODULE, invalidate, [SpaceId]),
-    ok.
-
+    case rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId]) of
+        {_, BadNodes} when length(BadNodes) > 0 ->
+            ?error("Failed to invalidate QoS bounded cache on following nodes: ~p~n", [BadNodes]);
+        _ -> ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -63,11 +63,11 @@ get_file_qos(SessId, FileKey) ->
     {ok, qos_entry:record()} | logical_file_manager:error_reply().
 get_qos_details(SessId, QosId) ->
     case qos_entry:get_file_guid(QosId) of
-        {ok, FileGuid} ->
+        FileGuid ->
             remote_utils:call_fslogic(SessId, provider_request, FileGuid, #get_qos{id = QosId},
                 fun(Resp) ->
                     {ok, #qos_entry{
-                        file_guid = Resp#get_qos_resp.file_guid,
+                        file_uuid = file_id:guid_to_uuid(FileGuid),
                         expression = Resp#get_qos_resp.expression,
                         replicas_num = Resp#get_qos_resp.replicas_num,
                         status = Resp#get_qos_resp.status
@@ -113,7 +113,7 @@ check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
     lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
 check_qos_fulfilled(SessId, QosId, undefined) ->
     case get_qos_details(SessId, QosId) of
-        {ok, #qos_entry{file_guid = QosOriginFileGuid}} ->
+        {ok, #qos_entry{file_uuid = QosOriginFileGuid}} ->
             check_qos_fulfilled(SessId, QosId, {guid, QosOriginFileGuid});
         {error, _} = Error ->
             Error

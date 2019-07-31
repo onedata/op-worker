@@ -25,8 +25,8 @@
 %% tests
 -export([
     empty_qos/1,
-    add_qos_for_file_1/1,
-    add_qos_for_file_2/1,
+    add_single_qos_for_file/1,
+    add_single_qos_for_file_with_multiple_replicas/1,
     add_qos_for_file_3/1,
     add_multiple_qos_for_file/1,
     add_qos_for_multiple_files_1/1,
@@ -94,21 +94,21 @@ all() -> [
 
 
 
-empty_qos(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3] = get_op_nodes(Config),
-    {SessId1, _UserId1} = {
-        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-        ?config({user_id, <<"user1">>}, Config)
-    },
+%%empty_qos(Config) ->
+%%    [_WorkerP1, WorkerP2, _WorkerP3] = get_op_nodes(Config),
+%%    {SessId1, _UserId1} = {
+%%        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+%%        ?config({user_id, <<"user1">>}, Config)
+%%    },
+%%
+%%    % create file
+%%    FileGuid = create_test_file(WorkerP2, SessId1, ?FILE_PATH(<<"file1">>), <<"test_data">>),
+%%
+%%    % check that file has empty qos
+%%    ?assertMatch({ok, undefined}, lfm_proxy:get_file_qos(WorkerP2, SessId1, {guid, FileGuid})).
 
-    % create file
-    FileGuid = create_test_file(WorkerP2, SessId1, ?FILE_PATH(<<"file1">>), <<"test_data">>),
 
-    % check that file has empty qos
-    ?assertMatch({ok, undefined}, lfm_proxy:get_file_qos(WorkerP2, SessId1, {guid, FileGuid})).
-
-
-add_qos_for_file_1(Config) ->
+add_single_qos_for_file(Config) ->
     [WorkerP1, WorkerP2, _WorkerP3] = get_op_nodes(Config),
     P1Id = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP1)),
     P2Id = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP2)),
@@ -143,7 +143,7 @@ add_qos_for_file_1(Config) ->
 
     qos_test_utils:add_qos_test_base(Config, Spec).
 
-add_qos_for_file_2(Config) ->
+add_single_qos_for_file_with_multiple_replicas(Config) ->
     [WorkerP1, WorkerP2, WorkerP3] = get_op_nodes(Config),
     P1Id = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP1)),
     P2Id = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP2)),

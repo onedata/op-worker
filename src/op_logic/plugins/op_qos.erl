@@ -137,7 +137,7 @@ authorize(#op_req{operation = create, client = Client, gri = #gri{
     op_logic_utils:is_eff_space_member(Client, SpaceId);
 
 authorize(#op_req{operation = get, client = Client, gri = #gri{aspect = instance}},
-    #qos_entry{file_guid = FileGuid}
+    #qos_entry{file_uuid = FileGuid}
 ) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:is_eff_space_member(Client, SpaceId);
@@ -150,7 +150,7 @@ authorize(#op_req{operation = get, client = Client, gri = #gri{
     op_logic_utils:is_eff_space_member(Client, SpaceId);
 
 authorize(#op_req{operation = delete, client = Client, gri = #gri{aspect = instance}},
-    #qos_entry{file_guid = FileGuid}
+    #qos_entry{file_uuid = FileGuid}
 ) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:is_eff_space_member(Client, SpaceId).
@@ -167,7 +167,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}}, 
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #qos_entry{
-    file_guid = Guid
+    file_uuid = Guid
 }) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId);
@@ -177,7 +177,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #qos_entry{
-    file_guid = Guid
+    file_uuid = Guid
 }) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId).

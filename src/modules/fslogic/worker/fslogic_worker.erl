@@ -57,6 +57,7 @@
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_QOS_CACHE, init_qos_cache).
 -define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
+-define(CHECK_QOS_CACHE, bounded_cache_timer).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
@@ -168,6 +169,9 @@ handle(?INIT_QOS_CACHE) ->
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
     init_qos_cache_for_space(SpaceId);
+handle(Msg = {?CHECK_QOS_CACHE, #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
+    ?debug("Checking QoS bounded cache"),
+    check_qos_bounded_cache(Msg);
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -235,6 +239,16 @@ init_report() ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedule initialization of QoS bounded cache for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_init_qos_cache_for_space(od_space:id()) -> ok.
+schedule_init_qos_cache_for_space(SpaceId) ->
+    erlang:send_after(0, fslogic_worker, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -459,6 +473,13 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
+    index_name = IndexName, query_view_params = QueryViewParams,
+    qos_job_pid = undefined
+}, FileCtx) ->
+    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
+        Callback, IndexName, QueryViewParams);
+handle_provider_request(UserCtx, #schedule_file_replication{
+    block = _Block, target_provider_id = TargetProviderId, callback = Callback,
     index_name = IndexName, query_view_params = QueryViewParams, qos_job_pid = QosJobPID
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
@@ -630,11 +651,6 @@ schedule_periodical_spaces_autocleaning_check() ->
 schedule_init_qos_cache_for_all_spaces() ->
     schedule(?INIT_QOS_CACHE, 0).
 
--spec schedule_init_qos_cache_for_space(od_space:id()) -> ok.
-schedule_init_qos_cache_for_space(SpaceId) ->
-    erlang:send_after(0, fslogic_worker, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
-    ok.
-
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
     erlang:send_after(Timeout, self(), {sync_timer, Request}),
@@ -728,3 +744,6 @@ init_qos_cache_for_space(SpaceId) ->
         Error:Reason ->
             ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error, Reason}])
     end.
+
+check_qos_bounded_cache(Options) ->
+    bounded_cache:check_cache_size(Options).

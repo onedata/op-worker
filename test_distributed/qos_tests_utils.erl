@@ -26,9 +26,9 @@
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
 
-assert_qos_entry_document(Worker, QosId, FileGuid, Expression, ReplicasNum, Status) ->
+assert_qos_entry_document(Worker, QosId, FileUuid, Expression, ReplicasNum, Status) ->
     ExpectedQosEntry = #qos_entry{
-        file_guid = FileGuid,
+        file_uuid = FileUuid,
         expression = Expression,
         replicas_num = ReplicasNum,
         status = Status
@@ -37,14 +37,14 @@ assert_qos_entry_document(Worker, QosId, FileGuid, Expression, ReplicasNum, Stat
     ?assertMatch(ExpectedQosEntry, QosEntry).
 
 
-assert_file_qos_document(Worker, FileGuid, QosList, TargetStorages) ->
+assert_file_qos_document(Worker, FileUuid, QosList, TargetStorages) ->
     ExpectedFileQos = #file_qos{
         qos_list = QosList,
         target_storages = TargetStorages
     },
     ExpectedFileQosSorted = sort_file_qos(ExpectedFileQos),
 
-    {ok, #document{value = FileQos}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileGuid])),
+    {ok, #document{value = FileQos}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileUuid])),
     FileQosSorted = sort_file_qos(FileQos),
     ?assertMatch(ExpectedFileQosSorted, FileQosSorted).
 

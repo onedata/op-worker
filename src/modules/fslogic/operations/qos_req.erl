@@ -102,8 +102,8 @@ check_fulfillment(UserCtx, FileCtx, QosId) ->
 %%--------------------------------------------------------------------
 -spec restore_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
 restore_qos_on_storage(FileCtx, StorageId) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    EffFileQos = file_qos:get_effective(FileGuid),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    EffFileQos = file_qos:get_effective(FileUuid),
 
     case EffFileQos of
         undefined ->
@@ -111,14 +111,13 @@ restore_qos_on_storage(FileCtx, StorageId) ->
         _ ->
             QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
             lists:foreach(fun(QosId) ->
-                qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId])
+                {ok, _} = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId])
             end, QosToUpdate)
     end.
 
 %%%===================================================================
-%%% Internal functions
+%%% Insecure functions
 %%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -129,40 +128,38 @@ restore_qos_on_storage(FileCtx, StorageId) ->
 -spec add_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
 add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    QosExpressionInRPN = qos_expression:transform_to_rpn(QosExpression),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
+    QosExpressionInRPN = qos_expression:transform_to_rpn(QosExpression),
 
     % create qos_entry document
     QosEntryToCreate = #document{value = #qos_entry{
         expression = QosExpressionInRPN,
         replicas_num = ReplicasNum,
-        file_guid = FileGuid,
+        file_uuid = FileUuid,
         status = ?QOS_IN_PROGRESS_STATUS
     }},
     {ok, #document{key = QosId}} = qos_entry:create(QosEntryToCreate, SpaceId),
 
-    % TODO: for now target storage for dir is selected here and does not change
-    % in qos traverse task. Have to figure out how to choose different
-    % storages for subdirs and/or file if multiple storage fulfilling qos are
-    % available.
+    % TODO: VFS-5567 for now target storage for dir is selected here and
+    % does not change in qos traverse task. Have to figure out how to
+    % choose different storages for subdirs and/or file if multiple storage
+    % fulfilling qos are available.
     TargetStoragesList = get_target_storages(user_ctx:get_session_id(UserCtx),
-        {guid, FileGuid}, QosExpressionInRPN, ReplicasNum),
+        FileCtx, QosExpressionInRPN, ReplicasNum),
 
     case TargetStoragesList of
-        {error, ?CANNOT_FULFILL_QOS} ->
-
-            create_or_update_file_qos_doc(FileGuid, QosId, []),
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            % TODO: VFS-5568 - handle qos requirements that cannot be satisfied
-            qos_entry:add_impossible_qos(QosId, SpaceId);
+        {error, ?ERROR_CANNOT_FULFILL_QOS} ->
+            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+            ok = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
-            create_or_update_file_qos_doc(FileGuid, QosId, TargetStoragesList),
-            qos_traverse:fulfill_qos(user_ctx:get_session_id(UserCtx), FileCtx, QosId,
-                TargetStoragesList)
+            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, TargetStoragesList),
+            {ok, _} = qos_traverse:fulfill_qos(
+                user_ctx:get_session_id(UserCtx), FileCtx, QosId, TargetStoragesList
+            )
     end,
 
-    qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
 
     #provider_response{
         status = #status{code = ?OK},
@@ -179,11 +176,11 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
 %%--------------------------------------------------------------------
 -spec get_file_qos_insecure(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:provider_response().
 get_file_qos_insecure(_UserCtx, FileCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
 
-    Resp = case file_qos:get_effective(FileGuid) of
+    Resp = case file_qos:get_effective(FileUuid) of
         undefined ->
-           #effective_file_qos{};
+            #effective_file_qos{};
         EffQos ->
             #effective_file_qos{
                 qos_list = EffQos#file_qos.qos_list,
@@ -195,6 +192,7 @@ get_file_qos_insecure(_UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         provider_response = Resp
     }.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -208,11 +206,11 @@ get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
     {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #get_qos_resp{
-        file_guid = QosEntry#qos_entry.file_guid,
         expression = QosEntry#qos_entry.expression,
         replicas_num = QosEntry#qos_entry.replicas_num,
         status = QosEntry#qos_entry.status
     }}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -224,10 +222,11 @@ get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
 -spec remove_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 remove_qos_insecure(_UserCtx, FileCtx, QosId) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    {ok, _} = file_qos:remove_qos_id(FileGuid, QosId),
-    qos_traverse:remove_qos(FileCtx, QosId),
-    qos_entry:delete(QosId),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO: VFS-5567 For now QoS is added only for file or dir
+    % for which QoS has been added, so starting traverse is not needed.
+    {ok, _} = file_qos:remove_qos_id(FileUuid, QosId),
+    ok = qos_entry:delete(QosId),
     #provider_response{status = #status{code = ?OK}}.
 
 
@@ -247,53 +246,29 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
     }}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calls file_qos:create_or_update/2 fun. Document and diff function are
-%% created using QoS ID and list of target storages for that QoS.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update_file_qos_doc(fslogic_worker:file_guid(), qos_entry:id(),
-    file_qos:target_storages()) -> ok.
-create_or_update_file_qos_doc(FileGuid, QosId, TargetStoragesList) ->
-    NewTargetStorages = file_qos:merge_storage_list_to_target_storages(
-        QosId, TargetStoragesList, #{}
-    ),
-    NewDoc = #document{
-        key = FileGuid,
-        scope = file_id:guid_to_space_id(FileGuid),
-        value = #file_qos{
-            qos_list = [QosId],
-            target_storages = NewTargetStorages
-        }
-    },
-
-    Diff = fun(#file_qos{qos_list = CurrFileQos, target_storages = CurrTS}) ->
-        UpdatedTS = file_qos:merge_storage_list_to_target_storages(
-            QosId, TargetStoragesList, CurrTS
-        ),
-        {ok, #file_qos{qos_list = [QosId | CurrFileQos], target_storages = UpdatedTS}}
-    end,
-    {ok, _} = file_qos:create_or_update(NewDoc, Diff),
-    ok.
-
-
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 %%--------------------------------------------------------------------
 %% @doc
 %% Get list of storage id, on which file should be present according to
 %% qos requirements and available storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_storages(session:id(), logical_file_manager:file_key(),
+-spec get_target_storages(session:id(), file_ctx:ctx(),
     qos_expression:expression(), pos_integer()) -> [storage:id()].
-get_target_storages(SessId, FileKey, Expression, ReplicasNum) ->
+get_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileKey = {guid, FileGuid},
+
     {ok, FileLocations} = lfm:get_file_distribution(SessId, FileKey),
 
     % TODO: VFS-5574 add check if storage has enough free space
     % call using ?MODULE macro for mocking in tests
-    SpaceStorages = ?MODULE:get_space_storages(SessId, FileKey),
-    qos_expression:get_target_storage(Expression, ReplicasNum, SpaceStorages, FileLocations).
+    SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
+    qos_expression:get_target_storage(
+        Expression, ReplicasNum, SpaceStorages, FileLocations
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -301,10 +276,9 @@ get_target_storages(SessId, FileKey, Expression, ReplicasNum) ->
 %% Get list of storage id supporting space in which given file is stored.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_storages(session:id(), logical_file_manager:file_key()) ->
-    [storage:id()].
-get_space_storages(Auth, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(Auth, FileKey),
+-spec get_space_storages(session:id(), file_ctx:ctx()) -> [storage:id()].
+get_space_storages(Auth, FileCtx) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
     % TODO: VFS-5573 use storage qos

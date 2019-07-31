@@ -19,11 +19,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([remove_qos/2, fulfill_qos/4, init_pool/0]).
+-export([fulfill_qos/4, init_pool/0]).
 
 %% Pool callbacks
 -export([do_master_job/1, do_slave_job/1, task_finished/1, get_job/1,
-    get_sync_info/1, list_ongoing_jobs/0, update_job_progress/5]).
+    get_sync_info/1, update_job_progress/5]).
 
 % For test purpose
 -export([schedule_transfers/4]).
@@ -53,10 +53,11 @@
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined) -> ok.
+-spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined)
+        -> {ok, traverse:id()}.
 fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
     {ok, #document{value = QosItem}} = qos_entry:get(QosId),
-    QosOriginFileGuid = QosItem#qos_entry.file_guid,
+    QosOriginFileGuid = QosItem#qos_entry.file_uuid,
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
     Options = #{
         task_id => ?TASK_ID(QosId),
@@ -69,27 +70,6 @@ fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
         }
     },
 
-    case file_ctx:is_dir(FileCtx) of
-        {false, _} ->
-            {ok, FileMeta} = file_meta:get(file_ctx:get_uuid_const(FileCtx)),
-            tree_traverse:run(?POOL_NAME, FileMeta, Options);
-        {true, _} ->
-            tree_traverse:run(?POOL_NAME, FileCtx, Options)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates traverse task for removing qos.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_qos(file_ctx:ctx(), qos_entry:id()) -> ok.
-remove_qos(FileCtx, QosId) ->
-    Options = #{
-        task_id => <<QosId/binary, "#remove">>,
-        execute_on_slave_dir => true,
-        batch_size => ?TRAVERSE_BATCH_SIZE,
-        traverse_info => #remove_qos_traverse_args{qos_id = QosId}
-    },
     tree_traverse:run(?POOL_NAME, FileCtx, Options).
 
 %%--------------------------------------------------------------------
@@ -110,23 +90,28 @@ init_pool() ->
 %%% Traverse callbacks
 %%%===================================================================
 
-list_ongoing_jobs() ->
-    {ok, []}.
+-spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+    {ok, tree_traverse:master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
+get_job(DocOrID) ->
+    tree_traverse:get_job(DocOrID).
 
+-spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:ctx_sync_info()}.
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).
+
+-spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
     [QosId, _] = binary:split(TaskId, <<"#">>, [global]),
     {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
     ok.
 
-get_job(DocOrID) ->
-    tree_traverse:get_job(DocOrID).
-
-get_sync_info(Job) ->
-    tree_traverse:get_sync_info(Job).
-
+-spec update_job_progress(undefined | main_job | traverse:job_id(),
+    tree_traverse:master_job(), traverse:pool(), traverse:id(),
+    traverse:job_status()) -> {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
+-spec do_master_job(tree_traverse:master_job()) -> {ok, traverse:master_job_map()}.
 do_master_job(Job) ->
     tree_traverse:do_master_job(Job).
 
@@ -137,17 +122,9 @@ do_master_job(Job) ->
 %% to fulfill QoS requirements.
 %% @end
 %%--------------------------------------------------------------------
+-spec do_slave_job(traverse:job()) -> ok.
 do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}) ->
-    create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs);
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Performs slave job for traverse task responsible for removing QoS requirement.
-%%--------------------------------------------------------------------
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, #remove_qos_traverse_args{qos_id = QosId}}) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    {ok, _} = file_qos:remove_from_target_storages(FileGuid, QosId).
-
+    create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs).
 
 %%%===================================================================
 %%% Internal functions

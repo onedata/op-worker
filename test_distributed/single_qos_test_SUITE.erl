@@ -900,6 +900,7 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
     % create file
     FilePath = filename:join(?SPACE1, <<"file1">>),
     FileGuid = qos_tests_utils:create_file(Worker, SessId, FilePath, ?TEST_DATA),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % add QoS for file
     QosNameIdMapping = lists:foldl(fun(QosCfg, QosNameIdMapping) ->
@@ -923,7 +924,7 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, FileGuid, QosExpressionRPN, ReplicasNum, QosStatus
+            Worker, QosId, FileUuid, QosExpressionRPN, ReplicasNum, QosStatus
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -934,7 +935,7 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
         map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
     end, ExpectedTargetStorages),
 
-    qos_tests_utils:assert_file_qos_document(Worker, FileGuid, ExpectedQosListId, ExpectedTargetStoragesId).
+    qos_tests_utils:assert_file_qos_document(Worker, FileUuid, ExpectedQosListId, ExpectedTargetStoragesId).
 
 
 add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
@@ -951,6 +952,7 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
     DirPath = filename:join(?SPACE1, <<"dir1">>),
     FilePath = filename:join(DirPath, <<"file1">>),
     DirGuid = qos_tests_utils:create_directory(Worker, SessId, DirPath),
+    DirUuid = file_id:guid_to_uuid(DirGuid),
     FileGuid = qos_tests_utils:create_file(Worker, SessId, FilePath, ?TEST_DATA),
 
     % add QoS for directory
@@ -975,7 +977,7 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, QosStatus
+            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, QosStatus
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -986,7 +988,7 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
         map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
     end, ExpectedTargetStorages),
 
-    qos_tests_utils:assert_file_qos_document(Worker, DirGuid, ExpectedQosListId, ExpectedTargetStoragesId),
+    qos_tests_utils:assert_file_qos_document(Worker, DirUuid, ExpectedQosListId, ExpectedTargetStoragesId),
     
     % check that for file document file_qos has not been created
     ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileGuid])).
@@ -1017,6 +1019,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
         QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
 
         DirGuid = qos_tests_utils:get_guid(Worker, SessId, DirPath),
+        DirUuid = file_id:guid_to_uuid(DirGuid),
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
             lfm_proxy:add_qos(Worker, SessId, {guid, DirGuid}, QosExpression, ReplicasNum)
@@ -1029,7 +1032,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, DirGuid, QosExpressionRPN, ReplicasNum, ?QOS_TRAVERSE_FINISHED_STATUS
+            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, ?QOS_TRAVERSE_FINISHED_STATUS
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -1048,10 +1051,11 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
             map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
         end, ExpectedTargetStorages),
         FileGuid = qos_tests_utils:get_guid(Worker, SessId, FilePath),
-        qos_tests_utils:assert_effective_qos(Worker, FileGuid, ExpectedQosListId, ExpectedTargetStoragesId),
+        FileUuid = file_id:guid_to_uuid(FileGuid),
+        qos_tests_utils:assert_effective_qos(Worker, FileUuid, ExpectedQosListId, ExpectedTargetStoragesId),
 
         % check that for file document file_qos has not been created
-        ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileGuid]))
+        ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileUuid]))
     end, ExpectedEffQosList).
 
 

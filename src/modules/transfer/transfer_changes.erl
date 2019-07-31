@@ -105,6 +105,7 @@ handle(Doc = #document{
 ->
     handle_finished_migration(Doc);
 
+% TODO: VFS-5572 use transfer callback when available
 handle(#document{
     key = TransferId,
     value = #transfer{

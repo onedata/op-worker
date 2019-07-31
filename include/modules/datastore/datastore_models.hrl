@@ -272,7 +272,7 @@
 % document even if expressions are exactly the same. For each file / directory
 % multiple qos_entry can be defined.
 -record(qos_entry, {
-    file_guid :: fslogic_worker:file_guid(),
+    file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status()

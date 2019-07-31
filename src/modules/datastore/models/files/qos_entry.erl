@@ -7,9 +7,12 @@
 %%%-------------------------------------------------------------------
 %%% @doc This model holds information about single QoS, that is QoS requirement
 %%% defined by the user for file or directory through QoS expression and
-%%% number of required replicas. Each such requirement creates new qos_entry
-%%% document even if expressions are exactly the same. For each file / directory
-%%% multiple qos_entry can be defined.
+%%% number of required replicas. Information about requirement is stored in
+%%% qos_entry document. Document is created for each requirement even if
+%%% the same requirement was already defined. For each file / directory
+%%% multiple qos_entry can be defined. New file replica is created only
+%%% when new QoS requirement is defined and current replicas do not satisfy all
+%%% QoS requirements. Otherwise there is no need to create new replica.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -21,12 +24,16 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, delete/1, create/2, update/2,
-    add_impossible_qos/2, list_impossible_qos/0,
-    get_file_guid/1, set_status/2]).
+%% functions operating on record using datastore model API
+-export([get/1, delete/1, create/2]).
+
+%% higher-level functions operating on file_qos record.
+-export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
+    set_status/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+
 
 -type id() :: binary().
 -type key() :: datastore:key().
@@ -96,8 +103,8 @@ delete(QosId) ->
 -spec get_file_guid(id()) -> file_id:file_guid().
 get_file_guid(QosId) ->
     case qos_entry:get(QosId) of
-        {ok, #document{value = QosEntry}} ->
-            {ok, QosEntry#qos_entry.file_guid};
+        {ok, #document{value = QosEntry, scope = SpaceId}} ->
+            file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId);
         {error, _} = Error ->
             Error
     end.
@@ -108,7 +115,6 @@ set_status(QosId, Status) ->
         {ok, QosEntry#qos_entry{status = Status}}
     end,
     update(QosId, Diff).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -165,7 +171,7 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {file_guid, string},
+        {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},
         {status, atom}

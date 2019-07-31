@@ -52,9 +52,9 @@ transform_to_rpn(Expression) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_storage(expression(), pos_integer(), [storage:id()], []) ->
-    [storage:id()] | ?CANNOT_FULFILL_QOS.
+    [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
 get_target_storage(_Expression, _ReplicasNum, [], _FileLocations) ->
-    {error, ?CANNOT_FULFILL_QOS};
+    {error, ?ERROR_CANNOT_FULFILL_QOS};
 get_target_storage(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).
 
@@ -183,9 +183,9 @@ filter_storage(Key, Val, StorageSet) ->
 %% Storage with higher current blocks size are preferred.
 %% @end
 %%--------------------------------------------------------------------
--spec select([storage:id()], pos_integer(), []) -> [storage:id()] | ?CANNOT_FULFILL_QOS.
+-spec select([storage:id()], pos_integer(), []) -> [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
 select([], _ReplicasNum, _FileLocations) ->
-    {error, ?CANNOT_FULFILL_QOS};
+    {error, ?ERROR_CANNOT_FULFILL_QOS};
 select(StorageList, ReplicasNum, FileLocations) ->
     StorageListWithBlocksSize = lists:map(fun (StorageId) ->
             {get_storage_blocks_size(StorageId, FileLocations), StorageId}
@@ -198,7 +198,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
         ReplicasNum ->
             StorageSublist;
         _ ->
-            {error, ?CANNOT_FULFILL_QOS}
+            {error, ?ERROR_CANNOT_FULFILL_QOS}
     end.
 
 %%--------------------------------------------------------------------
