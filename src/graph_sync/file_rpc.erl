@@ -107,8 +107,8 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
 
     assert_space_membership_and_local_support(Auth, FileGuid),
 
-    case lfm:ls_by_startid(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
-        {ok, Children} ->
+    case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
+        {ok, Children, _, _} ->
             {ok, lists:map(fun({ChildGuid, _ChildName}) ->
                 gs_protocol:gri_to_string(#gri{
                     type = op_file,

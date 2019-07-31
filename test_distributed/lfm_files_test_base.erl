@@ -1672,8 +1672,8 @@ verify_with_startid(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, Sta
   {SessId1, _UserId1} =
     {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-  Ans = lfm_proxy:ls_by_startid(Worker, SessId1, {path, MainDirPath}, 0, Limit, StartId),
-  {ok, List} = ?assertMatch({ok, _}, Ans),
+  Ans = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Limit, undefined, StartId),
+  {ok, List, _, _} = ?assertMatch({ok, _, _, _}, Ans),
   ?assertEqual(ExpectedSize, length(List)),
 
   lists:foreach(fun({{_, F1}, F2}) ->

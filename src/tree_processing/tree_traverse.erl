@@ -172,9 +172,10 @@ do_master_job(#tree_traverse{
     traverse_info = TraverseInfo
 } = TT) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
-        {undefined, <<>>} -> file_meta:list_children(Doc, BatchSize);
-        {undefined, _} -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize);
-        _ -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize, Token)
+        {undefined, <<>>} ->
+            file_meta:list_children(Doc, BatchSize);
+        _ ->
+            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
     end,
 
     #{token := Token2, last_name := LN2, last_tree := LT2} = ExtendedInfo,
@@ -197,8 +198,8 @@ do_master_job(#tree_traverse{
         true -> lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
-            last_name = LN2,
-            last_tree = LT2
+            last_name = utils:ensure_defined(LN2, undefined, <<>>),
+            last_tree = utils:ensure_defined(LT2, undefined, <<>>)
         } | lists:reverse(MasterJobs)]
     end,
     {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}};
