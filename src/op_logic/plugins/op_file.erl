@@ -229,7 +229,7 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_file_accessible_locally(Req#op_req.auth, Guid);
+    has_access_to_file(Req#op_req.auth, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= instance;
@@ -239,7 +239,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_file_accessible_locally(Req#op_req.auth, Guid);
+    has_access_to_file(Req#op_req.auth, Guid);
 
 authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -447,8 +447,8 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
 %% in case of user root dir since it doesn't belong to any space.
 %% @end
 %%--------------------------------------------------------------------
--spec check_file_accessible_locally(aai:auth(), file_id:file_guid()) -> boolean().
-check_file_accessible_locally(?USER(UserId) = Auth, Guid) ->
+-spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
+has_access_to_file(?USER(UserId) = Auth, Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
             true;

@@ -737,7 +737,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {get_user_spaces(UserCtx, Offset, Limit), FileCtx};
+            {list_user_spaces(UserCtx, Offset, Limit), FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
@@ -1332,9 +1332,9 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 %% @private
--spec get_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
+-spec list_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
     Limit :: non_neg_integer()) -> Children :: [ctx()].
-get_user_spaces(UserCtx, Offset, Limit) ->
+list_user_spaces(UserCtx, Offset, Limit) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
     case Offset < length(Spaces) of

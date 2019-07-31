@@ -22,14 +22,11 @@
 %% API
 -export([is_authorized/2, authenticate/1]).
 
-% opaque type of auth token that is necessary to perform operations on files.
--type auth() :: any().
-
--export_type([auth/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,7 +34,8 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
+-spec is_authorized(cowboy_req:req(), map()) ->
+    {true | {false, binary()} | stop, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {ok, ?USER(UserId, SessionId)} ->
@@ -78,52 +76,9 @@ authenticate(#macaroon_auth{} = Credentials) ->
             Error
     end;
 authenticate(Req) ->
-    case resolve_credentials(Req) of
-        {error, not_found} ->
+    case tokens:parse_access_token_header(Req) of
+        undefined ->
             {ok, ?NOBODY};
-        Credentials ->
-            authenticate(Credentials)
-    end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Resolves authorization carried by request (if any).
-%% @end
-%%--------------------------------------------------------------------
--spec resolve_credentials(req()) -> user_identity:credentials() | {error, not_found}.
-resolve_credentials(Req) ->
-    case parse_macaroon_from_header(Req) of
-        undefined -> {error, not_found};
-        Macaroon -> #macaroon_auth{macaroon = Macaroon}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Parses macaroon from request headers, accepted headers:
-%%  * Macaroon
-%%  * X-Auth-Token
-%%  * Bearer Authentication
-%% @end
-%%--------------------------------------------------------------------
--spec parse_macaroon_from_header(req()) -> undefined | binary().
-parse_macaroon_from_header(Req) ->
-    case cowboy_req:header(<<"authorization">>, Req) of
-        <<"Bearer ", Macaroon/binary>> ->
-            Macaroon;
-        _ ->
-            case cowboy_req:header(<<"macaroon">>, Req) of
-                undefined ->
-                    cowboy_req:header(<<"x-auth-token">>, Req);
-                Value ->
-                    Value
-            end
+        AccessToken ->
+            authenticate(#macaroon_auth{macaroon = AccessToken})
     end.
