@@ -113,7 +113,8 @@ check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
     lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
 check_qos_fulfilled(SessId, QosId, undefined) ->
     case get_qos_details(SessId, QosId) of
-        {ok, #qos_entry{file_uuid = QosOriginFileGuid}} ->
+        {ok, QosEntry} ->
+            QosOriginFileGuid = qos_entry:get_file_guid(QosEntry),
             check_qos_fulfilled(SessId, QosId, {guid, QosOriginFileGuid});
         {error, _} = Error ->
             Error
