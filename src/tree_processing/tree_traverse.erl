@@ -220,8 +220,8 @@ do_master_job(#tree_traverse{
         true -> lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
-            last_name = utils:ensure_defined(LN2, undefined, <<>>),
-            last_tree = utils:ensure_defined(LT2, undefined, <<>>)
+            last_name = LN2,
+            last_tree = LT2
         } | lists:reverse(MasterJobs)]
     end,
     {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}};
