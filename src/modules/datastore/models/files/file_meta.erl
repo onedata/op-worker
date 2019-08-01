@@ -424,7 +424,7 @@ list_children(Entry, Size) ->
 %% @equiv list_children(Entry, Offset, Size, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), non_neg_integer(), non_neg_integer()) ->
+-spec list_children(entry(), integer(), non_neg_integer()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Size) ->
     list_children_internal(Entry, #{offset => Offset, size => Size}).
@@ -434,7 +434,7 @@ list_children(Entry, Offset, Size) ->
 %% @equiv list_children(Entry, Offset, Size, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), non_neg_integer(), non_neg_integer(),
+-spec list_children(entry(), integer(), non_neg_integer(),
     datastore_links_iter:token() | undefined) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Size, Token) ->
@@ -447,7 +447,7 @@ list_children(Entry, Offset, Size, Token) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: non_neg_integer(),
+    Offset :: integer(),
     Size :: non_neg_integer(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name()
@@ -463,7 +463,7 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: non_neg_integer(),
+    Offset :: integer(),
     Size :: non_neg_integer(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),

@@ -50,24 +50,8 @@ handle(Auth, RpcFun, Data) ->
     gs_protocol:rpc_result().
 handle_internal(Auth, <<"getDirChildren">>, Data) ->
     ls(Auth, Data);
-handle_internal(?USER(_UserId, SessId) = Auth, <<"getFileDownloadUrl">>, Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    assert_space_membership_and_local_support(Auth, FileGuid),
-
-    case page_file_download:get_file_download_url(SessId, FileGuid) of
-        {ok, URL} ->
-            {ok, #{<<"fileUrl">> => URL}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?debug("Cannot resolve file download url for file ~p - ~p", [
-                FileGuid, Errno
-            ]),
-            ?ERROR_POSIX(Errno)
-    end;
+handle_internal(Auth, <<"getFileDownloadUrl">>, Data) ->
+    get_file_download_url(Auth, Data);
 handle_internal(Auth, <<"moveFile">>, Data) ->
     move(Auth, Data);
 handle_internal(Auth, <<"copyFile">>, Data) ->
@@ -97,7 +81,7 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
                 (_) ->
                     false
             end},
-            <<"offset">> => {integer, {not_lower_than, 0}}
+            <<"offset">> => {integer, any}
         }
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
@@ -118,6 +102,29 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
                 })
             end, Children)};
         {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
+
+
+%% @private
+-spec get_file_download_url(aai:auth(), gs_protocol:rpc_args()) ->
+    gs_protocol:rpc_result().
+get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
+    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+        required => #{<<"guid">> => {binary, non_empty}}
+    }),
+    FileGuid = maps:get(<<"guid">>, SanitizedData),
+    assert_space_membership_and_local_support(Auth, FileGuid),
+
+    case page_file_download:get_file_download_url(SessId, FileGuid) of
+        {ok, URL} ->
+            {ok, #{<<"fileUrl">> => URL}};
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN;
+        {error, Errno} ->
+            ?debug("Cannot resolve file download url for file ~p - ~p", [
+                FileGuid, Errno
+            ]),
             ?ERROR_POSIX(Errno)
     end.
 

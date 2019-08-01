@@ -700,7 +700,7 @@ get_child_canonical_path(ParentCtx, FileName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer()
+    Offset :: integer(), Limit :: non_neg_integer()
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
@@ -712,7 +712,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: non_neg_integer(),
+    Offset :: integer(),
     Limit :: non_neg_integer(),
     Token :: undefined | datastore_links_iter:token()
 ) ->
@@ -727,7 +727,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: non_neg_integer(),
+    Offset :: integer(),
     Limit :: non_neg_integer(),
     Token :: undefined | datastore_links_iter:token(),
     StartId :: undefined | file_meta:name()

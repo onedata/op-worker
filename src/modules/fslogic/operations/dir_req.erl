@@ -121,7 +121,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Offset :: integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name()
 ) ->

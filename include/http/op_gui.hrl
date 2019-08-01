@@ -26,7 +26,7 @@
 %% Prefix of paths requested by websocket clients.
 -define(WEBSOCKET_PREFIX_PATH, "/ws/").
 
-% Graph Sync endpoints
+% Graph Sync websocket endpoint
 -define(GUI_GRAPH_SYNC_WS_PATH, "/graph_sync/gui").
 
 %% GUI routing plugin - module of such name is expected in

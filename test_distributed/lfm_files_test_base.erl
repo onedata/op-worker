@@ -447,11 +447,25 @@ readdir_should_work_with_token2(Config) ->
 
 readdir_should_work_with_startid(Config) ->
   {MainDirPath, Files} = generate_dir(Config, 10),
-  StartId1 = verify_with_startid(Config, MainDirPath, Files, 4, 4, 0, undefined),
-  StartId2 = verify_with_startid(Config, MainDirPath, Files, 4, 4, 3, StartId1),
-  StartId3 = verify_with_startid(Config, MainDirPath, Files, 3, 3, 6, StartId2),
-  StartId4 = verify_with_startid(Config, MainDirPath, Files, 2, 3, 8, StartId3),
-  ?assertEqual(lists:last(Files), StartId4).
+
+  % list all files in chunks (use 0 offset for each chunk)
+  StartId1 = verify_with_startid(Config, MainDirPath, Files, 0, 4, 0, 4, undefined),
+  StartId2 = verify_with_startid(Config, MainDirPath, Files, 3, 4, 0, 4, StartId1),
+  StartId3 = verify_with_startid(Config, MainDirPath, Files, 6, 3, 0, 3, StartId2),
+  StartId4 = verify_with_startid(Config, MainDirPath, Files, 8, 2, 0, 3, StartId3),
+  ?assertEqual(lists:last(Files), StartId4),
+
+  % test ls with startid and positive offset
+  StartId5 = verify_with_startid(Config, MainDirPath, Files, 4, 2, 4, 2, undefined),
+  StartId6 = verify_with_startid(Config, MainDirPath, Files, 7, 3, 2, 4, StartId5),
+  ?assertEqual(lists:last(Files), StartId6),
+
+  % test ls with startid and offset beyond files num
+  verify_with_startid(Config, MainDirPath, Files, 0, 0, 20, 4, StartId5),
+
+  % test ls with startid and negative offset
+  StartId7 = verify_with_startid(Config, MainDirPath, Files, 3, 4, -2, 4, StartId5),
+  verify_with_startid(Config, MainDirPath, Files, 0, 6, -10, 6, StartId7).
 
 echo_loop(Config) ->
   ?PERFORMANCE(Config, [
@@ -1666,19 +1680,19 @@ verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLas
   ?assertEqual(IsLast, IL),
   Token2.
 
-verify_with_startid(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, StartId) ->
+verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, StartId) ->
   [Worker | _] = ?config(op_worker_nodes, Config),
 
   {SessId1, _UserId1} =
     {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-  Ans = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Limit, undefined, StartId),
+  Ans = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit, undefined, StartId),
   {ok, List, _, _} = ?assertMatch({ok, _, _, _}, Ans),
   ?assertEqual(ExpectedSize, length(List)),
 
   lists:foreach(fun({{_, F1}, F2}) ->
     ?assertEqual(F1, F2)
-  end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
+  end, lists:zip(List, lists:sublist(Files, FilesOffset + 1, ExpectedSize))),
 
   case List of
     [_ | _] ->
