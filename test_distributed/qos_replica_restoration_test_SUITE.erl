@@ -59,21 +59,25 @@ basic_qos_restoration_test_base(Config, DirStructureType) ->
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
     GuidsAndPaths = qos_test_utils:add_qos_test_base(Config, QosSpec),
-    [{Guid, Path} | _] = maps:get(files, GuidsAndPaths),
-
-    SpaceId = file_id:guid_to_space_id(Guid),
-
-    % remove leading slash and space id
-    [_, _ | PathTokens] = binary:split(Path, <<"/">>, [global]),
-    StoragePath = storage_file_path(Worker2, SpaceId, filename:join(PathTokens)),
-
-    ?assertEqual({ok, ?TEST_DATA}, read_file(Worker2, StoragePath)),
-
     NewData = <<"new_test_data">>,
-    {ok, FileHandle} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid}, write),
-    {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, NewData),
+    StoragePaths = lists:map(fun({Guid, Path}) ->
+        SpaceId = file_id:guid_to_space_id(Guid),
 
-    ?assertEqual({ok, NewData}, read_file(Worker2, StoragePath), ?ATTEMPTS).
+        % remove leading slash and space id
+        [_, _ | PathTokens] = binary:split(Path, <<"/">>, [global]),
+        StoragePath = storage_file_path(Worker2, SpaceId, filename:join(PathTokens)),
+
+        ?assertEqual({ok, ?TEST_DATA}, read_file(Worker2, StoragePath)),
+
+        {ok, FileHandle} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid}, write),
+        {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, NewData),
+        StoragePath
+
+    end, maps:get(files, GuidsAndPaths)),
+
+    lists:foreach(fun(StoragePath) ->
+        ?assertEqual({ok, NewData}, read_file(Worker2, StoragePath), ?ATTEMPTS)
+    end, StoragePaths).
 
 
 %%%===================================================================
@@ -149,7 +153,16 @@ end_per_suite(Config) ->
     {?SPACE_ID, [
         {Name, [
             {?filename(Name, 1), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution}
+                {?filename(Name, 1), ?TEST_DATA, Distribution},
+                {?filename(Name, 2), ?TEST_DATA, Distribution},
+                {?filename(Name, 3), ?TEST_DATA, Distribution},
+                {?filename(Name, 4), ?TEST_DATA, Distribution}
+            ]},
+            {?filename(Name, 2), [
+                {?filename(Name, 1), ?TEST_DATA, Distribution},
+                {?filename(Name, 2), ?TEST_DATA, Distribution},
+                {?filename(Name, 3), ?TEST_DATA, Distribution},
+                {?filename(Name, 4), ?TEST_DATA, Distribution}
             ]}
         ]}
     ]}
