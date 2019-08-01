@@ -633,7 +633,7 @@ remove_file_on_remote_provider_ceph(Config0) ->
 
     ?assertMatch({error, enoent}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
-    
+
 evict_on_ceph(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
     Type = rest,

@@ -1398,6 +1398,7 @@ rerun_transfer(Worker, User, TransferType, IndexTransfer, OldTid, Config) ->
     ).
 
 schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Config) ->
+    AllWorkers = ?config(op_worker_nodes, Config),
     Headers = [?USER_TOKEN_HEADER(Config, UserId)],
     AllSpacePrivs = privileges:space_privileges(),
     SpacePrivs = AllSpacePrivs -- RequiredPrivs,
@@ -1411,12 +1412,12 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
                 % success will be checked later
                 ok;
             (PrivsToAdd) ->
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
+                initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
                 {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, []),
                 ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
         end, combinations(RequiredPrivs)),
 
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
+        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
         case rest_test_utils:request(Worker, URL, Method, Headers, []) of
             {ok, 200, _, Body} ->
                 DecodedBody = json_utils:decode(Body),
@@ -1426,7 +1427,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
                 {error, Body}
         end
     after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, UserId, UserSpacePrivs)
+        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, UserSpacePrivs)
     end.
 
 %% Modifies storage timeout twice in order to

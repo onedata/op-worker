@@ -28,5 +28,21 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
+get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
+    name = Name,
+    providers = ProvidersIds
+}) ->
+    Providers = lists:map(fun(ProviderId) ->
+        {ok, ProviderName} = provider_logic:get_name(ProviderId),
+        #{
+            <<"providerId">> => ProviderId,
+            <<"providerName">> => ProviderName
+        }
+    end, maps:keys(ProvidersIds)),
+    ?OK_REPLY(#{
+        <<"name">> => Name,
+        <<"providers">> => Providers,
+        <<"spaceId">> => SpaceId
+    });
 get_response(_, SpaceData) ->
     ?OK_REPLY(SpaceData).

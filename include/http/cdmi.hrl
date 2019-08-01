@@ -19,7 +19,7 @@
 -define(CDMI_PATH, "/cdmi/[...]").
 
 -record(cdmi_req, {
-    client = undefined :: undefined | op_logic:client(),
+    auth = undefined :: undefined | aai:auth(),
     resource :: cdmi_handler:cdmi_resource(),
     % CDMI version associated with request (in cdmi version header).
     % If not specified only limited operations are permitted.

@@ -33,9 +33,11 @@
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_parent/1, get_parent_uuid/1]).
--export([get_child/2, get_child_uuid/2,
+-export([
+    get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
-    list_children_by_key/4, list_children_by_key/5]).
+    list_children/5, list_children/6
+]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -422,46 +424,74 @@ list_children(Entry, Size) ->
 %% @equiv list_children(Entry, Offset, Size, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), non_neg_integer(), non_neg_integer()) ->
+-spec list_children(entry(), integer(), non_neg_integer()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Size) ->
     list_children_internal(Entry, #{offset => Offset, size => Size}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_children_internal(Entry, #{offset => Offset, size => Size, token => Token}).
+%% @equiv list_children(Entry, Offset, Size, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), non_neg_integer(), non_neg_integer(),
+-spec list_children(entry(), integer(), non_neg_integer(),
     datastore_links_iter:token() | undefined) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Size, Token) ->
-    list_children_internal(Entry, #{offset => Offset, size => Size, token => Token}).
+    list_children(Entry, Offset, Size, Token, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_children_internal(Entry, #{prev_link_name => PrevLinkKey,
-%%  prev_tree_id => PrevProviderID, size => Size}).
+%% @equiv list_children(Entry, Offset, Size, Token, PrevLinkKey, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children_by_key(entry(), name(), oneprovider:id(), non_neg_integer()) ->
+-spec list_children(
+    Entry :: entry(),
+    Offset :: integer(),
+    Size :: non_neg_integer(),
+    Token :: undefined | datastore_links_iter:token(),
+    PrevLinkKey :: undefined | name()
+) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children_by_key(Entry, PrevLinkKey, PrevProviderID, Size) ->
-    list_children_internal(Entry, #{prev_link_name => PrevLinkKey,
-        prev_tree_id => PrevProviderID, size => Size}).
+list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
+    list_children(Entry, Offset, Size, Token, PrevLinkKey, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_children_internal(Entry, #{prev_link_name => PrevLinkKey,
-%%  prev_tree_id => PrevProviderID, size => Size, token => Token}).
+%% @equiv list_children_internal(Entry, #{offset => Offset, size => Size, token => Token}).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children_by_key(entry(), name(), oneprovider:id(), non_neg_integer(),
-    datastore_links_iter:token() | undefined) ->
+-spec list_children(
+    Entry :: entry(),
+    Offset :: integer(),
+    Size :: non_neg_integer(),
+    Token :: undefined | datastore_links_iter:token(),
+    PrevLinkKey :: undefined | name(),
+    PrevTeeID :: undefined | oneprovider:id()
+) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children_by_key(Entry, PrevLinkKey, PrevTeeID, Size, Token) ->
-    list_children_internal(Entry, #{prev_link_name => PrevLinkKey,
-        prev_tree_id => PrevTeeID, size => Size, token => Token}).
+list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
+    Opts = case Offset of
+        0 -> #{size => Size};
+        _ -> #{offset => Offset, size => Size}
+    end,
+
+    Opts2 = case Token of
+        undefined -> Opts;
+        _ -> Opts#{token => Token}
+    end,
+
+    Opts3 = case PrevLinkKey of
+        undefined -> Opts2;
+        _ -> Opts2#{prev_link_name => PrevLinkKey}
+    end,
+
+    Opts4 = case PrevTeeID of
+        undefined -> Opts3;
+        _ -> Opts3#{prev_tree_id => PrevTeeID}
+    end,
+
+    list_children_internal(Entry, Opts4).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -796,9 +826,9 @@ list_children_internal(Entry, Opts) ->
 
         case Result of
             {{ok, Links}, Token2} ->
-                prepare_list_ans(Links, #{token => Token2}, Opts);
+                prepare_list_ans(Links, #{token => Token2});
             {ok, Links} ->
-                prepare_list_ans(Links, #{}, Opts);
+                prepare_list_ans(Links, #{});
             {error, Reason} ->
                 {error, Reason}
         end
@@ -810,19 +840,14 @@ list_children_internal(Entry, Opts) ->
 %% Prepares list answer tagging children and setting information needed to list next batch.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_list_ans([datastore_links:link()], list_extended_info(), list_opts()) ->
+-spec prepare_list_ans([datastore_links:link()], list_extended_info()) ->
     {ok, [#child_link_uuid{}], list_extended_info()}.
-prepare_list_ans(Links, ExtendedInfo, Opts) ->
-    ExtendedInfo2 = case Opts of
-        #{offset := _} ->
-            ExtendedInfo;
+prepare_list_ans(Links, ExtendedInfo) ->
+    ExtendedInfo2 = case Links of
+        [#link{name = Name, tree_id = Tree} | _] ->
+            ExtendedInfo#{last_name => Name, last_tree => Tree};
         _ ->
-            case Links of
-                [#link{name = Name, tree_id = Tree} | _] ->
-                    ExtendedInfo#{last_name => Name, last_tree => Tree};
-                _ ->
-                    ExtendedInfo#{last_name => undefined, last_tree => undefined}
-            end
+            ExtendedInfo#{last_name => undefined, last_tree => undefined}
     end,
     {ok, tag_children(lists:reverse(Links)), ExtendedInfo2}.
 

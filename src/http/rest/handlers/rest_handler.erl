@@ -32,7 +32,7 @@
 
 % State of REST handler
 -record(state, {
-    client = undefined :: undefined | op_logic:client(),
+    auth = undefined :: undefined | aai:auth(),
     rest_req = undefined :: undefined | #rest_req{},
     allowed_methods :: [method()]
 }).
@@ -152,9 +152,9 @@ is_authorized(Req, State) ->
     end,
 
     case Result of
-        {ok, Client} ->
+        {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
-            {true, Req, State#state{client = Client}};
+            {true, Req, State#state{auth = Auth}};
         {error, _} = Error ->
             RestResp = rest_translator:error_response(Error),
             {stop, send_response(RestResp, Req), State}
@@ -244,18 +244,18 @@ rest_routes() ->
     {stop, cowboy_req:req(), state()}.
 process_request(Req, State) ->
     try
-        #state{client = Cl, rest_req = #rest_req{
+        #state{auth = Auth, rest_req = #rest_req{
             method = Method,
             parse_body = ParseBody,
             consumes = Consumes,
             b_gri = GriWithBindings
         }} = State,
         Operation = method_to_operation(Method),
-        GRI = resolve_gri_bindings(Cl#client.session_id, GriWithBindings, Req),
+        GRI = resolve_gri_bindings(Auth#auth.session_id, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody, Consumes),
         OpReq = #op_req{
             operation = Operation,
-            client = Cl,
+            auth = Auth,
             gri = GRI,
             data = Data
         },

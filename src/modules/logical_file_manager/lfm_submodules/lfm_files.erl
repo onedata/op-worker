@@ -18,7 +18,7 @@
 
 %% API
 %% Functions operating on directories or files
--export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2,
+-export([unlink/3, rm/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
     get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4,
     schedule_replication_by_index/6]).
 %% Functions operating on files
@@ -69,9 +69,21 @@ rm(SessId, FileKey) ->
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mv(SessId, FileKey, TargetPath) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
-    {guid, TargetDirGuid} = guid_utils:ensure_guid(SessId, {path, TargetDir}),
+    mv(SessId, FileKey, {path, TargetDir}, TargetName).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Moves a file or directory to a new location.
+%% @end
+%%--------------------------------------------------------------------
+-spec mv(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    TargetParentKey :: fslogic_worker:file_guid_or_path(),
+    TargetName :: file_meta:name()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+mv(SessId, FileKey, TargetParentKey, TargetName) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    {guid, TargetDirGuid} = guid_utils:ensure_guid(SessId, TargetParentKey),
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #rename{target_parent_guid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_guid = NewGuid}) ->
@@ -87,18 +99,27 @@ mv(SessId, FileKey, TargetPath) ->
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 cp(SessId, FileKey, TargetPath) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     {TargetName, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
-    remote_utils:call_fslogic(SessId, fuse_request,
-        #resolve_guid{path = TargetParentPath},
-        fun(#guid{guid = TargetParentGuid}) ->
-            case copy_utils:copy(SessId, Guid, TargetParentGuid, TargetName) of
-                {ok, NewGuid, _} ->
-                    {ok, NewGuid};
-                Error ->
-                    Error
-            end
-        end).
+    cp(SessId, FileKey, {path, TargetParentPath}, TargetName).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Copies a file or directory to given location.
+%% @end
+%%--------------------------------------------------------------------
+-spec cp(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    TargetParentKey :: fslogic_worker:file_guid_or_path(),
+    TargetName :: file_meta:name()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+cp(SessId, FileKey, TargetParentKey, TargetName) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    {guid, TargetParentGuid} = guid_utils:ensure_guid(SessId, TargetParentKey),
+    case file_copy:copy(SessId, Guid, TargetParentGuid, TargetName) of
+        {ok, NewGuid, _} ->
+            {ok, NewGuid};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

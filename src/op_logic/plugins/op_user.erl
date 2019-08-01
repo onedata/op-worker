@@ -7,24 +7,20 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles op logic operations (create, get, update, delete)
-%%% corresponding to provider aspects such as:
-%%% - configuration.
+%%% corresponding to user.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_provider).
+-module(op_user).
 -author("Bartosz Walkowicz").
 
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
--include("global_definitions.hrl").
--include("modules/rtransfer/rtransfer.hrl").
 -include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/onedata.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
--export([gather_configuration/0]).
-
-% op logic callbacks
 -export([op_logic_plugin/0]).
 -export([
     operation_supported/3,
@@ -44,50 +40,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns contents of the configuration object.
-%% @end
-%%--------------------------------------------------------------------
--spec gather_configuration() -> #{binary() := term()}.
-gather_configuration() ->
-    ProviderId = oneprovider:get_id_or_undefined(),
-    Name = case provider_logic:get_name() of
-        {ok, N} -> N;
-        _ -> undefined
-    end,
-    Domain = case provider_logic:get_domain() of
-        {ok, D} -> D;
-        _ -> undefined
-    end,
-    OnezoneDomain = case ProviderId of
-        undefined -> undefined;
-        _ -> oneprovider:get_oz_domain()
-    end,
-    Version = oneprovider:get_version(),
-    {ok, CompOzVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEZONE),
-    {ok, CompOpVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEPROVIDER),
-    {ok, CompOcVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONECLIENT),
-
-    #{
-        <<"providerId">> => gs_protocol:undefined_to_null(ProviderId),
-        <<"name">> => gs_protocol:undefined_to_null(Name),
-        <<"domain">> => gs_protocol:undefined_to_null(Domain),
-        <<"onezoneDomain">> => gs_protocol:undefined_to_null(OnezoneDomain),
-        <<"version">> => Version,
-        <<"build">> => oneprovider:get_build(),
-        <<"rtransferPort">> => ?RTRANSFER_PORT,
-        <<"compatibleOnezoneVersions">> => CompOzVersions,
-        <<"compatibleOneproviderVersions">> => CompOpVersions,
-        <<"compatibleOneclientVersions">> => CompOcVersions
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns the op logic plugin module that handles model logic.
 %% @end
 %%--------------------------------------------------------------------
 op_logic_plugin() ->
-    op_provider.
+    op_user.
 
 
 %%--------------------------------------------------------------------
@@ -97,8 +54,8 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
-operation_supported(get, configuration, private) -> true;
-operation_supported(get, test_image, private) -> true;
+operation_supported(get, instance, private) -> true;
+operation_supported(get, eff_spaces, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -109,21 +66,33 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
-data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
     undefined.
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link op_logic_behaviour} callback fetch_entity/1.
+%%
+%% For now fetches only records for authorized users.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
     {ok, op_logic:versioned_entity()} | op_logic:error().
+fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
+    case user_logic:get(SessionId, UserId) of
+        {ok, #document{value = User}} ->
+            {ok, {User, 1}};
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN;
+        _ ->
+            ?ERROR_NOT_FOUND
+    end;
 fetch_entity(_) ->
-    {ok, {undefined, 1}}.
+    ?ERROR_FORBIDDEN.
 
 
 %%--------------------------------------------------------------------
@@ -142,27 +111,30 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
-    true;
-authorize(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
+    false;
+
+%% User can perform all operations on his record
+authorize(#op_req{auth = ?USER(UserId), gri = #gri{id = UserId}}, _) ->
     true.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/1.
+%% {@link op_logic_behaviour} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
-    ok;
-validate(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= eff_spaces
+->
     ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/2.
+%% {@link op_logic_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
@@ -176,18 +148,10 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{gri = #gri{aspect = configuration}}, _) ->
-    {ok, gather_configuration()};
-get(#op_req{gri = #gri{aspect = test_image}}, _) ->
-    % Dummy image in png format. Used by gui to check connectivity.
-    {ok, {binary, <<
-        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0,
-        0, 1, 0, 0, 0, 1, 1, 3, 0, 0, 0, 37, 219, 86, 202, 0, 0, 0, 6, 80,
-        76, 84, 69, 0, 0, 0, 255, 255, 255, 165, 217, 159, 221, 0, 0, 0, 9,
-        112, 72, 89, 115, 0, 0, 14, 196, 0, 0, 14, 196, 1, 149, 43, 14, 27,
-        0, 0, 0, 10, 73, 68, 65, 84, 8, 153, 99, 96, 0, 0, 0, 2, 0, 1, 244,
-        113, 100, 166, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
-    >>}}.
+get(#op_req{gri = #gri{aspect = instance}}, User) ->
+    {ok, User};
+get(#op_req{gri = #gri{aspect = eff_spaces}}, User) ->
+    user_logic:get_eff_spaces(User).
 
 
 %%--------------------------------------------------------------------

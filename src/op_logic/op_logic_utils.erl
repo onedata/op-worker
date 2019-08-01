@@ -28,7 +28,7 @@
 %%%===================================================================
 
 
--spec is_eff_space_member(op_logic:client(), op_space:id()) -> boolean().
+-spec is_eff_space_member(aai:auth(), op_space:id()) -> boolean().
 is_eff_space_member(?NOBODY, _SpaceId) ->
     false;
 is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->
@@ -51,9 +51,9 @@ assert_space_supported_by(SpaceId, ProviderId) ->
     end.
 
 
--spec assert_file_exists(op_logic:client(), file_id:file_guid()) ->
+-spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
-assert_file_exists(#client{session_id = SessionId}, FileGuid) ->
+assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, _} ->
             ok;

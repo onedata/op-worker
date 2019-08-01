@@ -111,9 +111,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {user, _}}}) -> #{
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(_) ->
-    {ok, undefined}.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -132,16 +132,16 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = space
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_STATISTICS);
 
-authorize(#op_req{operation = get, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {user, _}
 }}, _) ->
@@ -177,15 +177,15 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = space}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = SpaceId, aspect = space}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(Cl#client.session_id, SpaceId, undefined, Metric, Step);
+    get_metric(Auth#auth.session_id, SpaceId, undefined, Metric, Step);
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = SpaceId, aspect = {user, UserId}}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = SpaceId, aspect = {user, UserId}}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
-    get_metric(Cl#client.session_id, SpaceId, UserId, Metric, Step).
+    get_metric(Auth#auth.session_id, SpaceId, UserId, Metric, Step).
 
 
 %%--------------------------------------------------------------------

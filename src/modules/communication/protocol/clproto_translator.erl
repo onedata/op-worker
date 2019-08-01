@@ -415,12 +415,14 @@ translate_from_protobuf(#'GetChildAttr'{
 translate_from_protobuf(#'GetFileChildren'{
     offset = Offset,
     size = Size,
-    index_token = Token
+    index_token = Token,
+    index_startid = StartId
 }) ->
     #get_file_children{
         offset = Offset,
         size = Size,
-        index_token = Token
+        index_token = Token,
+        index_startid = StartId
     };
 translate_from_protobuf(#'GetFileChildrenAttrs'{
     offset = Offset,
@@ -1432,12 +1434,14 @@ translate_to_protobuf(#get_child_attr{name = Name}) ->
 translate_to_protobuf(#get_file_children{
     offset = Offset,
     size = Size,
-    index_token = Token
+    index_token = Token,
+    index_startid = StartId
 }) ->
     {get_file_children, #'GetFileChildren'{
         offset = Offset,
         size = Size,
-        index_token = Token
+        index_token = Token,
+        index_startid = StartId
     }};
 translate_to_protobuf(#get_file_children_attrs{
     offset = Offset,

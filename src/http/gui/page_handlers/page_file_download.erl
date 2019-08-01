@@ -43,11 +43,11 @@
 %%--------------------------------------------------------------------
 -spec get_file_download_url(session:id(), fslogic_worker:file_guid()) ->
     {ok, binary()} | {error, term()}.
-get_file_download_url(SessionId, FileId) ->
-    case lfm:check_perms(SessionId, {guid, FileId}, read) of
+get_file_download_url(SessionId, FileGuid) ->
+    case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
         {ok, true} ->
-            Hostname = op_gui_session:get_requested_host(),
-            {ok, Code} = file_download_code:create(SessionId, FileId),
+            Hostname = oneprovider:get_domain(),
+            {ok, Code} = file_download_code:create(SessionId, FileGuid),
             URL = str_utils:format_bin("https://~s~s/~s", [
                 Hostname, ?FILE_DOWNLOAD_PATH, Code
             ]),

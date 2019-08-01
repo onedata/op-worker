@@ -173,9 +173,12 @@ get_provider_ids(SessionId, SpaceId) ->
     end.
 
 
--spec is_supported(od_space:doc(), od_provider:id()) -> boolean().
-is_supported(#document{value = #od_space{providers = Providers}}, ProviderId) ->
-    maps:is_key(ProviderId, Providers).
+-spec is_supported(od_space:doc() | od_space:record(), od_provider:id()) ->
+    boolean().
+is_supported(#od_space{providers = Providers}, ProviderId) ->
+    maps:is_key(ProviderId, Providers);
+is_supported(#document{value = Space}, ProviderId) ->
+    is_supported(Space, ProviderId).
 
 
 -spec is_supported(gs_client_worker:client(), od_space:id(), od_provider:id()) ->
