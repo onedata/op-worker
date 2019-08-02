@@ -18,8 +18,11 @@
 %% API
 -export([is_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
--export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
-    space_dir_uuid_to_spaceid_no_error/1, spaceid_to_space_dir_guid/1]).
+-export([
+    is_space_dir_guid/1,
+    spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
+    space_dir_uuid_to_spaceid_no_error/1, spaceid_to_space_dir_guid/1
+]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
@@ -89,6 +92,20 @@ uuid_to_guid(FileUuid) ->
     catch
         {not_a_space, _} ->
             file_id:pack_guid(FileUuid, undefined)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns true if given guid represents space dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_space_dir_guid(file_id:file_guid()) -> boolean().
+is_space_dir_guid(FileGuid) ->
+    case file_id:unpack_guid(FileGuid) of
+        {<<?SPACE_ROOT_PREFIX, SpaceId/binary>>, SpaceId} ->
+            true;
+        _ ->
+            false
     end.
 
 %%--------------------------------------------------------------------

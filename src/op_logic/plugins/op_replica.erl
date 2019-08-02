@@ -143,9 +143,9 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}}) -> #
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(_) ->
-    {ok, undefined}.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -164,17 +164,17 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, client = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = Guid,
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_REPLICATION);
 
-authorize(#op_req{operation = create, client = ?USER(UserId), data = Data, gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
     aspect = replicate_by_index
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
@@ -184,9 +184,9 @@ authorize(#op_req{operation = create, client = ?USER(UserId), data = Data, gri =
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.client, SpaceId);
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
 
-authorize(#op_req{operation = delete, client = ?USER(UserId), data = Data, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
     id = Guid,
     aspect = instance
 }}, _) ->
@@ -203,7 +203,7 @@ authorize(#op_req{operation = delete, client = ?USER(UserId), data = Data, gri =
             )
     end;
 
-authorize(#op_req{operation = delete, client = ?USER(UserId), data = Data, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
     aspect = evict_by_index
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
@@ -232,7 +232,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} =
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    op_logic_utils:assert_file_exists(Req#op_req.client, Guid),
+    op_logic_utils:assert_file_exists(Req#op_req.auth, Guid),
 
     % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Req#op_req.data, undefined) of
@@ -265,7 +265,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} =
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    op_logic_utils:assert_file_exists(Req#op_req.client, Guid),
+    op_logic_utils:assert_file_exists(Req#op_req.auth, Guid),
 
     % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Data, undefined) of
@@ -311,9 +311,9 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_ind
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
     case lfm:schedule_file_replication(
-        Cl#client.session_id,
+        Auth#auth.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined)
@@ -324,9 +324,9 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
             ?ERROR_POSIX(Errno)
     end;
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_index}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_index}}) ->
     case lfm:schedule_replication_by_index(
-        Cl#client.session_id,
+        Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined),
         maps:get(<<"space_id">>, Data),
@@ -346,8 +346,8 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = rep
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
+    SessionId = Auth#auth.session_id,
     case lfm:get_file_distribution(SessionId, {guid, FileGuid}) of
         {ok, _Blocks} = Res ->
             Res;
@@ -372,9 +372,9 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
     case lfm:schedule_replica_eviction(
-        Cl#client.session_id,
+        Auth#auth.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined)
@@ -385,9 +385,9 @@ delete(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = inst
             ?ERROR_POSIX(Errno)
     end;
 
-delete(#op_req{client = Cl, data = Data, gri = #gri{id = IndexName, aspect = evict_by_index}}) ->
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = evict_by_index}}) ->
     case lfm:schedule_replica_eviction_by_index(
-        Cl#client.session_id,
+        Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined),
         maps:get(<<"space_id">>, Data),

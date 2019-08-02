@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -43,8 +44,8 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
-% One of providers should not connect (and go down) because incorrect
-% compatible_oz_versions env variables are defined in init_per_testcase.
+% One of providers should not connect (and go down) because mocked
+% compatibility check function in init_per_testcase.
 incompatible_zone_should_not_connect(Config) ->
     [P1, P2] = ?config(op_worker_nodes, Config),
     ?assertMatch(true, is_down(P1), 180),
@@ -57,20 +58,22 @@ incompatible_zone_should_not_connect(Config) ->
 %%%===================================================================
 
 % Mock oz endpoint returning its versions and for one of providers
-% set incorrect compatible_oz_versions env var so it should go down
+% mock compatibility check function so it should go down
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
 
 init_per_testcase(_Case, Config) ->
     Workers = [P1 | _] = ?config(op_worker_nodes, Config),
-    rpc:call(P1, application, set_env, [
-        ?APP_NAME, compatible_oz_versions, ["16.04-rc5"]
-    ]),
     % Mock OZ version
     {_AppId, _AppName, AppVersion} = lists:keyfind(
         ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
     ),
+    test_utils:mock_new(P1, compatibility),
+    test_utils:mock_expect(P1, compatibility, check_products_compatibility,
+        fun(?ONEPROVIDER,_,?ONEZONE,_) -> {false, []} ;
+           (S1,V1,S2,V2) -> meck:passthrough([S1, V1, S2, V2])
+        end),
     ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
     ZoneConfigurationURL = str_utils:format_bin("https://~s~s", [
         ZoneDomain, ?ZONE_CONFIGURATION_PATH
@@ -84,12 +87,7 @@ init_per_testcase(_Case, Config) ->
             case Url of
                 ZoneConfigurationURL ->
                     {ok, 200, #{}, json_utils:encode(#{
-                        <<"version">> => list_to_binary(AppVersion),
-                        <<"compatibleOneproviderVersions">> => [
-                            % Return some random versions that will surely
-                            % not match provider's version.
-                            <<"13.04-rc2">>, <<"13.04-rc7">>
-                        ]
+                        <<"version">> => list_to_binary(AppVersion)
                     })};
                 _ ->
                     meck:passthrough([Url, Headers, Body, Options])

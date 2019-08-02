@@ -184,10 +184,10 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(cowboy_req:req(), cdmi_req()) ->
     {stop | true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
-is_authorized(Req, #cdmi_req{client = undefined} = CdmiReq) ->
+is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
     try http_auth:authenticate(Req) of
-        {ok, ?USER = Client} ->
-            {true, Req, CdmiReq#cdmi_req{client = Client}};
+        {ok, ?USER = Auth} ->
+            {true, Req, CdmiReq#cdmi_req{auth = Auth}};
         {ok, ?NOBODY} ->
             {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), CdmiReq};
         {error, not_found} ->
@@ -221,7 +221,7 @@ is_authorized(Req, CdmiReq) ->
 resource_exists(Req, #cdmi_req{resource = {capabilities, _}} = CdmiReq) ->
     {true, Req, CdmiReq};
 resource_exists(Req, #cdmi_req{
-    client = ?USER(_UserId, SessionId),
+    auth = ?USER(_UserId, SessionId),
     file_path = Path,
     resource = Type
 } = CdmiReq) ->
@@ -477,13 +477,13 @@ resolve_resource_by_id(Req) ->
             throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"file_id">>))
     end,
 
-    {Cl, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
+    {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
             case http_auth:authenticate(Req) of
-                {ok, ?USER(_UserId, SessionId) = Client} ->
+                {ok, ?USER(_UserId, SessionId) = Auth0} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->
-                            {Client, FilePath};
+                            {Auth0, FilePath};
                         {error, Errno} ->
                             throw(?ERROR_POSIX(Errno))
                     end;
@@ -503,7 +503,7 @@ resolve_resource_by_id(Req) ->
     end,
 
     CdmiReq = resolve_resource_by_path(FullPath),
-    CdmiReq#cdmi_req{client = Cl}.
+    CdmiReq#cdmi_req{auth = Auth1}.
 
 
 %%--------------------------------------------------------------------
@@ -517,17 +517,17 @@ resolve_resource_by_id(Req) ->
 -spec resolve_resource_by_path(file_meta:path()) -> cdmi_req().
 resolve_resource_by_path(<<"/", ?ROOT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        client = ?NOBODY,
+        auth = ?NOBODY,
         resource = {capabilities, root}
     };
 resolve_resource_by_path(<<"/", ?CONTAINER_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        client = ?NOBODY,
+        auth = ?NOBODY,
         resource = {capabilities, container}
     };
 resolve_resource_by_path(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        client = ?NOBODY,
+        auth = ?NOBODY,
         resource = {capabilities, dataobject}
     };
 resolve_resource_by_path(Path) ->

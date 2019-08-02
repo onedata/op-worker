@@ -68,6 +68,7 @@ start() ->
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
+        {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
         rest_handler:rest_routes()

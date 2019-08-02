@@ -195,9 +195,10 @@ do_master_job(#tree_traverse{
     traverse_info = TraverseInfo
 } = TT, _TaskID) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
-        {undefined, <<>>} -> file_meta:list_children(Doc, BatchSize);
-        {undefined, _} -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize);
-        _ -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize, Token)
+        {undefined, <<>>} ->
+            file_meta:list_children(Doc, BatchSize);
+        _ ->
+            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
     end,
     #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
 

@@ -24,6 +24,7 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -215,15 +216,16 @@ connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
     disch_macaroons = DischMacaroons}
 ) ->
     % given
+    OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
-        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+        Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = SessId,
             macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
-            version = list_to_binary(Version)
+            version = Version
         }
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),

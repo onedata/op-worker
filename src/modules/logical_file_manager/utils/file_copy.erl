@@ -9,7 +9,7 @@
 %%% Implementation of copy.
 %%% @end
 %%%--------------------------------------------------------------------
--module(copy_utils).
+-module(file_copy).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").

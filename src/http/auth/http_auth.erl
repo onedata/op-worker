@@ -22,14 +22,11 @@
 %% API
 -export([is_authorized/2, authenticate/1]).
 
-% opaque type of auth token that is necessary to perform operations on files.
--type auth() :: any().
-
--export_type([auth/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,7 +34,8 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), map()) -> {true | {false, binary()} | stop, req(), map()}.
+-spec is_authorized(cowboy_req:req(), map()) ->
+    {true | {false, binary()} | stop, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {ok, ?USER(UserId, SessionId)} ->
@@ -62,64 +60,25 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(req()) -> op_logic:client() | {error, term()}.
+-spec authenticate(#macaroon_auth{} | cowboy_req:req()) ->
+    aai:auth() | {error, term()}.
+authenticate(#macaroon_auth{} = Credentials) ->
+    case user_identity:get_or_fetch(Credentials) of
+        {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
+            case session_manager:reuse_or_create_rest_session(Iden, Credentials) of
+                {ok, SessionId} ->
+                    {ok, ?USER(UserId, SessionId)};
+                {error, {invalid_identity, _}} ->
+                    user_identity:delete(Credentials),
+                    authenticate(Credentials)
+            end;
+        Error ->
+            Error
+    end;
 authenticate(Req) ->
-    case resolve_auth(Req) of
-        {error, not_found} ->
+    case tokens:parse_access_token_header(Req) of
+        undefined ->
             {ok, ?NOBODY};
-        Auth ->
-            case user_identity:get_or_fetch(Auth) of
-                {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
-                    case session_manager:reuse_or_create_rest_session(Iden, Auth) of
-                        {ok, SessId} ->
-                            {ok, ?USER(UserId, SessId)};
-                        {error, {invalid_identity, _}} ->
-                            user_identity:delete(Auth),
-                            authenticate(Req)
-                    end;
-                Error ->
-                    Error
-            end
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Resolves authorization carried by request (if any).
-%% @end
-%%--------------------------------------------------------------------
--spec resolve_auth(req()) -> user_identity:credentials() | {error, not_found}.
-resolve_auth(Req) ->
-    case parse_macaroon_from_header(Req) of
-        undefined -> {error, not_found};
-        Macaroon -> #macaroon_auth{macaroon = Macaroon}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Parses macaroon from request headers, accepted headers:
-%%  * Macaroon
-%%  * X-Auth-Token
-%%  * Bearer Authentication
-%% @end
-%%--------------------------------------------------------------------
--spec parse_macaroon_from_header(req()) -> undefined | binary().
-parse_macaroon_from_header(Req) ->
-    case cowboy_req:header(<<"authorization">>, Req) of
-        <<"Bearer ", Macaroon/binary>> ->
-            Macaroon;
-        _ ->
-            case cowboy_req:header(<<"macaroon">>, Req) of
-                undefined ->
-                    cowboy_req:header(<<"x-auth-token">>, Req);
-                Value ->
-                    Value
-            end
+        AccessToken ->
+            authenticate(#macaroon_auth{macaroon = AccessToken})
     end.

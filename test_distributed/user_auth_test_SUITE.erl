@@ -17,6 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -88,8 +89,9 @@ end_per_testcase(_Case, Config) ->
     DischMacaroons :: [binary()], SessionId :: session:id()) ->
     {ok, Sock :: term()}.
 connect_via_macaroon(Node, Macaroon, DischMacaroons, SessionId) ->
+    OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
-        Node, application, get_env, [?APP_NAME, compatible_oc_versions]
+        Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     % given
@@ -97,7 +99,7 @@ connect_via_macaroon(Node, Macaroon, DischMacaroons, SessionId) ->
         #'ClientHandshakeRequest'{
             session_id = SessionId,
             macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
-            version = list_to_binary(Version)}
+            version = Version}
     }},
     MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
