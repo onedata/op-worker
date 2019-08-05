@@ -32,7 +32,7 @@
 -export([get/1, is_enabled/1, get_config/1, get_current_run/1,
     create_or_update/2, maybe_mark_current_run/2, mark_run_finished/1, delete/1]).
 
-%% datastore_model callback`s
+%% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
 
 
