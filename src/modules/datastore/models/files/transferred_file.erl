@@ -32,7 +32,7 @@
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 -export([resolve_conflict/3]).
 
--type id() :: datastore:id().
+-type id() :: datastore:key().
 -type record() :: #transferred_file{}.
 -type doc() :: datastore_doc:doc(record()).
 

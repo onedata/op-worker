@@ -711,7 +711,7 @@ send_msg(Node, SessionId, Msg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
-    {ok, {Sock :: ssl:socket(), SessId :: session:id()}}.
+    {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(NodeToConnect, []),
     SslEchoClient =

@@ -530,7 +530,7 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 
 
 %% @private
--spec prepare_index_options(maps:map()) -> list().
+-spec prepare_index_options(map()) -> list().
 prepare_index_options(Data) ->
     Options = case maps:get(<<"replica_update_min_changes">>, Data, undefined) of
         undefined ->

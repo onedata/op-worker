@@ -38,14 +38,14 @@
     emission_time/0]).
 
 -type key() :: atom().
--type ctx() :: maps:map().
+-type ctx() :: map().
 -type metadata() :: term().
 -type init_handler() :: fun((subscription:id(), session:id()) -> ctx()).
 -type terminate_handler() :: fun((ctx()) -> term()).
 -type event_handler() :: fun((Evts :: [event:type()], ctx()) -> ok).
 -type aggregation_rule() :: fun((OldEvt :: event:type(), Evt :: event:type()) ->
     NewEvt :: event:type()).
--type transition_rule() :: fun((metadata(), Evt :: event:object()) -> metadata()).
+-type transition_rule() :: fun((metadata(), Evt :: event:type()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
 -type subscriptions() :: #{subscription:id() => subscription_manager:key() | local}.
@@ -88,7 +88,7 @@
 %% Starts the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Mgr :: pid(), Sub :: #subscription{}, SessId :: session:id()) ->
+-spec start_link(Mgr :: pid(), Sub :: subscription:base(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(Mgr, Sub, SessId) ->
     gen_server2:start_link(?MODULE, [Mgr, Sub, SessId], []).
@@ -342,7 +342,7 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %% Adds subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
+-spec add_subscription(SessId :: session:id(), Sub :: subscription:base(),
     Subs :: subscriptions()) -> NewSubs :: subscriptions().
 add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
     case subscription_manager:add_subscriber(Sub, SessId) of
@@ -429,7 +429,7 @@ spawn_event_handler(Force, #state{stream = Stm} = State) ->
 %% Processes event on the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec process_event(Evt :: event:object(), State :: #state{}) -> NewState :: #state{}.
+-spec process_event(Evt :: event:type(), State :: #state{}) -> NewState :: #state{}.
 process_event(Evt, #state{events = Evts, metadata = Meta, stream = Stm} = State) ->
     EvtKey = event_type:get_aggregation_key(Evt),
     NewEvts = case maps:find(EvtKey, Evts) of

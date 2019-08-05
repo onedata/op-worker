@@ -43,7 +43,7 @@
 -type filter() :: [binary()].
 
 -export_type([type/0, name/0, value/0, names/0, metadata/0, rdf/0, view_id/0,
-    filter/0]).
+    filter/0, doc/0]).
 
 -define(CTX, #{
     model => ?MODULE,

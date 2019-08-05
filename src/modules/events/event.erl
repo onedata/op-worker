@@ -24,7 +24,7 @@
 
 -export([init_counters/0, init_report/0]).
 
--export_type([key/0, base/0, type/0, stream/0, manager_ref/0]).
+-export_type([key/0, base/0, aggregated/0, type/0, stream/0, manager_ref/0]).
 
 -type key() :: term().
 -type base() :: #event{}.

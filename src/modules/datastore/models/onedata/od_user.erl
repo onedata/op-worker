@@ -34,7 +34,7 @@
 %%     <<"entitlements">> => [binary()],
 %%     <<"custom">> => jiffy:json_value()
 %% }
--type linked_account() :: maps:map().
+-type linked_account() :: map().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
 -export_type([full_name/0, linked_account/0]).

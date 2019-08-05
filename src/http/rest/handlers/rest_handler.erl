@@ -199,7 +199,7 @@ delete_resource(Req, State) ->
 %% Returns all REST routes in the cowboy router format.
 %% @end
 %%--------------------------------------------------------------------
--spec rest_routes() -> [{binary(), module(), maps:map()}].
+-spec rest_routes() -> [{binary(), module(), map()}].
 rest_routes() ->
     AllRoutes = lists:flatten([
         file_routes:routes(),
@@ -425,7 +425,7 @@ get_data(Req, as_is, Consumes) ->
 %% specified multiple times it's values are merged into list.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_query_string(cowboy_req:req()) -> maps:map().
+-spec parse_query_string(cowboy_req:req()) -> map().
 parse_query_string(Req) ->
     Params = lists:foldl(fun({Key, Val}, AccMap) ->
         maps:update_with(Key, fun(OldVal) ->

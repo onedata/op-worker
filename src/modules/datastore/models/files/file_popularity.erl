@@ -29,7 +29,7 @@
 -type id() :: file_meta:uuid().
 -type record() :: #file_popularity{}.
 -type doc() :: datastore_doc:doc(record()).
--export_type([id/0]).
+-export_type([id/0, record/0]).
 
 -define(CTX, #{model => ?MODULE}).
 

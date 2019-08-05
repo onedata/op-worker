@@ -26,7 +26,7 @@
 %% Check rules list using cache. Returns updated file context.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_cache_results(check_permissions:access_definition(),
+-spec check_and_cache_results([check_permissions:access_definition()],
     user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 check_and_cache_results([], _UserCtx, DefaultFileCtx) ->
     {ok, DefaultFileCtx};

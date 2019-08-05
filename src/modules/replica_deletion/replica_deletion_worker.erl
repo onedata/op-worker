@@ -59,7 +59,7 @@ start_link() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec cast(file_meta:uuid(), od_space:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_evicion:id(),replica_deletion:type(),
+    version_vector:version_vector(), replica_deletion:id(), replica_deletion:type(),
     replica_deletion:report_id()) -> ok.
 cast(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id) ->
     worker_pool:cast(?REPLICA_DELETION_WORKERS_POOL,

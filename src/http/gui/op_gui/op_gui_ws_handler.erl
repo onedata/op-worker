@@ -148,7 +148,7 @@ websocket_init({Identity, Auth, Host}) ->
     {stop, State} when
     InFrame :: {text | binary | ping | pong, binary()},
     State :: no_state,
-    OutFrame :: cowboy_websocket:frame().
+    OutFrame :: cow_ws:frame().
 websocket_handle({text, MsgJSON}, State) ->
     % Try to decode request
     DecodedMsg = try
@@ -197,7 +197,7 @@ websocket_handle(Data, State) ->
     {stop, State} when
     Info :: any(),
     State :: no_state,
-    OutFrame :: cowboy_websocket:frame().
+    OutFrame :: cow_ws:frame().
 % Sends any data to the client
 websocket_info({send, Data}, State) ->
     Msg = [
@@ -608,7 +608,7 @@ split_into_sublists(List, NumberOfParts, ResultList) ->
 %% it is undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_data_backend_map() -> maps:map().
+-spec get_data_backend_map() -> map().
 get_data_backend_map() ->
     case get(data_backend_map) of
         undefined -> #{};
@@ -622,6 +622,6 @@ get_data_backend_map() ->
 %% Saves data backend map in process dictionary.
 %% @end
 %%--------------------------------------------------------------------
--spec set_data_backend_map(maps:map()) -> term().
+-spec set_data_backend_map(map()) -> term().
 set_data_backend_map(NewMap) ->
     put(data_backend_map, NewMap).

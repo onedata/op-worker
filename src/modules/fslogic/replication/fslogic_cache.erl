@@ -461,7 +461,7 @@ get_public_blocks(Key) ->
 %% Returns blocks of location as tree.
 %% @end
 %%-------------------------------------------------------------------
--spec get_blocks_tree(file_location:id()) -> fslogic_blocks:blocks_tree().
+-spec get_blocks_tree(file_location:id()) -> fslogic_location_cache:blocks_tree().
 get_blocks_tree(Key) ->
     case get({?BLOCKS, Key}) of
         undefined ->
@@ -481,7 +481,7 @@ get_blocks_tree(Key) ->
 %% Saves blocks (marks it to be flushed).
 %% @end
 %%-------------------------------------------------------------------
--spec save_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
+-spec save_blocks(file_location:id(), fslogic_location_cache:stored_blocks()) -> ok.
 save_blocks(Key, Blocks) ->
     init_flush_check(),
     Keys = get(?KEYS_BLOCKS_MODIFIED),
@@ -494,7 +494,7 @@ save_blocks(Key, Blocks) ->
 %% Caches blocks (blocks will not be flushed).
 %% @end
 %%-------------------------------------------------------------------
--spec cache_blocks(file_location:id(), fslogic_blocks:stored_blocks()) -> ok.
+-spec cache_blocks(file_location:id(), fslogic_location_cache:stored_blocks()) -> ok.
 cache_blocks(Key, Blocks) ->
     put({?BLOCKS, Key}, blocks_to_tree(Blocks, true)),
     put({?PUBLIC_BLOCKS, Key}, Blocks),
@@ -903,7 +903,7 @@ apply_size_change(Key, FileUuid) ->
 %% @equiv blocks_to_tree(Blocks, true).
 %% @end
 %%-------------------------------------------------------------------
--spec blocks_to_tree(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks_tree().
+-spec blocks_to_tree(fslogic_location_cache:stored_blocks()) -> fslogic_location_cache:blocks_tree().
 blocks_to_tree(Blocks) ->
     blocks_to_tree(Blocks, true).
 
@@ -913,8 +913,8 @@ blocks_to_tree(Blocks) ->
 %% Translates blocks (list or tree) to tree.
 %% @end
 %%-------------------------------------------------------------------
--spec blocks_to_tree(fslogic_blocks:stored_blocks(), boolean()) ->
-    fslogic_blocks:blocks_tree().
+-spec blocks_to_tree(fslogic_location_cache:stored_blocks(), boolean()) ->
+    fslogic_location_cache:blocks_tree().
 blocks_to_tree(Blocks, true) when is_list(Blocks) ->
     gb_sets:from_ordset(lists:map(
         fun(#file_block{offset = O, size = S}) ->
@@ -934,7 +934,7 @@ blocks_to_tree(Blocks, _) ->
 %% Translates blocks (list or tree) to blocks list.
 %% @end
 %%-------------------------------------------------------------------
--spec tree_to_blocks(fslogic_blocks:stored_blocks()) -> fslogic_blocks:blocks().
+-spec tree_to_blocks(fslogic_location_cache:stored_blocks()) -> fslogic_blocks:blocks().
 tree_to_blocks(Tree) ->
     lists:map(
         fun(#file_block{offset = O, size = S}) ->

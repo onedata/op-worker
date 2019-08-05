@@ -59,7 +59,7 @@
     stream_pid :: undefined | pid(),
 
     mode = streaming :: harvesting_stream:mode(),
-    backoff :: backoff:backoff(),
+    backoff :: backoff:backoff() | undefined,
     error_log = <<"">> :: binary(),
     log_level = error :: warning | error | debug,
 

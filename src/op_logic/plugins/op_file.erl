@@ -484,7 +484,7 @@ assert_file_managed_locally(?USER(UserId), Guid) ->
 %% Adds attributes listed in list, to given map.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_attributes(maps:map(), list(), #file_attr{}) -> maps:map().
+-spec gather_attributes(map(), list(), #file_attr{}) -> map().
 gather_attributes(Map, [], _Attr) ->
     Map;
 gather_attributes(Map, [<<"mode">> | Rest], Attr = #file_attr{mode = Mode}) ->

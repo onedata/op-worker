@@ -25,9 +25,9 @@
 -type datastore() :: {DSName :: string(), StoreType :: atom(), Params :: list()}.
 -type rra() :: {ConsolidationFunction :: atom(), XffFactor :: float(),
     PDPsPerCDP :: non_neg_integer(), CDPsPerRRA :: non_neg_integer()}.
--type options() :: proplists:proplists().
+-type options() :: proplists:proplist().
 
--export_type([datastore/0, options/0]).
+-export_type([datastore/0, rra/0, options/0]).
 
 %%%===================================================================
 %%% API functions
@@ -38,7 +38,7 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(datastore:key(), #monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
+-spec create_rrd(datastore:key(), #monitoring_id{}, map(), non_neg_integer()) -> ok.
 create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
     case monitoring_state:exists(MonitoringId) of
         false ->

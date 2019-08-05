@@ -38,7 +38,7 @@
 -type record() :: #harvesting_state{}.
 -type doc() :: datastore_doc:doc(record()).
 
--export_type([id/0, record/0]).
+-export_type([id/0, record/0, doc/0]).
 
 -define(CTX, #{model => ?MODULE}).
 
@@ -127,7 +127,7 @@ create(SpaceId) ->
         value = #harvesting_state{progress = harvesting_progress:init()}
     }).
 
--spec update(id(), datastore_doc:diff()) -> {ok, doc()} | {error, term()}.
+-spec update(id(), datastore:diff()) -> {ok, doc()} | {error, term()}.
 update(SpaceId, Diff) ->
     datastore_model:update(?CTX, SpaceId, Diff).
 

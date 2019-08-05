@@ -104,7 +104,7 @@ emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
 %% range of blocks should be included in event.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_location_changed(file_ctx:ctx(), [session:id()],
+-spec emit_file_location_changed(file_location:record(), [session:id()],
     non_neg_integer() | undefined, non_neg_integer() | undefined) ->
     ok | {error, Reason :: term()}.
 emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
@@ -204,7 +204,7 @@ emit_helper_params_changed(StorageId) ->
 %% Creates #file_location_changed_event.
 %% @end
 %%--------------------------------------------------------------------
--spec create_file_location_changed(file_ctx:ctx(),
+-spec create_file_location_changed(file_location:record(),
     non_neg_integer() | undefined, non_neg_integer() | undefined) ->
     #file_location_changed_event{}.
 create_file_location_changed(Location, Offset, OffsetEnd) ->

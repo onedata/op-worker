@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 -type key() :: datastore:key().
--type doc() :: datastore_model:doc(record()).
+-type doc() :: datastore_doc:doc(record()).
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
 -type diff() :: datastore_doc:diff(record()).

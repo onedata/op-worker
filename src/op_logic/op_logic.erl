@@ -57,6 +57,7 @@
 -type error() :: gs_protocol:error().
 
 -export_type([
+    req/0,
     op_plugin/0,
     operation/0,
     entity_id/0,
@@ -363,7 +364,7 @@ process_request(#req_ctx{
     end;
 
 process_request(#req_ctx{
-    plugin = Plugin, 
+    plugin = Plugin,
     req = #op_req{operation = get, return_revision = true} = Req,
     versioned_entity = {Entity, Rev}
 }) ->

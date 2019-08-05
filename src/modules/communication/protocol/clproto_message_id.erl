@@ -20,7 +20,7 @@
 -type id() :: #message_id{}.
 -type issuer() :: oneprovider:id() | client.
 
--export_type([id/0]).
+-export_type([id/0, issuer/0]).
 
 -define(INT64, 16#FFFFFFFFFFFFFFF).
 

@@ -26,7 +26,7 @@
 %% Convert Request parameters to couchdb view query options
 %% @end
 %%--------------------------------------------------------------------
--spec sanitize_query_options(maps:map() | list()) -> list().
+-spec sanitize_query_options(map() | list()) -> list().
 sanitize_query_options(Map) when is_map(Map) ->
     sanitize_query_options(maps:to_list(Map), []);
 sanitize_query_options(RawOptionsList) ->

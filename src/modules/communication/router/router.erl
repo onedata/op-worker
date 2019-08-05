@@ -47,6 +47,8 @@
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
 
+-export_type([rib/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -197,7 +199,7 @@ route_and_ignore_answer(ClientMsg) ->
 %% reply address. Otherwise delegates it to event_router.
 %% @end
 %%--------------------------------------------------------------------
--spec answer_or_delegate(client_message(), connection_api:reply_to()) ->
+-spec answer_or_delegate(client_message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
 answer_or_delegate(#client_message{
     message_id = MsgId,

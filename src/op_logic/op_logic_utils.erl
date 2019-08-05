@@ -28,7 +28,7 @@
 %%%===================================================================
 
 
--spec is_eff_space_member(aai:auth(), op_space:id()) -> boolean().
+-spec is_eff_space_member(aai:auth(), od_space:id()) -> boolean().
 is_eff_space_member(?NOBODY, _SpaceId) ->
     false;
 is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->

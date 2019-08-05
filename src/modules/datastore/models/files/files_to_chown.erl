@@ -184,7 +184,7 @@ exists(Key) ->
 %% Add file that need to be chowned in future.
 %% @end
 %%--------------------------------------------------------------------
--spec add(file_ctx:ctx(), od_user:id()) -> {ok, datastore:id()} | {error, term()}.
+-spec add(file_ctx:ctx(), od_user:id()) -> {ok, datastore:key()} | {error, term()}.
 add(FileCtx, UserId) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     UpdateFun = fun(Val = #files_to_chown{file_guids = Guids}) ->
