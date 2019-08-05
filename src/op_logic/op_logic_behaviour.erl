@@ -47,8 +47,8 @@
 %% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
--callback fetch_entity(entity_logic:entity_id()) ->
-    {ok, entity_logic:versioned_entity()} | entity_logic:error().
+-callback fetch_entity(op_logic:req()) ->
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 
 
 %%--------------------------------------------------------------------

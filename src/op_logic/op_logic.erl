@@ -58,7 +58,6 @@
 
 -export_type([
     req/0,
-    client/0,
     op_plugin/0,
     operation/0,
     entity_id/0,
