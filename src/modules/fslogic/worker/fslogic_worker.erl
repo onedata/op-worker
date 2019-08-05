@@ -312,6 +312,8 @@ handle_request_locally(UserCtx, #proxyio_request{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
+handle_request_remotely(_UserCtx, _Req, []) ->
+    #status{code = ?ENOTSUP};
 handle_request_remotely(UserCtx, Req, Providers) ->
     ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
     fslogic_remote:reroute(UserCtx, ProviderId, Req).
