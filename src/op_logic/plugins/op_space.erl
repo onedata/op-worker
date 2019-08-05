@@ -9,7 +9,7 @@
 %%% This module handles op logic operations (create, get, update, delete)
 %%% corresponding to space aspects such as:
 %%% - space,
-%%% - indices,
+%%% - views,
 %%% - transfers.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -36,7 +36,7 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
--define(DEFAULT_INDEX_LIST_LIMIT, 100).
+-define(DEFAULT_VIEW_LIST_LIMIT, 100).
 -define(DEFAULT_TRANSFER_LIST_LIMIT, 100).
 
 
@@ -61,20 +61,20 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
-operation_supported(create, {index, _}, private) -> true;
-operation_supported(create, {index_reduce_function, _}, private) -> true;
+operation_supported(create, {view, _}, private) -> true;
+operation_supported(create, {view_reduce_function, _}, private) -> true;
 
 operation_supported(get, list, private) -> true;
 operation_supported(get, instance, private) -> true;
-operation_supported(get, indices, private) -> true;
-operation_supported(get, {index, _}, private) -> true;
-operation_supported(get, {query_index, _}, private) -> true;
+operation_supported(get, views, private) -> true;
+operation_supported(get, {view, _}, private) -> true;
+operation_supported(get, {query_view, _}, private) -> true;
 operation_supported(get, transfers, private) -> true;
 
-operation_supported(update, {index, _}, private) -> true;
+operation_supported(update, {view, _}, private) -> true;
 
-operation_supported(delete, {index, _}, private) -> true;
-operation_supported(delete, {index_reduce_function, _}, private) -> true;
+operation_supported(delete, {view, _}, private) -> true;
+operation_supported(delete, {view_reduce_function, _}, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -85,7 +85,7 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
-data_spec(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
+data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
     required => #{
         <<"application/javascript">> => {binary, non_empty}
     },
@@ -106,7 +106,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {index, _}}}) -> #{
     }
 };
 
-data_spec(#op_req{operation = create, gri = #gri{aspect = {index_reduce_function, _}}}) -> #{
+data_spec(#op_req{operation = create, gri = #gri{aspect = {view_reduce_function, _}}}) -> #{
     required => #{<<"application/javascript">> => {binary, non_empty}}
 };
 
@@ -116,17 +116,17 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = indices}}) -> #{
+data_spec(#op_req{operation = get, gri = #gri{aspect = views}}) -> #{
     optional => #{
         <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {binary, non_empty}
     }
 };
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = {index, _}}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = {view, _}}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = {query_index, _}}}) -> #{
+data_spec(#op_req{operation = get, gri = #gri{aspect = {query_view, _}}}) -> #{
     optional => #{
         <<"descending">> => {boolean, any},
         <<"limit">> => {integer, {not_lower_than, 1}},
@@ -152,7 +152,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
     }
 };
 
-data_spec(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
+data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
         <<"application/javascript">> => {binary, any},
         <<"spatial">> => {boolean, any},
@@ -171,10 +171,10 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = {index, _}}}) -> #{
     }
 };
 
-data_spec(#op_req{operation = delete, gri = #gri{aspect = {index, _}}}) ->
+data_spec(#op_req{operation = delete, gri = #gri{aspect = {view, _}}}) ->
     undefined;
 
-data_spec(#op_req{operation = delete, gri = #gri{aspect = {index_reduce_function, _}}}) ->
+data_spec(#op_req{operation = delete, gri = #gri{aspect = {view_reduce_function, _}}}) ->
     undefined.
 
 
@@ -210,15 +210,15 @@ authorize(#op_req{auth = ?NOBODY}, _) ->
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {index, _}
+    aspect = {view, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {index_reduce_function, _}
+    aspect = {view_reduce_function, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User is always authorized to list his spaces
@@ -232,21 +232,21 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = indices
+    aspect = views
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_VIEWS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {index, _}
+    aspect = {view, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_VIEWS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {query_index, _}
+    aspect = {query_view, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_QUERY_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_QUERY_VIEWS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
@@ -256,21 +256,21 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 
 authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {index, _}
+    aspect = {view, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {index, _}
+    aspect = {view, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = {index_reduce_function, _}
+    aspect = {view_reduce_function, _}
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_INDICES).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS).
 
 
 %%--------------------------------------------------------------------
@@ -281,7 +281,7 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, data = Data, gri = #gri{
     id = SpaceId,
-    aspect = {index, _}
+    aspect = {view, _}
 }}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId),
 
@@ -297,7 +297,7 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
 
 validate(#op_req{operation = create, gri = #gri{
     id = SpaceId,
-    aspect = {index_reduce_function, _}
+    aspect = {view_reduce_function, _}
 }}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
@@ -309,13 +309,13 @@ validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = views}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {index, _}}}, _) ->
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {view, _}}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_index, _}}}, _) ->
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view, _}}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
@@ -323,7 +323,7 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}},
 
 validate(#op_req{operation = update, gri = #gri{
     id = SpaceId,
-    aspect = {index, _}
+    aspect = {view, _}
 }} = Req, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId),
 
@@ -337,12 +337,12 @@ validate(#op_req{operation = update, gri = #gri{
         end, Providers)
     end;
 
-validate(#op_req{operation = delete, gri = #gri{id = SpaceId, aspect = {index, _}}}, _) ->
+validate(#op_req{operation = delete, gri = #gri{id = SpaceId, aspect = {view, _}}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
     id = SpaceId,
-    aspect = {index_reduce_function, _}
+    aspect = {view_reduce_function, _}
 }}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId).
 
@@ -353,20 +353,20 @@ validate(#op_req{operation = delete, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     index:save(
-        SpaceId, IndexName,
+        SpaceId, ViewName,
         maps:get(<<"application/javascript">>, Data), undefined,
-        prepare_index_options(Data),
+        prepare_view_options(Data),
         maps:get(<<"spatial">>, Data, false),
         maps:get(<<"providers[]">>, Data, [oneprovider:get_id()])
     );
 
-create(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}} = Req) ->
+create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName}}} = Req) ->
     ReduceFunction = maps:get(<<"application/javascript">>, Req#op_req.data),
-    case index:update_reduce_function(SpaceId, IndexName, ReduceFunction) of
+    case index:update_reduce_function(SpaceId, ViewName, ReduceFunction) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         Result ->
             Result
     end.
@@ -397,9 +397,9 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
             Error
     end;
 
-get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
+get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_INDEX_LIST_LIMIT),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_VIEW_LIST_LIMIT),
 
     {StartId, Offset} = case PageToken of
         <<"null">> ->
@@ -410,35 +410,35 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = indices}}, _) ->
     end,
 
     case index:list(SpaceId, StartId, Offset, Limit) of
-        {ok, Indices} ->
-            NextPageToken = case length(Indices) of
-                Limit -> #{<<"nextPageToken">> => lists:last(Indices)};
+        {ok, Views} ->
+            NextPageToken = case length(Views) of
+                Limit -> #{<<"nextPageToken">> => lists:last(Views)};
                 _ -> #{}
             end,
             {ok, maps:merge(#{
-                <<"indexes">> => Indices,   % TODO VFS-5608
-                <<"indices">> => Indices
+                <<"indexes">> => Views,   % TODO VFS-5608
+                <<"views">> => Views
             }, NextPageToken)};
         {error, _} = Error ->
             Error
     end;
 
-get(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}, _) ->
-    case index:get_json(SpaceId, IndexName) of
+get(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}, _) ->
+    case index:get_json(SpaceId, ViewName) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         Result ->
             Result
     end;
 
-get(#op_req{gri = #gri{id = SpaceId, aspect = {query_index, IndexName}}} = Req, _) ->
+get(#op_req{gri = #gri{id = SpaceId, aspect = {query_view, ViewName}}} = Req, _) ->
     Options = index_utils:sanitize_query_options(Req#op_req.data),
-    case index:query(SpaceId, IndexName, Options) of
+    case index:query(SpaceId, ViewName, Options) of
         {ok, {Rows}} ->
             QueryResult = lists:map(fun(Row) -> maps:from_list(Row) end, Rows),
             {ok, QueryResult};
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         {error, _} = Error ->
             Error
     end;
@@ -483,19 +483,19 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
+update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
     MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
 
     case index:update(
-        SpaceId, IndexName,
+        SpaceId, ViewName,
         MapFun,
-        prepare_index_options(Data),
+        prepare_view_options(Data),
         maps:get(<<"spatial">>, Data, undefined),
         maps:get(<<"providers[]">>, Data, undefined)
     ) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         Result ->
             Result
     end.
@@ -507,18 +507,18 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {index, IndexName}
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#op_req{gri = #gri{id = SpaceId, aspect = {index, IndexName}}}) ->
-    case index:delete(SpaceId, IndexName) of
+delete(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
+    case index:delete(SpaceId, ViewName) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         Result ->
             Result
     end;
 
-delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexName}}}) ->
-    case index:update_reduce_function(SpaceId, IndexName, undefined) of
+delete(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName}}}) ->
+    case index:update_reduce_function(SpaceId, ViewName, undefined) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>);
+            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         Result ->
             Result
     end.
@@ -530,8 +530,8 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {index_reduce_function, IndexNa
 
 
 %% @private
--spec prepare_index_options(maps:map()) -> list().
-prepare_index_options(Data) ->
+-spec prepare_view_options(maps:map()) -> list().
+prepare_view_options(Data) ->
     Options = case maps:get(<<"replica_update_min_changes">>, Data, undefined) of
         undefined ->
             [];

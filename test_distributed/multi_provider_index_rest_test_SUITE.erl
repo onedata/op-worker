@@ -156,16 +156,16 @@ create_get_update_delete_index(Config) ->
 
     Options1 = #{<<"update_min_changes">> => 10000},
 
-    % creating index without SPACE_MANAGE_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    % creating index without SPACE_MANAGE_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     ?assertMatch(ErrorForbidden, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
     )),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
 
-    % creating index with SPACE_MANAGE_INDICES privilege should succeed
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
+    % creating index with SPACE_MANAGE_VIEWS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
     ?assertMatch(ok, create_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
     )),
@@ -174,14 +174,14 @@ create_get_update_delete_index(Config) ->
 
     %% GET
 
-    % viewing index without SPACE_VIEW_INDICES should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_VIEW_INDICES]),
+    % viewing index without SPACE_VIEW_VIEWS should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_VIEW_VIEWS]),
     lists:foreach(fun(Worker) ->
         ?assertMatch(ErrorForbidden, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % viewing index with SPACE_VIEW_INDICES should succeed
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_VIEW_INDICES]),
+    % viewing index with SPACE_VIEW_VIEWS should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_VIEW_VIEWS]),
     ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
@@ -197,8 +197,8 @@ create_get_update_delete_index(Config) ->
 
     Options2 = #{<<"replica_update_min_changes">> => 100},
 
-    % updating index without SPACE_MANAGE_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    % updating index without SPACE_MANAGE_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
     ?assertMatch(ErrorForbidden, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
         <<>>, Options2#{providers => [Provider2]}
@@ -217,8 +217,8 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % updating index (without overriding map function) with SPACE_MANAGE_INDICES privilege should succeed
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
+    % updating index (without overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName,
         <<>>, Options2#{providers => [Provider2]}
@@ -237,7 +237,7 @@ create_get_update_delete_index(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % updating index (with overriding map function) with SPACE_MANAGE_INDICES privilege should succeed
+    % updating index (with overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
     ?assertMatch(ok, update_index_via_rest(
         Config, WorkerP1, ?SPACE_ID, IndexName, ?GEOSPATIAL_MAP_FUNCTION, #{}
     )),
@@ -258,14 +258,14 @@ create_get_update_delete_index(Config) ->
 
     %% DELETE
 
-    % deleting index without SPACE_MANAGE_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    % deleting index without SPACE_MANAGE_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
     ?assertMatch(ErrorForbidden, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    % deleting index with SPACE_MANAGE_INDICES privilege should succeed
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
+    % deleting index with SPACE_MANAGE_VIEWS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
     ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
@@ -446,8 +446,8 @@ create_get_delete_reduce_fun(Config) ->
 
     %% CREATE
 
-    % adding index reduce fun without SPACE_MANAGE_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    % adding index reduce fun without SPACE_MANAGE_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
     ?assertMatch(ErrorForbidden, add_reduce_fun_via_rest(
         Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
     )),
@@ -465,8 +465,8 @@ create_get_delete_reduce_fun(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % adding index reduce fun with SPACE_MANAGE_INDICES privilege should succeed
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
+    % adding index reduce fun with SPACE_MANAGE_VIEWS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
     ?assertMatch(ok, add_reduce_fun_via_rest(
         Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
     )),
@@ -487,8 +487,8 @@ create_get_delete_reduce_fun(Config) ->
 
     %% DELETE
 
-    % deleting index reduce fun without SPACE_MANAGE_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_INDICES]),
+    % deleting index reduce fun without SPACE_MANAGE_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
     ?assertMatch(ErrorForbidden, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
 
     % reduce fun should stay
@@ -502,8 +502,8 @@ create_get_delete_reduce_fun(Config) ->
         }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
     end, Workers),
 
-    % deleting index reduce fun with SPACE_MANAGE_INDICES privilege should succeed
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_INDICES, ?SPACE_VIEW_INDICES]),
+    % deleting index reduce fun with SPACE_MANAGE_VIEWS privilege should succeed
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
     ?assertMatch(ok, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -589,8 +589,8 @@ list_indices(Config) ->
     ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
     ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS),
 
-    % listing indices without SPACE_VIEW_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, <<"user1">>, AllPrivs -- [?SPACE_VIEW_INDICES]),
+    % listing indices without SPACE_VIEW_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, <<"user1">>, AllPrivs -- [?SPACE_VIEW_VIEWS]),
     ?assertMatch(ErrorForbidden, list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
     ?assertMatch(ErrorForbidden, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
 
@@ -645,8 +645,8 @@ query_index(Config) ->
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % querying index without SPACE_QUERY_INDICES privilege should fail
-    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_QUERY_INDICES]),
+    % querying index without SPACE_QUERY_VIEWS privilege should fail
+    initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_QUERY_VIEWS]),
     ?assertEqual(ErrorForbidden, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ErrorForbidden, Query(WorkerP2, #{}), ?ATTEMPTS).
 

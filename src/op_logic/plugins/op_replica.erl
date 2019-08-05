@@ -57,12 +57,12 @@ op_logic_plugin() ->
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(create, instance, private) -> true;
-operation_supported(create, replicate_by_index, private) -> true;
+operation_supported(create, replicate_by_view, private) -> true;
 
 operation_supported(get, distribution, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
-operation_supported(delete, evict_by_index, private) -> true;
+operation_supported(delete, evict_by_view, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -80,7 +80,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     }
 };
 
-data_spec(#op_req{operation = create, gri = #gri{aspect = replicate_by_index}}) -> #{
+data_spec(#op_req{operation = create, gri = #gri{aspect = replicate_by_view}}) -> #{
     required => #{
         <<"space_id">> => {binary, non_empty}
     },
@@ -113,7 +113,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) -> #{
     }
 };
 
-data_spec(#op_req{operation = delete, gri = #gri{aspect = evict_by_index}}) -> #{
+data_spec(#op_req{operation = delete, gri = #gri{aspect = evict_by_view}}) -> #{
     required => #{
         <<"space_id">> => {binary, non_empty}
     },
@@ -175,11 +175,11 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_REPLICATION);
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
-    aspect = replicate_by_index
+    aspect = replicate_by_view
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
     space_logic:has_eff_privileges(
-        SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES]
+        SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS]
     );
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
@@ -204,20 +204,20 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #
     end;
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
-    aspect = evict_by_index
+    aspect = evict_by_view
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
     case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined ->
             % only eviction
             space_logic:has_eff_privileges(SpaceId, UserId, [
-                ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES
+                ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS
             ]);
         _ ->
             % migration (eviction preceded by replication)
             space_logic:has_eff_privileges(SpaceId, UserId, [
                 ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION,
-                ?SPACE_QUERY_INDICES
+                ?SPACE_QUERY_VIEWS
             ])
     end.
 
@@ -242,7 +242,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} =
             op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider)
     end;
 
-validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by_index}} = Req, _) ->
+validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by_view}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
     op_logic_utils:assert_space_supported_locally(SpaceId),
@@ -282,7 +282,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} =
             op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider)
     end;
 
-validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_index}} = Req, _) ->
+validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_view}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
     op_logic_utils:assert_space_supported_locally(SpaceId),
@@ -324,7 +324,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = inst
             ?ERROR_POSIX(Errno)
     end;
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_index}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_view}}) ->
     case lfm:schedule_replication_by_index(
         Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
@@ -385,7 +385,7 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = inst
             ?ERROR_POSIX(Errno)
     end;
 
-delete(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = evict_by_index}}) ->
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = evict_by_view}}) ->
     case lfm:schedule_replica_eviction_by_index(
         Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),

@@ -124,7 +124,7 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
 }}, #transfer{space_id = SpaceId} = Transfer) ->
     IndexPrivileges = case Transfer#transfer.index_name of
         undefined -> [];
-        _ -> [?SPACE_QUERY_INDICES]
+        _ -> [?SPACE_QUERY_VIEWS]
     end,
     TransferPrivileges = case transfer:type(Transfer) of
         replication -> [?SPACE_SCHEDULE_REPLICATION];

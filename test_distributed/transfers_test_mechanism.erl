@@ -1191,7 +1191,7 @@ schedule_replication_by_index_via_rest(Worker, ProviderId, User, SpaceId, IndexN
         Worker,
         SpaceId,
         User,
-        [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_INDICES],
+        [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
         <<
             "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
             "&space_id=", SpaceId/binary, QueryParamsBin/binary
@@ -1283,7 +1283,7 @@ schedule_replica_eviction_by_index_via_rest(ScheduleNode, ProviderId, User, Spac
         ScheduleNode,
         SpaceId,
         User,
-        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
         <<
             "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
             "&space_id=", SpaceId/binary, QueryParamsBin/binary
@@ -1314,7 +1314,7 @@ schedule_replica_migration_by_index_via_rest(ScheduleNode, ProviderId, User, Spa
         ScheduleNode,
         SpaceId,
         User,
-        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_INDICES],
+        [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
         <<
             "replicas-index/", IndexName/binary, "?provider_id=", ProviderId/binary,
             "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
@@ -1383,7 +1383,7 @@ rerun_transfer(Worker, User, TransferType, IndexTransfer, OldTid, Config) ->
         migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
     end,
     IndexPrivs = case IndexTransfer of
-        true -> [?SPACE_QUERY_INDICES];
+        true -> [?SPACE_QUERY_VIEWS];
         false -> []
     end,
 

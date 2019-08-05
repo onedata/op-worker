@@ -184,8 +184,10 @@ get_json(SpaceId, IndexName) ->
                 index_options = Options,
                 providers = Providers
             }}} ->
+                ViewOptions = maps:from_list(Options),
                 {ok, #{
-                    <<"indexOptions">> => maps:from_list(Options),
+                    <<"indexOptions">> => ViewOptions,
+                    <<"viewOptions">> => ViewOptions,
                     <<"providers">> => Providers,
                     <<"mapFunction">> => MapFunction,
                     <<"reduceFunction">> => utils:ensure_defined(
