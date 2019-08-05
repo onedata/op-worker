@@ -88,7 +88,7 @@
 %% Starts the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Mgr :: pid(), Sub :: #subscription{}, SessId :: session:id()) ->
+-spec start_link(Mgr :: pid(), Sub :: subscription:base(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(Mgr, Sub, SessId) ->
     gen_server2:start_link(?MODULE, [Mgr, Sub, SessId], []).
@@ -342,7 +342,7 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %% Adds subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
+-spec add_subscription(SessId :: session:id(), Sub :: subscription:base(),
     Subs :: subscriptions()) -> NewSubs :: subscriptions().
 add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
     case subscription_manager:add_subscriber(Sub, SessId) of
