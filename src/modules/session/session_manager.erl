@@ -246,7 +246,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         (#session{identity = ValidIden} = ExistingSess) ->
             case Iden of
                 ValidIden ->
-                    {ok, ExistingSess#session{auth = Auth}};
+                    {ok, ExistingSess};
                 _ ->
                     {error, {invalid_identity, Iden}}
             end

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_authorized/2, authenticate/1]).
+-export([is_authorized/2, authenticate/1, authenticate/2]).
 
 
 %%%===================================================================
@@ -57,15 +57,32 @@ is_authorized(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user based on request headers.
+%% @equiv authenticate(CredentialsOrReq, rest).
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate(#macaroon_auth{} | cowboy_req:req()) ->
     aai:auth() | {error, term()}.
-authenticate(#macaroon_auth{} = Credentials) ->
+authenticate(CredentialsOrReq) ->
+    authenticate(CredentialsOrReq, rest).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Authenticates user based on request headers.
+%% @end
+%%--------------------------------------------------------------------
+-spec authenticate(#macaroon_auth{} | cowboy_req:req(), rest | gui) ->
+    aai:auth() | {error, term()}.
+authenticate(#macaroon_auth{} = Credentials, Type) ->
     case user_identity:get_or_fetch(Credentials) of
         {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
-            case session_manager:reuse_or_create_rest_session(Iden, Credentials) of
+            Result = case Type of
+                rest ->
+                    session_manager:reuse_or_create_rest_session(Iden, Credentials);
+                gui ->
+                    session_manager:reuse_or_create_gui_session(Iden, Credentials)
+            end,
+            case Result of
                 {ok, SessionId} ->
                     {ok, ?USER(UserId, SessionId)};
                 {error, {invalid_identity, _}} ->
@@ -75,10 +92,10 @@ authenticate(#macaroon_auth{} = Credentials) ->
         Error ->
             Error
     end;
-authenticate(Req) ->
+authenticate(Req, Type) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
             {ok, ?NOBODY};
         AccessToken ->
-            authenticate(#macaroon_auth{macaroon = AccessToken})
+            authenticate(#macaroon_auth{macaroon = AccessToken}, Type)
     end.

@@ -49,7 +49,7 @@ verify_handshake_auth(nobody) ->
     {ok, ?NOBODY};
 verify_handshake_auth({macaroon, Macaroon, _DischargeMacaroons}) ->
     Credentials = #macaroon_auth{macaroon = Macaroon},
-    case http_auth:authenticate(Credentials) of
+    case http_auth:authenticate(Credentials, gui) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {error, _} ->
