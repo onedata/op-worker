@@ -109,7 +109,7 @@ add_links(Scope, Key, TreeId, Links) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    {datastore:link_name(), datastore:link_target()}) ->
+    datastore:link_name() | {datastore:link_name(), datastore:link_rev()}) ->
     ok | {error, term()}.
 delete_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
@@ -122,8 +122,7 @@ delete_links(Scope, Key, TreeId, Links) ->
 get_file_guid(QosId) ->
     case qos_entry:get(QosId) of
         {ok, #document{value = QosEntry, scope = SpaceId}} ->
-            Guid = file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId),
-            {ok, Guid};
+            {ok, file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId)};
         {error, _} = Error ->
             Error
     end.

@@ -23,9 +23,11 @@
 -spec encode_pid(undefined | pid()) -> binary().
 encode_pid(undefined) ->
     undefined;
-encode_pid(Pid) ->
+encode_pid(Pid) when is_pid(Pid)->
     % todo remove after VFS-3657
-    list_to_binary(pid_to_list(Pid)).
+    list_to_binary(pid_to_list(Pid));
+encode_pid(Pid) ->
+    Pid.
 
 
 -spec decode_pid(undefined | binary()) -> pid().

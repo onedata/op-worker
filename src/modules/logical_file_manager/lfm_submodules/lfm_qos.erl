@@ -110,13 +110,13 @@ check_qos_fulfilled(SessId, QosList) ->
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
     logical_file_manager:file_key()) -> boolean() | lfm:error_reply().
 check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
-    lists:all(fun(QosId) -> check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
+    lists:all(fun(QosId) -> true == check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
 check_qos_fulfilled(SessId, QosId, undefined) ->
     case qos_entry:get_file_guid(QosId) of
-        {ok, QosOriginFileGuid} ->
-            check_qos_fulfilled(SessId, QosId, {guid, QosOriginFileGuid});
         {error, _} = Error ->
-            Error
+            Error;
+        {ok, QosOriginFileGuid} ->
+            check_qos_fulfilled(SessId, QosId, {guid, QosOriginFileGuid})
     end;
 check_qos_fulfilled(SessId, QosId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),

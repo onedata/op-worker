@@ -56,42 +56,42 @@
 ]).
 
 all() -> [
-%%    eviction_of_replica_protected_by_qos_file,
-%%    eviction_of_replica_not_protected_by_qos_file,
-%%    migration_of_replica_protected_by_qos_file,
-%%    migration_of_replica_not_protected_by_qos_file,
-%%    migration_of_replica_protected_by_qos_on_equal_storage_file,
-%%    eviction_of_replica_protected_by_qos_dir,
-%%    eviction_of_replica_not_protected_by_qos_dir,
-%%    migration_of_replica_protected_by_qos_dir,
-%%    migration_of_replica_not_protected_by_qos_dir,
-%%    migration_of_replica_protected_by_qos_on_equal_storage_dir
-%%    eviction_of_replica_protected_by_qos_dir_each_file_separately,
-%%    eviction_of_replica_not_protected_by_qos_dir_each_file_separately,
-%%    migration_of_replica_protected_by_qos_dir_each_file_separately,
-%%    migration_of_replica_not_protected_by_qos_dir_each_file_separately,
-%%    migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
-
-%%    remote_eviction_of_replica_protected_by_qos_file,
-%%    remote_eviction_of_replica_not_protected_by_qos_file,
-%%    remote_migration_of_replica_protected_by_qos_file,
-%%    remote_migration_of_replica_not_protected_by_qos_file,
-%%    remote_migration_of_replica_protected_by_qos_on_equal_storage_file,
-%%    remote_eviction_of_replica_protected_by_qos_dir,
-%%    remote_eviction_of_replica_not_protected_by_qos_dir,
-%%    remote_migration_of_replica_protected_by_qos_dir,
-%%    remote_migration_of_replica_not_protected_by_qos_dir,
-%%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir,
-%%    remote_eviction_of_replica_protected_by_qos_dir_each_file_separately,
-%%    remote_eviction_of_replica_not_protected_by_qos_dir_each_file_separately,
-%%    remote_migration_of_replica_protected_by_qos_dir_each_file_separately,
-%%    remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately,
-%%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
-
     autocleaning_of_replica_protected_by_qos_file,
     autocleaning_of_replica_not_protected_by_qos_file,
     autocleaning_of_replica_protected_by_qos_dir,
-    autocleaning_of_replica_not_protected_by_qos_dir
+    autocleaning_of_replica_not_protected_by_qos_dir,
+%%
+    eviction_of_replica_protected_by_qos_file,
+    eviction_of_replica_not_protected_by_qos_file,
+    migration_of_replica_protected_by_qos_file,
+    migration_of_replica_not_protected_by_qos_file,
+%%    migration_of_replica_protected_by_qos_on_equal_storage_file,
+    eviction_of_replica_protected_by_qos_dir,
+    eviction_of_replica_not_protected_by_qos_dir,
+    migration_of_replica_protected_by_qos_dir,
+    migration_of_replica_not_protected_by_qos_dir,
+%%    migration_of_replica_protected_by_qos_on_equal_storage_dir,
+    eviction_of_replica_protected_by_qos_dir_each_file_separately,
+    eviction_of_replica_not_protected_by_qos_dir_each_file_separately,
+    migration_of_replica_protected_by_qos_dir_each_file_separately,
+    migration_of_replica_not_protected_by_qos_dir_each_file_separately,
+%%    migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately,
+
+    remote_eviction_of_replica_protected_by_qos_file,
+    remote_eviction_of_replica_not_protected_by_qos_file,
+    remote_migration_of_replica_protected_by_qos_file,
+    remote_migration_of_replica_not_protected_by_qos_file,
+%%    remote_migration_of_replica_protected_by_qos_on_equal_storage_file,
+    remote_eviction_of_replica_protected_by_qos_dir,
+    remote_eviction_of_replica_not_protected_by_qos_dir,
+    remote_migration_of_replica_protected_by_qos_dir,
+    remote_migration_of_replica_not_protected_by_qos_dir,
+%%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir,
+    remote_eviction_of_replica_protected_by_qos_dir_each_file_separately,
+    remote_eviction_of_replica_not_protected_by_qos_dir_each_file_separately,
+    remote_migration_of_replica_protected_by_qos_dir_each_file_separately,
+    remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately
+%%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -654,7 +654,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
                 root_directory = {qos_test_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
             },
             scenario = #scenario{
-                type = lfm,
+                type = rest,
                 file_key_type = guid,
                 schedule_node = ScheduleNode,
                 evicting_nodes = [EvictingNode],
@@ -678,6 +678,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     ).
 
 qos_autocleaning_protection_test_base(Config, TestSpec) ->
+    Workers = ?config(op_worker_nodes, Config),
     #test_spec_autocleaning{
         run_node = RunNode,
         dir_structure_type = DirStructureType,
@@ -686,10 +687,20 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
         files_number = FilesNumber
     } = TestSpec,
 
-    Filename = generator:gen_name(),
+    Name = <<"name">>,
+    % remove possible remnants of previous test
+    SessId = fun (Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    lfm_proxy:rm_recursive(RunNode, SessId(RunNode), {path, <<"/", ?SPACE_ID/binary, "/", Name/binary>>}),
+    lists:foreach(fun(Worker) ->
+        ?assertEqual(
+            {error, enoent},
+            lfm_proxy:stat(Worker, SessId(Worker), {path, <<"/", ?SPACE_ID/binary, "/", Name/binary>>}),
+            ?ATTEMPTS)
+    end, Workers),
+
     rpc:call(RunNode, file_popularity_api, enable, [?SPACE_ID]),
-    QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
-    GuidsAndPaths = qos_test_utils:add_qos_test_base(Config, QosSpec),
+    QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Name),
+    _GuidsAndPaths = qos_test_utils:add_qos_test_base(Config, QosSpec),
 
     Configuration =  #{
         enabled => true,
@@ -699,17 +710,18 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
     rpc:call(RunNode, autocleaning_api, configure, [?SPACE_ID, Configuration]),
     {ok, ARId} = rpc:call(RunNode, autocleaning_api, force_start, [?SPACE_ID]),
 
+    F = fun() ->
+        {ok, #{stopped_at := StoppedAt}} = rpc:call(RunNode, autocleaning_api, get_run_report, [ARId]),
+        StoppedAt
+    end,
+    % wait for auto-cleaning run to finish
+    ?assertEqual(true, null =/= F(), ?ATTEMPTS),
+
     ?assertMatch({ok, #{
         released_bytes := ReleasedBytes,
         bytes_to_release := BytesToRelease,
         files_number := FilesNumber
-    }}, rpc:call(RunNode, autocleaning_api, get_run_report, [ARId]), ?ATTEMPTS),
-
-    Guid = qos_test_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths),
-
-    % fixme maybe clear space at the test beginning, if not run on other space
-    % this is needed so space is empty for the next test
-    lfm_proxy:rm_recursive(RunNode, <<"0">>, {guid, Guid}).
+    }}, rpc:call(RunNode, autocleaning_api, get_run_report, [ARId])).
 
 
 %%%===================================================================

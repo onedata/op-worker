@@ -316,9 +316,9 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
     % handle task
     case gb_sets:is_element(ReportId, IdsToCancel) of
         true ->
-            cancel_task(Task, SpaceId);
+            ok = cancel_task(Task, SpaceId);
         false ->
-            handle_task(Task, SpaceId)
+            ok = handle_task(Task, SpaceId)
     end,
     {noreply, State#state{active_tasks = ActiveTasks + 1}, ?DIE_AFTER};
 handle_cast(Task = #task{id = ReportId}, State = #state{
@@ -447,12 +447,15 @@ handle_task(#task{
 } = Task, SpaceId) ->
     % TODO: VFS-5573 use actual storage id
     StorageId = oneprovider:get_id(),
-    case file_qos:check_qos_protected(file_id:pack_guid(FileUuid, SpaceId), StorageId) of
-        true ->
-            cancel_task(Task, SpaceId);
+    case file_qos:check_qos_protected(FileUuid, StorageId) of
         false ->
             {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
                 Type, SpaceId),
+            ok;
+        true ->
+            % This is needed to avoid deadlock as cancel_task
+            % makes a synchronous call to this process.
+            spawn(fun() -> ok = cancel_task(Task, SpaceId) end),
             ok
     end.
 

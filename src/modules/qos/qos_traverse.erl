@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([fulfill_qos/4, init_pool/0]).
+-export([fulfill_qos/5, init_pool/0]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, task_finished/1, get_job/1,
@@ -28,7 +28,10 @@
 % For test purpose
 -export([schedule_transfers/4]).
 
+-type(qos_task_type() :: traverse | restore).
+
 -record(add_qos_traverse_args, {
+    task_id :: binary(),
     session_id :: session:id(),
     qos_id :: qos_entry:id(),
     file_path_tokens = [] :: [binary()],
@@ -37,9 +40,9 @@
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
-% there can be multiple tasks per QoS entry (e.g. qos restoration task during first traverse)
-% so task id needs to be generated
--define(TASK_ID(QosId), <<QosId/binary, "#", (datastore_utils:gen_key())/binary>>).
+% QosId and task type are needed when executing task_finished/1
+-define(TASK_ID(QosId, Type), <<(datastore_utils:gen_key())/binary, "#", QosId/binary, "#",
+    (atom_to_binary(Type, utf8))/binary>>).
 
 %%%===================================================================
 %%% API
@@ -50,16 +53,19 @@
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined)
+-spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined, qos_task_type())
         -> ok.
-fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
-    {ok, #document{value = QosItem}} = qos_entry:get(QosId),
-    QosOriginFileGuid = QosItem#qos_entry.file_uuid,
+fulfill_qos(SessionId, FileCtx, QosId, TargetStorages, TaskType) ->
+    {ok, #document{value = QosItem, scope = SpaceId}} = qos_entry:get(QosId),
+    QosOriginFileUuid = QosItem#qos_entry.file_uuid,
+    QosOriginFileGuid = file_id:pack_guid(QosOriginFileUuid, SpaceId),
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
+    TaskId = ?TASK_ID(QosId, TaskType),
     Options = #{
-        task_id => ?TASK_ID(QosId),
+        task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #add_qos_traverse_args{
+            task_id = TaskId,
             session_id = SessionId,
             qos_id = QosId,
             file_path_tokens = FilePathTokens,
@@ -98,8 +104,11 @@ get_sync_info(Job) ->
 
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
-    [QosId, _] = binary:split(TaskId, <<"#">>, [global]),
-    {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS),
+    [_, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
+    case binary_to_atom(TaskType, utf8) of
+        traverse -> {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS);
+        restore -> ok
+    end,
     ok.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
@@ -142,16 +151,21 @@ create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
     % TODO: add space check and optionally choose other storage
 
     OnTransferScheduledFun = fun(TransferId, StorageId) ->
-        qos_status:add_status_link(QosId, SpaceId, RelativePath, StorageId, TransferId)
+        {ok, _} = qos_status:add_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId, TransferId)
     end,
-    OnTransferFinishedFun = fun(StorageId) ->
-        qos_status:delete_status_link(QosId, SpaceId, RelativePath, StorageId)
+    OnTransferFinishedFun = fun
+        (undefined) -> ok;
+        (StorageId) -> ok = qos_status:delete_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId)
     end,
 
     % call using ?MODULE macro for mocking in tests
     TransfersStorageProplist = ?MODULE:schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
     wait_for_transfers_completion(TransfersStorageProplist, OnTransferFinishedFun).
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc

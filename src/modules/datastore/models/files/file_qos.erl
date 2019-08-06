@@ -175,7 +175,8 @@ remove_qos_id(FileUuid, QosId) ->
 %% created using QoS ID and list of target storages for that QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(file_meta:uuid(), od_space:id(), qos_entry:id(), target_storages()) -> ok.
+-spec add_qos(file_meta:uuid(), od_space:id(),
+    qos_entry:id(), [storage:id()]) -> ok.
 add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
     NewTargetStorages = merge_storage_list_to_target_storages(
         QosId, TargetStoragesList, #{}
@@ -204,36 +205,13 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
-%fixme -spec / :: () -> .
-check_qos_protected(FileGuid, StorageId) ->
-    QosStorages = case file_qos:get_effective(FileGuid) of
+-spec check_qos_protected(file_meta:uuid(), storage:id()) -> boolean().
+check_qos_protected(FileUuid, StorageId) ->
+    QosStorages = case file_qos:get_effective(FileUuid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS
     end,
     maps:is_key(StorageId, QosStorages).
-
-
-maybe_swap_equivalent_storages_for_file(Guid, PrevStorage, NewStorage) ->
-    QosStorages = case file_qos:get_effective(Guid) of
-        undefined -> #{};
-        #file_qos{target_storages = TS} -> TS
-    end,
-
-    % TODO: VFS-5573 use actual storage qos
-    EquivalentStorages =
-        providers_qos:get_provider_qos(PrevStorage)
-            ==
-        providers_qos:get_provider_qos(NewStorage),
-
-    case maps:is_key(PrevStorage, QosStorages) andalso
-        EquivalentStorages andalso
-        not maps:is_key(NewStorage, QosStorages) of
-        true ->
-            {ok, _} = swap_storages_in_doc(Guid, PrevStorage, NewStorage, QosStorages),
-            ok;
-        false ->
-            ok
-    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -286,25 +264,6 @@ merge_target_storages(ParentStorages, ChildStorages) ->
 remove_duplicates_from_list(List) ->
     sets:to_list(sets:from_list(List)).
 
-
-swap_storages_in_doc(FileGuid, PrevStorage, NewStorage, QosTargetStorages) ->
-    Diff = fun(#file_qos{target_storages = TS}) ->
-        PrevStorageQosList = maps:get(PrevStorage, TS, []),
-        NewStorageQosList = maps:get(NewStorage, TS, []),
-        {ok, #file_qos{target_storages = (maps:remove(PrevStorage, TS))#{
-            NewStorage => NewStorageQosList ++ PrevStorageQosList}
-        }}
-    end,
-    QosList = maps:get(PrevStorage, QosTargetStorages),
-    NewFileDoc = #document{
-        key = FileGuid,
-        scope = file_id:guid_to_space_id(FileGuid),
-        value = #file_qos{
-            qos_list = QosList,
-            target_storages = #{NewStorage => QosList}
-        }
-    },
-    file_qos:create_or_update(NewFileDoc, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc

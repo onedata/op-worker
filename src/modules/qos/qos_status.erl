@@ -29,11 +29,12 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([add_status_link/5, delete_status_link/4, check_fulfilment/2, get_relative_path/2]).
+-export([add_status_link/6, delete_status_link/5, check_fulfilment/2, get_relative_path/2]).
 
 -type path() :: binary().
 
--define(QOS_STATUS_LINK_NAME(RelativePath, StorageId), <<RelativePath/binary, "###", StorageId/binary>>).
+-define(QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId),
+    <<RelativePath/binary, "###", TaskId/binary, "###", StorageId/binary>>).
 
 %%%===================================================================
 %%% API
@@ -44,22 +45,22 @@
 %% Adds new status link for given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec add_status_link(qos_entry:id(), datastore_doc:scope(), path(), storage:id(),
-    transfer:id()) ->  ok | {error, term()}.
-add_status_link(QosId, Scope, RelativePath, StorageId, TransferId) ->
-    Link = {?QOS_STATUS_LINK_NAME(RelativePath, StorageId), TransferId},
-    {ok, _} = qos_entry:add_links(Scope, QosId, oneprovider:get_id(), Link).
+-spec add_status_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
+    storage:id(), transfer:id()) ->  ok | {error, term()}.
+add_status_link(QosId, Scope, RelativePath, TaskId, StorageId, TransferId) ->
+    Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId), TransferId},
+    qos_entry:add_links(Scope, QosId, oneprovider:get_id(), Link).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes given status link from given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_status_link(qos_entry:id(), datastore_doc:scope(), path(), storage:id()) ->
-    ok | {error, term()}.
-delete_status_link(QosId, Scope, RelativePath, StorageId) ->
-    ok = qos_entry:delete_links(Scope, QosId, oneprovider:get_id(),
-        ?QOS_STATUS_LINK_NAME(RelativePath, StorageId)).
+-spec delete_status_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
+    storage:id()) -> ok | {error, term()}.
+delete_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
+    qos_entry:delete_links(Scope, QosId, oneprovider:get_id(),
+        ?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -69,8 +70,8 @@ delete_status_link(QosId, Scope, RelativePath, StorageId) ->
 %%--------------------------------------------------------------------
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosId, FileGuid) ->
-    {ok, #document{value = QosItem}} = qos_entry:get(QosId),
-    check_fulfilment_internal(QosId, FileGuid, QosItem).
+    {ok, #document{value = QosItem, scope = SpaceId}} = qos_entry:get(QosId),
+    check_fulfilment_internal(QosId, SpaceId, FileGuid, QosItem).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,10 +94,12 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %%% Internal functions
 %%%===================================================================
 
--spec check_fulfilment_internal(qos_entry:id(), fslogic_worker:file_guid(), qos_entry:record()) ->  boolean().
-check_fulfilment_internal(QosId, FileGuid, #qos_entry{file_uuid = OriginGuid, status = Status}) ->
+-spec check_fulfilment_internal(qos_entry:id(), od_space:id(), file_meta:uuid(), qos_entry:record()) ->
+    boolean().
+check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = OriginUuid, status = Status}) ->
     case Status of
         ?QOS_TRAVERSE_FINISHED_STATUS ->
+            OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
             RelativePath = get_relative_path(OriginGuid, FileGuid),
             case get_next_status_link(QosId, RelativePath) of
                 {ok, empty} ->
@@ -114,7 +117,7 @@ check_fulfilment_internal(QosId, FileGuid, #qos_entry{file_uuid = OriginGuid, st
 %% Returns next status link.
 %% @end
 %%--------------------------------------------------------------------
--spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path()} | {error, term()}.
+-spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.
 get_next_status_link(QosId, PrevName) ->
     datastore_model:fold_links(qos_entry:get_ctx(), QosId, all,
         fun(#link{name = N}, _Acc) -> {ok, N} end,

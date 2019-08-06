@@ -111,7 +111,7 @@ restore_qos_on_storage(FileCtx, StorageId) ->
         _ ->
             QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
             lists:foreach(fun(QosId) ->
-                ok = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId])
+                ok = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId], restore)
             end, QosToUpdate)
     end.
 
@@ -157,7 +157,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, TargetStoragesList),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             ok = qos_traverse:fulfill_qos(
-                user_ctx:get_session_id(UserCtx), FileCtx, QosId, TargetStoragesList
+                user_ctx:get_session_id(UserCtx), FileCtx, QosId, TargetStoragesList, traverse
             )
     end,
 
