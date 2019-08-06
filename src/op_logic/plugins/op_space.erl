@@ -530,7 +530,7 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName
 
 
 %% @private
--spec prepare_view_options(maps:map()) -> list().
+-spec prepare_view_options(map()) -> list().
 prepare_view_options(Data) ->
     Options = case maps:get(<<"replica_update_min_changes">>, Data, undefined) of
         undefined ->

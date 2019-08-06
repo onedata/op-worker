@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% db-index model for ember app.
+%%% db-view model for ember app.
 %%% @end
 %%%-------------------------------------------------------------------
--module(db_index_data_backend).
+-module(db_view_data_backend).
 -behavior(data_backend_behaviour).
 -author("Bartosz Walkowicz").
 
@@ -55,12 +55,12 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | op_gui_error:error_result().
-find_record(<<"db-index">>, RecordId) ->
+find_record(<<"db-view">>, RecordId) ->
     SessionId = op_gui_session:get_session_id(),
     {ok, UserId} = session:get_user_id(SessionId),
 
-    {ok, IndexPropList} = Result = db_index_record(RecordId),
-    SpaceId = proplists:get_value(<<"space">>, IndexPropList),
+    {ok, ViewPropList} = Result = db_view_record(RecordId),
+    SpaceId = proplists:get_value(<<"space">>, ViewPropList),
 
     case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_VIEWS) of
         true ->
@@ -144,26 +144,26 @@ delete_record(_ResourceType, _Id) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant db index record based on space id and index name.
+%% Returns a client-compliant db view record based on space id and view name.
 %% @end
 %%--------------------------------------------------------------------
--spec db_index_record(IndexId :: binary()) -> {ok, proplists:proplist()}.
-db_index_record(IndexId) ->
+-spec db_view_record(ViewId :: binary()) -> {ok, proplists:proplist()}.
+db_view_record(ViewId) ->
     {ok, #document{value = #index{
-        name = IndexName,
+        name = ViewName,
         space_id = SpaceId,
-        index_options = IndexOptions,
+        index_options = ViewOptions,
         providers = Providers,
         map_function = MapFunction,
         reduce_function = ReduceFunction,
         spatial = Spatial
-    }}} = index:get(IndexId),
+    }}} = index:get(ViewId),
 
     {ok, [
-        {<<"id">>, IndexId},
-        {<<"name">>, IndexName},
+        {<<"id">>, ViewId},
+        {<<"name">>, ViewName},
         {<<"space">>, SpaceId},
-        {<<"indexOptions">>, {IndexOptions}},
+        {<<"viewOptions">>, {ViewOptions}},
         {<<"providers">>, Providers},
         {<<"mapFunction">>, MapFunction},
         {<<"reduceFunction">>, utils:ensure_defined(ReduceFunction, undefined, null)},

@@ -417,9 +417,9 @@ transfer_record(StateAndTransferId) ->
         _ ->
             case view_links:get_view_id(IndexName, SpaceId) of
                 {ok, IndexId} ->
-                    {<<"index">>, IndexId, IndexName};
+                    {<<"view">>, IndexId, IndexName};
                 _ ->
-                    {<<"index">>, null, IndexName}
+                    {<<"view">>, null, IndexName}
             end
     end,
     QueryParams = case QueryViewParams of

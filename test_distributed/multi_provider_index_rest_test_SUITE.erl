@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Multi provider index REST tests
+%%% Multi provider view REST tests
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_index_rest_test_SUITE).
@@ -36,41 +36,41 @@
 ]).
 
 -export([
-    create_get_update_delete_index/1,
-    creating_index_with_invalid_params_should_fail/1,
-    updating_index_with_invalid_params_should_fail/1,
-    overwriting_index_should_fail/1,
+    create_get_update_delete_view/1,
+    creating_view_with_invalid_params_should_fail/1,
+    updating_view_with_invalid_params_should_fail/1,
+    overwriting_view_should_fail/1,
     create_get_delete_reduce_fun/1,
-    getting_nonexistent_index_should_fail/1,
-    getting_index_of_not_supported_space_should_fail/1,
-    list_indices/1,
-    query_index/1,
-    quering_index_with_invalid_params_should_fail/1,
-    create_geospatial_index/1,
-    query_geospatial_index/1,
-    query_file_popularity_index/1,
+    getting_nonexistent_view_should_fail/1,
+    getting_view_of_not_supported_space_should_fail/1,
+    list_views/1,
+    query_view/1,
+    quering_view_with_invalid_params_should_fail/1,
+    create_geospatial_view/1,
+    query_geospatial_view/1,
+    query_file_popularity_view/1,
     spatial_flag_test/1,
     file_removal_test/1,
-    create_duplicated_indices_on_remote_providers/1]).
+    create_duplicated_views_on_remote_providers/1]).
 
 all() ->
     ?ALL([
-        create_get_update_delete_index,
-        creating_index_with_invalid_params_should_fail,
-        updating_index_with_invalid_params_should_fail,
-        overwriting_index_should_fail,
+        create_get_update_delete_view,
+        creating_view_with_invalid_params_should_fail,
+        updating_view_with_invalid_params_should_fail,
+        overwriting_view_should_fail,
         create_get_delete_reduce_fun,
-        getting_nonexistent_index_should_fail,
-        getting_index_of_not_supported_space_should_fail,
-        list_indices,
-        query_index,
-        quering_index_with_invalid_params_should_fail,
-        create_geospatial_index,
-        query_geospatial_index,
-        query_file_popularity_index,
+        getting_nonexistent_view_should_fail,
+        getting_view_of_not_supported_space_should_fail,
+        list_views,
+        query_view,
+        quering_view_with_invalid_params_should_fail,
+        create_geospatial_view,
+        query_geospatial_view,
+        query_file_popularity_view,
         spatial_flag_test,
         file_removal_test,
-        create_duplicated_indices_on_remote_providers
+        create_duplicated_views_on_remote_providers
     ]).
 
 -define(ATTEMPTS, 100).
@@ -82,14 +82,14 @@ all() ->
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
     ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
 
--define(INDEX_NAME(__FunctionName), begin
+-define(VIEW_NAME(__FunctionName), begin
     FunctionNameBin = str_utils:to_binary(__FunctionName),
     RandomIntBin = integer_to_binary(erlang:unique_integer([positive])),
-    <<"index_", FunctionNameBin/binary, RandomIntBin/binary>>
+    <<"view_", FunctionNameBin/binary, RandomIntBin/binary>>
 end).
 
--define(INDEX_PATH(__SpaceId, __IndexName),
-    <<"spaces/", __SpaceId/binary, "/indices/", __IndexName/binary>>
+-define(VIEW_PATH(__SpaceId, __ViewName),
+    <<"spaces/", __SpaceId/binary, "/views/", __ViewName/binary>>
 ).
 
 -define(XATTR_NAME, begin
@@ -132,8 +132,8 @@ end).
     }">>
 ).
 
--define(INDEX@(IndexName, ProviderId),
-    <<IndexName/binary, "@", (ProviderId)/binary >>).
+-define(VIEW@(ViewName, ProviderId),
+    <<ViewName/binary, "@", (ProviderId)/binary >>).
 
 
 %%%===================================================================
@@ -141,11 +141,11 @@ end).
 %%%===================================================================
 
 
-create_get_update_delete_index(Config) ->
+create_get_update_delete_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -156,135 +156,139 @@ create_get_update_delete_index(Config) ->
 
     Options1 = #{<<"update_min_changes">> => 10000},
 
-    % creating index without SPACE_MANAGE_VIEWS privilege should fail
+    % creating view without SPACE_MANAGE_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
-    ?assertMatch(ErrorForbidden, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    ?assertMatch(ErrorForbidden, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?MAP_FUNCTION(XattrName), false, [], Options1
     )),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
 
-    % creating index with SPACE_MANAGE_VIEWS privilege should succeed
+    % creating view with SPACE_MANAGE_VIEWS privilege should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false, [], Options1
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?MAP_FUNCTION(XattrName), false, [], Options1
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     %% GET
 
-    % viewing index without SPACE_VIEW_VIEWS should fail
+    % viewing view without SPACE_VIEW_VIEWS should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_VIEW_VIEWS]),
     lists:foreach(fun(Worker) ->
-        ?assertMatch(ErrorForbidden, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        ?assertMatch(ErrorForbidden, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
-    % viewing index with SPACE_VIEW_VIEWS should succeed
+    % viewing view with SPACE_VIEW_VIEWS should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_VIEW_VIEWS]),
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options1,
+            <<"viewOptions">> := Options1,
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     %% UPDATE
 
     Options2 = #{<<"replica_update_min_changes">> => 100},
 
-    % updating index without SPACE_MANAGE_VIEWS privilege should fail
+    % updating view without SPACE_MANAGE_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
-    ?assertMatch(ErrorForbidden, update_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName,
+    ?assertMatch(ErrorForbidden, update_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName,
         <<>>, Options2#{providers => [Provider2]}
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % assert nothing was changed
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options1,
+            <<"viewOptions">> := Options1,
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
-    % updating index (without overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
+    % updating view (without overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
-    ?assertMatch(ok, update_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName,
+    ?assertMatch(ok, update_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName,
         <<>>, Options2#{providers => [Provider2]}
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after update
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options2,
+            <<"viewOptions">> := Options2,
             <<"providers">> := [Provider2],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
-    % updating index (with overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
-    ?assertMatch(ok, update_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?GEOSPATIAL_MAP_FUNCTION, #{}
+    % updating view (with overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
+    ?assertMatch(ok, update_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, #{}
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after update
     ExpMapFun2 = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options2,
+            <<"viewOptions">> := Options2,
             <<"providers">> := [Provider2],
             <<"mapFunction">> := ExpMapFun2,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     %% DELETE
 
-    % deleting index without SPACE_MANAGE_VIEWS privilege should fail
+    % deleting view without SPACE_MANAGE_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
-    ?assertMatch(ErrorForbidden, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch(ErrorForbidden, remove_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName)),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    % deleting index with SPACE_MANAGE_VIEWS privilege should succeed
+    % deleting view with SPACE_MANAGE_VIEWS privilege should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
-    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName)),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+    ?assertMatch(ok, remove_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
 
-creating_index_with_invalid_params_should_fail(Config) ->
+creating_view_with_invalid_params_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ExpRestError = rest_test_utils:get_rest_error(ExpError),
-        ?assertMatch(ExpRestError, create_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName),
+        ?assertMatch(ExpRestError, create_view_via_rest(
+            Config, Worker, ?SPACE_ID, ViewName, ?MAP_FUNCTION(XattrName),
             maps:get(spatial, Options, false), maps:get(providers, Options, []),
             Options
         )),
-        ?assertMatch([], list_indices_via_rest(Config, Worker, ?SPACE_ID, 100))
+        ?assertMatch([], list_views_via_rest(Config, Worker, ?SPACE_ID, 100))
     end, [
         {#{update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
         {#{update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
@@ -305,38 +309,39 @@ creating_index_with_invalid_params_should_fail(Config) ->
     ]).
 
 
-updating_index_with_invalid_params_should_fail(Config) ->
+updating_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1 | _] = ?config(op_worker_nodes, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
-    % create index
+    % create view
     InitialOptions = #{<<"update_min_changes">> => 10000},
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName,
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName,
         ?MAP_FUNCTION(XattrName), false, [], InitialOptions
     )),
-    ExpIndex = #{
+    ExpView = #{
         <<"indexOptions">> => InitialOptions,
+        <<"viewOptions">> => InitialOptions,
         <<"providers">> => [?PROVIDER_ID(WorkerP1)],
         <<"mapFunction">> => view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
         <<"reduceFunction">> => null,
         <<"spatial">> => false
     },
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, ExpIndex}, get_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS
+        ?assertMatch({ok, ExpView}, get_view_via_rest(
+            Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS
         )
     end, Workers),
 
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ExpRestError = rest_test_utils:get_rest_error(ExpError),
-        ?assertMatch(ExpRestError, update_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName, <<>>, Options
+        ?assertMatch(ExpRestError, update_view_via_rest(
+            Config, Worker, ?SPACE_ID, ViewName, <<>>, Options
         )),
-        ?assertMatch({ok, ExpIndex}, get_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName)
+        ?assertMatch({ok, ExpView}, get_view_via_rest(
+            Config, Worker, ?SPACE_ID, ViewName)
         )
     end, [
         {#{update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
@@ -358,66 +363,68 @@ updating_index_with_invalid_params_should_fail(Config) ->
     ]).
 
 
-overwriting_index_should_fail(Config) ->
+overwriting_view_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     Options = #{
         <<"update_min_changes">> => 10000,
         <<"replica_update_min_changes">> => 100
     },
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName,
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName,
         ?MAP_FUNCTION(XattrName), false, [Provider2], Options
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     ExpMapFun1 = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options,
+            <<"viewOptions">> := Options,
             <<"providers">> := [Provider2],
             <<"mapFunction">> := ExpMapFun1,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     % overwrite
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_ALREADY_EXISTS),
-    ?assertMatch(ExpRestError, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName,
+    ?assertMatch(ExpRestError, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName,
         ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
 
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options,
+            <<"viewOptions">> := Options,
             <<"providers">> := [Provider2],
             <<"mapFunction">> := ExpMapFun1,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     % delete
-    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+    ?assertMatch(ok, remove_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
 
 create_get_delete_reduce_fun(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -425,247 +432,253 @@ create_get_delete_reduce_fun(Config) ->
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
     % create on one provider
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?MAP_FUNCTION(XattrName), false
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
+            <<"viewOptions">> := #{},
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     %% CREATE
 
-    % adding index reduce fun without SPACE_MANAGE_VIEWS privilege should fail
+    % adding view reduce fun without SPACE_MANAGE_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
     ?assertMatch(ErrorForbidden, add_reduce_fun_via_rest(
-        Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
+        Config, WorkerP2, ?SPACE_ID, ViewName, ?REDUCE_FUNCTION(XattrName)
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    % index should not change
+    % view should not change
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
+            <<"viewOptions">> := #{},
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
-    % adding index reduce fun with SPACE_MANAGE_VIEWS privilege should succeed
+    % adding view reduce fun with SPACE_MANAGE_VIEWS privilege should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
     ?assertMatch(ok, add_reduce_fun_via_rest(
-        Config, WorkerP2, ?SPACE_ID, IndexName, ?REDUCE_FUNCTION(XattrName)
+        Config, WorkerP2, ?SPACE_ID, ViewName, ?REDUCE_FUNCTION(XattrName)
     )),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after adding reduce
     ExpReduceFun = view_utils:escape_js_function(?REDUCE_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
+            <<"viewOptions">> := #{},
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := ExpReduceFun,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     %% DELETE
 
-    % deleting index reduce fun without SPACE_MANAGE_VIEWS privilege should fail
+    % deleting view reduce fun without SPACE_MANAGE_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_MANAGE_VIEWS]),
-    ?assertMatch(ErrorForbidden, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
+    ?assertMatch(ErrorForbidden, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName)),
 
     % reduce fun should stay
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
+            <<"viewOptions">> := #{},
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := ExpReduceFun,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
-    % deleting index reduce fun with SPACE_MANAGE_VIEWS privilege should succeed
+    % deleting view reduce fun with SPACE_MANAGE_VIEWS privilege should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_MANAGE_VIEWS, ?SPACE_VIEW_VIEWS]),
-    ?assertMatch(ok, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch(ok, remove_reduce_fun_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName)),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after adding reduce
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
+            <<"viewOptions">> := #{},
             <<"providers">> := [Provider1],
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := false
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
     % delete on other provider
-    ?assertMatch(ok, remove_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName)),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
+    ?assertMatch(ok, remove_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS).
 
 
-getting_nonexistent_index_should_fail(Config) ->
+getting_nonexistent_view_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
 
     lists:foreach(fun(Worker) ->
-        ?assertMatch(ExpRestError, get_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName
+        ?assertMatch(ExpRestError, get_view_via_rest(
+            Config, Worker, ?SPACE_ID, ViewName
         ))
     end, Workers).
 
 
-getting_index_of_not_supported_space_should_fail(Config) ->
+getting_view_of_not_supported_space_should_fail(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     SpaceId = <<"space2">>,
     XattrName = ?XATTR_NAME,
 
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION(XattrName), false
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP2, SpaceId, ViewName, ?MAP_FUNCTION(XattrName), false
     )),
 
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpProviders = [?PROVIDER_ID(WorkerP2)],
     ?assertMatch({ok, #{
         <<"indexOptions">> := #{},
+        <<"viewOptions">> := #{},
         <<"providers">> := ExpProviders,
         <<"mapFunction">> := ExpMapFun,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP2, SpaceId, IndexName), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP2, SpaceId, ViewName), ?ATTEMPTS),
 
     ExpRestError = rest_test_utils:get_rest_error(
         ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(WorkerP1))
     ),
-    ?assertMatch(ExpRestError, get_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName
+    ?assertMatch(ExpRestError, get_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName
     )).
 
 
-list_indices(Config) ->
+list_views(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    IndexNum = 20,
-    Chunk = rand:uniform(IndexNum),
+    ViewNum = 20,
+    Chunk = rand:uniform(ViewNum),
 
     AllPrivs = privileges:space_privileges(),
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk)),
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk)),
+    ?assertMatch([], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk)),
 
-    IndexNames = lists:sort(lists:map(fun(Num) ->
+    ViewNames = lists:sort(lists:map(fun(Num) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
-        IndexName = <<"index_name_", (integer_to_binary(Num))/binary>>,
+        ViewName = <<"view_name_", (integer_to_binary(Num))/binary>>,
         XattrName = ?XATTR_NAME,
-        ?assertMatch(ok, create_index_via_rest(
-            Config, Worker, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName)
+        ?assertMatch(ok, create_view_via_rest(
+            Config, Worker, ?SPACE_ID, ViewName, ?MAP_FUNCTION(XattrName)
         )),
-        IndexName
-    end, lists:seq(1, IndexNum))),
+        ViewName
+    end, lists:seq(1, ViewNum))),
 
-    ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
-    ?assertMatch(IndexNames, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS),
+    ?assertMatch(ViewNames, list_views_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
+    ?assertMatch(ViewNames, list_views_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS),
 
-    % listing indices without SPACE_VIEW_VIEWS privilege should fail
+    % listing views without SPACE_VIEW_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, <<"user1">>, AllPrivs -- [?SPACE_VIEW_VIEWS]),
-    ?assertMatch(ErrorForbidden, list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
-    ?assertMatch(ErrorForbidden, list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
+    ?assertMatch(ErrorForbidden, list_views_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk), ?ATTEMPTS),
+    ?assertMatch(ErrorForbidden, list_views_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk), ?ATTEMPTS).
 
 
-query_index(Config) ->
+query_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
     AllPrivs = privileges:space_privileges(),
-    Query = query_filter(Config, SpaceId, IndexName),
+    Query = query_filter(Config, SpaceId, ViewName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
     ErrorNotFound = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
     ExpGuids = lists:sort(Guids),
 
-    % support index only by one provider; other should return error on query
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
+    % support view only by one provider; other should return error on query
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP2)], #{}
     )),
     ?assertMatch(ErrorNotFound, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % support index on both providers and check that they returns correct results
-    ?assertMatch(ok, update_index_via_rest(
-        Config, WorkerP2, ?SPACE_ID, IndexName, <<>>,
+    % support view on both providers and check that they returns correct results
+    ?assertMatch(ok, update_view_via_rest(
+        Config, WorkerP2, ?SPACE_ID, ViewName, <<>>,
         #{providers => [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
     ), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % remove support for index on one provider,
+    % remove support for view on one provider,
     % which should then remove it from db
-    ?assertMatch(ok, update_index_via_rest(
-        Config, WorkerP2, SpaceId, IndexName, <<>>,
+    ?assertMatch(ok, update_view_via_rest(
+        Config, WorkerP2, SpaceId, ViewName, <<>>,
         #{providers => [?PROVIDER_ID(WorkerP2)]}
     )),
     ?assertEqual(ErrorNotFound, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertMatch(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % add index again on both providers and check that they
+    % add view again on both providers and check that they
     % returns correct results
-    ?assertMatch(ok, update_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, <<>>,
+    ?assertMatch(ok, update_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName, <<>>,
         #{providers => [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query(WorkerP2, #{}), ?ATTEMPTS),
 
-    % querying index without SPACE_QUERY_VIEWS privilege should fail
+    % querying view without SPACE_QUERY_VIEWS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, AllPrivs -- [?SPACE_QUERY_VIEWS]),
     ?assertEqual(ErrorForbidden, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ErrorForbidden, Query(WorkerP2, #{}), ?ATTEMPTS).
 
 
-quering_index_with_invalid_params_should_fail(Config) ->
+quering_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
-    Query = query_filter(Config, SpaceId, IndexName),
+    Query = query_filter(Config, SpaceId, ViewName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
     ExpGuids = lists:sort(Guids),
 
-    % support index only by one provider; other should return error on query
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
+    % support view only by one provider; other should return error on query
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
@@ -712,32 +725,33 @@ quering_index_with_invalid_params_should_fail(Config) ->
     ]).
 
 
-create_geospatial_index(Config) ->
+create_geospatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
-    create_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName, ?GEOSPATIAL_MAP_FUNCTION, true),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    create_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, true),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     ExpMapFun = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
     ExpProviders = [?PROVIDER_ID(WorkerP1)],
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
+            <<"viewOptions">> := #{},
             <<"providers">> := ExpProviders,
             <<"mapFunction">> := ExpMapFun,
             <<"reduceFunction">> := null,
             <<"spatial">> := true
-        }}, get_index_via_rest(Config, Worker, ?SPACE_ID, IndexName), ?ATTEMPTS)
+        }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers).
 
 
-query_geospatial_index(Config) ->
+query_geospatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
     Path0 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
     Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
@@ -751,13 +765,13 @@ query_geospatial_index(Config) ->
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
 
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName,
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName,
         ?GEOSPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)], #{}
     )),
 
-    Query = query_filter(Config, SpaceId, IndexName),
+    Query = query_filter(Config, SpaceId, ViewName),
 
     lists:foreach(fun(Worker) ->
         QueryOptions1 = #{spatial => true, stale => false},
@@ -771,48 +785,48 @@ query_geospatial_index(Config) ->
     end, Workers).
 
 
-query_file_popularity_index(Config) ->
+query_file_popularity_view(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = <<"file-popularity">>,
+    ViewName = <<"file-popularity">>,
     Options = #{
         spatial => false,
         stale => false
     },
-    ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, Options)).
+    ?assertMatch({ok, _}, query_view_via_rest(Config, WorkerP1, SpaceId, ViewName, Options)).
 
 
 spatial_flag_test(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName,
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName,
         ?GEOSPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1)], #{}
     )),
 
-    ?assertMatch({404, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [])),
-    ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [spatial])),
-    ?assertMatch({ok, _}, query_index_via_rest(Config, WorkerP1, SpaceId, IndexName, [{spatial, true}])).
+    ?assertMatch({404, _}, query_view_via_rest(Config, WorkerP1, SpaceId, ViewName, [])),
+    ?assertMatch({ok, _}, query_view_via_rest(Config, WorkerP1, SpaceId, ViewName, [spatial])),
+    ?assertMatch({ok, _}, query_view_via_rest(Config, WorkerP1, SpaceId, ViewName, [{spatial, true}])).
 
 
 file_removal_test(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
-    Query = query_filter(Config, SpaceId, IndexName),
+    Query = query_filter(Config, SpaceId, ViewName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
     ExpGuids = lists:sort(Guids),
 
-    % support index on both providers and check that they returns correct results
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, SpaceId, IndexName, ?MAP_FUNCTION(XattrName),
+    % support view on both providers and check that they returns correct results
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName, ?MAP_FUNCTION(XattrName),
         false, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)], #{}
     )),
     ?assertEqual(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
@@ -826,144 +840,154 @@ file_removal_test(Config) ->
     ?assertEqual([], Query(WorkerP1, #{}), ?ATTEMPTS).
 
 
-create_duplicated_indices_on_remote_providers(Config) ->
+create_duplicated_views_on_remote_providers(Config) ->
     [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    IndexName = ?INDEX_NAME(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
     ExpGuids = lists:sort(Guids),
 
-    % create index on P1 and P2
-    ?assertMatch([], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
+    % create view on P1 and P2
+    ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
     Options1 = #{<<"update_min_changes">> => 10000},
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP1, ?SPACE_ID, IndexName, ?MAP_FUNCTION(XattrName), false,
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?MAP_FUNCTION(XattrName), false,
         [Provider1, Provider2], Options1
     )),
-    % create different index on P2 but with the same name
-    ?assertMatch(ok, create_index_via_rest(
-        Config, WorkerP2, ?SPACE_ID, IndexName, ?MAP_FUNCTION2(XattrName), false, [], Options1
+    % create different view on P2 but with the same name
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP2, ?SPACE_ID, ViewName, ?MAP_FUNCTION2(XattrName), false, [], Options1
     )),
 
-    IndexName@P1 = ?INDEX@(IndexName, Provider1),
-    IndexName@P2 = ?INDEX@(IndexName, Provider2),
+    ViewName@P1 = ?VIEW@(ViewName, Provider1),
+    ViewName@P2 = ?VIEW@(ViewName, Provider2),
 
-    IndexName@P1Short = ?INDEX@(IndexName, binary_part(Provider1, 0, 4)),
-    IndexName@P2Short = ?INDEX@(IndexName, binary_part(Provider2, 0, 4)),
+    ViewName@P1Short = ?VIEW@(ViewName, binary_part(Provider1, 0, 4)),
+    ViewName@P2Short = ?VIEW@(ViewName, binary_part(Provider2, 0, 4)),
 
-    ?assertMatch([IndexName@P2, IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName@P1, IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
-    ?assertMatch([IndexName@P1Short, IndexName@P2Short], list_indices_via_rest(Config, WorkerP3, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName@P2, ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName@P1, ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
+    ?assertMatch([ViewName@P1Short, ViewName@P2Short], list_views_via_rest(Config, WorkerP3, ?SPACE_ID, 100), ?ATTEMPTS),
 
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpMapFun2 = view_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
 
     ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ExpError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>)),
+    ExpError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>)),
 
     % get by simple name
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider1, Provider2],
         <<"mapFunction">> := ExpMapFun,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider2],
         <<"mapFunction">> := ExpMapFun2,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName), ?ATTEMPTS),
 
-    ?assertMatch(ExpError2, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName), ?ATTEMPTS),
+    ?assertMatch(ExpError2, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName), ?ATTEMPTS),
 
     % get by extended name
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider1, Provider2],
         <<"mapFunction">> := ExpMapFun,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName@P1), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName@P1), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider2],
         <<"mapFunction">> := ExpMapFun2,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName@P2), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName@P2), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider1, Provider2],
         <<"mapFunction">> := ExpMapFun,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName@P1), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P1), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider2],
         <<"mapFunction">> := ExpMapFun2,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName@P2), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P2), ?ATTEMPTS),
 
     % get by shortened extended name
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider1, Provider2],
         <<"mapFunction">> := ExpMapFun,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP1, ?SPACE_ID, IndexName@P1Short), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName@P1Short), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider2],
         <<"mapFunction">> := ExpMapFun2,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP2, ?SPACE_ID, IndexName@P2Short), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName@P2Short), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider1, Provider2],
         <<"mapFunction">> := ExpMapFun,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName@P1Short), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P1Short), ?ATTEMPTS),
 
     ?assertMatch({ok, #{
         <<"indexOptions">> := Options1,
+        <<"viewOptions">> := Options1,
         <<"providers">> := [Provider2],
         <<"mapFunction">> := ExpMapFun2,
         <<"reduceFunction">> := null,
         <<"spatial">> := false
-    }}, get_index_via_rest(Config, WorkerP3, ?SPACE_ID, IndexName@P2Short), ?ATTEMPTS),
+    }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P2Short), ?ATTEMPTS),
 
 
-    % query the indices by simple name
-    Query = query_filter(Config, SpaceId, IndexName),
-    Query2 = query_filter2(Config, SpaceId, IndexName),
+    % query the views by simple name
+    Query = query_filter(Config, SpaceId, ViewName),
+    Query2 = query_filter2(Config, SpaceId, ViewName),
 
     ?assertMatch(ExpGuids, Query(WorkerP1, #{}), ?ATTEMPTS),
     ?assertEqual(ExpGuids, Query2(WorkerP2, #{}), ?ATTEMPTS),
     ?assertEqual(ExpError2, Query(WorkerP3, #{}), ?ATTEMPTS),
 
-    % query the indices by extended name
-    Query@P1 = query_filter(Config, SpaceId, IndexName@P1),
-    Query@P2 = query_filter2(Config, SpaceId, IndexName@P2),
+    % query the views by extended name
+    Query@P1 = query_filter(Config, SpaceId, ViewName@P1),
+    Query@P2 = query_filter2(Config, SpaceId, ViewName@P2),
 
     ?assertMatch(ExpGuids, Query@P1(WorkerP1, #{}), ?ATTEMPTS),
     ?assertMatch(ExpError, Query@P2(WorkerP1, #{}), ?ATTEMPTS),
@@ -972,9 +996,9 @@ create_duplicated_indices_on_remote_providers(Config) ->
     ?assertEqual(ExpError, Query@P1(WorkerP3, #{}), ?ATTEMPTS),
     ?assertEqual(ExpError, Query@P2(WorkerP3, #{}), ?ATTEMPTS),
 
-    % query the indices by shortened extended name
-    Query@P1Short = query_filter(Config, SpaceId, IndexName@P1Short),
-    Query@P2Short = query_filter2(Config, SpaceId, IndexName@P2Short),
+    % query the views by shortened extended name
+    Query@P1Short = query_filter(Config, SpaceId, ViewName@P1Short),
+    Query@P2Short = query_filter2(Config, SpaceId, ViewName@P2Short),
 
     ?assertMatch(ExpGuids, Query@P1Short(WorkerP1, #{}), ?ATTEMPTS),
     ?assertMatch(ExpError, Query@P2Short(WorkerP1, #{}), ?ATTEMPTS),
@@ -1023,16 +1047,16 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(Case, Config) when
-    Case =:= create_get_update_delete_index;
+    Case =:= create_get_update_delete_view;
     Case =:= create_get_delete_reduce_fun;
-    Case =:= list_indices;
-    Case =:= query_index
+    Case =:= list_views;
+    Case =:= query_view
 ->
     [WorkerP1, _| _] = ?config(op_worker_nodes, Config),
     OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [?SPACE_ID, <<"user1">>]),
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
-init_per_testcase(query_file_popularity_index, Config) ->
+init_per_testcase(query_file_popularity_view, Config) ->
     Config2 = sort_workers(Config),
     [WorkerP1, WorkerP2| _] = ?config(op_worker_nodes, Config2),
     ok = rpc:call(WorkerP1, file_popularity_api, enable, [?SPACE_ID]),
@@ -1044,10 +1068,10 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(sort_workers(Config)).
 
 end_per_testcase(Case, Config) when
-    Case =:= create_get_update_delete_index;
+    Case =:= create_get_update_delete_view;
     Case =:= create_get_delete_reduce_fun;
-    Case =:= list_indices;
-    Case =:= query_index
+    Case =:= list_views;
+    Case =:= query_view
 ->
     UserId = <<"user1">>,
     Workers = ?config(op_worker_nodes, Config),
@@ -1055,7 +1079,7 @@ end_per_testcase(Case, Config) when
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, OldPrivs),
     end_per_testcase(all, Config);
 
-end_per_testcase(query_file_popularity_index, Config) ->
+end_per_testcase(query_file_popularity_view, Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     rpc:call(WorkerP1, file_popularity_api, disable, [?SPACE_ID]),
     rpc:call(WorkerP2, file_popularity_api, disable, [?SPACE_ID]),
@@ -1063,31 +1087,31 @@ end_per_testcase(query_file_popularity_index, Config) ->
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    remove_all_indices(Workers, <<"space1">>),
-    remove_all_indices(Workers, <<"space2">>),
+    remove_all_views(Workers, <<"space1">>),
+    remove_all_views(Workers, <<"space2">>),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction) ->
-    create_index_via_rest(
-        Config, Worker, SpaceId, IndexName, MapFunction, false
+create_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction) ->
+    create_view_via_rest(
+        Config, Worker, SpaceId, ViewName, MapFunction, false
     ).
 
-create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial) ->
-    create_index_via_rest(
-        Config, Worker, SpaceId, IndexName, MapFunction,
+create_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Spatial) ->
+    create_view_via_rest(
+        Config, Worker, SpaceId, ViewName, MapFunction,
         Spatial, [], #{}
     ).
 
-create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, Providers, Options) ->
+create_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Spatial, Providers, Options) ->
     QueryString = create_query_string(Options#{
         spatial => Spatial,
         providers => Providers
     }),
-    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, QueryString/binary>>,
+    Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
         {<<"content-type">>, <<"application/javascript">>}
@@ -1100,9 +1124,9 @@ create_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Spatial, 
             {Code, json_utils:decode(Body)}
     end.
 
-update_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Options) ->
+update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
     QueryString = create_query_string(Options),
-    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, QueryString/binary>>,
+    Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
         {<<"content-type">>, <<"application/javascript">>}
@@ -1115,8 +1139,8 @@ update_index_via_rest(Config, Worker, SpaceId, IndexName, MapFunction, Options) 
             {Code, json_utils:decode(Body)}
     end.
 
-add_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName, ReduceFunction) ->
-    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, "/reduce">>,
+add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
+    Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
         {<<"content-type">>, <<"application/javascript">>}
     ]),
@@ -1128,8 +1152,8 @@ add_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName, ReduceFunction) ->
             {Code, json_utils:decode(Body)}
     end.
 
-remove_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName) ->
-    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, "/reduce">>,
+remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
+    Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
         {<<"content-type">>, <<"application/javascript">>}
     ]),
@@ -1141,8 +1165,8 @@ remove_reduce_fun_via_rest(Config, Worker, SpaceId, IndexName) ->
             {Code, json_utils:decode(Body)}
     end.
 
-get_index_via_rest(Config, Worker, SpaceId, IndexName) ->
-    Path = ?INDEX_PATH(SpaceId, IndexName),
+get_view_via_rest(Config, Worker, SpaceId, ViewName) ->
+    Path = ?VIEW_PATH(SpaceId, ViewName),
     Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->
@@ -1151,8 +1175,8 @@ get_index_via_rest(Config, Worker, SpaceId, IndexName) ->
             {Code, json_utils:decode(Body)}
     end.
 
-remove_index_via_rest(Config, Worker, SpaceId, IndexName) ->
-    Path = ?INDEX_PATH(SpaceId, IndexName),
+remove_view_via_rest(Config, Worker, SpaceId, ViewName) ->
+    Path = ?VIEW_PATH(SpaceId, ViewName),
     Headers = ?USER_1_AUTH_HEADERS(Config),
     case rest_test_utils:request(Worker, Path, delete, Headers, []) of
         {ok, 204, _, _} ->
@@ -1161,9 +1185,9 @@ remove_index_via_rest(Config, Worker, SpaceId, IndexName) ->
             {Code, json_utils:decode(Body)}
     end.
 
-query_index_via_rest(Config, Worker, SpaceId, IndexName, Options) ->
+query_view_via_rest(Config, Worker, SpaceId, ViewName, Options) ->
     QueryString = create_query_string(Options),
-    Path = <<(?INDEX_PATH(SpaceId, IndexName))/binary, "/query", QueryString/binary>>,
+    Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/query", QueryString/binary>>,
     Headers = ?USER_1_AUTH_HEADERS(Config),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->
@@ -1172,8 +1196,8 @@ query_index_via_rest(Config, Worker, SpaceId, IndexName, Options) ->
             {Code, json_utils:decode(Body)}
     end.
 
-list_indices_via_rest(Config, Worker, Space, ChunkSize) ->
-    case list_indices_via_rest(Config, Worker, Space, ChunkSize, <<"null">>, []) of
+list_views_via_rest(Config, Worker, Space, ChunkSize) ->
+    case list_views_via_rest(Config, Worker, Space, ChunkSize, <<"null">>, []) of
         Result when is_list(Result) ->
             % Make sure there are no duplicates
             ?assertEqual(lists:sort(Result), lists:usort(Result)),
@@ -1182,21 +1206,21 @@ list_indices_via_rest(Config, Worker, Space, ChunkSize) ->
             Error
     end.
 
-list_indices_via_rest(Config, Worker, Space, ChunkSize, StartId, Acc) ->
-    case list_indices_via_rest(Config, Worker, Space, StartId, ChunkSize) of
-        {ok, {Indices, NextPageToken}} ->
+list_views_via_rest(Config, Worker, Space, ChunkSize, StartId, Acc) ->
+    case list_views_via_rest(Config, Worker, Space, StartId, ChunkSize) of
+        {ok, {Views, NextPageToken}} ->
             case NextPageToken of
                 <<"null">> ->
-                    Acc ++ Indices;
+                    Acc ++ Views;
                 _ ->
-                    ?assertMatch(ChunkSize, length(Indices)),
-                    list_indices_via_rest(Config, Worker, Space, ChunkSize, NextPageToken, Acc ++ Indices)
+                    ?assertMatch(ChunkSize, length(Views)),
+                    list_views_via_rest(Config, Worker, Space, ChunkSize, NextPageToken, Acc ++ Views)
             end;
         Error ->
             Error
     end.
 
-list_indices_via_rest(Config, Worker, Space, StartId, LimitOrUndef) ->
+list_views_via_rest(Config, Worker, Space, StartId, LimitOrUndef) ->
     TokenParam = case StartId of
         <<"null">> -> <<"">>;
         Token -> <<"&page_token=", Token/binary>>
@@ -1207,26 +1231,26 @@ list_indices_via_rest(Config, Worker, Space, StartId, LimitOrUndef) ->
         Int when is_integer(Int) ->
             <<"&limit=", (integer_to_binary(Int))/binary>>
     end,
-    Url = str_utils:format_bin("spaces/~s/indices?~s~s", [
+    Url = str_utils:format_bin("spaces/~s/views?~s~s", [
         Space, TokenParam, LimitParam
     ]),
     case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of
         {ok, 200, _, Body} ->
             ParsedBody = json_utils:decode(Body),
-            Indices = maps:get(<<"indices">>, ParsedBody),
+            Views = maps:get(<<"views">>, ParsedBody),
             NextPageToken = maps:get(<<"nextPageToken">>, ParsedBody, <<"null">>),
-            {ok, {Indices, NextPageToken}};
+            {ok, {Views, NextPageToken}};
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
     end.
 
-remove_all_indices(Nodes, SpaceId) ->
+remove_all_views(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
         case rpc:call(Node, index, list, [SpaceId]) of
-            {ok, IndexNames} ->
-                lists:foreach(fun(IndexName) ->
-                    ok = rpc:call(Node, index, delete, [SpaceId, IndexName])
-                end, IndexNames);
+            {ok, ViewNames} ->
+                lists:foreach(fun(ViewName) ->
+                    ok = rpc:call(Node, index, delete, [SpaceId, ViewName])
+                end, ViewNames);
             {error, not_found} ->
                 ok
         end
@@ -1270,9 +1294,9 @@ objectids_to_guids(ObjectIds) ->
         Guid
     end, ObjectIds).
 
-query_filter(Config, SpaceId, IndexName) ->
+query_filter(Config, SpaceId, ViewName) ->
     fun(Node, Options) ->
-        case query_index_via_rest(Config, Node, SpaceId, IndexName, Options) of
+        case query_view_via_rest(Config, Node, SpaceId, ViewName, Options) of
             {ok, Body} when is_list(Body) ->
                 ObjectIds = lists:map(fun(#{<<"value">> := ObjectId}) ->
                     ObjectId
@@ -1283,9 +1307,9 @@ query_filter(Config, SpaceId, IndexName) ->
         end
     end.
 
-query_filter2(Config, SpaceId, IndexName) ->
+query_filter2(Config, SpaceId, ViewName) ->
     fun(Node, Options) ->
-        case query_index_via_rest(Config, Node, SpaceId, IndexName, Options) of
+        case query_view_via_rest(Config, Node, SpaceId, ViewName, Options) of
             {ok, Body} ->
                 ObjectIds = lists:map(fun(#{<<"key">> := ObjectId}) ->
                     ObjectId
