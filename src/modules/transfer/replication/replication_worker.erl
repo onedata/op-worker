@@ -78,7 +78,7 @@ max_transfer_retries() ->
 %%--------------------------------------------------------------------
 -spec view_querying_chunk_size() -> non_neg_integer().
 view_querying_chunk_size() ->
-    application:get_env(?APP_NAME, replication_by_index_batch, 1000).
+    application:get_env(?APP_NAME, replication_by_view_batch, 1000).
 
 %%--------------------------------------------------------------------
 %% @doc
