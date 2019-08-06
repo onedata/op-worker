@@ -29,7 +29,7 @@
 -export([
     enqueue_data_transfer/4,
     transfer_regular_file/2,
-    index_querying_chunk_size/0,
+    view_querying_chunk_size/0,
     max_transfer_retries/0,
     required_permissions/0
 ]).
@@ -92,11 +92,11 @@ max_transfer_retries() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link transfer_worker_behaviour} callback index_querying_chunk_size/0.
+%% {@link transfer_worker_behaviour} callback view_querying_chunk_size/0.
 %% @end
 %%--------------------------------------------------------------------
--spec index_querying_chunk_size() -> non_neg_integer().
-index_querying_chunk_size() ->
+-spec view_querying_chunk_size() -> non_neg_integer().
+view_querying_chunk_size() ->
     application:get_env(?APP_NAME, replica_eviction_by_index_batch, 1000).
 
 %%--------------------------------------------------------------------

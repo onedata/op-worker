@@ -83,9 +83,9 @@
     transfer_id :: transfer:id(),
     user_ctx :: user_ctx:ctx(),
 
-    % Those fields are specified only for transfers by index.
+    % Those fields are specified only for transfers by view.
     % Otherwise are left undefined.
-    index_name = undefined :: transfer:index_name(),
+    view_name = undefined :: transfer:view_name(),
     query_view_params = undefined :: transfer:query_view_params(),
 
     % CAUTION!!! This field is currently unused.

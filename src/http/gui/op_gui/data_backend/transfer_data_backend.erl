@@ -415,7 +415,7 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid, Path};
         _ ->
-            case index_links:get_index_id(IndexName, SpaceId) of
+            case view_links:get_view_id(IndexName, SpaceId) of
                 {ok, IndexId} ->
                     {<<"index">>, IndexId, IndexName};
                 _ ->

@@ -811,14 +811,14 @@ translate_from_protobuf(#'ScheduleFileReplication'{
     target_provider_id = ProviderId,
     block = Block,
     callback = Callback,
-    index_name = IndexName,
+    index_name = ViewName,
     query_params = QueryParams
 }) ->
     #schedule_file_replication{
         target_provider_id = ProviderId,
         block = translate_from_protobuf(Block),
         callback = Callback,
-        index_name = IndexName,
+        view_name = ViewName,
         query_view_params = translate_from_protobuf(QueryParams)
     };
 translate_from_protobuf(#'QueryParams'{
@@ -867,14 +867,14 @@ translate_from_protobuf(#'QueryParams'{
 translate_from_protobuf(#'ScheduleReplicaInvalidation'{
     source_provider_id = SourceProviderId,
     target_provider_id = TargetProviderId,
-    index_name = IndexName,
+    index_name = ViewName,
     query_params = QueryParams
 
 }) ->
     #schedule_replica_invalidation{
         source_provider_id = SourceProviderId,
         target_provider_id = TargetProviderId,
-        index_name = IndexName,
+        view_name = ViewName,
         query_view_params = translate_from_protobuf(QueryParams)
     };
 translate_from_protobuf(#'ReadMetadata'{
@@ -1846,26 +1846,26 @@ translate_to_protobuf(#schedule_file_replication{
     target_provider_id = ProviderId,
     block = Block,
     callback = Callback,
-    index_name = IndexName,
+    view_name = ViewName,
     query_view_params = QueryViewParams
 }) ->
     {replicate_file, #'ScheduleFileReplication'{
         target_provider_id = ProviderId,
         block = translate_to_protobuf(Block),
         callback = Callback,
-        index_name = IndexName,
+        index_name = ViewName,
         query_params = translate_to_protobuf(QueryViewParams)
     }};
 translate_to_protobuf(#schedule_replica_invalidation{
     source_provider_id = ProviderId,
     target_provider_id = MigrationProviderId,
-    index_name = IndexName,
+    view_name = ViewName,
     query_view_params = QueryViewParams
 }) ->
     {invalidate_file_replica, #'ScheduleReplicaInvalidation'{
         source_provider_id = ProviderId,
         target_provider_id = MigrationProviderId,
-        index_name =_id = IndexName,
+        index_name = ViewName,
         query_params = translate_to_protobuf(QueryViewParams)
     }};
 translate_to_protobuf(#query_view_params{params = Params}) ->

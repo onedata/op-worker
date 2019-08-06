@@ -154,14 +154,14 @@ get_file_distribution(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback(), transfer:index_name(),
+    od_provider:id(), transfer:callback(), transfer:view_name(),
     query_view_params()) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-    IndexName, QueryViewParams
+    ViewName, QueryViewParams
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, IndexName, QueryViewParams).
+        Callback, ViewName, QueryViewParams).
 
 %%%===================================================================
 %%% Internal functions
@@ -176,14 +176,14 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), od_provider:id(), transfer:callback(),
-    transfer:index_name(), query_view_params()) -> provider_response().
+    transfer:view_name(), query_view_params()) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
-    IndexName, QueryViewParams
+    ViewName, QueryViewParams
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, IndexName, QueryViewParams),
+        TargetProviderId, Callback, ViewName, QueryViewParams),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{

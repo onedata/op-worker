@@ -612,11 +612,11 @@
     dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
     mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
 
-    % Only replication of files existing in given index will be scheduled
+    % Only replication of files existing in given view will be scheduled
     % if this value is undefined, whole subtree will be iterated
-    index_name :: transfer:index_name(),
+    index_name :: transfer:view_name(),
     % query_view_params are directly passed to couchbase
-    % if index_id is undefined query_view_params are ignored
+    % if index_name (view_name) is undefined query_view_params are ignored
     query_view_params = [] :: transfer:query_view_params()
 }).
 
@@ -677,15 +677,15 @@
 }).
 
 %% Model that holds information on database view.
-%% Specifying reduce function is optional in case of non-spatial index and
+%% Specifying reduce function is optional in case of non-spatial views and
 %% forbidden in case of spatial ones (map_function is treated as
 %% spacial function).
 -record(index, {
     name :: index:name(),
     space_id :: od_space:id(),
     spatial = false :: boolean(),
-    map_function :: index:index_function(),
-    reduce_function :: undefined | index:index_function(),
+    map_function :: index:view_function(),
+    reduce_function :: undefined | index:view_function(),
     index_options = [] :: index:options(),
     providers = [] :: all | [od_provider:id()]
 }).

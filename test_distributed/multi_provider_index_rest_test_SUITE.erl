@@ -182,7 +182,7 @@ create_get_update_delete_index(Config) ->
 
     % viewing index with SPACE_VIEW_VIEWS should succeed
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_VIEW_VIEWS]),
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
+    ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options1,
@@ -245,7 +245,7 @@ create_get_update_delete_index(Config) ->
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after update
-    ExpMapFun2 = index_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    ExpMapFun2 = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options2,
@@ -319,7 +319,7 @@ updating_index_with_invalid_params_should_fail(Config) ->
     ExpIndex = #{
         <<"indexOptions">> => InitialOptions,
         <<"providers">> => [?PROVIDER_ID(WorkerP1)],
-        <<"mapFunction">> => index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
+        <<"mapFunction">> => view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
         <<"reduceFunction">> => null,
         <<"spatial">> => false
     },
@@ -377,7 +377,7 @@ overwriting_index_should_fail(Config) ->
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    ExpMapFun1 = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
+    ExpMapFun1 = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options,
@@ -433,7 +433,7 @@ create_get_delete_reduce_fun(Config) ->
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
+    ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
@@ -474,7 +474,7 @@ create_get_delete_reduce_fun(Config) ->
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after adding reduce
-    ExpReduceFun = index_utils:escape_js_function(?REDUCE_FUNCTION(XattrName)),
+    ExpReduceFun = view_utils:escape_js_function(?REDUCE_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := #{},
@@ -547,7 +547,7 @@ getting_index_of_not_supported_space_should_fail(Config) ->
         Config, WorkerP2, SpaceId, IndexName, ?MAP_FUNCTION(XattrName), false
     )),
 
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
+    ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpProviders = [?PROVIDER_ID(WorkerP2)],
     ?assertMatch({ok, #{
         <<"indexOptions">> := #{},
@@ -720,7 +720,7 @@ create_geospatial_index(Config) ->
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    ExpMapFun = index_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    ExpMapFun = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
     ExpProviders = [?PROVIDER_ID(WorkerP1)],
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
@@ -861,8 +861,8 @@ create_duplicated_indices_on_remote_providers(Config) ->
     ?assertMatch([IndexName@P1, IndexName], list_indices_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([IndexName@P1Short, IndexName@P2Short], list_indices_via_rest(Config, WorkerP3, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    ExpMapFun = index_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
-    ExpMapFun2 = index_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
+    ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
+    ExpMapFun2 = view_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
 
     ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
     ExpError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"index_name">>)),

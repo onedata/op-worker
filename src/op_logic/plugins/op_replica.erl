@@ -250,10 +250,10 @@ validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by
     % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
-            assert_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
+            assert_view_exists_on_provider(SpaceId, Name, oneprovider:get_id());
         ReplicatingProvider ->
             op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider),
-            assert_index_exists_on_provider(SpaceId, Name, ReplicatingProvider)
+            assert_view_exists_on_provider(SpaceId, Name, ReplicatingProvider)
     end;
 
 validate(#op_req{operation = get, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
@@ -290,10 +290,10 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_vie
     % If `provider_id` is not specified local provider is chosen as target instead
     case maps:get(<<"provider_id">>, Data, undefined) of
         undefined ->
-            assert_index_exists_on_provider(SpaceId, Name, oneprovider:get_id());
+            assert_view_exists_on_provider(SpaceId, Name, oneprovider:get_id());
         EvictingProvider ->
             op_logic_utils:assert_space_supported_by(SpaceId, EvictingProvider),
-            assert_index_exists_on_provider(SpaceId, Name, EvictingProvider)
+            assert_view_exists_on_provider(SpaceId, Name, EvictingProvider)
     end,
 
     case maps:get(<<"migration_provider_id">>, Data, undefined) of
@@ -301,7 +301,7 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_vie
             ok;
         ReplicatingProvider ->
             op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider),
-            assert_index_exists_on_provider(SpaceId, Name, ReplicatingProvider)
+            assert_view_exists_on_provider(SpaceId, Name, ReplicatingProvider)
     end.
 
 
@@ -324,14 +324,14 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = inst
             ?ERROR_POSIX(Errno)
     end;
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = replicate_by_view}}) ->
-    case lfm:schedule_replication_by_index(
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = replicate_by_view}}) ->
+    case lfm:schedule_replication_by_view(
         Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined),
         maps:get(<<"space_id">>, Data),
-        IndexName,
-        index_utils:sanitize_query_options(Data)
+        ViewName,
+        view_utils:sanitize_query_options(Data)
     ) of
         {ok, TransferId} ->
             {ok, value, TransferId};
@@ -385,14 +385,14 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = inst
             ?ERROR_POSIX(Errno)
     end;
 
-delete(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = evict_by_view}}) ->
-    case lfm:schedule_replica_eviction_by_index(
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = evict_by_view}}) ->
+    case lfm:schedule_replica_eviction_by_view(
         Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined),
         maps:get(<<"space_id">>, Data),
-        IndexName,
-        index_utils:sanitize_query_options(Data)
+        ViewName,
+        view_utils:sanitize_query_options(Data)
     ) of
         {ok, TransferId} ->
             {ok, value, TransferId};
@@ -407,12 +407,12 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = IndexName, aspect = evi
 
 
 %% @private
--spec assert_index_exists_on_provider(od_space:id(), index:name(),
+-spec assert_view_exists_on_provider(od_space:id(), index:name(),
     od_provider:id()) -> ok | no_return().
-assert_index_exists_on_provider(SpaceId, IndexName, ProviderId) ->
-    case index:exists_on_provider(SpaceId, IndexName, ProviderId) of
+assert_view_exists_on_provider(SpaceId, ViewName, ProviderId) ->
+    case index:exists_on_provider(SpaceId, ViewName, ProviderId) of
         true ->
             ok;
         false ->
-            throw(?ERROR_INDEX_NOT_EXISTS_ON(ProviderId))
+            throw(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId))
     end.
