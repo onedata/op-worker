@@ -69,7 +69,7 @@
 %% definition of an event triggered when file location is changed
 %% file_location - updated file location
 -record(file_location_changed_event, {
-    file_location :: #file_location{},
+    file_location :: file_location:record(),
     change_beg_offset :: undefined | non_neg_integer(),
     change_end_offset :: undefined | non_neg_integer()
 }).

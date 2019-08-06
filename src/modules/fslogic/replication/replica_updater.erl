@@ -65,7 +65,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 %% This function in synchronized on the file.
 %% @end
 %%--------------------------------------------------------------------
--spec rename(file_ctx:ctx(), TargetFileId :: helpers:file()) ->
+-spec rename(file_ctx:ctx(), TargetFileId :: helpers:file_id()) ->
     ok | {error, Reason :: term()}.
 rename(FileCtx, TargetFileId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -133,7 +133,7 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
 %% Inavlidates given blocks in given locations. File size is also updated.
 %% @end
 %%--------------------------------------------------------------------
--spec shrink(#document{value :: #file_location{}}, [#file_block{}] | lists:list(), non_neg_integer()) ->
+-spec shrink(#document{value :: #file_location{}}, [#file_block{}], non_neg_integer()) ->
     file_location:doc().
 shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
     OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),

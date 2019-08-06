@@ -116,7 +116,7 @@ handle_cast(Request, State) ->
 %% {@link harvesting_stream} callback custom_error_handling/2.
 %% @end
 %%--------------------------------------------------------------------
--spec custom_error_handling(harversting_stream:state(), harvesting_result:result()) ->
+-spec custom_error_handling(harvesting_stream:state(), harvesting_result:result()) ->
     harvesting_stream:handling_result().
 custom_error_handling(State = #hs_state{
     space_id = SpaceId,

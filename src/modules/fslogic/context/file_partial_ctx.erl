@@ -27,6 +27,8 @@
 
 -type ctx() :: #file_partial_ctx{} | file_ctx:ctx().
 
+-export_type([ctx/0]).
+
 %% API
 -export([new_by_guid/1, new_by_logical_path/2, new_by_canonical_path/2]).
 -export([get_space_id_const/1, is_space_dir_const/1, is_user_root_dir_const/2]).

@@ -47,12 +47,13 @@
     is_dir :: undefined | boolean(),
     is_import_on :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
-    storage_path_type :: helpers:storage_path_type(),
+    storage_path_type :: undefined | helpers:storage_path_type(),
     mounted_in_root :: undefined | boolean(),
     storage_sync_info :: undefined | storage_sync_info:doc()
 }).
 
 -type ctx() :: #file_ctx{}.
+-export_type([ctx/0]).
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
@@ -136,8 +137,8 @@ new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) 
 %% that the file is locally supported.
 %% @end
 %%--------------------------------------------------------------------
--spec new_by_partial_context(file_partial_ctx:ctx()) ->
-    {file_partial_ctx:ctx(), od_space:id() | undefined}.
+-spec new_by_partial_context(file_partial_ctx:ctx() | ctx()) ->
+    {ctx(), od_space:id() | undefined}.
 new_by_partial_context(FileCtx = #file_ctx{}) ->
     {FileCtx, get_space_id_const(FileCtx)};
 new_by_partial_context(FilePartialCtx) ->
@@ -227,7 +228,7 @@ get_storage_path_type_const(#file_ctx{storage_path_type = StoragePathType}) ->
 %% Returns file's share ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_share_id_const(user_ctx:ctx()) -> od_share:id() | undefined.
+-spec get_share_id_const(ctx()) -> od_share:id() | undefined.
 get_share_id_const(#file_ctx{guid = Guid}) ->
     {_FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
     ShareId.
@@ -396,7 +397,7 @@ get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_and_cache_file_doc_including_deleted(ctx()) ->
-    {file_meta:doc(), ctx()} | datastore:get_error().
+    {file_meta:doc(), ctx()} | {error, term()}.
 get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     case file_meta:get_including_deleted(FileUuid) of
@@ -945,7 +946,7 @@ get_file_location_docs(FileCtx) ->
 %% Returns file location docs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location_docs(ctx(), fslogic_location_cache:get_blocks_opts()) ->
+-spec get_file_location_docs(ctx(), fslogic_location_cache:get_doc_opts()) ->
     {[file_location:doc()], ctx()}.
 % TODO VFS-4412 - export as _const function
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->

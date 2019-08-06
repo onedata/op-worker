@@ -317,7 +317,7 @@ apply_changes_batch(Since, Until, Docs, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_applied(couchbase_changes:since(), couchbase_changes:until(),
-    ok | timeout | {error, datastore:seq(), term()}, state()) -> state().
+    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> state().
 change_applied(_Since, Until, Ans, State) ->
     State2 = State#state{apply_batch = undefined},
     case Ans of

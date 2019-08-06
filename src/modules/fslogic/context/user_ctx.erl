@@ -24,6 +24,7 @@
 }).
 
 -type ctx() :: #user_ctx{}.
+-export_type([ctx/0]).
 
 %% API
 -export([new/1]).

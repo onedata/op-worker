@@ -536,7 +536,7 @@ unmock_share_logic(Config) ->
 
 
 %% Puts an od_* document in the provider's cache, which triggers posthooks
--spec put_into_cache(datastore_doc:doc()) -> {ok, datastore_doc:doc()}.
+-spec put_into_cache(datastore:doc()) -> {ok, datastore:doc()}.
 put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type = element(1, Record),
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).

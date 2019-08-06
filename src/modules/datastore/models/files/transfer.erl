@@ -62,7 +62,7 @@
 ]).
 
 -type id() :: binary().
--type diff() :: datastore:diff(transfer()).
+-type diff() :: datastore_doc:diff(transfer()).
 -type status() :: scheduled | enqueued | active | completed | aborting |
     failed | cancelled | skipped.
 -type callback() :: undefined | binary().
@@ -130,7 +130,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %% Starts the transfer for specified user id.
 %% @end
 %%--------------------------------------------------------------------
--spec start_for_user(od_user:id(), fslogic_worker:file_uuid(),
+-spec start_for_user(od_user:id(), fslogic_worker:file_guid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
     callback(), view_name(), query_view_params()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.

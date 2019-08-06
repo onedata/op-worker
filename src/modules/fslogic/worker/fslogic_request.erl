@@ -53,7 +53,7 @@ get_file_partial_ctx(_UserCtx, Req) ->
 %% Get providers capable of handling given request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers(user_ctx:ctx(), file_partial_ctx:ctx(), fslogic_worker:request()) ->
+-spec get_target_providers(user_ctx:ctx(), file_partial_ctx:ctx() | undefined, fslogic_worker:request()) ->
     [oneprovider:id()].
 get_target_providers(_UserCtx, undefined, _) ->
     [oneprovider:get_id()];

@@ -219,7 +219,7 @@ update_value(SessionId, Key, UpdateFun, InitialValue) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_session(SessId :: binary(),
-    MemoryUpdateFun :: fun((maps:map()) -> maps:map())) ->
+    MemoryUpdateFun :: fun((map()) -> map())) ->
     ok | {error, term()}.
 update_session(SessionId, MemoryUpdateFun) ->
     SessionUpdateFun = fun(#session{memory = OldMemory} = Session) ->

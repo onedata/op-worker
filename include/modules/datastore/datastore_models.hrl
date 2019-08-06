@@ -67,7 +67,7 @@
     linked_accounts = [] :: [od_user:linked_account()],
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = #{} :: maps:map(od_space:id(), od_space:alias()),
+    space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 
     % Direct relations to other entities
     eff_groups = [] :: [od_group:id()],
@@ -90,13 +90,13 @@
 -record(od_space, {
     name :: undefined | binary(),
 
-    direct_users = #{} :: maps:map(od_user:id(), [privileges:space_privilege()]),
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:space_privilege()]),
+    direct_users = #{} :: #{od_user:id() => [privileges:space_privilege()]},
+    eff_users = #{} :: #{od_user:id() => [privileges:space_privilege()]},
 
-    direct_groups = #{} :: maps:map(od_group:id(), [privileges:space_privilege()]),
-    eff_groups = #{} :: maps:map(od_group:id(), [privileges:space_privilege()]),
+    direct_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
+    eff_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
 
-    providers = #{} :: maps:map(od_provider:id(), Size :: integer()),
+    providers = #{} :: #{od_provider:id() => Size :: integer()},
 
     shares = [] :: [od_share:id()],
 
@@ -130,7 +130,7 @@
     online = false :: boolean(),
 
     % Direct relations to other entities
-    spaces = #{} :: maps:map(od_space:id(), Size :: integer()),
+    spaces = #{} :: #{od_space:id() => Size :: integer()},
 
     % Effective relations to other entities
     eff_users = [] :: [od_user:id()],
@@ -144,8 +144,8 @@
     name :: od_handle_service:name() | undefined,
 
     % Effective relations to other entities
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:handle_service_privilege()]),
-    eff_groups = #{} :: maps:map(od_group:id(), [privileges:handle_service_privilege()]),
+    eff_users = #{} :: #{od_user:id() => [privileges:handle_service_privilege()]},
+    eff_groups = #{} :: #{od_group:id() => [privileges:handle_service_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
@@ -162,8 +162,8 @@
     handle_service :: od_handle_service:id() | undefined,
 
     % Effective relations to other entities
-    eff_users = #{} :: maps:map(od_user:id(), [privileges:handle_privilege()]),
-    eff_groups = #{} :: maps:map(od_group:id(), [privileges:handle_privilege()]),
+    eff_users = #{} :: #{od_user:id() => [privileges:handle_privilege()]},
+    eff_groups = #{} :: #{od_group:id() => [privileges:handle_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
@@ -222,7 +222,7 @@
     connections = [] :: [pid()],
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory
-    memory = #{} :: maps:map(),
+    memory = #{} :: map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     direct_io = false :: boolean()
 }).
@@ -395,7 +395,7 @@
         OldChanges :: [replica_changes:change()],
         NewChanges :: [replica_changes:change()]
     },
-    last_rename :: replica_changes:last_rename(),
+    last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
     last_replication_timestamp :: non_neg_integer() | undefined
 }).
@@ -426,7 +426,7 @@
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: maps:map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
+    storage_strategies = #{} :: map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
     file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
     file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
     enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
@@ -477,12 +477,12 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: maps:map([{od_provider:id(), couchbase_changes:seq()}])
+    seq = #{} :: #{od_provider:id() => couchbase_changes:seq()}
 }).
 
 %% Model that holds state entries for DBSync worker
 -record(dbsync_batches, {
-    batches = #{} :: maps:map()
+    batches = #{} :: map()
 }).
 
 %% Model that holds files created by root, whose owner needs to be changed when
@@ -501,10 +501,10 @@
 %% Record that holds monitoring id
 -record(monitoring_id, {
     main_subject_type = undefined :: atom(),
-    main_subject_id = <<"">> :: datastore:id(),
+    main_subject_id = <<"">> :: datastore:key(),
     metric_type = undefined :: atom(),
     secondary_subject_type = undefined :: atom(),
-    secondary_subject_id = <<"">> :: datastore:id(),
+    secondary_subject_id = <<"">> :: datastore:key(),
     provider_id = oneprovider:get_id_or_undefined() :: oneprovider:id()
 }).
 
@@ -512,7 +512,7 @@
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_guid :: undefined | binary(),
-    state_buffer = #{} :: maps:map(),
+    state_buffer = #{} :: map(),
     last_update_time :: undefined | non_neg_integer()
 }).
 
@@ -525,7 +525,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
-    file_objectid :: undefined | file_id:object_id(), % undefined only for upgraded docs
+    file_objectid :: undefined | file_id:objectid(), % undefined only for upgraded docs
     value = #{} :: json_utils:json_term()
 }).
 
@@ -606,11 +606,11 @@
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
-    min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    last_update = #{} :: #{od_provider:id() => non_neg_integer()},
+    min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    mth_hist = #{} :: #{od_provider:id() => histogram:histogram()},
 
     % Only replication of files existing in given view will be scheduled
     % if this value is undefined, whole subtree will be iterated
@@ -633,11 +633,11 @@
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: maps:map(od_provider:id(), non_neg_integer()),
-    min_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    hr_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    dy_hist = #{} :: maps:map(od_provider:id(), histogram:histogram()),
-    mth_hist = #{} :: maps:map(od_provider:id(), histogram:histogram())
+    last_update = #{} :: #{od_provider:id() => non_neg_integer()},
+    min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
+    mth_hist = #{} :: #{od_provider:id() => histogram:histogram()}
 }).
 
 %% Model that holds statistics about all transfers for given space.
@@ -647,9 +647,9 @@
     % Time of last update for stats.
     timestamp = 0 :: non_neg_integer(),
     % Mapping of providers to their data input and sources
-    stats_in = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    stats_in = #{} :: #{od_provider:id() => histogram:histogram()},
     % Mapping of providers to their data output and destinations
-    stats_out = #{} :: maps:map(od_provider:id(), histogram:histogram()),
+    stats_out = #{} :: #{od_provider:id() => histogram:histogram()},
     % Providers mapping to providers they recently sent data to
     active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).
@@ -701,7 +701,7 @@
     % Information about execution environment and processing task
     pool :: traverse:pool(),
     callback_module :: traverse:callback_module(),
-    task_id :: traverse_task:key(),
+    task_id :: traverse:id(),
     % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
     % Information needed to restart directory listing

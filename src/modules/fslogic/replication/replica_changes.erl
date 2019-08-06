@@ -25,9 +25,9 @@
 -define(MAX_CHANGES, 20).
 
 -type change() :: fslogic_blocks:blocks() | {shrink, non_neg_integer()} | {rename, last_rename()}.
--type last_rename() :: {{FileId :: helpers:file(), SpaceId :: binary()}, Seq :: non_neg_integer()}.
+-type last_rename() :: {{FileId :: helpers:file_id(), SpaceId :: binary()}, Seq :: non_neg_integer()}.
 
--export_type([change/0]).
+-export_type([change/0, last_rename/0]).
 
 %%%===================================================================
 %%% API
@@ -104,7 +104,7 @@ get_merged_changes(Doc, N) ->
 %% Sets last_rename field in given file_location
 %% @end
 %%--------------------------------------------------------------------
--spec set_last_rename(datastore:doc(), helpers:file(), binary()) -> ok.
+-spec set_last_rename(datastore:doc(), helpers:file_id(), binary()) -> ok.
 set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
     {ok, Locations} = file_meta:get_locations_by_uuid(FileUuid),
@@ -136,7 +136,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_or_delete(file_ctx:ctx(), file_location:doc(),
-    {{helpers:file(), binary()}, non_neg_integer()} | undefined) ->
+    {{helpers:file_id(), binary()}, non_neg_integer()} | undefined) ->
     {{renamed, file_location:doc(), file_meta:uuid(), od_space:id()}
     | skipped | deleted, file_ctx:ctx()}.
 rename_or_delete(FileCtx, _, undefined) ->

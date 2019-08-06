@@ -276,7 +276,7 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 %% Supports a space based on support_space_token and support size.
 %% @end
 %%--------------------------------------------------------------------
--spec support_space(Token :: token:id() | macaroon:macaroon(), SupportSize :: integer()) ->
+-spec support_space(Token :: binary() | macaroon:macaroon(), SupportSize :: integer()) ->
     {ok, od_space:id()} | gs_protocol:error().
 support_space(Token, SupportSize) ->
     support_space(?ROOT_SESS_ID, Token, SupportSize).

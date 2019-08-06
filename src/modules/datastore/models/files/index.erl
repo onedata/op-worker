@@ -31,11 +31,11 @@
 ]).
 
 -type id() :: binary().
--type diff() :: datastore:diff(index()).
+-type diff() :: datastore_doc:diff(index()).
 -type doc() :: datastore_doc:doc(index()).
 
 -type name() :: binary().
--type key() :: datastore_utils:key().
+-type key() :: datastore:key().
 -type index() :: #index{}.
 -type view_function() :: binary().
 -type options() :: proplists:proplist().

@@ -39,7 +39,7 @@ is_enabled(#autocleaning_config{enabled = Enabled}) -> Enabled.
 %% basing on NewConfiguration map.
 %% @end
 %%-------------------------------------------------------------------
--spec create_or_update(config() | undefined, maps:map(), non_neg_integer()) ->
+-spec create_or_update(config() | undefined, map(), non_neg_integer()) ->
     {ok, config()} | error().
 create_or_update(undefined, NewConfiguration, SupportSize) ->
     create_or_update(default(SupportSize, SupportSize), NewConfiguration, SupportSize);
@@ -89,7 +89,7 @@ get_target(#autocleaning_config{target = Target}) ->
 get_threshold(#autocleaning_config{threshold = Threshold}) ->
     Threshold.
 
--spec to_map(config()) -> maps:map().
+-spec to_map(config()) -> map().
 to_map(#autocleaning_config{
     enabled = Enabled,
     target = Target,

@@ -151,7 +151,7 @@ token_to_opts(#index_token{
 %% @equiv apply(fun couchbase_driver:query_view/4, Args).
 %% @end
 %%--------------------------------------------------------------------
--spec query(list()) -> {ok, datastore_json2:ejson()} | {error, term()}.
+-spec query(datastore_json:ejson()) -> {ok, term()} | {error, term()}.
 query(Args) ->
     apply(fun couchbase_driver:query_view/4, Args).
 

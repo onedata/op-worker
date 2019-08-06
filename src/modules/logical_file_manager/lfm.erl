@@ -341,7 +341,7 @@ schedule_replica_eviction_by_view(SessId, EvictingProviderId, ReplicatingProvide
 %% @end
 %%--------------------------------------------------------------------
 -spec create(session:id(), Path :: file_meta:path()) ->
-    {ok, file_meta:file_guid()} | error_reply().
+    {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path) ->
     ?run(fun() -> lfm_files:create(SessId, Path) end).
 

@@ -457,7 +457,7 @@ send_or_apply(Process, FunOrMsg) ->
 %% by this user session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_process(ile_ctx:ctx()) -> {ok, pid()} | {error, Reason :: any()}.
+-spec get_process(file_ctx:ctx()) -> {ok, pid()} | {error, Reason :: any()}.
 get_process(FileCtx) ->
     proc_lib:start(?MODULE, init_or_return_existing, [FileCtx], 10000).
 
@@ -781,7 +781,7 @@ terminate(_Reason, State) ->
 %% returns From tuples for further handling.
 %% @end
 %%--------------------------------------------------------------------
--spec disassociate_ref(fetch_ref(), #state{}) -> {block(), priority(),
+-spec disassociate_ref(fetch_ref(), #state{}) -> {block() | undefined, priority() | undefined,
     AffectedFroms :: [from()], FinishedFroms :: [from()], #state{}}.
 disassociate_ref(Ref, State = #state{
     in_progress = InProgress,

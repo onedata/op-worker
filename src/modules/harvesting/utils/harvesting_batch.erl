@@ -58,7 +58,7 @@
     size = 0
 }).
 
--type seq() :: custom_metadata:seq() | undefined.
+-type seq() :: couchbase_changes:seq() | undefined.
 -type operation() :: binary(). % ?SUBMIT | ?DELETE
 -type file_id() :: file_id:objectid().
 -type doc() :: custom_metadata:doc().
@@ -71,7 +71,7 @@
 -define(SUBMIT, <<"submit">>).
 -define(DELETE, <<"delete">>).
 
--export_type([batch/0, accumulator/0]).
+-export_type([batch/0, accumulator/0, batch_entries/0]).
 
 %%%===================================================================
 %%% API functions

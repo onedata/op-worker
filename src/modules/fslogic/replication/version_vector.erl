@@ -23,6 +23,8 @@
 -type version_vector() :: #{{binary(), binary()} => non_neg_integer()}.
 -type comparison_result() :: lesser | greater | identical | concurrent.
 
+-export_type([version_vector/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================

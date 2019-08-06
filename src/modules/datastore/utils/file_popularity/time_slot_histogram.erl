@@ -29,6 +29,8 @@
 -type histogram() :: #time_slot_histogram{}.
 -type values() :: histogram:histogram() | cumulative_histogram:histogram().
 
+-export_type([histogram/0]).
+
 %% API
 -export([
     new/2, new/3, new/4,

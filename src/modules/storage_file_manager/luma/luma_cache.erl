@@ -28,7 +28,7 @@
 -type tree_root_id() :: binary().   % tree_root_id_prefix() concatenated with storage:id()
 -type link_id() :: binary().
 -type link_target() :: od_user:id() | od_group:id()| luma:user_ctx().
--type query_fun() :: fun(() -> {ok, luma:user_ctx() |od_user:od() | od_group:id()}
+-type query_fun() :: fun(() -> {ok, luma:user_ctx() |od_user:id() | od_group:id()}
                                 | {error, term()}).
 
 -define(CTX, #{
@@ -214,7 +214,7 @@ invalidate(StorageId) ->
 %% Adds reverse user mapping to cache if user_ctx is a POSIX user_ctx.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(),
+-spec maybe_add_reverse_mapping(storage:id(), luma:user_ctx(),
     od_user:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid}, UserId) ->
     add_link(?REV_LUMA_USER_ROOT_PREFIX, StorageId, Uid, UserId);
@@ -228,7 +228,7 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
 %% POSIX user_ctx.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(), od_user:id(),
+-spec maybe_add_reverse_mapping(storage:id(), luma:user_ctx(), od_user:id(),
     od_group:id() | od_space:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid, <<"gid">> := Gid},
     UserId, GroupOrSpaceId) ->
@@ -396,7 +396,7 @@ for_each(RootId, StorageId, Callback, Acc0) ->
 tree_root(RootPrefix, StorageId) ->
     <<RootPrefix/binary, StorageId/binary>>.
 
--spec add_if_not_empty(binary(), binary(), maps:map()) -> maps:map().
+-spec add_if_not_empty(binary(), binary(), map()) -> map().
 add_if_not_empty(_Key, <<"">>, Map) -> Map;
 add_if_not_empty(Key, Value, Map) -> Map#{Key => Value}.
 

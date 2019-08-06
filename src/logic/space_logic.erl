@@ -87,7 +87,7 @@ get_name(SessionId, SpaceId) ->
 
 
 -spec get_eff_users(gs_client_worker:client(), od_space:id()) ->
-    {ok, maps:map(od_user:id(), [privileges:space_privilege()])} | gs_protocol:error().
+    {ok, #{od_user:id() => [privileges:space_privilege()]}} | gs_protocol:error().
 get_eff_users(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{eff_users = EffUsers}}} ->
@@ -136,7 +136,7 @@ has_eff_privileges(SpaceId, UserId, Privileges) ->
 
 
 -spec get_eff_groups(gs_client_worker:client(), od_space:id()) ->
-    {ok, maps:map(od_group:id(), [privileges:space_privilege()])} | gs_protocol:error().
+    {ok, #{od_group:id() => [privileges:space_privilege()]}} | gs_protocol:error().
 get_eff_groups(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{eff_groups = EffGroups}}} ->

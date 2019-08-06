@@ -179,7 +179,7 @@ connect_as_client(Node, SessId, Macaroon, Version) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_macaroon(Node :: node()) ->
-    {ok, {Sock :: ssl:socket(), SessId :: session:id()}} | no_return().
+    {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}} | no_return().
 connect_via_macaroon(Node) ->
     connect_via_macaroon(Node, [{active, true}]).
 
