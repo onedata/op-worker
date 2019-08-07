@@ -49,7 +49,7 @@
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
     schedule_file_replication/4, schedule_replica_eviction/4,
-    schedule_replication_by_index/6, schedule_replica_eviction_by_index/6
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
 ]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
@@ -293,14 +293,14 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 %% Schedules file replication to given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replication_by_index(session:id(), TargetProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:index_name(),
+-spec schedule_replication_by_view(session:id(), TargetProviderId :: oneprovider:id(),
+    transfer:callback(), od_space:id(), transfer:view_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
-schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
-    IndexName, QueryParams
+schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId,
+    ViewName, QueryParams
 ) ->
-    ?run(fun() -> lfm_files:schedule_replication_by_index(
-        SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams
+    ?run(fun() -> lfm_files:schedule_replication_by_view(
+        SessId, TargetProviderId, Callback, SpaceId, ViewName, QueryParams
     ) end).
 
 %%--------------------------------------------------------------------
@@ -323,16 +323,16 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
 %% to provider given as MigrateProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_eviction_by_index(session:id(), oneprovider:id(),
+-spec schedule_replica_eviction_by_view(session:id(), oneprovider:id(),
     undefined | oneprovider:id(), od_space:id(),
-    transfer:index_name(), transfer:query_view_params()) ->
+    transfer:view_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | error_reply().
-schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProviderId,
-    SpaceId, IndexName, QueryViewParams
+schedule_replica_eviction_by_view(SessId, EvictingProviderId, ReplicatingProviderId,
+    SpaceId, ViewName, QueryViewParams
 ) ->
-    ?run(fun() -> lfm_files:schedule_replica_eviction_by_index(
+    ?run(fun() -> lfm_files:schedule_replica_eviction_by_view(
         SessId, EvictingProviderId, ReplicatingProviderId,
-        SpaceId, IndexName, QueryViewParams
+        SpaceId, ViewName, QueryViewParams
     ) end).
 
 %%--------------------------------------------------------------------

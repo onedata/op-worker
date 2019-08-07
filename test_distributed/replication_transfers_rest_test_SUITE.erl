@@ -52,18 +52,18 @@
     rerun_file_replication/1,
     rerun_file_replication_by_other_user/1,
     rerun_dir_replication/1,
-    rerun_index_replication/1,
-    schedule_replication_of_regular_file_by_index/1,
-    schedule_replication_of_regular_file_by_index2/1,
-    schedule_replication_of_regular_file_by_index_with_reduce/1,
-    scheduling_replication_by_not_existing_index_should_fail/1,
-    scheduling_replication_by_index_with_function_returning_wrong_value_should_fail/1,
-    scheduling_replication_by_index_returning_not_existing_file_should_not_fail/1,
-    scheduling_replication_by_empty_index_should_succeed/1,
-    scheduling_replication_by_not_existing_key_in_index_should_succeed/1,
-    schedule_replication_of_100_regular_files_by_index_with_batch_1000/1,
-    schedule_replication_of_100_regular_files_by_index_with_batch_100/1,
-    schedule_replication_of_100_regular_files_by_index_with_batch_10/1,
+    rerun_view_replication/1,
+    schedule_replication_of_regular_file_by_view/1,
+    schedule_replication_of_regular_file_by_view2/1,
+    schedule_replication_of_regular_file_by_view_with_reduce/1,
+    scheduling_replication_by_not_existing_view_should_fail/1,
+    scheduling_replication_by_view_with_function_returning_wrong_value_should_fail/1,
+    scheduling_replication_by_view_returning_not_existing_file_should_not_fail/1,
+    scheduling_replication_by_empty_view_should_succeed/1,
+    scheduling_replication_by_not_existing_key_in_view_should_succeed/1,
+    schedule_replication_of_100_regular_files_by_view_with_batch_1000/1,
+    schedule_replication_of_100_regular_files_by_view_with_batch_100/1,
+    schedule_replication_of_100_regular_files_by_view_with_batch_10/1,
     file_removed_during_replication/1,
     rtransfer_works_between_providers_with_different_ports/1
 ]).
@@ -99,18 +99,18 @@ all() -> [
     rerun_file_replication,
     rerun_file_replication_by_other_user,
     rerun_dir_replication,
-    rerun_index_replication,
-    schedule_replication_of_regular_file_by_index,
-    schedule_replication_of_regular_file_by_index2,
-    schedule_replication_of_regular_file_by_index_with_reduce,
-    scheduling_replication_by_not_existing_index_should_fail,
-    scheduling_replication_by_index_with_function_returning_wrong_value_should_fail,
-    scheduling_replication_by_index_returning_not_existing_file_should_not_fail,
-    scheduling_replication_by_empty_index_should_succeed,
-    scheduling_replication_by_not_existing_key_in_index_should_succeed,
-    schedule_replication_of_100_regular_files_by_index_with_batch_1000,
-    schedule_replication_of_100_regular_files_by_index_with_batch_100,
-    schedule_replication_of_100_regular_files_by_index_with_batch_10,
+    rerun_view_replication,
+    schedule_replication_of_regular_file_by_view,
+    schedule_replication_of_regular_file_by_view2,
+    schedule_replication_of_regular_file_by_view_with_reduce,
+    scheduling_replication_by_not_existing_view_should_fail,
+    scheduling_replication_by_view_with_function_returning_wrong_value_should_fail,
+    scheduling_replication_by_view_returning_not_existing_file_should_not_fail,
+    scheduling_replication_by_empty_view_should_succeed,
+    scheduling_replication_by_not_existing_key_in_view_should_succeed,
+    schedule_replication_of_100_regular_files_by_view_with_batch_1000,
+    schedule_replication_of_100_regular_files_by_view_with_batch_100,
+    schedule_replication_of_100_regular_files_by_view_with_batch_10,
     file_removed_during_replication,
     rtransfer_works_between_providers_with_different_ports
 ].
@@ -210,43 +210,43 @@ rerun_file_replication_by_other_user(Config) ->
 rerun_dir_replication(Config) ->
     replication_transfers_test_base:rerun_dir_replication(Config, rest, guid).
 
-rerun_index_replication(Config) ->
-    replication_transfers_test_base:rerun_index_replication(Config, rest).
+rerun_view_replication(Config) ->
+    replication_transfers_test_base:rerun_view_replication(Config, rest).
 
-schedule_replication_of_regular_file_by_index(Config) ->
-    replication_transfers_test_base:schedule_replication_of_regular_file_by_index(Config, rest).
+schedule_replication_of_regular_file_by_view(Config) ->
+    replication_transfers_test_base:schedule_replication_of_regular_file_by_view(Config, rest).
 
-schedule_replication_of_regular_file_by_index2(Config) ->
-    replication_transfers_test_base:schedule_replication_of_regular_file_by_index2(Config, rest).
+schedule_replication_of_regular_file_by_view2(Config) ->
+    replication_transfers_test_base:schedule_replication_of_regular_file_by_view2(Config, rest).
 
-schedule_replication_of_regular_file_by_index_with_reduce(Config) ->
-    replication_transfers_test_base:schedule_replication_of_regular_file_by_index_with_reduce(Config, rest).
+schedule_replication_of_regular_file_by_view_with_reduce(Config) ->
+    replication_transfers_test_base:schedule_replication_of_regular_file_by_view_with_reduce(Config, rest).
 
-scheduling_replication_by_not_existing_index_should_fail(Config) ->
-    replication_transfers_test_base:scheduling_replication_by_not_existing_index_should_fail(Config, rest).
+scheduling_replication_by_not_existing_view_should_fail(Config) ->
+    replication_transfers_test_base:scheduling_replication_by_not_existing_view_should_fail(Config, rest).
 
-scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(Config) ->
-    replication_transfers_test_base:scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(Config, rest).
+scheduling_replication_by_view_with_function_returning_wrong_value_should_fail(Config) ->
+    replication_transfers_test_base:scheduling_replication_by_view_with_function_returning_wrong_value_should_fail(Config, rest).
 
-scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Config) ->
-    replication_transfers_test_base:scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Config, rest).
+scheduling_replication_by_view_returning_not_existing_file_should_not_fail(Config) ->
+    replication_transfers_test_base:scheduling_replication_by_view_returning_not_existing_file_should_not_fail(Config, rest).
 
-scheduling_replication_by_empty_index_should_succeed(Config) ->
-    replication_transfers_test_base:scheduling_replication_by_empty_index_should_succeed(Config, rest).
+scheduling_replication_by_empty_view_should_succeed(Config) ->
+    replication_transfers_test_base:scheduling_replication_by_empty_view_should_succeed(Config, rest).
 
-scheduling_replication_by_not_existing_key_in_index_should_succeed(Config) ->
-    replication_transfers_test_base:scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, rest).
+scheduling_replication_by_not_existing_key_in_view_should_succeed(Config) ->
+    replication_transfers_test_base:scheduling_replication_by_not_existing_key_in_view_should_succeed(Config, rest).
 
-schedule_replication_of_100_regular_files_by_index_with_batch_1000(Config) ->
-    replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, rest).
+schedule_replication_of_100_regular_files_by_view_with_batch_1000(Config) ->
+    replication_transfers_test_base:schedule_replication_of_100_regular_files_by_view(Config, rest).
 
-schedule_replication_of_100_regular_files_by_index_with_batch_100(Config) ->
-    %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 100
-    replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, rest).
+schedule_replication_of_100_regular_files_by_view_with_batch_100(Config) ->
+    %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_view_batch variable to 100
+    replication_transfers_test_base:schedule_replication_of_100_regular_files_by_view(Config, rest).
 
-schedule_replication_of_100_regular_files_by_index_with_batch_10(Config) ->
-    %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_index_batch variable to 10
-    replication_transfers_test_base:schedule_replication_of_100_regular_files_by_index(Config, rest).
+schedule_replication_of_100_regular_files_by_view_with_batch_10(Config) ->
+    %replication_transfers_test_base:init_per_testcase sets replica_eviction_by_view_batch variable to 10
+    replication_transfers_test_base:schedule_replication_of_100_regular_files_by_view(Config, rest).
 
 file_removed_during_replication(Config) ->
     replication_transfers_test_base:file_removed_during_replication(Config, rest, guid).

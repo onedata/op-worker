@@ -150,7 +150,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
-    EvictSourceReplica, IndexName, QueryViewParams}, State
+    EvictSourceReplica, ViewName, QueryViewParams}, State
 ) ->
     flush(),
     case replication_status:handle_enqueued(TransferId) of
@@ -159,7 +159,7 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
             TransferParams = #transfer_params{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
-                index_name = IndexName,
+                view_name = ViewName,
                 query_view_params = QueryViewParams
             },
             replication_worker:enqueue_data_transfer(FileCtx, TransferParams),

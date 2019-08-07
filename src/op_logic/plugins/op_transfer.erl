@@ -122,16 +122,16 @@ authorize(#op_req{auth = ?NOBODY}, _) ->
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
-    IndexPrivileges = case Transfer#transfer.index_name of
+    ViewPrivileges = case Transfer#transfer.index_name of
         undefined -> [];
-        _ -> [?SPACE_QUERY_INDICES]
+        _ -> [?SPACE_QUERY_VIEWS]
     end,
     TransferPrivileges = case transfer:type(Transfer) of
         replication -> [?SPACE_SCHEDULE_REPLICATION];
         eviction -> [?SPACE_SCHEDULE_EVICTION];
         migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
     end,
-    space_logic:has_eff_privileges(SpaceId, UserId, IndexPrivileges ++ TransferPrivileges);
+    space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = instance
