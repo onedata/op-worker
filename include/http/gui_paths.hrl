@@ -27,6 +27,9 @@
 % Endpoint for uploading files
 -define(FILE_UPLOAD_PATH, "/upload").
 
+% New endpoint for uploading files
+-define(NEW_FILE_UPLOAD_PATH, "/new_upload").
+
 % Endpoint for downloading files
 -define(FILE_DOWNLOAD_PATH, "/download").
 

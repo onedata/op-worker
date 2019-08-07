@@ -80,6 +80,7 @@ start() ->
         {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
+        {?NEW_FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload_new},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
         {"/", [<<"GET">>], page_redirect_to_onezone}
