@@ -489,17 +489,11 @@ assert_file_managed_locally(?USER(UserId), Guid) ->
     Retries :: non_neg_integer()
 ) ->
     {ok, file_id:file_guid()} | no_return().
-create_file(SessId, ParentGuid, Name, Mode, Type, Counter, Counter) ->
+create_file(SessId, ParentGuid, OriginalName, Mode, Type, Counter, Counter) ->
+    Name = maybe_add_file_suffix(OriginalName, Counter),
     ?check(create_file(SessId, ParentGuid, Name, Mode, Type));
 create_file(SessId, ParentGuid, OriginalName, Mode, Type, Counter, Retries) ->
-    Name = case Counter of
-        0 ->
-            OriginalName;
-        _ ->
-            RootName = filename:rootname(OriginalName),
-            Ext = filename:extension(OriginalName),
-            str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext])
-    end,
+    Name = maybe_add_file_suffix(OriginalName, Counter),
     case create_file(SessId, ParentGuid, Name, Mode, Type) of
         {ok, Guid} ->
             {ok, Guid};
@@ -511,6 +505,17 @@ create_file(SessId, ParentGuid, OriginalName, Mode, Type, Counter, Retries) ->
         {error, Errno} ->
             throw(?ERROR_POSIX(Errno))
     end.
+
+
+%% @private
+-spec maybe_add_file_suffix(file_meta:name(), Counter :: non_neg_integer()) ->
+    file_meta:name().
+maybe_add_file_suffix(OriginalName, 0) ->
+    OriginalName;
+maybe_add_file_suffix(OriginalName, Counter) ->
+    RootName = filename:rootname(OriginalName),
+    Ext = filename:extension(OriginalName),
+    str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext]).
 
 
 %% @private
