@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license 
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -11,23 +11,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(page_file_upload_new).
--author("Lukasz Opiola").
+-author("Bartosz Walkowicz").
 
 -behaviour(dynamic_page_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/http/codes.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 
--define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
-
-%% Cowboy API
+%% Dynamic page behaviour API
 -export([handle/2]).
 
 %% For test purpose
--export([multipart/3]).
+-export([handle_multipart_req/3]).
+
+-define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
 
 
 %% ====================================================================
@@ -59,23 +59,28 @@ handle(<<"POST">>, InitialReq) ->
             Host = cowboy_req:host(Req),
             SessionId = op_gui_session:initialize(Identity, Auth, Host),
             try
-                Req2 = multipart(Req, SessionId, []),
+                Req2 = handle_multipart_req(Req, SessionId, #{}),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
-                throw:{missing_param, _} ->
-                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req);
                 throw:stream_file_error ->
-                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req);
+                    cowboy_req:reply(
+                        ?HTTP_500_INTERNAL_SERVER_ERROR,
+                        ?CONN_CLOSE_HEADERS, Req
+                    );
                 Type:Message ->
                     UserId = op_gui_session:get_user_id(),
                     ?error_stacktrace("Error while processing file upload "
-                    "from user ~p - ~p:~p",
-                        [UserId, Type, Message]),
+                                      "from user ~p - ~p:~p", [
+                        UserId, Type, Message
+                    ]),
                     % @todo VFS-1815 for now return 500,
                     % because retries are not stable
 %%                    % Return 204 - resumable will retry the upload
 %%                    cowboy_req:reply(204, #{}, <<"">>)
-                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
+                    cowboy_req:reply(
+                        ?HTTP_500_INTERNAL_SERVER_ERROR,
+                        ?CONN_CLOSE_HEADERS, Req
+                    )
             end
     end.
 
@@ -85,114 +90,97 @@ handle(<<"POST">>, InitialReq) ->
 %% ====================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Parses a multipart HTTP form.
-%% @end
-%%--------------------------------------------------------------------
--spec multipart(cowboy_req:req(), session:id(), Params :: proplists:proplist()) ->
+-spec handle_multipart_req(cowboy_req:req(), session:id(), map()) ->
     cowboy_req:req().
-multipart(Req, SessionId, Params) ->
-    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
-    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
-    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
+handle_multipart_req(Req, SessionId, Params) ->
+    ReadBodyOpts = get_read_body_opts(),
 
     case cowboy_req:read_part(Req) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
                 {data, FieldName} ->
                     {ok, FieldValue, Req3} = cowboy_req:read_part_body(Req2),
-                    multipart(Req3, SessionId, [{FieldName, FieldValue} | Params]);
+                    handle_multipart_req(Req3, SessionId, Params#{
+                        FieldName => FieldValue
+                    });
                 {file, _FieldName, _Filename, _CType} ->
-                    FileGuid = get_bin_param(<<"fileId">>, Params),
-                    {ok, FileHandle} = lfm:open(SessionId, {guid, FileGuid}, write),
-                    ChunkNumber = get_int_param(
-                        <<"resumableChunkNumber">>, Params),
-                    ChunkSize = get_int_param(
-                        <<"resumableChunkSize">>, Params),
-                    % First chunk number in resumable is 1
-                    Offset = ChunkSize * (ChunkNumber - 1),
-                    % Set options for reading from socket
-                    Opts = #{
-                        % length is chunk size - how much the cowboy read
-                        % function returns at once.
-                        length => UploadWriteSize,
-                        % Maximum timeout after which body read from request
-                        % is passed to upload handler process.
-                        % Note that the body is returned immediately
-                        % if its size reaches the buffer size (length above).
-                        period => UploadPeriod,
-                        % read timeout - the read will fail if read_length
-                        % is not satisfied within this time.
-                        timeout => UploadReadTimeout
-                    },
-                    Req3 = try
-                        stream_file(Req2, FileHandle, Offset, Opts)
-                    catch Type:Message ->
-                        {ok, UserId} = session:get_user_id(SessionId),
-                        ?error_stacktrace("Error while streaming file upload "
-                        "from user ~p - ~p:~p",
-                            [UserId, Type, Message]),
-                        lfm:release(FileHandle), % release if possible
-                        lfm:unlink(SessionId, {guid, FileGuid}, false),
-                        throw(stream_file_error)
-                    end,
-                    multipart(Req3, SessionId, Params)
+                    Req3 = write_chunk(Req2, SessionId, Params, ReadBodyOpts),
+                    handle_multipart_req(Req3, SessionId, Params)
             end;
         {done, Req2} ->
             Req2
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Stream a file upload based on file handle and write offset.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_file(Req :: cowboy_req:req(),
-    FileHandle :: lfm:handle(), Offset :: non_neg_integer(),
-    Opts :: cowboy_req:read_body_opts()) -> cowboy_req:req().
-stream_file(Req, FileHandle, Offset, Opts) ->
-    case cowboy_req:read_part_body(Req, Opts) of
+-spec get_read_body_opts() -> cowboy_req:read_body_opts().
+get_read_body_opts() ->
+    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
+    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
+    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
+
+    #{
+        % length is chunk size - how much the cowboy read
+        % function returns at once.
+        length => UploadWriteSize,
+        % Maximum timeout after which body read from request
+        % is passed to upload handler process.
+        % Note that the body is returned immediately
+        % if its size reaches the buffer size (length above).
+        period => UploadPeriod,
+        % read timeout - the read will fail if read_length
+        % is not satisfied within this time.
+        timeout => UploadReadTimeout
+    }.
+
+
+%% @private
+-spec write_chunk(cowboy_req:req(), session:id(), map(),
+    cowboy_req:read_body_opts()) -> cowboy_req:req().
+write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
+    SanitizedParams = op_sanitizer:sanitize_data(Params, #{
+        required => #{
+            <<"fileId">> => {binary, non_empty},
+            <<"resumableChunkNumber">> => {integer, {not_lower_than, 0}},
+            <<"resumableChunkSize">> => {integer, {not_lower_than, 0}}
+        }
+    }),
+
+    FileGuid = maps:get(<<"fileId">>, SanitizedParams),
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
+
+    ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
+    ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
+    Offset = ChunkSize * (ChunkNumber - 1),
+
+    Req2 = try
+        write_binary(Req, FileHandle, Offset, ReadBodyOpts)
+    catch Type:Message ->
+        UserId = op_gui_session:get_user_id(),
+        ?error_stacktrace("Error while uploading file from user ~p - ~p:~p", [
+            UserId, Type, Message
+        ]),
+        lfm:release(FileHandle), % release if possible
+        lfm:unlink(SessionId, {guid, FileGuid}, false),
+        throw(stream_file_error)
+    end,
+    ?check(lfm:release(FileHandle)),
+
+    Req2.
+
+
+%% @private
+-spec write_binary(cowboy_req:req(), lfm:handle(), non_neg_integer(),
+    cowboy_req:read_body_opts()) -> cowboy_req:req().
+write_binary(Req, FileHandle, Offset, ReadBodyOpts) ->
+    case cowboy_req:read_part_body(Req, ReadBodyOpts) of
         {ok, Body, Req2} ->
-            % @todo VFS-1815 handle errors, such as {error, enospc}
-            {ok, _, _} = lfm:write(FileHandle, Offset, Body),
-            ok = lfm:release(FileHandle),
-            % @todo VFS-1815 register_chunk?
-            % or send a message from client that uuid has finished?
+            ?check(lfm:write(FileHandle, Offset, Body)),
             Req2;
         {more, Body, Req2} ->
-            {ok, NewHandle, Written} =
-                lfm:write(FileHandle, Offset, Body),
-            stream_file(Req2, NewHandle, Offset + Written, Opts)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Retrieves a value from a proplist, converting it to integer.
-%% @end
-%%--------------------------------------------------------------------
--spec get_int_param(Key :: term(), Params :: proplists:proplist()) -> integer().
-get_int_param(Key, Params) ->
-    binary_to_integer(get_bin_param(Key, Params)).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Retrieves a value from a proplist. Assumes all values are binary.
-%% Throws when given key is not found.
-%% @end
-%%--------------------------------------------------------------------
--spec get_bin_param(Key :: term(), Params :: proplists:proplist()) -> binary().
-get_bin_param(Key, Params) ->
-    case proplists:get_value(Key, Params) of
-        undefined ->
-            throw({missing_param, Key});
-        Value ->
-            Value
+            {ok, NewHandle, Written} = ?check(lfm:write(
+                FileHandle, Offset, Body
+            )),
+            write_binary(Req2, NewHandle, Offset + Written, ReadBodyOpts)
     end.
