@@ -8,7 +8,7 @@
 %%% Basic tests of couchbase views.
 %%% @end
 %%%-------------------------------------------------------------------
--module(index_test_SUITE).
+-module(view_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -18,8 +18,11 @@
 
 %% API
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([

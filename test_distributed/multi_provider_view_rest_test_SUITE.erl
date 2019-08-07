@@ -9,7 +9,7 @@
 %%% Multi provider view REST tests
 %%% @end
 %%%-------------------------------------------------------------------
--module(multi_provider_index_rest_test_SUITE).
+-module(multi_provider_view_rest_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
