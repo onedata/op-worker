@@ -22,6 +22,7 @@
 -include("op_logic.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -103,8 +104,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
                 false
             end
         end}
-
-    }
+    },
+    optional => #{<<"createAttempts">> => {integer, {between, 1, 200}}}
 };
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
@@ -288,16 +289,15 @@ validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}}, 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
 
-    ParentGuid = maps:get(<<"parent">>, Data),
-    Name = maps:get(<<"name">>, Data),
-    Type = maps:get(<<"type">>, Data),
-    % Creates file/directory with default mode
-    Mode = undefined,
-
-    {ok, Guid} = case Type of
-        <<"file">> -> ?check(lfm:create(SessionId, ParentGuid, Name, Mode));
-        <<"dir">> -> ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode))
-    end,
+    {ok, Guid} = create_file(
+        SessionId,
+        maps:get(<<"parent">>, Data),
+        maps:get(<<"name">>, Data),
+        undefined,
+        binary_to_atom(maps:get(<<"type">>, Data), utf8),
+        0,
+        maps:get(<<"createAttempts">>, Data, 1) - 1
+    ),
 
     {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
     {ok, resource, {GRI#gri{id = Guid}, Attrs}};
@@ -476,6 +476,56 @@ assert_file_managed_locally(?USER(UserId), Guid) ->
             SpaceId = file_id:guid_to_space_id(Guid),
             op_logic_utils:assert_space_supported_locally(SpaceId)
     end.
+
+
+%% @private
+-spec create_file(
+    SessionId :: session:id(),
+    ParentGuid :: file_id:file_guid(),
+    Name :: file_meta:name(),
+    Mode :: undefined | file_meta:mode(),
+    Type :: file | dir,
+    Counter :: non_neg_integer(),
+    Retries :: non_neg_integer()
+) ->
+    {ok, file_id:file_guid()} | no_return().
+create_file(SessId, ParentGuid, Name, Mode, Type, Counter, Counter) ->
+    ?check(create_file(SessId, ParentGuid, Name, Mode, Type));
+create_file(SessId, ParentGuid, OriginalName, Mode, Type, Counter, Retries) ->
+    Name = case Counter of
+        0 ->
+            OriginalName;
+        _ ->
+            RootName = filename:rootname(OriginalName),
+            Ext = filename:extension(OriginalName),
+            str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext])
+    end,
+    case create_file(SessId, ParentGuid, Name, Mode, Type) of
+        {ok, Guid} ->
+            {ok, Guid};
+        {error, ?EEXIST} ->
+            create_file(
+                SessId, ParentGuid, OriginalName, Mode, Type,
+                Counter + 1, Retries
+            );
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
+    end.
+
+
+%% @private
+-spec create_file(
+    SessionId :: session:id(),
+    ParentGuid :: file_id:file_guid(),
+    Name :: file_meta:name(),
+    Mode :: undefined | file_meta:mode(),
+    Type :: file | dir
+) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(SessionId, ParentGuid, Name, Mode, file) ->
+    lfm:create(SessionId, ParentGuid, Name, Mode);
+create_file(SessionId, ParentGuid, Name, Mode, dir) ->
+    lfm:mkdir(SessionId, ParentGuid, Name, Mode).
 
 
 %%--------------------------------------------------------------------
