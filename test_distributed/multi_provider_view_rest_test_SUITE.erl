@@ -1035,7 +1035,7 @@ init_per_suite(Config) ->
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, multi_provider_index_rest_test_SUITE]}
+        {?LOAD_MODULES, [initializer, multi_provider_view_rest_test_SUITE]}
         | Config
     ].
 

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_authorized/2, authenticate/1, authenticate/2]).
+-export([is_authorized/2, authenticate/2]).
 
 
 %%%===================================================================
@@ -37,7 +37,7 @@
 -spec is_authorized(cowboy_req:req(), map()) ->
     {true | {false, binary()} | stop, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    case authenticate(Req) of
+    case authenticate(Req, rest) of
         {ok, ?USER(UserId, SessionId)} ->
             {true, Req, State#{
                 user_id => UserId,
@@ -53,17 +53,6 @@ is_authorized(Req, State) ->
             ?debug("Authentication error ~p", [Error]),
             {{false, <<"authentication_error">>}, Req, State}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv authenticate(CredentialsOrReq, rest).
-%% @end
-%%--------------------------------------------------------------------
--spec authenticate(#macaroon_auth{} | cowboy_req:req()) ->
-    aai:auth() | {error, term()}.
-authenticate(CredentialsOrReq) ->
-    authenticate(CredentialsOrReq, rest).
 
 
 %%--------------------------------------------------------------------
@@ -87,7 +76,7 @@ authenticate(#macaroon_auth{} = Credentials, Type) ->
                     {ok, ?USER(UserId, SessionId)};
                 {error, {invalid_identity, _}} ->
                     user_identity:delete(Credentials),
-                    authenticate(Credentials)
+                    authenticate(Credentials, Type)
             end;
         Error ->
             Error
