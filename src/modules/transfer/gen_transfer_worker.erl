@@ -9,7 +9,7 @@
 %%% This behaviour specifies an API for transfer worker - a module that
 %%% supervises/participates in transfer of data.
 %%% It implements most of required generic functionality for such worker
-%%% including walking down fs subtree or querying specified index and
+%%% including walking down fs subtree or querying specified view and
 %%% scheduling transfer of individual files received.
 %%% But leaves implementation of, specific to given transfer type,
 %%% functions like transfer of regular file to callback modules.
@@ -61,10 +61,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called to get chunk size when querying db index.
+%% Callback called to get chunk size when querying db view.
 %% @end
 %%--------------------------------------------------------------------
--callback index_querying_chunk_size() -> non_neg_integer().
+-callback view_querying_chunk_size() -> non_neg_integer().
 
 
 %%--------------------------------------------------------------------
@@ -337,16 +337,16 @@ backoff(RetryNum, MaxRetries) ->
 %% @private
 %% @doc
 %% Transfers data from appropriate source, that is either files returned by
-%% querying specified index or file system subtree (regular file or
+%% querying specified view or file system subtree (regular file or
 %% entire directory depending on file ctx).
 %% @end
 %%--------------------------------------------------------------------
 -spec transfer_data_insecure(user_ctx:ctx(), file_ctx:ctx(), state(), transfer_params()) ->
     ok | {error, term()}.
-transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{index_name = undefined}) ->
+transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{view_name = undefined}) ->
     transfer_fs_subtree(State, FileCtx, Params);
 transfer_data_insecure(_, FileCtx, State, Params) ->
-    transfer_files_from_index(State, FileCtx, Params, undefined).
+    transfer_files_from_view(State, FileCtx, Params, undefined).
 
 
 %% @private
@@ -403,25 +403,25 @@ transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
 
 
 %% @private
--spec transfer_files_from_index(state(), file_ctx:ctx(), transfer_params(),
+-spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
     file_meta:uuid()) -> ok | {error, term()}.
-transfer_files_from_index(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
+transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
     case transfer:is_ongoing(Params#transfer_params.transfer_id) of
         true ->
-            Chunk = Mod:index_querying_chunk_size(),
-            transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId);
+            Chunk = Mod:view_querying_chunk_size(),
+            transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId);
         false ->
             throw(already_ended)
     end.
 
 
 %% @private
--spec transfer_files_from_index(state(), file_ctx:ctx(), transfer_params(),
+-spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
     non_neg_integer(), file_meta:uuid()) -> ok | {error, term()}.
-transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
+transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     #transfer_params{
         transfer_id = TransferId,
-        index_name = IndexName,
+        view_name = ViewName,
         query_view_params = QueryViewParams
     } = Params,
 
@@ -437,7 +437,7 @@ transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
     end,
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case index:query(SpaceId, IndexName, [{limit, Chunk} | QueryViewParams2]) of
+    case index:query(SpaceId, ViewName, [{limit, Chunk} | QueryViewParams2]) of
         {ok, {Rows}} ->
             {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
                 {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
@@ -458,9 +458,9 @@ transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
                         Error:Reason ->
                             transfer:increment_files_failed_and_processed_counters(TransferId),
                             ?error_stacktrace(
-                                "Processing result of query index ~p "
+                                "Processing result of query view ~p "
                                 "in space ~p failed due to ~p:~p", [
-                                    IndexName, SpaceId, Error, Reason
+                                    ViewName, SpaceId, Error, Reason
                                 ]
                             ),
                             false
@@ -470,18 +470,18 @@ transfer_files_from_index(State, FileCtx, Params, Chunk, LastDocId) ->
             end, {undefined, []}, Rows),
 
             enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
-                index_name = undefined, query_view_params = undefined
+                view_name = undefined, query_view_params = undefined
             }),
             case length(Rows) < Chunk of
                 true ->
                     transfer:increment_files_processed_counter(TransferId),
                     ok;
                 false ->
-                    transfer_files_from_index(State, FileCtx, Params, NewLastDocId)
+                    transfer_files_from_view(State, FileCtx, Params, NewLastDocId)
             end;
         Error = {error, Reason} ->
             ?error("Querying view ~p failed due to ~p when processing transfer ~p", [
-                IndexName, Reason, TransferId
+                ViewName, Reason, TransferId
             ]),
             Error
     end.

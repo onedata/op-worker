@@ -9,7 +9,7 @@
 %%% Utils functions for operating on index record.
 %%% @end
 %%%-------------------------------------------------------------------
--module(index_utils).
+-module(view_utils).
 -author("Bartosz Walkowicz").
 
 -include_lib("ctool/include/api_errors.hrl").
@@ -17,9 +17,11 @@
 %% API
 -export([sanitize_query_options/1, escape_js_function/1]).
 
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -31,6 +33,7 @@ sanitize_query_options(Map) when is_map(Map) ->
     sanitize_query_options(maps:to_list(Map), []);
 sanitize_query_options(RawOptionsList) ->
     sanitize_query_options(RawOptionsList, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc escapes characters: \ " ' \n \t \v \0 \f \r
@@ -48,6 +51,7 @@ escape_js_function(Function) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc Escapes characters given as proplists, in provided Function.

@@ -34,7 +34,7 @@
 create_response(#gri{aspect = instance}, _, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});
-create_response(#gri{aspect = replicate_by_index}, _, value, TransferId) ->
+create_response(#gri{aspect = replicate_by_view}, _, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
 
@@ -60,6 +60,6 @@ get_response(_, ReplicaData) ->
 delete_response(#gri{aspect = instance}, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});
-delete_response(#gri{aspect = evict_by_index}, value, TransferId) ->
+delete_response(#gri{aspect = evict_by_view}, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).

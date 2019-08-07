@@ -28,7 +28,7 @@
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
-    schedule_replication_by_index/6, schedule_replica_eviction_by_index/7]).
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/7]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -447,21 +447,21 @@ schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationPro
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
     ?EXEC(Worker, lfm:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
 
--spec schedule_replication_by_index(node(), session:id(),
-    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), IndexName :: transfer:index_name(),
+-spec schedule_replication_by_view(node(), session:id(),
+    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), ViewName :: transfer:view_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
-schedule_replication_by_index(Worker, SessId, ProviderId, SpaceId, IndexName, QueryViewParams) ->
-    ?EXEC(Worker, lfm:schedule_replication_by_index(SessId,
-        ProviderId, undefined, SpaceId, IndexName, QueryViewParams)).
+schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, QueryViewParams) ->
+    ?EXEC(Worker, lfm:schedule_replication_by_view(SessId,
+        ProviderId, undefined, SpaceId, ViewName, QueryViewParams)).
 
--spec schedule_replica_eviction_by_index(node(), session:id(), ProviderId :: oneprovider:id(),
+-spec schedule_replica_eviction_by_view(node(), session:id(), ProviderId :: oneprovider:id(),
     MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:index_name(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
-schedule_replica_eviction_by_index(Worker, SessId, ProviderId, MigrationProviderId,
-    SpaceId, IndexName, QueryViewParams
+    transfer:view_name(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
+schedule_replica_eviction_by_view(Worker, SessId, ProviderId, MigrationProviderId,
+    SpaceId, ViewName, QueryViewParams
 ) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction_by_index(
-        SessId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_replica_eviction_by_view(
+        SessId, ProviderId, MigrationProviderId, SpaceId, ViewName, QueryViewParams
     )).
 
 -spec get_file_distribution(node(), session:id(), lfm:file_key()) -> {ok, list()}.

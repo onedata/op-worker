@@ -415,11 +415,11 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid, Path};
         _ ->
-            case index_links:get_index_id(IndexName, SpaceId) of
+            case view_links:get_view_id(IndexName, SpaceId) of
                 {ok, IndexId} ->
-                    {<<"index">>, IndexId, IndexName};
+                    {<<"view">>, IndexId, IndexName};
                 _ ->
-                    {<<"index">>, null, IndexName}
+                    {<<"view">>, null, IndexName}
             end
     end,
     QueryParams = case QueryViewParams of

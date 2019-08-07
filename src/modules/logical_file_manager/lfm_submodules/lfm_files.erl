@@ -20,13 +20,13 @@
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
     get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4,
-    schedule_replication_by_index/6]).
+    schedule_replication_by_view/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1, get_file_distribution/2, create_and_open/5,
-    create_and_open/4, schedule_replica_eviction_by_index/6]).
+    create_and_open/4, schedule_replica_eviction_by_view/6]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -182,19 +182,19 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules replication transfer by index and returns its ID.
+%% Schedules replication transfer by view and returns its ID.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replication_by_index(session:id(), ProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:index_name(),
+-spec schedule_replication_by_view(session:id(), ProviderId :: oneprovider:id(),
+    transfer:callback(), od_space:id(), transfer:view_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | lfm:error_reply().
-schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams) ->
+schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId, ViewName, QueryParams) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #schedule_file_replication{
             target_provider_id = TargetProviderId,
             callback = Callback,
-            index_name = IndexName,
+            view_name = ViewName,
             query_view_params = QueryParams
         },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->
@@ -224,24 +224,24 @@ schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules replica_eviction transfer by index on given provider,
+%% Schedules replica_eviction transfer by view on given provider,
 %% migrates unique data to provider given as MigrateProviderId.
 %% Returns ID of scheduled transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_eviction_by_index(session:id(), ProviderId :: oneprovider:id(),
+-spec schedule_replica_eviction_by_view(session:id(), ProviderId :: oneprovider:id(),
     MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:index_name(), transfer:query_view_params()) ->
+    transfer:view_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | lfm:error_reply().
-schedule_replica_eviction_by_index(SessId, ProviderId, MigrationProviderId,
-    SpaceId, IndexName, QueryViewParams
+schedule_replica_eviction_by_view(SessId, ProviderId, MigrationProviderId,
+    SpaceId, ViewName, QueryViewParams
 ) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #schedule_replica_invalidation{
             source_provider_id = ProviderId,
             target_provider_id = MigrationProviderId,
-            index_name = IndexName,
+            view_name = ViewName,
             query_view_params = QueryViewParams
         },
         fun(#scheduled_transfer{transfer_id = TransferId}) ->

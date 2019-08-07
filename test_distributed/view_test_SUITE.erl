@@ -5,10 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Basic tests of couchbase indices
+%%% Basic tests of couchbase views.
 %%% @end
 %%%-------------------------------------------------------------------
--module(index_test_SUITE).
+-module(view_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -18,19 +18,22 @@
 
 %% API
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
-    create_and_delete_simple_index_test/1,
-    query_simple_empty_index_test/1,
-    query_index_using_file_meta/1,
-    query_index_using_times/1,
-    query_index_using_custom_metadata_when_xattr_is_not_set/1,
-    query_index_using_custom_metadata/1,
-    query_index_using_file_popularity/1,
-    query_index_and_emit_ctx/1,
+    create_and_delete_simple_view_test/1,
+    query_simple_empty_view_test/1,
+    query_view_using_file_meta/1,
+    query_view_using_times/1,
+    query_view_using_custom_metadata_when_xattr_is_not_set/1,
+    query_view_using_custom_metadata/1,
+    query_view_using_file_popularity/1,
+    query_view_and_emit_ctx/1,
     wrong_map_function/1
 ]).
 
@@ -51,15 +54,15 @@ end).
 -define(SESS_ID(Worker),
     ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
 
--define(index_name, begin <<"index_", (str_utils:to_binary(?FUNCTION))/binary>> end).
+-define(view_name, begin <<"view_", (str_utils:to_binary(?FUNCTION))/binary>> end).
 -define(ATTEMPTS, 15).
 
--define(assertQuery(ExpectedRows, Worker, SpaceId, IndexName, Options),
-    ?assertQuery(ExpectedRows, Worker, SpaceId, IndexName, Options, ?ATTEMPTS)).
+-define(assertQuery(ExpectedRows, Worker, SpaceId, ViewName, Options),
+    ?assertQuery(ExpectedRows, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
 
--define(assertQuery(ExpectedRows, Worker, SpaceId, IndexName, Options, Attempts),
+-define(assertQuery(ExpectedRows, Worker, SpaceId, ViewName, Options, Attempts),
     ?assertMatch(ExpectedRows, begin
-        {ok, QueryResult} = query_index(Worker, SpaceId, IndexName, Options),
+        {ok, QueryResult} = query_view(Worker, SpaceId, ViewName, Options),
         query_result_to_map(QueryResult)
     end, Attempts)).
 
@@ -68,14 +71,14 @@ end).
 %%% API
 %%%===================================================================
 all() -> ?ALL([
-    create_and_delete_simple_index_test,
-    query_simple_empty_index_test,
-    query_index_using_file_meta,
-    query_index_using_times,
-    query_index_using_custom_metadata_when_xattr_is_not_set,
-    query_index_using_custom_metadata,
-    query_index_using_file_popularity,
-    query_index_and_emit_ctx,
+    create_and_delete_simple_view_test,
+    query_simple_empty_view_test,
+    query_view_using_file_meta,
+    query_view_using_times,
+    query_view_using_custom_metadata_when_xattr_is_not_set,
+    query_view_using_custom_metadata,
+    query_view_using_file_popularity,
+    query_view_and_emit_ctx,
     wrong_map_function
 ]).
 
@@ -83,39 +86,39 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-create_and_delete_simple_index_test(Config) ->
+create_and_delete_simple_view_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             return [id, id];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    ?assertMatch({ok, [IndexName]}, list_indices(Worker, SpaceId)),
-    delete_index(Worker, SpaceId, IndexName),
-    ?assertMatch({ok, []}, list_indices(Worker, SpaceId)).
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    ?assertMatch({ok, [ViewName]}, list_views(Worker, SpaceId)),
+    delete_view(Worker, SpaceId, ViewName),
+    ?assertMatch({ok, []}, list_views(Worker, SpaceId)).
 
-query_simple_empty_index_test(Config) ->
+query_simple_empty_view_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             return [id, id];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    {ok, Result} = query_index(Worker, SpaceId, IndexName, []),
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    {ok, Result} = query_view(Worker, SpaceId, ViewName, []),
     ?assertMatch([], query_result_to_map(Result)).
 
-query_index_using_file_meta(Config) ->
+query_view_using_file_meta(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
@@ -126,7 +129,7 @@ query_index_using_file_meta(Config) ->
                 return [id, meta];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
 
     ?assertQuery([#{
         <<"id">> := _,
@@ -141,12 +144,12 @@ query_index_using_file_meta(Config) ->
             <<"shares">> := [],
             <<"deleted">> := false,
             <<"parent_uuid">> := <<"">>
-        }}],Worker, SpaceId, IndexName, [{stale, false}]).
+        }}],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_index_using_times(Config) ->
+query_view_using_times(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
@@ -157,7 +160,7 @@ query_index_using_times(Config) ->
                 return [id, meta];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([#{
         <<"id">> := _,
         <<"key">> := CdmiId,
@@ -166,12 +169,12 @@ query_index_using_times(Config) ->
             <<"mtime">> := _,
             <<"ctime">> := _
 
-        }}],Worker, SpaceId, IndexName, [{stale, false}]).
+        }}],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_index_using_custom_metadata_when_xattr_is_not_set(Config) ->
+query_view_using_custom_metadata_when_xattr_is_not_set(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
@@ -180,13 +183,13 @@ query_index_using_custom_metadata_when_xattr_is_not_set(Config) ->
                 return [id, meta];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    ?assertQuery([],Worker, SpaceId, IndexName, [{stale, false}]).
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    ?assertQuery([],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_index_using_custom_metadata(Config) ->
+query_view_using_custom_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
@@ -208,7 +211,7 @@ query_index_using_custom_metadata(Config) ->
                 return [id, meta];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([#{
         <<"id">> := _,
         <<"key">> := CdmiId,
@@ -216,12 +219,12 @@ query_index_using_custom_metadata(Config) ->
             XattrName := XattrValue,
             XattrName2 := XattrValue2
         }
-    }],Worker, SpaceId, IndexName, [{stale, false}]).
+    }],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_index_using_file_popularity(Config) ->
+query_view_using_file_popularity(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     SessionId = ?SESS_ID(Worker),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     TestData = <<"test_data">>,
@@ -244,7 +247,7 @@ query_index_using_file_popularity(Config) ->
                 return [id, meta];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
 
     ?assertQuery([#{
         <<"id">> := _,
@@ -261,12 +264,12 @@ query_index_using_file_popularity(Config) ->
             <<"last_open">> := _,
             <<"open_count">> := 1,
             <<"size">> := TestDataSize
-    }}],Worker, SpaceId, IndexName, [{stale, false}]).
+    }}],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_index_and_emit_ctx(Config) ->
+query_view_and_emit_ctx(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
@@ -277,19 +280,19 @@ query_index_and_emit_ctx(Config) ->
                 return [id, ctx];
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([#{
         <<"id">> := _,
         <<"key">> := CdmiId,
         <<"value">> := #{
             <<"providerId">> := ProviderId
 
-        }}],Worker, SpaceId, IndexName, [{stale, false}, {key, CdmiId}]).
+        }}],Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
 
 wrong_map_function(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
-    IndexName = ?index_name,
+    ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
@@ -299,8 +302,8 @@ wrong_map_function(Config) ->
             throw 'Test error';
         }
     ">>,
-    create_index(Worker, SpaceId, IndexName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    ?assertQuery([], Worker, SpaceId, IndexName, [{stale, false}, {key, CdmiId}]).
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
 
 
 %%%===================================================================
@@ -330,17 +333,17 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-create_index(Worker, SpaceId, IndexName, MapFunction, ReduceFunction, Options, Spatial, ProviderIds) ->
-    ok = rpc:call(Worker, index, save, [SpaceId, IndexName, MapFunction,
+create_view(Worker, SpaceId, ViewName, MapFunction, ReduceFunction, Options, Spatial, ProviderIds) ->
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, MapFunction,
         ReduceFunction, Options, Spatial, ProviderIds]).
 
-delete_index(Worker, SpaceId, IndexName) ->
-    ok = rpc:call(Worker, index, delete, [SpaceId, IndexName]).
+delete_view(Worker, SpaceId, ViewName) ->
+    ok = rpc:call(Worker, index, delete, [SpaceId, ViewName]).
 
-query_index(Worker, SpaceId, ViewName, Options) ->
+query_view(Worker, SpaceId, ViewName, Options) ->
     rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).
 
-list_indices(Worker, SpaceId) ->
+list_views(Worker, SpaceId) ->
     rpc:call(Worker, index, list, [SpaceId]).
 
 query_result_to_map(QueryResult) ->

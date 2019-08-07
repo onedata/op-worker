@@ -39,7 +39,7 @@
     space_id :: od_space:id(),
     status :: transfer:status(),
     supporting_provider_id :: od_provider:id(),
-    index_name :: transfer:index_name(),
+    view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()
 }).
 
@@ -98,7 +98,7 @@ mark_cancelled(Pid) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
-    IndexName, QueryViewParams
+    ViewName, QueryViewParams
 ]) ->
     ok = gen_server2:cast(self(), start_replica_eviction),
     {ok, #state{
@@ -109,7 +109,7 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
         space_id = file_id:guid_to_space_id(FileGuid),
         status = enqueued,
         supporting_provider_id = SupportingProviderId,
-        index_name = IndexName,
+        view_name = ViewName,
         query_view_params = QueryViewParams
     }}.
 
@@ -146,7 +146,7 @@ handle_cast(start_replica_eviction, State = #state{
     session_id = SessionId,
     file_guid = FileGuid,
     supporting_provider_id = SupportingProviderId,
-    index_name = IndexName,
+    view_name = ViewName,
     query_view_params = QueryViewParams
 }) ->
     flush(),
@@ -156,7 +156,7 @@ handle_cast(start_replica_eviction, State = #state{
             TransferParams = #transfer_params{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
-                index_name = IndexName,
+                view_name = ViewName,
                 query_view_params = QueryViewParams,
                 supporting_provider = SupportingProviderId
             },

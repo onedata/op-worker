@@ -326,9 +326,9 @@ translate_error(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
         <<"The space of requested resource is not supported by provider ~p.">>, [ProviderId]
     }};
-translate_error(?ERROR_INDEX_NOT_EXISTS_ON(ProviderId)) ->
+translate_error(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId)) ->
     {?HTTP_400_BAD_REQUEST, {
-        <<"The specified index doesn't exists on ~s provider.">>, [ProviderId]
+        <<"The specified view doesn't exists on ~s provider.">>, [ProviderId]
     }};
 
 % Errors associated with transfers

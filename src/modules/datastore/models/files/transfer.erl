@@ -71,12 +71,12 @@
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
 -type list_limit() :: non_neg_integer() | all.
--type index_name() :: undefined | index:key().
+-type view_name() :: undefined | index:key().
 -type query_view_params() :: undefined | index:query_options() .
 
 -export_type([
     id/0, transfer/0, type/0, status/0, callback/0, doc/0,
-    timestamp/0, list_limit/0, index_name/0, query_view_params/0
+    timestamp/0, list_limit/0, view_name/0, query_view_params/0
 ]).
 
 -define(CTX, #{
@@ -116,7 +116,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     undefined | od_provider:id(), undefined | od_provider:id(), binary(),
-    index_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
+    view_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
     Callback, IndexName, QueryViewParams
 ) ->
@@ -132,7 +132,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%--------------------------------------------------------------------
 -spec start_for_user(od_user:id(), fslogic_worker:file_guid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
-    callback(), index_name(), query_view_params()) ->
+    callback(), view_name(), query_view_params()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
     ReplicatingProviderId, Callback, IndexName, QueryViewParams
