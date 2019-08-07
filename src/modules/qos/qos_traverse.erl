@@ -37,6 +37,8 @@
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
+% there can be multiple tasks per QoS entry (e.g. qos restoration task during first traverse)
+% so task id needs to be generated
 -define(TASK_ID(QosId), <<QosId/binary, "#", (datastore_utils:gen_key())/binary>>).
 
 %%%===================================================================

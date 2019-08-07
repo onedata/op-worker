@@ -24,7 +24,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
--export([get/1, delete/1, create/2, update/2]).
+-export([get/1, delete/1, create/2, update/2, add_links/4, delete_links/4]).
 
 %% higher-level functions operating on file_qos record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
@@ -92,6 +92,28 @@ get(QosId) ->
 delete(QosId) ->
     datastore_model:delete(?CTX, QosId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates links.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+    {datastore:link_name(), datastore:link_target()}) ->
+    {ok, datastore:link()} | {error, term()}.
+add_links(Scope, Key, TreeId, Links) ->
+    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes links.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+    {datastore:link_name(), datastore:link_target()}) ->
+    ok | {error, term()}.
+delete_links(Scope, Key, TreeId, Links) ->
+    datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
+
 %%%===================================================================
 %%% Higher-level functions operating on qos_entry record.
 %%%===================================================================
@@ -123,7 +145,7 @@ add_impossible_qos(QosId, Scope) ->
     qos_entry:update(QosId, fun(QosItem) ->
         {ok, QosItem#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
     end),
-    datastore_model:add_links(?CTX#{scope => Scope}, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}).
+    add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}).
 
 %%--------------------------------------------------------------------
 %% @doc
