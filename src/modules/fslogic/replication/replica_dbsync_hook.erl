@@ -46,9 +46,9 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
+                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []),
                         % TODO VFS-5573 use storage id instead of provider
-                        qos_req:restore_qos_on_storage(FileCtx4, oneprovider:get_id()),
-                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
+                        qos_req:restore_qos_on_storage(FileCtx4, oneprovider:get_id());
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;

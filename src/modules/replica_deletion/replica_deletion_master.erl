@@ -444,10 +444,17 @@ handle_task(#task{
         type = Type
     },
     id = ReportId
-}, SpaceId) ->
-    {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
-        Type, SpaceId),
-    ok.
+} = Task, SpaceId) ->
+    % TODO: VFS-5573 use actual storage id
+    StorageId = oneprovider:get_id(),
+    case file_qos:check_qos_protected(file_id:pack_guid(FileUuid, SpaceId), StorageId) of
+        true ->
+            cancel_task(Task, SpaceId);
+        false ->
+            {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
+                Type, SpaceId),
+            ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @private

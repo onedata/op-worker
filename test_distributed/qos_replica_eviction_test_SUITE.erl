@@ -63,7 +63,7 @@ all() -> [
     function = undefined,
     % used in tests when storages have equal qos.
     % This is needed so it is deterministic on
-    % which node qos will replicate files
+    % which node QoS will replicate files
     new_storages_mock = undefined
 }).
 

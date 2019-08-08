@@ -18,7 +18,6 @@
 -include("modules/datastore/transfer.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -118,72 +117,15 @@ enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
 %% @doc
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
 %%
-%% Checks whether file replica is protected by QoS and schedules eviction appropriately.
+%% Schedules safe file_replica_deletion via replica_deletion mechanism.
+%% If SupportingProviderId is undefined, it will bo chosen from
+%% providers who have given file replicated.
 %% @end
 %%--------------------------------------------------------------------
 -spec transfer_regular_file(file_ctx:ctx(), transfer_params()) -> ok | {error, term()}.
-transfer_regular_file(FileCtx, #transfer_params{
-    transfer_id = TransferId,
-    supporting_provider = SupportingProvider
-}) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO: VFS-5573 use actual storage id
-    EvictingStorage = oneprovider:get_id_or_undefined(),
-    SupportingStorage = SupportingProvider,
-    QosStorages = case file_qos:get_effective(Uuid) of
-        undefined -> #{};
-        #file_qos{target_storages = TS} -> TS
-    end,
-
-    % TODO: VFS-5573 use actual storage qos
-    EquivalentStorages =
-        providers_qos:get_provider_qos(EvictingStorage)
-            ==
-        providers_qos:get_provider_qos(SupportingStorage),
-
-    case {maps:is_key(EvictingStorage, QosStorages), EquivalentStorages andalso
-        not maps:is_key(SupportingStorage, QosStorages)} of
-        {true, true} ->
-            Diff = fun(#file_qos{target_storages = TS}) ->
-                PrevStorageQosList = maps:get(EvictingStorage, TS, []),
-                NewStorageQosList = maps:get(SupportingStorage, TS, []),
-                {ok, #file_qos{target_storages = (maps:remove(EvictingStorage, TS))#{
-                    SupportingStorage => NewStorageQosList ++ PrevStorageQosList}
-                }}
-            end,
-            QosList = maps:get(EvictingStorage, QosStorages),
-            NewFileDoc = #document{
-                key = Uuid,
-                scope = file_ctx:get_space_id_const(FileCtx),
-                value = #file_qos{
-                    qos_list = QosList,
-                    target_storages = #{SupportingStorage => QosList}
-                }
-            },
-            file_qos:create_or_update(NewFileDoc, Diff),
-            schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider);
-        {true, false} ->
-            transfer:increment_files_processed_counter(TransferId),
-            ok;
-        _ ->
-            schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider)
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Schedules safe file_replica_deletion via replica_deletion mechanism.
-%% If SupportingProviderId is undefined, it will be chosen from
-%% providers who have given file replicated.
-%% @end
-%%-------------------------------------------------------------------
--spec schedule_regular_file_eviction(file_ctx:ctx(), transfer:id(), od_provider:id() | undefined) -> ok.
-schedule_regular_file_eviction(FileCtx, TransferId, undefined) ->
+transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = undefined}) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
+    TransferId = Params#transfer_params.transfer_id,
     case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
         undefined ->
             transfer:increment_files_processed_counter(TransferId);
@@ -191,17 +133,26 @@ schedule_regular_file_eviction(FileCtx, TransferId, undefined) ->
             schedule_replica_deletion_task(
                 FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId
             )
-    end;
-schedule_regular_file_eviction(FileCtx, TransferId, SupportingProvider) ->
+    end,
+    ok;
+transfer_regular_file(FileCtx, #transfer_params{
+    transfer_id = TransferId,
+    supporting_provider = SupportingProvider
+}) ->
     {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    {Size, FileCtx} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
     schedule_replica_deletion_task(
         FileUuid, SupportingProvider, Blocks, VV, TransferId, SpaceId
-    ).
+    ),
+    ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private
