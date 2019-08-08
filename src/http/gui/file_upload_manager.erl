@@ -44,7 +44,8 @@
 -type error() :: {error, Reason :: term()}.
 
 -define(NOW, time_utils:system_time_seconds()).
--define(INACTIVITY_PERIOD, 60).  % timer:minutes(1)
+-define(INACTIVITY_PERIOD, 60).
+-define(UPLOADS_CHECKUP_INTERVAL, ?INACTIVITY_PERIOD * 1000).
 
 
 %%%===================================================================
@@ -299,7 +300,7 @@ call_file_upload_manager(Msg) ->
 -spec maybe_schedule_uploads_checkup(state()) -> state().
 maybe_schedule_uploads_checkup(#state{checkup_timer = undefined} = State) ->
     State#state{checkup_timer = erlang:send_after(
-        ?INACTIVITY_PERIOD, self(), check_uploads
+        ?UPLOADS_CHECKUP_INTERVAL, self(), check_uploads
     )};
 maybe_schedule_uploads_checkup(State) ->
     State.
