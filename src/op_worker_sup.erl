@@ -54,5 +54,6 @@ start_link() ->
     {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init([]) ->
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, [
-        transfer_onf_stats_aggregator:spec()
+        transfer_onf_stats_aggregator:spec(),
+        file_upload_manager:spec()
     ]}}.
