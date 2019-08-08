@@ -17,12 +17,14 @@
 
 -behaviour(gen_server).
 
+-include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
 -export([start_link/0, spec/0]).
--export([register_upload/2, deregister_upload/2]).
+-export([register_upload/2, is_upload_registered/2, deregister_upload/2]).
 
 %% gen_server callbacks
 -export([
@@ -32,10 +34,11 @@
 ]).
 
 -record(state, {
-    uploads = #{} :: #{file_id:file_guid() => pid()},
+    uploads = #{} :: uploads(),
     checkup_timer = undefined :: undefined | reference()
 }).
 
+-type uploads() :: #{file_id:file_guid() => {session:id(), non_neg_integer()}}.
 -type state() :: #state{}.
 -type error() :: {error, Reason :: term()}.
 
@@ -63,9 +66,22 @@ start_link() ->
 %% Registers upload monitoring for specified file.
 %% @end
 %%--------------------------------------------------------------------
--spec register_upload(session:id(), file_id:file_guid()) -> ok.
+-spec register_upload(session:id(), file_id:file_guid()) -> ok | error().
 register_upload(SessionId, FileGuid) ->
-    gen_server2:cast(?MODULE, {register, SessionId, FileGuid}).
+    call_file_upload_manager({register, SessionId, FileGuid}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if upload for specified session and file is registered.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_upload_registered(session:id(), file_id:file_guid()) -> boolean().
+is_upload_registered(SessionId, FileGuid) ->
+    case call_file_upload_manager({is_registered, SessionId, FileGuid}) of
+        true -> true;
+        _ -> false
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -125,6 +141,18 @@ init(_) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({register, SessionId, FileGuid}, _, #state{uploads = Uploads} = State) ->
+    {reply, ok, maybe_schedule_uploads_checkup(State#state{
+        uploads = Uploads#{FileGuid => {SessionId, ?NOW + ?INACTIVITY_PERIOD}}
+    })};
+handle_call({is_registered, SessionId, FileGuid}, _, State) ->
+    IsRegistered = case maps:find(FileGuid, State#state.uploads) of
+        {ok, {SessionId, _}} ->
+            true;
+        _ ->
+            false
+    end,
+    {reply, IsRegistered, State};
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, {error, wrong_request}, State}.
@@ -140,18 +168,18 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({register, SessionId, FileGuid}, #state{uploads = Uploads} = State) ->
-    {noreply, maybe_schedule_uploads_checkup(State#state{
-        uploads = Uploads#{{SessionId, FileGuid} => ?NOW + ?INACTIVITY_PERIOD}
-    })};
 handle_cast({deregister, SessionId, FileGuid}, #state{uploads = Uploads} = State) ->
-    ActiveUploads = maps:remove({SessionId, FileGuid}, Uploads),
-    NewState = State#state{uploads = ActiveUploads},
-    case maps:size(ActiveUploads) of
-        0 ->
-            {noreply, cancel_uploads_checkup(NewState), hibernate};
+    case maps:take(FileGuid, Uploads) of
+        {{SessionId, _}, ActiveUploads} ->
+            NewState = State#state{uploads = ActiveUploads},
+            case maps:size(ActiveUploads) of
+                0 ->
+                    {noreply, cancel_uploads_checkup(NewState), hibernate};
+                _ ->
+                    {noreply, NewState}
+            end;
         _ ->
-            {noreply, NewState}
+            {noreply, State}
     end;
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -224,13 +252,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% unfinished upload.
 %% @end
 %%--------------------------------------------------------------------
+-spec remove_stale_uploads(uploads()) -> uploads().
 remove_stale_uploads(Uploads) ->
     Now = ?NOW,
     maps:fold(fun
-        ({SessionId, FileGuid}, FileCheckup, Acc) when FileCheckup < Now ->
+        (FileGuid, {SessionId, CheckupTime}, Acc) when CheckupTime < Now ->
             case lfm:stat(SessionId, {guid, FileGuid}) of
                 {ok, #file_attr{mtime = MTime}} when MTime + ?INACTIVITY_PERIOD > Now ->
-                    Acc#{{SessionId, FileGuid} => MTime + ?INACTIVITY_PERIOD};
+                    Acc#{FileGuid => {SessionId, MTime + ?INACTIVITY_PERIOD}};
                 {ok, _} ->
                     lfm:unlink(SessionId, {guid, FileGuid}, false),
                     Acc;
@@ -240,6 +269,29 @@ remove_stale_uploads(Uploads) ->
         (FileGuid, FileCheckup, Acc) ->
             Acc#{FileGuid => FileCheckup}
     end, #{}, Uploads).
+
+
+%% @private
+-spec call_file_upload_manager(term()) -> ok | boolean() | error().
+call_file_upload_manager(Msg) ->
+    try
+        gen_server2:call(?MODULE, Msg, ?DEFAULT_REQUEST_TIMEOUT)
+    catch
+        exit:{noproc, _} ->
+            ?debug("File upload manager process does not exist"),
+            {error, no_file_upload_manager};
+        exit:{normal, _} ->
+            ?debug("Exit of file upload manager process"),
+            {error, no_file_upload_manager};
+        exit:{timeout, _} ->
+            ?debug("Timeout of file upload manager process"),
+            ?ERROR_TIMEOUT;
+        Type:Reason ->
+            ?error("Cannot call file upload manager due to ~p:~p", [
+                Type, Reason
+            ]),
+            {error, Reason}
+    end.
 
 
 %% @private

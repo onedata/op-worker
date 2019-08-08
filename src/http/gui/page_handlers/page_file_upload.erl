@@ -143,13 +143,14 @@ get_read_body_opts() ->
 write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
     SanitizedParams = op_sanitizer:sanitize_data(Params, #{
         required => #{
-            <<"fileId">> => {binary, non_empty},
+            <<"guid">> => {binary, non_empty},
             <<"resumableChunkNumber">> => {integer, {not_lower_than, 0}},
             <<"resumableChunkSize">> => {integer, {not_lower_than, 0}}
         }
     }),
 
     FileGuid = maps:get(<<"fileId">>, SanitizedParams),
+    assert_file_upload_registered(SessionId, FileGuid),
     {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
 
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
@@ -184,4 +185,14 @@ write_binary(Req, FileHandle, Offset, ReadBodyOpts) ->
                 FileHandle, Offset, Body
             )),
             write_binary(Req2, NewHandle, Offset + Written, ReadBodyOpts)
+    end.
+
+
+%% @private
+-spec assert_file_upload_registered(session:id(), file_id:file_guid()) ->
+    ok | no_return().
+assert_file_upload_registered(SessionId, FileGuid) ->
+    case file_upload_manager:is_upload_registered(SessionId, FileGuid) of
+        true -> ok;
+        false -> throw(upload_not_registered)
     end.
