@@ -774,7 +774,7 @@ do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, ParentGuid,
         {<<"resumableFilename">>, FileName}, {<<"resumableChunkSize">>, integer_to_binary(ChunkSize)}],
 
     utils:pforeach(fun(Chunk) ->
-        rpc:call(Worker, page_file_upload, multipart, [#{size => PartSize, left => PartsNumber}, SessionId,
+        rpc:call(Worker, page_file_upload_deprecated, multipart, [#{size => PartSize, left => PartsNumber}, SessionId,
             [{<<"resumableChunkNumber">>, integer_to_binary(Chunk)} | ParamsProp]])
     end, lists:seq(1,ChunksNumber)).
 
