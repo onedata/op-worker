@@ -64,21 +64,12 @@ handle(<<"POST">>, InitialReq) ->
                 Req2 = handle_multipart_req(Req, SessionId, #{}),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
-                throw:stream_file_error ->
-                    cowboy_req:reply(
-                        ?HTTP_500_INTERNAL_SERVER_ERROR,
-                        ?CONN_CLOSE_HEADERS, Req
-                    );
                 Type:Message ->
                     UserId = op_gui_session:get_user_id(),
                     ?error_stacktrace("Error while processing file upload "
                                       "from user ~p - ~p:~p", [
                         UserId, Type, Message
                     ]),
-                    % @todo VFS-1815 for now return 500,
-                    % because retries are not stable
-%%                    % Return 204 - resumable will retry the upload
-%%                    cowboy_req:reply(204, #{}, <<"">>)
                     cowboy_req:reply(
                         ?HTTP_500_INTERNAL_SERVER_ERROR,
                         ?CONN_CLOSE_HEADERS, Req
@@ -149,8 +140,8 @@ write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
         }
     }),
 
-    FileGuid = maps:get(<<"fileId">>, SanitizedParams),
-    assert_file_upload_registered(SessionId, FileGuid),
+    FileGuid = maps:get(<<"guid">>, SanitizedParams),
+    assert_file_upload_registered(FileGuid),
     {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
 
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
@@ -159,11 +150,7 @@ write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
 
     Req2 = try
         write_binary(Req, FileHandle, Offset, ReadBodyOpts)
-    catch Type:Message ->
-        UserId = op_gui_session:get_user_id(),
-        ?error_stacktrace("Error while uploading file from user ~p - ~p:~p", [
-            UserId, Type, Message
-        ]),
+    catch _:_ ->
         lfm:release(FileHandle), % release if possible
         throw(stream_file_error)
     end,
@@ -189,10 +176,10 @@ write_binary(Req, FileHandle, Offset, ReadBodyOpts) ->
 
 
 %% @private
--spec assert_file_upload_registered(session:id(), file_id:file_guid()) ->
-    ok | no_return().
-assert_file_upload_registered(SessionId, FileGuid) ->
-    case file_upload_manager:is_upload_registered(SessionId, FileGuid) of
+-spec assert_file_upload_registered(file_id:file_guid()) -> ok | no_return().
+assert_file_upload_registered(FileGuid) ->
+    UserId = op_gui_session:get_user_id(),
+    case file_upload_manager:is_upload_registered(UserId, FileGuid) of
         true -> ok;
         false -> throw(upload_not_registered)
     end.

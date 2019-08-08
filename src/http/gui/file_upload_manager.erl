@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 
 -include("timeouts.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -38,12 +39,12 @@
     checkup_timer = undefined :: undefined | reference()
 }).
 
--type uploads() :: #{file_id:file_guid() => {session:id(), non_neg_integer()}}.
+-type uploads() :: #{file_id:file_guid() => {od_user:id(), non_neg_integer()}}.
 -type state() :: #state{}.
 -type error() :: {error, Reason :: term()}.
 
--define(NOW, time_utils:system_time_millis()).
--define(INACTIVITY_PERIOD, 60000).  % timer:minutes(1)
+-define(NOW, time_utils:system_time_seconds()).
+-define(INACTIVITY_PERIOD, 60).  % timer:minutes(1)
 
 
 %%%===================================================================
@@ -66,9 +67,9 @@ start_link() ->
 %% Registers upload monitoring for specified file.
 %% @end
 %%--------------------------------------------------------------------
--spec register_upload(session:id(), file_id:file_guid()) -> ok | error().
-register_upload(SessionId, FileGuid) ->
-    call_file_upload_manager({register, SessionId, FileGuid}).
+-spec register_upload(od_user:id(), file_id:file_guid()) -> ok | error().
+register_upload(UserId, FileGuid) ->
+    call_file_upload_manager({register, UserId, FileGuid}).
 
 
 %%--------------------------------------------------------------------
@@ -76,9 +77,9 @@ register_upload(SessionId, FileGuid) ->
 %% Checks if upload for specified session and file is registered.
 %% @end
 %%--------------------------------------------------------------------
--spec is_upload_registered(session:id(), file_id:file_guid()) -> boolean().
-is_upload_registered(SessionId, FileGuid) ->
-    case call_file_upload_manager({is_registered, SessionId, FileGuid}) of
+-spec is_upload_registered(od_user:id(), file_id:file_guid()) -> boolean().
+is_upload_registered(UserId, FileGuid) ->
+    case call_file_upload_manager({is_registered, UserId, FileGuid}) of
         true -> true;
         _ -> false
     end.
@@ -89,9 +90,9 @@ is_upload_registered(SessionId, FileGuid) ->
 %% Deregisters upload monitoring for specified file.
 %% @end
 %%--------------------------------------------------------------------
--spec deregister_upload(session:id(), file_id:file_guid()) -> ok.
-deregister_upload(SessionId, FileGuid) ->
-    gen_server2:cast(?MODULE, {deregister, SessionId, FileGuid}).
+-spec deregister_upload(od_user:id(), file_id:file_guid()) -> ok.
+deregister_upload(UserId, FileGuid) ->
+    gen_server2:cast(?MODULE, {deregister, UserId, FileGuid}).
 
 
 %%-------------------------------------------------------------------
@@ -141,13 +142,13 @@ init(_) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({register, SessionId, FileGuid}, _, #state{uploads = Uploads} = State) ->
+handle_call({register, UserId, FileGuid}, _, #state{uploads = Uploads} = State) ->
     {reply, ok, maybe_schedule_uploads_checkup(State#state{
-        uploads = Uploads#{FileGuid => {SessionId, ?NOW + ?INACTIVITY_PERIOD}}
+        uploads = Uploads#{FileGuid => {UserId, ?NOW + ?INACTIVITY_PERIOD}}
     })};
-handle_call({is_registered, SessionId, FileGuid}, _, State) ->
+handle_call({is_registered, UserId, FileGuid}, _, State) ->
     IsRegistered = case maps:find(FileGuid, State#state.uploads) of
-        {ok, {SessionId, _}} ->
+        {ok, {UserId, _}} ->
             true;
         _ ->
             false
@@ -168,9 +169,9 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({deregister, SessionId, FileGuid}, #state{uploads = Uploads} = State) ->
+handle_cast({deregister, UserId, FileGuid}, #state{uploads = Uploads} = State) ->
     case maps:take(FileGuid, Uploads) of
-        {{SessionId, _}, ActiveUploads} ->
+        {{UserId, _}, ActiveUploads} ->
             NewState = State#state{uploads = ActiveUploads},
             case maps:size(ActiveUploads) of
                 0 ->
@@ -256,12 +257,12 @@ code_change(_OldVsn, State, _Extra) ->
 remove_stale_uploads(Uploads) ->
     Now = ?NOW,
     maps:fold(fun
-        (FileGuid, {SessionId, CheckupTime}, Acc) when CheckupTime < Now ->
-            case lfm:stat(SessionId, {guid, FileGuid}) of
+        (FileGuid, {UserId, CheckupTime}, Acc) when CheckupTime < Now ->
+            case lfm:stat(?ROOT_SESS_ID, {guid, FileGuid}) of
                 {ok, #file_attr{mtime = MTime}} when MTime + ?INACTIVITY_PERIOD > Now ->
-                    Acc#{FileGuid => {SessionId, MTime + ?INACTIVITY_PERIOD}};
+                    Acc#{FileGuid => {UserId, MTime + ?INACTIVITY_PERIOD}};
                 {ok, _} ->
-                    lfm:unlink(SessionId, {guid, FileGuid}, false),
+                    lfm:unlink(?ROOT_SESS_ID, {guid, FileGuid}, false),
                     Acc;
                 {error, _} ->
                     Acc

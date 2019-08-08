@@ -52,7 +52,7 @@ handle_internal(Auth, <<"getDirChildren">>, Data) ->
     ls(Auth, Data);
 handle_internal(Auth, <<"initializeFileUpload">>, Data) ->
     register_file_upload(Auth, Data);
-handle_internal(Auth, <<"finalizaFileUpload">>, Data) ->
+handle_internal(Auth, <<"finalizeFileUpload">>, Data) ->
     deregister_file_upload(Auth, Data);
 handle_internal(Auth, <<"getFileDownloadUrl">>, Data) ->
     get_file_download_url(Auth, Data);
@@ -113,24 +113,33 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
 %% @private
 -spec register_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
-register_file_upload(?USER(_UserId, SessionId), Data) ->
+register_file_upload(?USER(UserId, SessionId), Data) ->
     SanitizedData = op_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
-    file_upload_manager:register_upload(SessionId, FileGuid),
-    {ok, #{}}.
+
+    case lfm:stat(SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{type = Type, size = Size, owner_id = OwnerId}} ->
+            Size == 0 orelse throw(?ERROR_MALFORMED_DATA),
+            OwnerId == UserId orelse throw(?ERROR_MALFORMED_DATA),
+            Type == ?REGULAR_FILE_TYPE orelse throw(?ERROR_MALFORMED_DATA),
+            file_upload_manager:register_upload(UserId, FileGuid),
+            {ok, #{}};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
 
 
 %% @private
 -spec deregister_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
-deregister_file_upload(?USER(_UserId, SessionId), Data) ->
+deregister_file_upload(?USER(UserId), Data) ->
     SanitizedData = op_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
-    file_upload_manager:deregister_upload(SessionId, FileGuid),
+    file_upload_manager:deregister_upload(UserId, FileGuid),
     {ok, #{}}.
 
 
