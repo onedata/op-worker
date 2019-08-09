@@ -12,6 +12,7 @@
 -module(file_upload_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -30,6 +31,7 @@
     registering_upload_for_non_empty_file_should_fail/1,
     registering_upload_for_not_owned_file_should_fail/1,
     not_registered_upload_should_fail/1,
+    upload_test/1,
     stale_upload_file_should_be_deleted/1,
     finished_upload_file_should_be_left_intact/1
 ]).
@@ -40,6 +42,7 @@ all() ->
         registering_upload_for_non_empty_file_should_fail,
         registering_upload_for_not_owned_file_should_fail,
         not_registered_upload_should_fail,
+        upload_test,
         stale_upload_file_should_be_deleted,
         finished_upload_file_should_be_left_intact
     ]).
@@ -125,6 +128,39 @@ not_registered_upload_should_fail(Config) ->
     ).
 
 
+upload_test(Config) ->
+    [WorkerP1] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
+
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid})),
+
+    ?assertMatch(
+        {ok, _},
+        rpc:call(WorkerP1, file_rpc, handle, [
+            ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
+        ])
+    ),
+    ?assertMatch(true, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
+
+    do_multipart(WorkerP1, SessionId, 5, 10, 5, Guid),
+
+    ?assertMatch(
+        {ok, _},
+        rpc:call(WorkerP1, file_rpc, handle, [
+            ?USER(UserId, SessionId), <<"finalizeFileUpload">>, #{<<"guid">> => Guid}
+        ])
+    ),
+    ?assertMatch(false, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid]), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = 250}}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid}), ?ATTEMPTS),
+
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, Guid}, read),
+    {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(WorkerP1, FileHandle, 0, 250)),
+    ?assert(lists:all(fun(X) -> X == true end, [$a == Char || <<Char>> <= Data])),
+    lfm_proxy:close(WorkerP1, FileHandle).
+
+
 stale_upload_file_should_be_deleted(Config) ->
     [WorkerP1] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
@@ -202,11 +238,16 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(Case, Config) when
-    Case =:= not_registered_upload_should_fail
+    Case =:= not_registered_upload_should_fail;
+    Case =:= upload_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, cow_multipart),
     ok = test_utils:mock_new(Workers, cowboy_req),
+    ok = test_utils:mock_new(Workers, op_gui_session),
+    ok = test_utils:mock_expect(Workers, op_gui_session, get_user_id,
+        fun() -> <<"user1">> end
+    ),
     ok = test_utils:mock_expect(Workers, cow_multipart, form_data,
         fun(_) -> {file, ok, ok, ok} end
     ),
@@ -221,9 +262,9 @@ init_per_testcase(Case, Config) when
     ok = test_utils:mock_expect(Workers, cowboy_req, read_part_body,
         fun
             (#{left := 1, size := Size} = Req, _) ->
-                {ok, crypto:strong_rand_bytes(Size), Req#{done => true}};
+                {ok, << <<$a>> || _ <- lists:seq(1, Size) >>, Req#{done => true}};
             (#{left := Left, size := Size} = Req, _) ->
-                {more, crypto:strong_rand_bytes(Size), Req#{left => Left-1}}
+                {more, << <<$a>> || _ <- lists:seq(1, Size) >>, Req#{left => Left-1}}
         end
     ),
     init_per_testcase(default, Config);
@@ -234,11 +275,13 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(Case, Config) when
-    Case =:= not_registered_upload_should_fail
+    Case =:= not_registered_upload_should_fail;
+    Case =:= upload_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, cowboy_req),
     test_utils:mock_unload(Workers, cow_multipart),
+    test_utils:mock_unload(Workers, op_gui_session),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
