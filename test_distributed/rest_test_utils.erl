@@ -46,12 +46,13 @@ request(Node, URL, Method, Headers, Body, Opts) ->
             Other
     end.
 
-user_token_header(Config, User)  ->
-    #macaroon_auth{macaroon = Macaroon} = ?config({auth, User}, Config),
+user_token_header(Config, User) ->
+    #token_auth{token = Token} = ?config({auth, User}, Config),
     case rand:uniform(3) of
-        1 -> {<<"Macaroon">>, Macaroon};
-        2 -> {<<"X-Auth-Token">>, Macaroon};
-        3 -> {<<"Authorization">>, <<"Bearer ", Macaroon/binary>>}
+        1 -> {<<"X-Auth-Token">>, Token};
+        2 -> {<<"Authorization">>, <<"Bearer ", Token/binary>>};
+        %% @todo VFS-5554 Deprecated, included for backward compatibility
+        3 -> {<<"Macaroon">>, Token}
     end.
 
 assert_request_error(ExpectedError = {error, _}, RequestParams) ->
@@ -70,8 +71,8 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
             true;
         false ->
             ct:pal("Wrong response code: ~n"
-                   "    Expected: ~p~n"
-                   "    Got: ~p~n", [ExpectedCode, RespCode]),
+            "    Expected: ~p~n"
+            "    Got: ~p~n", [ExpectedCode, RespCode]),
             print_request(Node, URL, Method, Headers, Body),
             false
     end,

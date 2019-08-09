@@ -139,23 +139,34 @@ translate_error(?ERROR_BAD_VERSION(SupportedVersions)) ->
         {<<"Not supported protocol version. Supported ones are: ~p">>, [SupportedVersions]}
     };
 
-% Errors connected with macaroons
-translate_error(?ERROR_BAD_MACAROON) ->
+% Errors connected with tokens
+translate_error(?ERROR_BAD_TOKEN) ->
     {?HTTP_401_UNAUTHORIZED,
-        <<"Provided authorization token could not be understood by the server">>
+        <<"Provided access token could not be understood by the server">>
     };
-translate_error(?ERROR_MACAROON_INVALID) ->
+translate_error(?ERROR_TOKEN_INVALID) ->
     {?HTTP_401_UNAUTHORIZED,
-        <<"Provided authorization token is not valid">>
+        <<"Provided access token is not valid">>
     };
-translate_error(?ERROR_MACAROON_EXPIRED) ->
+translate_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)) ->
     {?HTTP_401_UNAUTHORIZED,
-        <<"Provided authorization token has expired">>
+        <<"Provided access token is not valid - unverified caveat: '", Caveat/binary, "'">>
     };
-translate_error(?ERROR_MACAROON_TTL_TO_LONG(MaxTtl)) ->
+translate_error(?ERROR_TOKEN_SUBJECT_INVALID) ->
     {?HTTP_401_UNAUTHORIZED,
-        <<"Provided authorization token has too long (insecure) TTL (it must not exceed ~B seconds)">>,
-        [MaxTtl]
+        <<"Token cannot be created for requested subject">>
+    };
+translate_error(?ERROR_TOKEN_AUDIENCE_FORBIDDEN) ->
+    {?HTTP_400_BAD_REQUEST,
+        <<"Requested audience is forbidden for this subject">>
+    };
+translate_error(?ERROR_TOKEN_SESSION_INVALID) ->
+    {?HTTP_401_UNAUTHORIZED,
+        <<"This token was issued for a session that no longer exists">>
+    };
+translate_error(?ERROR_BAD_AUDIENCE_TOKEN) ->
+    {?HTTP_401_UNAUTHORIZED,
+        <<"Provided audience token is not valid">>
     };
 
 % Errors connected with bad data

@@ -54,12 +54,6 @@ get_handshake_error_msg(invalid_token) ->
             status = 'INVALID_MACAROON'
         }
     };
-get_handshake_error_msg(bad_macaroon) ->
-    #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_MACAROON'
-        }
-    };
 get_handshake_error_msg(invalid_provider) ->
     #server_message{
         message_body = #handshake_response{
@@ -98,18 +92,17 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     session_id = SessId,
-    auth = #macaroon_auth{} = Auth
+    auth = #token_auth{token = Token} = Auth
 } = Req, IpAddress) when is_binary(SessId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
     case user_identity:get_or_fetch(Auth) of
-        ?ERROR_FORBIDDEN -> throw(invalid_provider);
-        ?ERROR_UNAUTHORIZED -> throw(bad_macaroon);
-        ?ERROR_BAD_MACAROON -> throw(bad_macaroon);
-        ?ERROR_MACAROON_INVALID -> throw(bad_macaroon);
-        ?ERROR_MACAROON_EXPIRED -> throw(bad_macaroon);
-        ?ERROR_MACAROON_TTL_TO_LONG(_) -> throw(bad_macaroon);
+        ?ERROR_FORBIDDEN ->
+            throw(invalid_provider);
+        {error, _} = Error ->
+            ?debug("Cannot authorize user based on token ~s due to ~w", [Token, Error]),
+            throw(invalid_token);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
             {ok, _} = session_manager:reuse_or_create_fuse_session(
                 SessId, Iden, Auth

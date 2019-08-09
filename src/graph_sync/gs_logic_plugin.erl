@@ -47,8 +47,8 @@ verify_handshake_auth(undefined) ->
     {ok, ?NOBODY};
 verify_handshake_auth(nobody) ->
     {ok, ?NOBODY};
-verify_handshake_auth({macaroon, Macaroon, _DischargeMacaroons}) ->
-    Credentials = #macaroon_auth{macaroon = Macaroon},
+verify_handshake_auth({token, Token}) ->
+    Credentials = #token_auth{token = Token},
     case http_auth:authenticate(Credentials, gui) of
         {ok, ?USER = Auth} ->
             {ok, Auth};

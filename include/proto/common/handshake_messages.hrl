@@ -16,7 +16,7 @@
 -include("proto/common/credentials.hrl").
 
 -record(client_handshake_request, {
-    auth :: #macaroon_auth{},
+    auth :: #token_auth{},
     session_id :: session:id(),
     version :: binary(),
     compatible_oneprovider_versions :: [binary()]

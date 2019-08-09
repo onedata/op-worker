@@ -379,9 +379,9 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         ],
         {ok, #{
             <<"providerId">> := ProviderId,
-            <<"macaroon">> := Macaroon
+            <<"providerRootToken">> := RootToken
         }} = oz_providers:register_with_uuid(none, Parameters),
-        provider_auth:save(ProviderId, Macaroon),
+        provider_auth:save(ProviderId, RootToken),
         {ok, ProviderId}
     catch
         T:M ->

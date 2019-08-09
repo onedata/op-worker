@@ -27,7 +27,7 @@
 
 -type record() :: #user_identity{}.
 -type doc() :: datastore_doc:doc(record()).
--type credentials() :: #macaroon_auth{} | binary().
+-type credentials() :: #token_auth{} | binary().
 -export_type([credentials/0]).
 
 -define(CTX, #{
@@ -130,11 +130,11 @@ get_or_fetch_user_id(Credentials) ->
 %%% Internal functions
 %%%===================================================================
 
--spec to_auth(credentials()) -> #macaroon_auth{}.
-to_auth(Auth = #macaroon_auth{}) ->
+-spec to_auth(credentials()) -> #token_auth{}.
+to_auth(Auth = #token_auth{}) ->
     Auth;
-to_auth(Macaroon) when is_binary(Macaroon) ->
-    #macaroon_auth{macaroon = Macaroon}.
+to_auth(Token) when is_binary(Token) ->
+    #token_auth{token = Token}.
 
 
 %%%===================================================================

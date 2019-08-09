@@ -353,10 +353,10 @@ start_gs_connection() ->
         Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
-        {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
+        {ok, ProviderAccessToken} = provider_auth:get_access_token(),
 
         gs_client:start_link(
-            Address, {macaroon, ProviderMacaroon, []}, [?GS_PROTOCOL_VERSION],
+            Address, {token, ProviderAccessToken}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts
         )
     catch
@@ -593,27 +593,8 @@ resolve_authorization(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
     resolve_authorization(Auth);
 
-resolve_authorization(#macaroon_auth{} = Auth) ->
-    #macaroon_auth{
-        macaroon = MacaroonBin, disch_macaroons = DischargeMacaroonsBin
-    } = Auth,
-    Macaroon = case macaroons:deserialize(MacaroonBin) of
-        {ok, M} ->
-            M;
-        {error, _} = Error ->
-            ?debug("Declining auth macaroon as it cannot be deserialized (~w): ~p", [
-                Error, Auth
-            ]),
-            throw(?ERROR_UNAUTHORIZED)
-    end,
-    BoundMacaroons = lists:map(
-        fun(DischargeMacaroonBin) ->
-            {ok, DM} = macaroons:deserialize(DischargeMacaroonBin),
-            BDM = macaroon:prepare_for_request(Macaroon, DM),
-            {ok, SerializedBDM} = macaroons:serialize(BDM),
-            SerializedBDM
-        end, DischargeMacaroonsBin),
-    {macaroon, MacaroonBin, BoundMacaroons}.
+resolve_authorization(#token_auth{token = Token}) ->
+    {token, Token}.
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().

@@ -103,8 +103,8 @@ response_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
-    {ok, {_Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
+    {ok, {_Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
 
     MsgId = <<"1">>,
     Ping = fuse_test_utils:generate_ping_message(MsgId),
@@ -124,11 +124,11 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
 
     SessionId = crypto:strong_rand_bytes(10),
     % Create a couple of connections within the same session
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock3, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock4, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock5, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock3, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock4, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock5, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
 
     Ping = fuse_test_utils:generate_ping_message(),
 
@@ -154,8 +154,8 @@ fallback_during_sending_response_because_of_connection_error_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
 
     mock_ranch_ssl_to_fail_once(Worker1),
     MsgId = <<"1">>,
@@ -177,11 +177,11 @@ fulfill_promises_after_connection_close_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock3, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock4, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
-    {ok, {Sock5, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock3, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock4, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock5, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
@@ -227,8 +227,8 @@ fulfill_promises_after_connection_error_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
@@ -270,8 +270,8 @@ send_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, once}], SessionId),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
 
     % In case of errors send_sync should try sending via other connections
     mock_ranch_ssl_to_fail_once(Workers),
@@ -333,7 +333,7 @@ client_keepalive_test(Config) ->
     SessionId = crypto:strong_rand_bytes(10),
 
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
     % send keepalive msg and assert it will not end in decoding error
     % on provider side (following communication should succeed)
     ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
@@ -347,7 +347,7 @@ heartbeats_test(Config) ->
 
     RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SID),
 
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
@@ -384,7 +384,7 @@ async_request_manager_memory_management_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = crypto:strong_rand_bytes(10),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
     {ok, AsyncReqManager} = rpc:call(
         Worker1, session_connections, get_async_req_manager, [SessionId]
     ),
@@ -422,7 +422,7 @@ socket_timeout_test(Config) ->
     initializer:remove_pending_messages(),
 
     lists:foreach(fun(MainNum) ->
-        {ok, {Sock2, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SID),
+        {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SID),
 
         lists:foreach(fun(Num) ->
             NumBin = integer_to_binary(Num),
@@ -468,7 +468,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
         meck:passthrough([FileUuid, SessId])
     end),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
 
     % when
     fuse_test_utils:create_file(Sock, RootGuid, <<"f1">>),
@@ -550,7 +550,7 @@ init_per_testcase(heartbeats_test, Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
             {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
         end
     ),
@@ -600,7 +600,7 @@ init_per_testcase(_Case, Config) ->
     mock_user_identity(Workers),
 
     initializer:mock_provider_id(
-        Workers, <<"providerId">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
     ),
     Config.
 
@@ -673,7 +673,7 @@ unmock_ranch_ssl(Node) ->
 mock_user_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
             {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
         end
     ).
@@ -713,7 +713,7 @@ send_msg(Node, SessionId, Msg) ->
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
     {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
-    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(NodeToConnect, []),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server

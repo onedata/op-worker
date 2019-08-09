@@ -67,6 +67,11 @@ gather_configuration() ->
     {ok, CompOpVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEPROVIDER),
     {ok, CompOcVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONECLIENT),
 
+    IdentityToken = case provider_auth:get_identity_token() of
+        {ok, T} -> T;
+        _ -> undefined
+    end,
+
     #{
         <<"providerId">> => gs_protocol:undefined_to_null(ProviderId),
         <<"name">> => gs_protocol:undefined_to_null(Name),
@@ -77,7 +82,8 @@ gather_configuration() ->
         <<"rtransferPort">> => ?RTRANSFER_PORT,
         <<"compatibleOnezoneVersions">> => CompOzVersions,
         <<"compatibleOneproviderVersions">> => CompOpVersions,
-        <<"compatibleOneclientVersions">> => CompOcVersions
+        <<"compatibleOneclientVersions">> => CompOcVersions,
+        <<"identityToken">> => IdentityToken
     }.
 
 
