@@ -29,7 +29,9 @@
     registering_upload_for_directory_should_fail/1,
     registering_upload_for_non_empty_file_should_fail/1,
     registering_upload_for_not_owned_file_should_fail/1,
-    not_registered_upload_should_fail/1
+    not_registered_upload_should_fail/1,
+    stale_upload_file_should_be_deleted/1,
+    finished_upload_file_should_be_left_intact/1
 ]).
 
 all() ->
@@ -37,7 +39,9 @@ all() ->
         registering_upload_for_directory_should_fail,
         registering_upload_for_non_empty_file_should_fail,
         registering_upload_for_not_owned_file_should_fail,
-        not_registered_upload_should_fail
+        not_registered_upload_should_fail,
+        stale_upload_file_should_be_deleted,
+        finished_upload_file_should_be_left_intact
     ]).
 
 -define(ATTEMPTS, 60).
@@ -121,6 +125,68 @@ not_registered_upload_should_fail(Config) ->
     ).
 
 
+stale_upload_file_should_be_deleted(Config) ->
+    [WorkerP1] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
+
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid})),
+
+    ?assertMatch(
+        {ok, _},
+        rpc:call(WorkerP1, file_rpc, handle, [
+            ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
+        ])
+    ),
+    ?assertMatch(true, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
+
+    % file shouldn't be deleted after only 30s of inactivity
+    timer:sleep(timer:seconds(30)),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid})),
+    ?assertMatch(true, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
+
+    % but after 1min (INACTIVITY_PERIOD) not finalized stale upload files should be deleted
+    timer:sleep(timer:seconds(100)),
+    ?assertMatch(false, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid]), ?ATTEMPTS),
+    ?assertMatch({error, enoent}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid}), ?ATTEMPTS).
+
+
+finished_upload_file_should_be_left_intact(Config) ->
+    [WorkerP1] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
+
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid})),
+
+    ?assertMatch(
+        {ok, _},
+        rpc:call(WorkerP1, file_rpc, handle, [
+            ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
+        ])
+    ),
+    ?assertMatch(true, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
+
+    % file shouldn't be deleted after only 30s of inactivity
+    timer:sleep(timer:seconds(30)),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid})),
+    ?assertMatch(true, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
+
+    ?assertMatch(
+        {ok, _},
+        rpc:call(WorkerP1, file_rpc, handle, [
+            ?USER(UserId, SessionId), <<"finalizeFileUpload">>, #{<<"guid">> => Guid}
+        ])
+    ),
+    ?assertMatch(false, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid]), ?ATTEMPTS),
+
+    % finalized upload files shouldn't be deleted automatically after INACTIVITY_PERIOD
+    timer:sleep(timer:seconds(100)),
+    ?assertMatch(false, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid})).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -194,12 +260,12 @@ end_per_testcase(_Case, Config) ->
 
 do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
     ChunkSize = PartsNumber*PartSize,
-    ParamsProp = [{<<"guid">>, FileGuid}, {<<"resumableChunkSize">>, integer_to_binary(ChunkSize)}],
+    Params = #{<<"guid">> => FileGuid, <<"resumableChunkSize">> => integer_to_binary(ChunkSize)},
 
     utils:pforeach(fun(Chunk) ->
         rpc:call(Worker, page_file_upload, handle_multipart_req, [
             #{size => PartSize, left => PartsNumber},
             SessionId,
-            [{<<"resumableChunkNumber">>, integer_to_binary(Chunk)} | ParamsProp]
+            Params#{<<"resumableChunkNumber">> => integer_to_binary(Chunk)}
         ])
     end, lists:seq(1,ChunksNumber)).
