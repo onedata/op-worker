@@ -24,8 +24,11 @@
 % Endpoint for nagios healthcheck
 -define(NAGIOS_OZ_CONNECTIVITY_PATH, "/nagios/oz_connectivity").
 
-% Endpoint for uploading files
--define(FILE_UPLOAD_PATH, "/upload").
+% Deprecated endpoint for uploading files
+-define(DEPRECATED_FILE_UPLOAD_PATH, "/upload").
+
+% New endpoint for uploading files
+-define(FILE_UPLOAD_PATH, "/file_upload").
 
 % Endpoint for downloading files
 -define(FILE_DOWNLOAD_PATH, "/download").

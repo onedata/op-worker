@@ -79,6 +79,7 @@ start() ->
         {?IDENTITY_MACAROON_PATH, [<<"GET">>], page_identity_macaroon},
         {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
+        {?DEPRECATED_FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload_deprecated},
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
