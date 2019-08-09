@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Monitors activity of file uploads. If no activity (writes) happens
-%%% for longer than allowed ?INACTIVITY _PERIOD it is assumed that GUI
+%%% for longer than allowed ?INACTIVITY_PERIOD it is assumed that GUI
 %%% lost connection to backend and no more file chunks will be uploaded.
 %%% Such damaged files will be deleted.
 %%% @end
@@ -70,7 +70,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec register_upload(od_user:id(), file_id:file_guid()) -> ok | error().
 register_upload(UserId, FileGuid) ->
-    call_file_upload_manager({register, UserId, FileGuid}).
+    call({register, UserId, FileGuid}).
 
 
 %%--------------------------------------------------------------------
@@ -80,7 +80,7 @@ register_upload(UserId, FileGuid) ->
 %%--------------------------------------------------------------------
 -spec is_upload_registered(od_user:id(), file_id:file_guid()) -> boolean().
 is_upload_registered(UserId, FileGuid) ->
-    case call_file_upload_manager({is_registered, UserId, FileGuid}) of
+    case call({is_registered, UserId, FileGuid}) of
         true -> true;
         _ -> false
     end.
@@ -274,8 +274,8 @@ remove_stale_uploads(Uploads) ->
 
 
 %% @private
--spec call_file_upload_manager(term()) -> ok | boolean() | error().
-call_file_upload_manager(Msg) ->
+-spec call(term()) -> ok | boolean() | error().
+call(Msg) ->
     try
         gen_server2:call(?MODULE, Msg, ?DEFAULT_REQUEST_TIMEOUT)
     catch

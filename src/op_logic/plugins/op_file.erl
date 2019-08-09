@@ -293,10 +293,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         SessionId,
         maps:get(<<"parent">>, Data),
         maps:get(<<"name">>, Data),
-        undefined,
         binary_to_atom(maps:get(<<"type">>, Data), utf8),
         0,
-        maps:get(<<"createAttempts">>, Data, 1) - 1
+        maps:get(<<"createAttempts">>, Data, 1)
     ),
 
     {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
@@ -479,28 +478,35 @@ assert_file_managed_locally(?USER(UserId), Guid) ->
 
 
 %% @private
+-spec create_file(session:id(), file_id:file_guid(), file_meta:name(), file | dir) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(SessionId, ParentGuid, Name, file) ->
+    lfm:create(SessionId, ParentGuid, Name, undefined);
+create_file(SessionId, ParentGuid, Name, dir) ->
+    lfm:mkdir(SessionId, ParentGuid, Name, undefined).
+
+
+%% @private
 -spec create_file(
     SessionId :: session:id(),
     ParentGuid :: file_id:file_guid(),
     Name :: file_meta:name(),
-    Mode :: undefined | file_meta:mode(),
     Type :: file | dir,
     Counter :: non_neg_integer(),
-    Retries :: non_neg_integer()
+    Attempts :: non_neg_integer()
 ) ->
     {ok, file_id:file_guid()} | no_return().
-create_file(SessId, ParentGuid, OriginalName, Mode, Type, Counter, Counter) ->
+create_file(_SessId, _ParentGuid, _OriginalName, _Type, Counter, Counter) ->
+    throw(?ERROR_POSIX(?EEXIST));
+create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),
-    ?check(create_file(SessId, ParentGuid, Name, Mode, Type));
-create_file(SessId, ParentGuid, OriginalName, Mode, Type, Counter, Retries) ->
-    Name = maybe_add_file_suffix(OriginalName, Counter),
-    case create_file(SessId, ParentGuid, Name, Mode, Type) of
+    case create_file(SessId, ParentGuid, Name, Type) of
         {ok, Guid} ->
             {ok, Guid};
         {error, ?EEXIST} ->
             create_file(
-                SessId, ParentGuid, OriginalName, Mode, Type,
-                Counter + 1, Retries
+                SessId, ParentGuid, OriginalName, Type,
+                Counter + 1, Attempts
             );
         {error, Errno} ->
             throw(?ERROR_POSIX(Errno))
@@ -516,21 +522,6 @@ maybe_add_file_suffix(OriginalName, Counter) ->
     RootName = filename:rootname(OriginalName),
     Ext = filename:extension(OriginalName),
     str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext]).
-
-
-%% @private
--spec create_file(
-    SessionId :: session:id(),
-    ParentGuid :: file_id:file_guid(),
-    Name :: file_meta:name(),
-    Mode :: undefined | file_meta:mode(),
-    Type :: file | dir
-) ->
-    {ok, file_id:file_guid()} | {error, term()}.
-create_file(SessionId, ParentGuid, Name, Mode, file) ->
-    lfm:create(SessionId, ParentGuid, Name, Mode);
-create_file(SessionId, ParentGuid, Name, Mode, dir) ->
-    lfm:mkdir(SessionId, ParentGuid, Name, Mode).
 
 
 %%--------------------------------------------------------------------

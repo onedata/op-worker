@@ -121,7 +121,7 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
 
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
-            file_upload_manager:register_upload(UserId, FileGuid),
+            ok = file_upload_manager:register_upload(UserId, FileGuid),
             {ok, #{}};
         {ok, _} ->
             ?ERROR_BAD_DATA(<<"guid">>);

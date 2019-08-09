@@ -17,6 +17,7 @@
 
 -behaviour(dynamic_page_behaviour).
 
+-include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -64,6 +65,19 @@ handle(<<"POST">>, InitialReq) ->
                 Req2 = handle_multipart_req(Req, SessionId, #{}),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
+                throw:upload_not_registered ->
+                    cowboy_req:reply(?HTTP_403_FORBIDDEN, ?CONN_CLOSE_HEADERS, Req);
+                throw:Error ->
+                    ErrorResp = rest_translator:error_response(Error),
+                    RespBody = case ErrorResp#rest_resp.body of
+                        {binary, Bin} -> Bin;
+                        Map -> json_utils:encode(Map)
+                    end,
+                    cowboy_req:reply(
+                        ErrorResp#rest_resp.code,
+                        maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
+                        RespBody, Req
+                    );
                 Type:Message ->
                     UserId = op_gui_session:get_user_id(),
                     ?error_stacktrace("Error while processing file upload "
@@ -148,15 +162,11 @@ write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     Offset = ChunkSize * (ChunkNumber - 1),
 
-    Req2 = try
+    try
         write_binary(Req, FileHandle, Offset, ReadBodyOpts)
-    catch _:_ ->
-        lfm:release(FileHandle), % release if possible
-        throw(stream_file_error)
-    end,
-    ?check(lfm:release(FileHandle)),
-
-    Req2.
+    after
+        lfm:release(FileHandle) % release if possible
+    end.
 
 
 %% @private
