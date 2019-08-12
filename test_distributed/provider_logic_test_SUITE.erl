@@ -236,7 +236,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, provider_logic, get_protected_data, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)por),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Provider1PrivateGRI, change_type = deleted},

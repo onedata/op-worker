@@ -182,9 +182,9 @@
 %% the root token and cached for a configurable time.
 -record(provider_auth, {
     provider_id :: od_provider:id(),
-    root_token :: binary(),
-    cached_access_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), binary()},
-    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), binary()}
+    root_token :: tokens:serialized(),
+    cached_access_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()},
+    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
 }).
 
 -record(authorization_nonce, {
