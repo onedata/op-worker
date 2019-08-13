@@ -25,7 +25,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
--export([get/2, get_protected_data/2]).
+-export([get/2, get_protected_data/2, get_as_map/1]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
@@ -73,6 +73,31 @@ get_protected_data(SessionId, SpaceId) ->
         gri = #gri{type = od_space, id = SpaceId, aspect = instance, scope = protected},
         subscribe = true
     }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves details of given space using current provider's auth
+%% and translates them to a map for use by onepanel.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_as_map(od_space:id()) ->
+    {ok, #{atom() := term()}} | gs_protocol:error().
+get_as_map(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = Record}} ->
+            {ok, #{
+                name => Record#od_space.name,
+                direct_users => Record#od_space.direct_users,
+                eff_users => Record#od_space.eff_users,
+                direct_groups => Record#od_space.direct_groups,
+                eff_groups => Record#od_space.eff_groups,
+                providers => Record#od_space.providers,
+                shares => Record#od_space.shares,
+                harvesters => Record#od_space.harvesters
+            }};
+        {error, Error} -> {error, Error}
+    end.
 
 
 -spec get_name(gs_client_worker:client(), od_space:id()) ->
