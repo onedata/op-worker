@@ -76,7 +76,7 @@ start() ->
 
     DynamicPageRoutes = [
         {?NAGIOS_OZ_CONNECTIVITY_PATH, [<<"GET">>], page_oz_connectivity},
-        {?IDENTITY_MACAROON_PATH, [<<"GET">>], page_identity_macaroon},
+        {?IDENTITY_TOKEN_PATH, [<<"GET">>], page_identity_token},
         {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
         {?DEPRECATED_FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload_deprecated},

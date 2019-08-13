@@ -329,7 +329,7 @@ remove_file_on_ceph_using_client(Config0) ->
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker, [{active, true}], SessionId(Worker)),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker, [{active, true}], SessionId(Worker)),
 
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
@@ -470,7 +470,7 @@ init_per_testcase(remove_file_on_ceph_using_client, Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
             {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
         end
     ),

@@ -578,7 +578,7 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     SpaceSize = available_size(SupportingProvider, SpaceId),
     RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    {ok, {Conn, _}} = fuse_test_utils:connect_via_macaroon(P1, [{active, true}], SessId(P1)),
+    {ok, {Conn, _}} = fuse_test_utils:connect_via_token(P1, [{active, true}], SessId(P1)),
     SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),
     rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId(P1)]),
 
@@ -621,7 +621,7 @@ init_per_testcase(Case, Config) when
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
                 {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
            (Auth) -> meck:passthrough([Auth])
         end

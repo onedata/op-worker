@@ -49,7 +49,7 @@ authenticate(Req) ->
         undefined ->
             false;
         Macaroon ->
-            Auth = #macaroon_auth{macaroon = Macaroon},
+            Auth = #token_auth{token = Macaroon},
             case user_identity:get_or_fetch(Auth) of
                 {error, _} ->
                     ?ERROR_UNAUTHORIZED;

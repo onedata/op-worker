@@ -32,7 +32,6 @@
 -export([get_eff_spaces/1, get_eff_spaces/2]).
 -export([has_eff_space/2, has_eff_space/3]).
 -export([get_space_by_name/3]).
--export([authorize/1]).
 
 %%%===================================================================
 %%% API
@@ -251,17 +250,3 @@ get_space_by_name_internal(Client, SpaceName, [SpaceId | Rest]) ->
         _ ->
             get_space_by_name_internal(Client, SpaceName, Rest)
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Collects discharge macaroon from OZ to verify if user is authenticated.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(CaveatId :: binary()) ->
-    {ok, DischMacaroon :: binary()} | gs_protocol:error().
-authorize(CaveatId) ->
-    gs_client_worker:request(#gs_req_rpc{
-        function = <<"authorizeUser">>,
-        args = #{<<"identifier">> => CaveatId}
-    }).

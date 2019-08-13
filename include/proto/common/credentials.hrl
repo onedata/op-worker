@@ -13,10 +13,9 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
-% Record containing macaroons for user authorization in OZ.
--record(macaroon_auth, {
-    macaroon :: binary(),
-    disch_macaroons = [] :: [binary()]
+% Record containing access token for user authorization in OZ.
+-record(token_auth, {
+    token :: tokens:serialized()
 }).
 
 -endif.

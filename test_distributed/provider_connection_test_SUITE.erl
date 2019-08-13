@@ -253,6 +253,8 @@ init_per_suite(Config) ->
         test_utils:mock_new(Nodes, oneprovider),
         % Set op version to old one, that for sure is not compatible with current one
         test_utils:mock_expect(Nodes, oneprovider, get_version, fun() -> <<"16.04-rc5">> end),
+        % Make sure provider identity token is not regenerated between requests
+        rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_token_ttl_sec, 999999999]),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -365,6 +367,7 @@ expected_configuration(Node) ->
     RtransferPort = proplists:get_value(server_port, TransferConfig),
     {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
     {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+    {ok, IdentityToken} = rpc:call(Node, provider_auth, get_identity_token, []),
 
     #{
         <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
@@ -376,7 +379,8 @@ expected_configuration(Node) ->
         <<"rtransferPort">> => RtransferPort,
         <<"compatibleOnezoneVersions">> => CompOzVersions,
         <<"compatibleOneproviderVersions">> => CompOpVersions,
-        <<"compatibleOneclientVersions">> => CompOcVersions
+        <<"compatibleOneclientVersions">> => CompOcVersions,
+        <<"identityToken">> => IdentityToken
     }.
 
 

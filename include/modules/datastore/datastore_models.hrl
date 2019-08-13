@@ -178,13 +178,13 @@
 %%% Records specific for oneprovider
 %%%===================================================================
 
-%% Authorization of this provider, auth and identity macaroons are derived from
-%% the root macaroon and cached for a configurable time.
+%% Authorization of this provider, access and identity tokens are derived from
+%% the root token and cached for a configurable time.
 -record(provider_auth, {
     provider_id :: od_provider:id(),
-    root_macaroon :: binary(),
-    cached_auth_macaroon = {0, <<"">>} :: {ExpirationTime :: integer(), binary()},
-    cached_identity_macaroon = {0, <<"">>} :: {ExpirationTime :: integer(), binary()}
+    root_token :: tokens:serialized(),
+    cached_access_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()},
+    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
 }).
 
 -record(authorization_nonce, {

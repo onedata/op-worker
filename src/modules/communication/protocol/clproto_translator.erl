@@ -285,12 +285,10 @@ translate_from_protobuf(#'ProviderHandshakeRequest'{
         nonce = Nonce
     };
 translate_from_protobuf(#'Macaroon'{
-    macaroon = Macaroon,
-    disch_macaroons = DischargeMacaroons
+    macaroon = Macaroon
 }) ->
-    #macaroon_auth{
-        macaroon = Macaroon,
-        disch_macaroons = DischargeMacaroons
+    #token_auth{
+        token = Macaroon
     };
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
@@ -1323,13 +1321,11 @@ translate_to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-translate_to_protobuf(#macaroon_auth{
-    macaroon = Macaroon,
-    disch_macaroons = DMacaroons
+translate_to_protobuf(#token_auth{
+    token = Macaroon
 }) ->
     #'Macaroon'{
-        macaroon = Macaroon,
-        disch_macaroons = DMacaroons
+        macaroon = Macaroon
     };
 
 

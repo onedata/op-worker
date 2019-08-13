@@ -66,8 +66,8 @@ translate_write_event_from_protobuf_test() ->
     ?assertEqual(Internal, clproto_translator:translate_from_protobuf(Protobuf)).
 
 translate_client_handshake_request_from_protobuf_test() ->
-    Macaroon = <<"DUMMY-MACAROON">>,
-    {Internal, Protobuf} = get_client_handshake_request(Macaroon, 1, [<<"18.01.01">>, <<"18.01.02">>]),
+    Token = <<"DUMMY-TOKEN">>,
+    {Internal, Protobuf} = get_client_handshake_request(Token, 1, [<<"18.01.01">>, <<"18.01.02">>]),
     ?assertEqual(Internal, clproto_translator:translate_from_protobuf(Protobuf)).
 
 translate_provider_handshake_request_from_protobuf_test() ->
@@ -82,9 +82,9 @@ translate_end_of_message_stream_from_protobuf_test() ->
     {Internal, Protobuf} = get_end_of_message_stream(),
     ?assertEqual(Internal, clproto_translator:translate_from_protobuf(Protobuf)).
 
-translate_macaroon_from_protobuf_test() ->
-    Macaroon = <<"DUMMY-MACAROON">>,
-    {Internal, Protobuf} = get_macaroon(Macaroon),
+translate_token_from_protobuf_test() ->
+    Token = <<"DUMMY-TOKEN">>,
+    {Internal, Protobuf} = get_token_auth(Token),
     ?assertEqual(Internal, clproto_translator:translate_from_protobuf(Protobuf)).
 
 translate_ping_from_protobuf_test() ->
@@ -318,19 +318,17 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
             file_size = FileSize, blocks = ProtobufBlocks}
     }.
 
-get_macaroon(Val) ->
-    DM1 = <<Val/binary, "-DM1">>,
-    DM2 = <<Val/binary, "-DM2">>,
+get_token_auth(Val) ->
     {
-        #macaroon_auth{macaroon = Val, disch_macaroons = [DM1, DM2]},
-        #'Macaroon'{macaroon = Val, disch_macaroons = [DM1, DM2]}
+        #token_auth{token = Val},
+        #'Macaroon'{macaroon = Val}
     }.
 
-get_client_handshake_request(Macaroon, SessionId, CompOpVersions) ->
-    {IntMacaroon, PBMacaroon} = get_macaroon(Macaroon),
+get_client_handshake_request(Token, SessionId, CompOpVersions) ->
+    {Internal, Protobuf} = get_token_auth(Token),
     {
-        #client_handshake_request{auth = IntMacaroon, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
-        #'ClientHandshakeRequest'{macaroon = PBMacaroon, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions}
+        #client_handshake_request{auth = Internal, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
+        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions}
     }.
 
 get_provider_handshake_request(ProviderId, Nonce) ->

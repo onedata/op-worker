@@ -276,13 +276,13 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 %% Supports a space based on support_space_token and support size.
 %% @end
 %%--------------------------------------------------------------------
--spec support_space(Token :: binary() | macaroon:macaroon(), SupportSize :: integer()) ->
+-spec support_space(tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | gs_protocol:error().
 support_space(Token, SupportSize) ->
     support_space(?ROOT_SESS_ID, Token, SupportSize).
 
 -spec support_space(SessionId :: gs_client_worker:client(),
-    Token :: binary() | macaroon:macaroon(), SupportSize :: integer()) ->
+    tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | gs_protocol:error().
 support_space(SessionId, Token, SupportSize) ->
     Data = #{<<"token">> => Token, <<"size">> => SupportSize},
@@ -733,7 +733,7 @@ zone_get_offline_access_idps() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Contacts given provider and retrieves his identity macaroon, and then
+%% Contacts given provider and retrieves his identity token, and then
 %% verifies it in Onezone.
 %% @end
 %%--------------------------------------------------------------------
@@ -741,11 +741,14 @@ zone_get_offline_access_idps() ->
 verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
-        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_MACAROON_PATH]),
+        %% @todo VFS-5554 Deprecated, included for backward compatibility
+        %% Must be supported in the 19.09.* line, later the counterpart in the
+        %% configuration endpoint can be used.
+        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, #{}, <<>>, SslOpts) of
-            {ok, 200, _, IdentityMacaroon} ->
-                verify_provider_identity(ProviderId, IdentityMacaroon);
+            {ok, 200, _, IdentityToken} ->
+                verify_provider_identity(ProviderId, IdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
             {error, _} = Error ->
@@ -762,18 +765,20 @@ verify_provider_identity(ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies given provider in Onezone based on its identity macaroon.
+%% Verifies given provider in Onezone based on its identity token.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_provider_identity(od_provider:id(), IdentityMacaroon :: binary()) ->
+-spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
     ok | gs_protocol:error().
-verify_provider_identity(ProviderId, IdentityMacaroon) ->
+verify_provider_identity(ProviderId, IdentityToken) ->
     ?CREATE_RETURN_OK(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_provider, id = undefined, aspect = verify_provider_identity},
         data = #{
             <<"providerId">> => ProviderId,
-            <<"macaroon">> => IdentityMacaroon
+            <<"token">> => IdentityToken,
+            %% @todo VFS-5554 Deprecated, included for backward compatibility
+            <<"macaroon">> => IdentityToken
         }
     })).
 

@@ -7,10 +7,13 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements dynamic_page_behaviour and is called
-%%% when identity macaroon page is visited.
+%%% when identity token page is visited.
+%%% @todo VFS-5554 Deprecated, included for backward compatibility
+%%% Must be supported in the 19.09.* line, later the counterpart in the
+%%% configuration endpoint can be used.
 %%% @end
 %%%-------------------------------------------------------------------
--module(page_identity_macaroon).
+-module(page_identity_token).
 -author("Lukasz Opiola").
 
 -behaviour(dynamic_page_behaviour).
@@ -30,10 +33,10 @@
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
-    {ok, IdentityMacaroon} = provider_auth:get_identity_macaroon(),
+    {ok, IdentityToken} = provider_auth:get_identity_token(),
     cowboy_req:reply(
         ?HTTP_200_OK,
         #{<<"content-type">> => <<"text/plain">>},
-        IdentityMacaroon,
+        IdentityToken,
         Req
     ).

@@ -25,19 +25,19 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    macaroon_auth/1,
+    token_auth/1,
     internal_error_when_handler_crashes/1,
     custom_error_when_handler_throws_error/1
 ]).
 
 
 all() -> ?ALL([
-    macaroon_auth,
+    token_auth,
     internal_error_when_handler_crashes,
     custom_error_when_handler_throws_error
 ]).
 
--define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(TOKEN, <<"DUMMY-TOKEN">>).
 
 -define(USER_ID, <<"test_id">>).
 -define(USER_FULL_NAME, <<"test_name">>).
@@ -51,16 +51,17 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-macaroon_auth(Config) ->
+token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
     % when
     AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
-    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?MACAROON}),
-    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?MACAROON}),
-    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?MACAROON)/binary>>}),
+    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?TOKEN}),
+    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?TOKEN)/binary>>}),
+    %% @todo VFS-5554 Deprecated, included for backward compatibility
+    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?TOKEN}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
@@ -223,7 +224,7 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#macaroon_auth{macaroon = ?MACAROON}, ?USER_ID) ->
+        (#token_auth{token = ?TOKEN}, ?USER_ID) ->
             UserDoc;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
@@ -263,7 +264,7 @@ unmock_user_logic(Config) ->
 mock_provider_id(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:mock_provider_id(
-        Workers, ?PROVIDER_ID, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, ?PROVIDER_ID, <<"access-token">>, <<"identity-token">>
     ).
 
 

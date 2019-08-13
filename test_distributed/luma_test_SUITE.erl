@@ -893,7 +893,7 @@ init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [idp_access_token, space_storage]),
     test_utils:mock_expect(Worker, idp_access_token, acquire, fun
-        (?ADMIN_ID, #macaroon_auth{}, ?OAUTH2_IDP) ->
+        (?ADMIN_ID, #token_auth{}, ?OAUTH2_IDP) ->
             {ok, {?IDP_ADMIN_TOKEN, ?TTL}};
         (?USER_ID, ?SESS_ID, ?OAUTH2_IDP) ->
             {ok, {?IDP_USER_TOKEN, ?TTL}}
