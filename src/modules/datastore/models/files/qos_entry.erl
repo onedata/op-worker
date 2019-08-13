@@ -141,10 +141,11 @@ set_status(QosId, Status) ->
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok | {error, term()}.
 add_impossible_qos(QosId, Scope) ->
-    qos_entry:update(QosId, fun(QosItem) ->
+    update(QosId, fun(QosItem) ->
         {ok, QosItem#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
     end),
-    add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}).
+    {ok, _} = add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

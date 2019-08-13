@@ -29,7 +29,8 @@
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/7,
-    get_file_qos/3, add_qos/5, get_qos_details/3, remove_qos/3, check_qos_fulfilled/3]).
+    get_file_qos/3, add_qos/5, get_qos_details/3, remove_qos/3, check_qos_fulfilled/3,
+    check_qos_fulfilled/4]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -81,31 +82,6 @@ teardown(Config) ->
         fun(Pid) ->
             Pid ! exit
         end, ?config(servers, Config)).
-
--spec add_qos(node(), session:id(), logical_file_manager:file_key(), binary(),
-    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | logical_file_manager:error_reply().
-add_qos(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos(SessId, FileKey, Expression, ReplicasNum)).
-
--spec get_file_qos(node(), session:id(), logical_file_manager:file_key()) ->
-    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | logical_file_manager:error_reply().
-get_file_qos(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_file_qos(SessId, FileKey)).
-
--spec get_qos_details(node(), session:id(), qos_entry:id()) ->
-    {ok, #qos_entry{}} | logical_file_manager:error_reply().
-get_qos_details(Worker, SessId, QosId) ->
-    ?EXEC(Worker, lfm:get_qos_details(SessId, QosId)).
-
--spec remove_qos(node(), session:id(), qos_entry:id()) ->
-    ok | logical_file_manager:error_reply().
-remove_qos(Worker, SessId, QosId) ->
-    ?EXEC(Worker, lfm:remove_qos(SessId, QosId)).
-
--spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
-    boolean() | logical_file_manager:error_reply().
-check_qos_fulfilled(Worker, SessId, QosId) ->
-    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId)).
 
 -spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
@@ -493,6 +469,37 @@ schedule_replica_eviction_by_view(Worker, SessId, ProviderId, MigrationProviderI
 -spec get_file_distribution(node(), session:id(), lfm:file_key()) -> {ok, list()}.
 get_file_distribution(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_distribution(SessId, FileKey)).
+
+-spec add_qos(node(), session:id(), lfm:file_key(), binary(),
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
+add_qos(Worker, SessId, FileKey, Expression, ReplicasNum) ->
+    ?EXEC(Worker, lfm:add_qos(SessId, FileKey, Expression, ReplicasNum)).
+
+-spec get_file_qos(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | lfm:error_reply().
+get_file_qos(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_qos(SessId, FileKey)).
+
+-spec get_qos_details(node(), session:id(), qos_entry:id()) ->
+    {ok, #qos_entry{}} | lfm:error_reply().
+get_qos_details(Worker, SessId, QosId) ->
+    ?EXEC(Worker, lfm:get_qos_details(SessId, QosId)).
+
+-spec remove_qos(node(), session:id(), qos_entry:id()) ->
+    ok | lfm:error_reply().
+remove_qos(Worker, SessId, QosId) ->
+    ?EXEC(Worker, lfm:remove_qos(SessId, QosId)).
+
+-spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
+    boolean() | lfm:error_reply().
+check_qos_fulfilled(Worker, SessId, QosId) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId)).
+
+-spec check_qos_fulfilled(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
+    boolean() | lfm:error_reply().
+check_qos_fulfilled(Worker, SessId, QosId, FileKey) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId, FileKey)).
+
 
 %%%===================================================================
 %%% Internal functions

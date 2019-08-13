@@ -69,7 +69,8 @@
 %% Utility functions
 -export([check_result/1]).
 %% Functions concerning qos
--export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2, check_qos_fulfilled/2]).
+-export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2,
+    check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -795,3 +796,13 @@ remove_qos(SessId, QosId) ->
 -spec check_qos_fulfilled(session:id(), qos_entry:id()) -> boolean() | error_reply().
 check_qos_fulfilled(SessId, QosId) ->
     ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check QoS fulfilled for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id(), file_key()) ->
+    ok | error_reply().
+check_qos_fulfilled(SessId, QosId, FileKey) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosId, FileKey) end).

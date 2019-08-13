@@ -5,10 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains tests of file restoration by qos.
+%%% This module contains multiprovider tests of qos.
 %%% @end
 %%%-------------------------------------------------------------------
--module(qos_replica_restoration_test_SUITE).
+-module(qos_multiprovider_test_SUITE).
 -author("Michal Stanisz").
 
 -include("transfers_test_mechanism.hrl").
@@ -18,12 +18,14 @@
 %% API
 -export([
     qos_restoration_file_test/1,
-    qos_restoration_dir_test/1
+    qos_restoration_dir_test/1,
+    qos_status_test/1
 ]).
 
 all() -> [
     qos_restoration_file_test,
-    qos_restoration_dir_test
+    qos_restoration_dir_test,
+    qos_status_test
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -48,6 +50,65 @@ qos_restoration_file_test(Config) ->
 qos_restoration_dir_test(Config) ->
     basic_qos_restoration_test_base(Config, nested).
 
+
+qos_status_test(Config) ->
+    [_Worker2, Worker1] = Workers = ?config(op_worker_nodes, Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+
+    Filename = generator:gen_name(),
+    QosSpec = create_basic_qos_test_spec(Config, nested, Filename),
+    {GuidsAndPaths, QosDesc} = qos_test_utils:add_qos_test_base(Config, QosSpec#{perform_checks => false}),
+    QosList = [QosId || {_, QosId, _} <- QosDesc],
+
+    % this is needed so only traverse transfers will start
+    mock_qos_restore(Config),
+
+    lists:foreach(fun({Guid, Path}) ->
+        lists:foreach(fun(Worker) ->
+            ?assertEqual(false, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
+            ?assertEqual(false, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
+        end, Workers)
+    end, maps:get(files, GuidsAndPaths)),
+
+    finish_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
+
+    lists:foreach(fun({Guid, Path}) ->
+        lists:foreach(fun(Worker) ->
+            ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
+            ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
+        end, Workers)
+    end, maps:get(files, GuidsAndPaths)),
+
+    unmock_qos_restore(Config),
+
+    % check status after restoration
+    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
+
+    IsAncestor = fun(A, F) ->
+        str_utils:binary_starts_with(F, A)
+    end,
+
+    lists:foreach(fun({FileGuid, FilePath}) ->
+        ct:print("writing to file ~p", [FilePath]),
+        {ok, FileHandle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, FileGuid}, write),
+        {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
+        ok = lfm_proxy:close(Worker1, FileHandle),
+        lists:foreach(fun(Worker) ->
+            lists:foreach(fun({G, P}) ->
+                ct:print("Checking ~p: ~n\tfile: ~p~n\tis_ancestor: ~p", [Worker, P, IsAncestor(P, FilePath)]),
+                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
+                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}), ?ATTEMPTS)
+            end, FilesAndDirs)
+        end, Workers),
+        finish_transfers([FileGuid]),
+        lists:foreach(fun(Worker) ->
+            lists:foreach(fun({G, P}) ->
+                ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
+                ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}), ?ATTEMPTS)
+            end, FilesAndDirs)
+        end, Workers)
+    end, maps:get(files, GuidsAndPaths)).
+
 %%%===================================================================
 %%% Tests base
 %%%===================================================================
@@ -58,7 +119,7 @@ basic_qos_restoration_test_base(Config, DirStructureType) ->
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
-    GuidsAndPaths = qos_test_utils:add_qos_test_base(Config, QosSpec),
+    {GuidsAndPaths, _} = qos_test_utils:add_qos_test_base(Config, QosSpec),
     NewData = <<"new_test_data">>,
     StoragePaths = lists:map(fun({Guid, Path}) ->
         SpaceId = file_id:guid_to_space_id(Guid),
@@ -71,6 +132,7 @@ basic_qos_restoration_test_base(Config, DirStructureType) ->
 
         {ok, FileHandle} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid}, write),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, NewData),
+        ok = lfm_proxy:close(Worker1, FileHandle),
         StoragePath
 
     end, maps:get(files, GuidsAndPaths)),
@@ -106,6 +168,10 @@ init_per_suite(Config) ->
         {?LOAD_MODULES, [initializer, transfers_test_utils, qos_test_utils, ?MODULE]}
         | Config
     ].
+
+init_per_testcase(qos_status_test, Config) ->
+    mock_schedule_transfers(Config),
+    init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
@@ -212,3 +278,33 @@ storage_mount_point(Worker, StorageId) ->
     [Helper | _] = rpc:call(Worker, storage, get_helpers, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
+
+mock_qos_restore(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, qos_req, [passthrough]),
+    test_utils:mock_expect(Workers, qos_req, restore_qos_on_storage, fun(_,_) -> ok end).
+
+unmock_qos_restore(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, qos_req).
+
+mock_schedule_transfers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, qos_traverse, [passthrough]),
+    TestPid = self(),
+    ok = test_utils:mock_expect(Workers, qos_traverse, schedule_transfers,
+        fun(_, FileGuid, TS, Fun) ->
+            Res = lists:map(fun(StorageId) ->
+                Fun(FileGuid, StorageId),
+                {FileGuid, StorageId}
+            end, TS),
+            TestPid ! {qos_slave_job, self(), FileGuid},
+            Res
+        end).
+
+finish_transfers([]) -> ok;
+finish_transfers(Files) ->
+    receive {qos_slave_job, Pid, FileGuid} ->
+        Pid ! {completed, FileGuid},
+        finish_transfers(lists:delete(FileGuid, Files))
+    end.
