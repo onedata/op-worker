@@ -28,7 +28,7 @@
 
 %% higher-level functions operating on file_qos record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
-    set_status/2, get_qos_details/1]).
+    set_status/2, get_qos_details/1, add_traverse_req/3, remove_traverse_req/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -142,8 +142,8 @@ set_status(QosId, Status) ->
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok | {error, term()}.
 add_impossible_qos(QosId, Scope) ->
-    {ok, _} = update(QosId, fun(QosItem) ->
-        {ok, QosItem#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
+    {ok, _} = update(QosId, fun(QosEntry) ->
+        {ok, QosEntry#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
     end),
     {ok, _} = add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}),
     ok.
@@ -169,6 +169,28 @@ list_impossible_qos() ->
 get_qos_details(QosId) ->
     {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
     {QosEntry#qos_entry.expression, QosEntry#qos_entry.replicas_num, QosEntry#qos_entry.status}.
+
+% fixme doc and spec
+add_traverse_req(FileUuid, QosId, TargetStorage) ->
+    {ok, _} = update(QosId, fun(#qos_entry{traverse_req = TR} = QosEntry) ->
+        {ok, QosEntry#qos_entry{
+            traverse_req = [
+                #qos_traverse_req{
+                    task_id = ?QOS_TRAVERSE_TASK_ID(QosId, traverse),
+                    file_uuid = FileUuid,
+                    target_storage = TargetStorage}
+                | TR]
+        }}
+    end),
+    ok.
+
+remove_traverse_req(QosId, TaskId) ->
+    {ok, _} = update(QosId, fun(#qos_entry{traverse_req = TR} = QosEntry) ->
+        {ok, QosEntry#qos_entry{
+            traverse_req = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
+        }}
+    end),
+    ok.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -204,6 +226,11 @@ get_record_struct(1) ->
         {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},
-        {status, atom}
+        {status, atom},
+        {traverse_req, [{record, [
+            {task_id, string},
+            {file_uuid, string},
+            {target_storage, string}
+        ]}]}
     ]}.
 

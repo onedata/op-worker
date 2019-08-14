@@ -21,9 +21,10 @@
 %% API
 -export([fulfill_qos/5, init_pool/0]).
 
-%% Pool callbacks
--export([do_master_job/2, do_slave_job/2, task_finished/1, get_job/1,
-    get_sync_info/1, update_job_progress/5]).
+%% Traverse behaviour callbacks
+-export([do_master_job/2, do_slave_job/2,
+    task_started/1, task_finished/1,
+    get_job/1, get_sync_info/1, update_job_progress/5]).
 
 % For test purpose
 -export([schedule_transfers/4]).
@@ -40,9 +41,6 @@
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
-% QosId and task type are needed when executing task_finished/1
--define(TASK_ID(QosId, Type), <<(datastore_utils:gen_key())/binary, "#", QosId/binary, "#",
-    (atom_to_binary(Type, utf8))/binary>>).
 
 %%%===================================================================
 %%% API
@@ -53,14 +51,13 @@
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined, qos_task_type())
-        -> ok.
-fulfill_qos(SessionId, FileCtx, QosId, TargetStorages, TaskType) ->
+-spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined, qos_task_type()) ->
+    ok.
+fulfill_qos(SessionId, FileCtx, QosId, TargetStorages, TaskId) ->
     {ok, #document{value = QosItem, scope = SpaceId}} = qos_entry:get(QosId),
     QosOriginFileUuid = QosItem#qos_entry.file_uuid,
     QosOriginFileGuid = file_id:pack_guid(QosOriginFileUuid, SpaceId),
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
-    TaskId = ?TASK_ID(QosId, TaskType),
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
@@ -102,8 +99,14 @@ get_job(DocOrID) ->
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
+% fixme spec
+task_started(TaskId) ->
+    [_, QosId, _TaskType] = binary:split(TaskId, <<"#">>, [global]),
+    qos_entry:remove_traverse_req(QosId, TaskId).
+
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
+    % fixme remove from qos_entry traverses list
     [_, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
     case binary_to_atom(TaskType, utf8) of
         traverse -> {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS);
@@ -129,21 +132,8 @@ do_master_job(Job, TaskId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_slave_job(traverse:job(), traverse:id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}, TaskId) ->
-    create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs, TaskId).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file replicas on given storages.
-%% @end
-%%--------------------------------------------------------------------
--spec create_qos_replicas(file_meta:uuid(), datastore_doc:scope(), [storage:id()],
-    #add_qos_traverse_args{}, traverse:id()) -> ok.
-create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs, TaskId) ->
+do_slave_job({#document{key = FileUuid, scope = SpaceId},
+    #add_qos_traverse_args{target_storages = TargetStorages} = TraverseArgs}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = qos_status:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
     SessId = TraverseArgs#add_qos_traverse_args.session_id,

@@ -80,6 +80,10 @@
 -define(QOS_TRAVERSE_FINISHED_STATUS, traverse_finished).
 -define(QOS_IMPOSSIBLE_STATUS, impossible).
 
+% QosId and task type are needed when executing task_finished/1
+-define(QOS_TRAVERSE_TASK_ID(QosId, Type), <<(datastore_utils:gen_key())/binary, "#", QosId/binary, "#",
+    (atom_to_binary(Type, utf8))/binary>>).
+
 -define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
 
 -endif.

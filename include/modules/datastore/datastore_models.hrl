@@ -266,6 +266,13 @@
     target_storages = #{} :: file_qos:target_storages()
 }).
 
+%%fixme
+-record(qos_traverse_req, {
+    task_id :: traverse:id(),
+    file_uuid :: file_meta:uuid(),
+    target_storage :: storage:id()
+}).
+
 % This model holds information about single QoS, that is QoS requirement
 % defined by the user for file or directory through QoS expression and
 % number of required replicas. Each such requirement creates new qos_entry
@@ -275,7 +282,8 @@
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
-    status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status()
+    status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status(),
+    traverse_req = [] :: [#qos_traverse_req{}]
 }).
 
 -record(file_meta, {

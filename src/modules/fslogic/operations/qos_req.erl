@@ -20,7 +20,7 @@
 
 %% API
 -export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2,
-    check_fulfillment/3, restore_qos_on_storage/2]).
+    check_fulfillment/3, restore_qos_on_storage/2, maybe_start_traverse/4]).
 
 % For test purpose
 -export([get_space_storages/2]).
@@ -115,6 +115,24 @@ restore_qos_on_storage(FileCtx, StorageId) ->
             end, QosToUpdate)
     end.
 
+% fixme spec and docs
+% fixme maybe move to qos_traverse (or somewhere better)
+maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO VFS-5573 use storage id instead of provider
+    case oneprovider:get_id_or_undefined() of
+        Storage ->
+            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            {ok, _} = qos_traverse:fulfill_qos(
+                ?ROOT_SESS_ID, FileCtx, QosId, [Storage], TaskId
+            ),
+            true;
+        _ ->
+            false
+    end.
+
 %%%===================================================================
 %%% Insecure functions
 %%%===================================================================
@@ -154,11 +172,12 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             {ok, _} = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, TargetStoragesList),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:fulfill_qos(
-                user_ctx:get_session_id(UserCtx), FileCtx, QosId, TargetStoragesList, traverse
-            )
+            lists:foreach(fun(Storage) ->
+                case ?MODULE:maybe_start_traverse(FileCtx, QosId, Storage, ?QOS_TRAVERSE_TASK_ID(QosId, traverse)) of
+                    true -> ok;
+                    false -> ok = qos_entry:add_traverse_req(FileUuid, QosId, Storage)
+                end
+            end, TargetStoragesList)
     end,
 
     #provider_response{

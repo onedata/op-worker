@@ -17,6 +17,11 @@
 
 %% API
 -export([
+    autocleaning_of_replica_protected_by_qos_file/1,
+    autocleaning_of_replica_not_protected_by_qos_file/1,
+    autocleaning_of_replica_protected_by_qos_dir/1,
+    autocleaning_of_replica_not_protected_by_qos_dir/1,
+
     eviction_of_replica_protected_by_qos_file/1,
     eviction_of_replica_not_protected_by_qos_file/1,
     migration_of_replica_protected_by_qos_file/1,
@@ -47,12 +52,7 @@
     remote_eviction_of_replica_not_protected_by_qos_dir_each_file_separately/1,
     remote_migration_of_replica_protected_by_qos_dir_each_file_separately/1,
     remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately/1,
-    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately/1,
-
-    autocleaning_of_replica_protected_by_qos_file/1,
-    autocleaning_of_replica_not_protected_by_qos_file/1,
-    autocleaning_of_replica_protected_by_qos_dir/1,
-    autocleaning_of_replica_not_protected_by_qos_dir/1
+    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately/1
 ]).
 
 all() -> [

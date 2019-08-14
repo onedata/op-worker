@@ -842,7 +842,7 @@ init_per_testcase(_, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     mock_providers_qos(Config),
     mock_schedule_transfers(Config),
-    mock_space_storages(Config, maps:keys(?TEST_PROVIDERS_QOS)),
+    mock_qos_req(Config, maps:keys(?TEST_PROVIDERS_QOS)),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
@@ -874,13 +874,25 @@ mock_schedule_transfers(Config) ->
         end).
 
 
-mock_space_storages(Config, StorageList) ->
+mock_qos_req(Config, StorageList) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, qos_req, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_req, get_space_storages,
         fun(_, _) ->
             StorageList
+        end),
+    ok = test_utils:mock_expect(Workers, qos_req, maybe_start_traverse,
+        fun(FileCtx, QosId, Storage, TaskId) ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
+            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            {ok, _} = qos_traverse:fulfill_qos(
+                <<"0">>, FileCtx, QosId, [Storage], TaskId
+            ),
+            true
         end).
+
 
 
 wait_for_qos_fulfillment(Worker, SessId, QosId) ->

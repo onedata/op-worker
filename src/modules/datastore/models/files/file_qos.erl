@@ -108,7 +108,6 @@ delete(Key) ->
         {error, _} = Error -> Error
     end.
 
-
 %%%===================================================================
 %%% Higher-level functions operating on file_qos record.
 %%%===================================================================
@@ -194,7 +193,7 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
         UpdatedTS = merge_storage_list_to_target_storages(
             QosId, TargetStoragesList, CurrTS
         ),
-        {ok, #file_qos{qos_list = [QosId | CurrFileQos], target_storages = UpdatedTS}}
+        {ok, #file_qos{qos_list = lists:usort([QosId | CurrFileQos]), target_storages = UpdatedTS}}
     end,
     {ok, _} = create_or_update(NewDoc, Diff),
     ok.
