@@ -33,7 +33,7 @@
 -type gid() :: non_neg_integer().
 -type posix_user_ctx() :: {uid(), gid()}.
 
--export_type([user_ctx/0, posix_user_ctx/0, gid/0, group_ctx/0, uid/0, gid/0]).
+-export_type([user_ctx/0, posix_user_ctx/0, gid/0, group_ctx/0, uid/0]).
 
 -define(KEY_SEPARATOR, <<"::">>).
 
