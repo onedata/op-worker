@@ -25,7 +25,7 @@
 
 %% API
 %% functions operating on record using datastore model API
--export([get/1, delete/1, create/2]).
+-export([get/1, delete/1, create/2, update/2]).
 
 %% higher-level functions operating on file_qos record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
@@ -100,11 +100,12 @@ delete(QosId) ->
 %%% Higher-level functions operating on qos_entry record.
 %%%===================================================================
 
--spec get_file_guid(id()) -> file_id:file_guid().
+-spec get_file_guid(id()) -> {ok, file_id:file_guid()} | {error, term()}.
 get_file_guid(QosId) ->
     case qos_entry:get(QosId) of
         {ok, #document{value = QosEntry, scope = SpaceId}} ->
-            file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId);
+            Guid = file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId),
+            {ok, Guid};
         {error, _} = Error ->
             Error
     end.

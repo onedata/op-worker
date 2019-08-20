@@ -151,7 +151,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
     case TargetStoragesList of
         {error, ?ERROR_CANNOT_FULFILL_QOS} ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
-            ok = qos_entry:add_impossible_qos(QosId, SpaceId);
+            {ok, _} = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, TargetStoragesList),
             {ok, _} = qos_traverse:fulfill_qos(

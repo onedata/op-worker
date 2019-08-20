@@ -7,32 +7,31 @@
 %%% @doc
 %%% This file contains definitions of macros used by qos module.
 %%%
-%%% QoS management is based on two types of documents: qos_entry and file_qos
-%%% each of which is synchronized within space.
+%%% QoS management is based on two types of documents synchronized within space:
+%%% qos_entry and file_qos.
 %%%
-%%% The qos_entry document contains information about single QoS requirement like
-%%% QoS expression, number of required replicas, fulfillment status and
-%%% ID of traverse task. Such document is created when user adds QoS
-%%% requirement for file or directory. Each QoS requirement is evaluated
-%%% separately. It means that it is not possible to define inconsistent
-%%% requirements. For example if one requirement says that file should
-%%% be present on storage in Poland and other requirement says that file
-%%% should be present on storage in any country expect Poland, two different
-%%% replicas will be created. On the other hand the same file replica can
-%%% fulfill multiple different QoS requirements. For example if there is
-%%% storage of type disk in Poland, then replica on such storage can fulfill
-%%% requirements that demands replica on storage in Poland and requirements
-%%% that demands replica on storage of type disk. System will create
-%%% new file replica only if currently existing replicas don't fulfill QoS
-%%% requirements.
+%%% The qos_entry document contains information about single QoS requirement
+%%% including QoS expression, number of required replicas, fulfillment status
+%%% and UUID of file or directory for which requirement has been added.
+%%% Such document is created when user adds QoS requirement for file or directory.
+%%% Each QoS requirement is evaluated separately. It means that it is not
+%%% possible to define inconsistent requirements. For example if one requirement
+%%% says that file should be present on storage in Poland and other requirement
+%%% says that file should be present on storage in any country but Poland,
+%%% two different replicas will be created. On the other hand the same file
+%%% replica can fulfill multiple different QoS requirements. For example if
+%%% there is storage of type disk in Poland, then replica on such storage can
+%%% fulfill requirements that demands replica on storage in Poland and requirements
+%%% that demands replica on storage of type disk. System will create new file
+%%% replica only if currently existing replicas don't fulfill QoS requirements.
 %%% Multiple qos_entry documents can be created for the same file or directory.
-%%% It is also possible to define exactly the same QoS requirement for
-%%% file or directory and for each of them separate document is created.
-%%% qos_entry can be related with links tree containing ID of transfers
-%%% scheduled to fulfill QoS after file or file in directory has been changed.
-%%% QoS requirement is fulfilled when:
+%%% Adding two identical QoS requirements for the same file results in two
+%%% different qos_entry documents. qos_entry document can be related with links
+%%% tree containing ID of transfers scheduled to fulfill QoS after file or
+%%% file in directory has been changed.
+%%% QoS requirement is considered as fulfilled when:
 %%% - there is no active traverse tasks for this QoS
-%%% - status is set to fulfilled in qos_entry document
+%%% - status indicates that first traverse task has ended
 %%%
 %%% The file_qos item contains aggregated information about QoS defined for file
 %%% or directory. It contains list of qos_entry IDs and mapping that maps storage_id
@@ -59,7 +58,7 @@
 % macros used for operations on QoS expression
 -define(UNION, <<"|">>).
 -define(INTERSECTION, <<"&">>).
-% TODO: for now used "-" instead of "\" as backslash is an escape character,
+% TODO: VFS-5712 for now used "-" instead of "\" as backslash is an escape character,
 % have to discuss that
 -define(COMPLEMENT, <<"-">>).
 -define(OPERATORS, [?UNION, ?INTERSECTION, ?COMPLEMENT]).
