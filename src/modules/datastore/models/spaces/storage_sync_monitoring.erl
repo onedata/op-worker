@@ -56,7 +56,7 @@
 -type error() :: {error, term()}.
 
 
--export_type([storage_sync_monitoring/0, doc/0]).
+-export_type([storage_sync_monitoring/0, doc/0, window/0, plot_counter_type/0]).
 
 
 -define(HISTOGRAM_LENGTH,
