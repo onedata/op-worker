@@ -20,6 +20,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% API
 -export([handle_handshake/2, get_handshake_error_msg/1]).
@@ -48,12 +49,6 @@ get_handshake_error_msg(incompatible_client_version) ->
         }
     };
 get_handshake_error_msg(invalid_token) ->
-    #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_MACAROON'
-        }
-    };
-get_handshake_error_msg(bad_macaroon) ->
     #server_message{
         message_body = #handshake_response{
             status = 'INVALID_MACAROON'
@@ -97,18 +92,17 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     session_id = SessId,
-    auth = #macaroon_auth{} = Auth
+    auth = #token_auth{token = Token} = Auth
 } = Req, IpAddress) when is_binary(SessId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
     case user_identity:get_or_fetch(Auth) of
-        ?ERROR_FORBIDDEN -> throw(invalid_provider);
-        ?ERROR_UNAUTHORIZED -> throw(bad_macaroon);
-        ?ERROR_BAD_MACAROON -> throw(bad_macaroon);
-        ?ERROR_MACAROON_INVALID -> throw(bad_macaroon);
-        ?ERROR_MACAROON_EXPIRED -> throw(bad_macaroon);
-        ?ERROR_MACAROON_TTL_TO_LONG(_) -> throw(bad_macaroon);
+        ?ERROR_FORBIDDEN ->
+            throw(invalid_provider);
+        {error, _} = Error ->
+            ?debug("Cannot authorize user based on token ~s due to ~w", [Token, Error]),
+            throw(invalid_token);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
             {ok, _} = session_manager:reuse_or_create_fuse_session(
                 SessId, Iden, Auth
@@ -156,33 +150,26 @@ handle_provider_handshake(#provider_handshake_request{
     ),
     {ProviderId, SessionId}.
 
-
 %% @private
 -spec assert_client_compatibility(#client_handshake_request{}, inet:ip_address()) ->
     ok | no_return().
 assert_client_compatibility(#client_handshake_request{
-    version = OcVersionBin,
-    compatible_oneprovider_versions = CompatibleOpVersions
+    version = OcVersion
 }, IpAddress) ->
     OpVersion = oneprovider:get_version(),
-    OcVersion = binary_to_list(OcVersionBin),
-    {ok, CompatibleOcVersions} = application:get_env(?APP_NAME, compatible_oc_versions),
 
-    % Client sends full build version (e.g. 17.06.0-rc9-aiosufshx) so instead
-    % of matching whole build version we check only the prefix
-    IsOcVersionPrefix = fun(Ver) -> lists:prefix(Ver, OcVersion) end,
-    case lists:any(IsOcVersionPrefix, CompatibleOcVersions) orelse
-        lists:member(OpVersion, CompatibleOpVersions)
-    of
+    case compatibility:check_products_compatibility(
+        ?ONEPROVIDER, OpVersion, ?ONECLIENT, OcVersion
+    ) of
         true ->
             ok;
-        false ->
+        {false, CompatibleOcVersions} ->
             ?debug("Discarding connection from oneclient @ ~s because of "
             "incompatible version.~n"
-            "Oneclient version: ~s, supports providers: ~p~n"
+            "Oneclient version: ~s ~n"
             "Oneprovider version: ~s, supports clients: ~p~n", [
                 inet_parse:ntoa(IpAddress),
-                OcVersion, CompatibleOpVersions,
+                OcVersion,
                 OpVersion, CompatibleOcVersions
             ]),
             throw(incompatible_client_version)

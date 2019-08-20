@@ -74,7 +74,7 @@ apply_batch(Docs, BatchRange) ->
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(datastore:doc()) -> ok | {error, datastore:seq(), term()}.
+-spec apply(datastore:doc()) -> ok | {error, datastore_doc:seq(), term()}.
 apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     try
         DocToHandle = case Value of
@@ -305,7 +305,7 @@ parallel_apply(DocsList, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_answers([pid()], reference()) ->
-    ok | timeout | {error, datastore:seq(), term()}.
+    ok | timeout | {error, datastore_doc:seq(), term()}.
 gather_answers(SlavesList, Ref) ->
     gather_answers(SlavesList, Ref, ok).
 
@@ -316,8 +316,8 @@ gather_answers(SlavesList, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_answers([pid()], reference(),
-    ok | {error, datastore:seq(), term()}) ->
-    ok | timeout | {error, datastore:seq(), term()}.
+    ok | {error, datastore_doc:seq(), term()}) ->
+    ok | timeout | {error, datastore_doc:seq(), term()}.
 gather_answers([], _Ref, Ans) ->
     Ans;
 gather_answers(Pids, Ref, TmpAns) ->
@@ -346,28 +346,19 @@ gather_answers(Pids, Ref, TmpAns) ->
             end
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model context used during application of changes.
+%% Warning: if any traverse callback module uses other sync info than one provided by tree_traverse, this function
+%% has to be extended to parse #document and get callback module.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx(model()) -> ctx().
 get_ctx(Model) ->
-    Ctx = model_apply(Model, {get_ctx, []}, fun() -> #{model => Model} end),
-    Ctx2 = case Model of
+    case Model of
         traverse_task ->
-            Ctx#{sync_enabled => true,
-                remote_driver => datastore_remote_driver,
-                mutator => oneprovider:get_id_or_undefined(),
-                local_links_tree_id => oneprovider:get_id_or_undefined()
-            };
-        tree_traverse_job ->
-            Ctx#{sync_enabled => true,
-                mutator => oneprovider:get_id_or_undefined()
-            };
+            Ctx = tree_traverse:get_sync_info(),
+            datastore_model_default:set_defaults(Ctx#{model => Model});
         _ ->
-            Ctx
-    end,
-    datastore_model_default:set_defaults(Ctx2).
-
-model_apply(Model, {Function, Args}, DefaultFun) ->
-    Exports = Model:module_info(functions),
-    Arity = length(Args),
-    case lists:keyfind(Function, 1, Exports) of
-        {Function, Arity} -> erlang:apply(Model, Function, Args);
-        _ -> DefaultFun()
+            datastore_model_default:get_ctx(Model)
     end.

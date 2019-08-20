@@ -29,11 +29,11 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
--export([init/4, init/5, run/2, run/3]).
+-export([init/4, init/5, run/2, run/3, cancel/2]).
 % Getters API
--export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2]).
+-export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/1, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
+-export([do_master_job/2, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
 -type master_job() :: #tree_traverse{}.
 -type slave_job() :: file_meta:doc().
@@ -53,7 +53,7 @@
     target_provider_id => oneprovider:id()
 }.
 
--export_type([slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
+-export_type([master_job/0, slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
 
 %%%===================================================================
 %%% Main API
@@ -114,6 +114,12 @@ run(Pool, FileCtx, Opts) ->
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
     run(Pool, Doc, Opts).
 
+-spec cancel(traverse:pool() | atom(), traverse:id()) -> ok | {error, term()}.
+cancel(Pool, TaskID) when is_atom(Pool) ->
+    cancel(atom_to_binary(Pool, utf8), TaskID);
+cancel(Pool, TaskID) ->
+    traverse:cancel(Pool, TaskID, oneprovider:get_id_or_undefined()).
+
 %%%===================================================================
 %%% Getters/Setters API
 %%%===================================================================
@@ -141,7 +147,7 @@ set_traverse_info(TraverseJob, TraverseInfo) ->
 %% Provides file_meta document from master job record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_doc(master_job()) -> file_meta:job().
+-spec get_doc(master_job()) -> file_meta:doc().
 get_doc(#tree_traverse{doc = Doc}) ->
     Doc.
 
@@ -150,6 +156,23 @@ get_task(Pool, ID) when is_atom(Pool) ->
     get_task(atom_to_binary(Pool, utf8), ID);
 get_task(Pool, ID) ->
     traverse_task:get(Pool, ID).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides information needed for document synchronization.
+%% Warning: if any traverse callback module uses other sync info than one provided by tree_traverse,
+%% dbsync_changes:get_ctx function has to be extended to parse #document and get callback module.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sync_info() -> traverse:sync_info().
+get_sync_info() ->
+    Provider = oneprovider:get_id_or_undefined(),
+    #{
+        sync_enabled => true,
+        remote_driver => datastore_remote_driver,
+        mutator => Provider,
+        local_links_tree_id => Provider
+    }.
 
 %%%===================================================================
 %%% Behaviour callbacks
@@ -161,7 +184,7 @@ get_task(Pool, ID) ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job()) -> {ok, traverse:master_job_map()}.
+-spec do_master_job(master_job(), traverse:id()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
     doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
@@ -170,14 +193,14 @@ do_master_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-} = TT) ->
+} = TT, _TaskID) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
-        {undefined, <<>>} -> file_meta:list_children(Doc, BatchSize);
-        {undefined, _} -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize);
-        _ -> file_meta:list_children_by_key(Doc, LN, LT, BatchSize, Token)
+        {undefined, <<>>} ->
+            file_meta:list_children(Doc, BatchSize);
+        _ ->
+            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
     end,
-
-    #{token := Token2, last_name := LN2, last_tree := LT2} = ExtendedInfo,
+    #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
 
     {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
         uuid = UUID}, {Slaves, Masters} = Acc) ->
@@ -193,7 +216,7 @@ do_master_job(#tree_traverse{
         end
     end, {[], []}, Children),
 
-    FinalMasterJobs = case Token2#link_token.is_last of
+    FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
         true -> lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
@@ -205,7 +228,7 @@ do_master_job(#tree_traverse{
 do_master_job(#tree_traverse{
     doc = Doc,
     traverse_info = TraverseInfo
-}) ->
+}, _TaskID) ->
     {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
@@ -232,17 +255,12 @@ get_job(DocOrID) ->
 %% Provides information needed for task document synchronization basing on file_meta scope.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sync_info(master_job()) -> {ok, traverse:ctx_sync_info()}.
+-spec get_sync_info(master_job()) -> {ok, traverse:sync_info()}.
 get_sync_info(#tree_traverse{
     doc = #document{scope = Scope}
 }) ->
-    {ok, #{
-        sync_enabled => true,
-        remote_driver => datastore_remote_driver,
-        mutator => oneprovider:get_id_or_undefined(),
-        local_links_tree_id => oneprovider:get_id_or_undefined(),
-        scope => Scope
-    }}.
+    Info = get_sync_info(),
+    {ok, Info#{scope => Scope}}.
 
 %%--------------------------------------------------------------------
 %% @doc

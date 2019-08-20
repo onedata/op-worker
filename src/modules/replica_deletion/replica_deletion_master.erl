@@ -74,7 +74,7 @@
 
 -record(deletion_task, {
     uuid :: file_meta:uuid(),
-    file :: file_ctx:ctx(),
+    file :: file_ctx:ctx() | undefined,
     supporting_provider :: od_provider:id(),
     blocks :: fslogic_blocks:blocks(),
     version :: version_vector:version_vector(),

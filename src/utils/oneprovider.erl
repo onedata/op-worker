@@ -199,7 +199,7 @@ get_oz_url() ->
 -spec get_oz_version() -> binary().
 get_oz_version() ->
     GetOzVersion = fun() ->
-        {ok, OzVersion, _} = provider_logic:fetch_compatibility_config(onezone),
+        {ok, OzVersion} = provider_logic:fetch_peer_version(onezone),
         {true, OzVersion, ?OZ_VERSION_CACHE_TTL}
     end,
     {ok, OzVersion} = simple_cache:get(cached_oz_version, GetOzVersion),
@@ -379,9 +379,9 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         ],
         {ok, #{
             <<"providerId">> := ProviderId,
-            <<"macaroon">> := Macaroon
+            <<"providerRootToken">> := RootToken
         }} = oz_providers:register_with_uuid(none, Parameters),
-        provider_auth:save(ProviderId, Macaroon),
+        provider_auth:save(ProviderId, RootToken),
         {ok, ProviderId}
     catch
         T:M ->

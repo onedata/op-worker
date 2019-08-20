@@ -158,6 +158,8 @@
 
 -type error() :: {error, Reason :: term()}.
 
+-export_type([worker_ref/0, respond_via/0]).
+
 -define(HEARTBEAT_MSG(__MSG_ID), #server_message{
     message_id = __MSG_ID,
     message_body = #processing_status{code = 'IN_PROGRESS'}

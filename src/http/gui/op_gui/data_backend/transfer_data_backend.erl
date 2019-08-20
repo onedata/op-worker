@@ -169,21 +169,21 @@ create_record(<<"transfer">>, Data) ->
         replication ->
             op_logic:handle(#op_req{
                 operation = create,
-                client = #client{type = user, id = UserId, session_id = SessionId},
+                auth =?USER(UserId, SessionId),
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => ReplicatingProvider}
             });
         eviction ->
             op_logic:handle(#op_req{
                 operation = delete,
-                client = #client{type = user, id = UserId, session_id = SessionId},
+                auth = ?USER(UserId, SessionId),
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => EvictingProvider}
             });
         migration ->
             op_logic:handle(#op_req{
                 operation = delete,
-                client = #client{type = user, id = UserId, session_id = SessionId},
+                auth = ?USER(UserId, SessionId),
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{
                     <<"provider_id">> => EvictingProvider,
@@ -250,7 +250,7 @@ cancel_transfer(SessionId, StateAndTransferId) ->
 
     Result = op_logic:handle(#op_req{
         operation = delete,
-        client = #client{type = user, id = UserId, session_id = SessionId},
+        auth = ?USER(UserId, SessionId),
         gri = #gri{type = op_transfer, id = TransferId, aspect = instance}
     }),
 
@@ -285,7 +285,7 @@ rerun_transfer(SessionId, StateAndTransferId) ->
 
     Result = op_logic:handle(#op_req{
         operation = create,
-        client = #client{type = user, id = UserId, session_id = SessionId},
+        auth = ?USER(UserId, SessionId),
         gri = #gri{type = op_transfer, id = TransferId, aspect = rerun}
     }),
 
@@ -415,11 +415,11 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid, Path};
         _ ->
-            case index_links:get_index_id(IndexName, SpaceId) of
+            case view_links:get_view_id(IndexName, SpaceId) of
                 {ok, IndexId} ->
-                    {<<"index">>, IndexId, IndexName};
+                    {<<"view">>, IndexId, IndexName};
                 _ ->
-                    {<<"index">>, null, IndexName}
+                    {<<"view">>, null, IndexName}
             end
     end,
     QueryParams = case QueryViewParams of
@@ -670,7 +670,7 @@ transfer_current_stat_record(#document{key = TransferId, value = #transfer{
 %% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------
--spec get_status(transfer:record()) ->
+-spec get_status(transfer:transfer()) ->
     transfer:status() | evicting | replicating.
 get_status(T = #transfer{
     replication_status = completed,

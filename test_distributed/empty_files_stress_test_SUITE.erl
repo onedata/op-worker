@@ -27,7 +27,7 @@
     many_files_creation_tree_test_base/1]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, update_job_progress/5, get_job/1, get_sync_info/1]).
+-export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1]).
 
 -define(STRESS_CASES, []).
 -define(STRESS_NO_CLEARING_CASES, [
@@ -132,7 +132,7 @@ end_per_testcase(_Case, Config) ->
 %%% Pool callbacks
 %%%===================================================================
 
-do_master_job(Job) ->
+do_master_job(Job, TaskID) ->
     case tree_traverse:get_traverse_info(Job) of
         precalculate_dir ->
             Doc = tree_traverse:get_doc(Job),
@@ -140,17 +140,17 @@ do_master_job(Job) ->
             {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
             case CalculationInfo of
                 0 ->
-                    tree_traverse:do_master_job(Job);
+                    tree_traverse:do_master_job(Job, TaskID);
                 _ ->
-                    {ok, Info} = tree_traverse:do_master_job(Job),
+                    {ok, Info} = tree_traverse:do_master_job(Job, TaskID),
                     Info2 = Info#{description => #{dirs_evaluation => CalculationInfo}},
                     {ok, Info2}
             end;
         _ ->
-            tree_traverse:do_master_job(Job)
+            tree_traverse:do_master_job(Job, TaskID)
     end.
 
-do_slave_job({Doc, _TraverseInfo}) ->
+do_slave_job({Doc, _TraverseInfo}, _TaskID) ->
     Callback = fun(Args) -> get_file_level(Args) end,
     {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
     case CalculationInfo of

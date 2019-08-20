@@ -40,6 +40,7 @@
 %% - 'canonical' - posix-style
 %% - 'flat' - based on UUID
 -type storage_path_type() :: binary().
+-export_type([storage_path_type/0]).
 
 -record(helper, {
     name :: helper:name(),

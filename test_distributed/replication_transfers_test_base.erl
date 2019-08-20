@@ -47,16 +47,16 @@
     rerun_file_replication/3,
     rerun_file_replication_by_other_user/3,
     rerun_dir_replication/3,
-    rerun_index_replication/2,
-    schedule_replication_of_regular_file_by_index/2,
-    schedule_replication_of_regular_file_by_index2/2,
-    schedule_replication_of_regular_file_by_index_with_reduce/2,
-    scheduling_replication_by_not_existing_index_should_fail/2,
-    scheduling_replication_by_index_with_function_returning_wrong_value_should_fail/2,
-    scheduling_replication_by_index_returning_not_existing_file_should_not_fail/2,
-    scheduling_replication_by_empty_index_should_succeed/2,
-    scheduling_replication_by_not_existing_key_in_index_should_succeed/2,
-    schedule_replication_of_100_regular_files_by_index/2,
+    rerun_view_replication/2,
+    schedule_replication_of_regular_file_by_view/2,
+    schedule_replication_of_regular_file_by_view2/2,
+    schedule_replication_of_regular_file_by_view_with_reduce/2,
+    scheduling_replication_by_not_existing_view_should_fail/2,
+    scheduling_replication_by_view_with_function_returning_wrong_value_should_fail/2,
+    scheduling_replication_by_view_returning_not_existing_file_should_not_fail/2,
+    scheduling_replication_by_empty_view_should_succeed/2,
+    scheduling_replication_by_not_existing_key_in_view_should_succeed/2,
+    schedule_replication_of_100_regular_files_by_view/2,
     file_removed_during_replication/3,
     rtransfer_works_between_providers_with_different_ports/2]).
 
@@ -1178,7 +1178,7 @@ rerun_dir_replication(Config, Type, FileKeyType) ->
         }
     ).
 
-rerun_index_replication(Config, Type) ->
+rerun_view_replication(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
@@ -1211,12 +1211,12 @@ rerun_index_replication(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+    transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction,
         [], [ProviderId2]),
-    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([FileId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     Config3 = transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1226,9 +1226,9 @@ rerun_index_replication(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1255,7 +1255,7 @@ rerun_index_replication(Config, Type) ->
         Config4, #transfer_test_spec{
             setup = undefined,
             scenario = #scenario{
-                function = fun transfers_test_mechanism:rerun_index_replication/2
+                function = fun transfers_test_mechanism:rerun_view_replication/2
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1282,7 +1282,7 @@ rerun_index_replication(Config, Type) ->
         }
     ).
 
-schedule_replication_of_regular_file_by_index(Config, Type) ->
+schedule_replication_of_regular_file_by_view(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1309,12 +1309,12 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+    transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction,
         [], [ProviderId2]),
-    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([FileId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1324,9 +1324,9 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1351,7 +1351,7 @@ schedule_replication_of_regular_file_by_index(Config, Type) ->
         }
     ).
 
-schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
+schedule_replication_of_regular_file_by_view_with_reduce(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1409,11 +1409,11 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
 
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
     ReduceFunction = transfers_test_utils:test_reduce_function(XattrValue21),
 
-    ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
+    ok = transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName,
         MapFunction, ReduceFunction, [{group, 1}, {key, XattrValue11}],
         [ProviderId2]
     ),
@@ -1421,8 +1421,8 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
     {ok, ObjectId1} = file_id:guid_to_objectid(Guid1),
     {ok, ObjectId6} = file_id:guid_to_objectid(Guid6),
 
-    ?assertIndexQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, IndexName,  [{key, XattrValue11}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, ViewName,  [{key, XattrValue11}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1432,9 +1432,9 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{group, true}, {key, XattrValue11}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1460,7 +1460,7 @@ schedule_replication_of_regular_file_by_index_with_reduce(Config, Type) ->
         }
     ).
 
-schedule_replication_of_regular_file_by_index2(Config, Type) ->
+schedule_replication_of_regular_file_by_view2(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1492,7 +1492,7 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
 
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr2),
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
 
     MapFunction = <<
         "function (id, type, meta, ctx) {
@@ -1508,12 +1508,12 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
                 return {'list': results};
             }
         }">>,
-    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+    transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction,
         [], [ProviderId2]),
 
-    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, JobId1}]),
-    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, JobId2}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([FileId], WorkerP2, SpaceId, ViewName,  [{key, JobId1}]),
+    ?assertViewQuery([FileId], WorkerP2, SpaceId, ViewName,  [{key, JobId2}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1523,9 +1523,9 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, JobId1}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1550,7 +1550,7 @@ schedule_replication_of_regular_file_by_index2(Config, Type) ->
         }
     ).
 
-scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
+scheduling_replication_by_not_existing_view_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1574,7 +1574,7 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1584,9 +1584,9 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:fail_to_replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:fail_to_replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 assertion_nodes = [WorkerP1, WorkerP2],
@@ -1598,7 +1598,7 @@ scheduling_replication_by_not_existing_index_should_fail(Config, Type) ->
         }
     ).
 
-scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(Config, Type) ->
+scheduling_replication_by_view_with_function_returning_wrong_value_should_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1632,12 +1632,12 @@ scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(
             }
         return null;
     }">>,
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
-    ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
+    ok = transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName,
         MapFunction, [], [ProviderId2]
     ),
-    ?assertIndexQuery([WrongValue], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([WrongValue], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1647,9 +1647,9 @@ scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1670,7 +1670,7 @@ scheduling_replication_by_index_with_function_returning_wrong_value_should_fail(
         }
     ).
 
-scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Config, Type) ->
+scheduling_replication_by_view_returning_not_existing_file_should_not_fail(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1709,12 +1709,12 @@ scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Conf
             }
         return null;
     }">>,
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
-    ok = transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName,
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
+    ok = transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName,
         MapFunction, [], [ProviderId2]
     ),
-    ?assertIndexQuery([NotExistingFileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([NotExistingFileId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1724,9 +1724,9 @@ scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Conf
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1748,18 +1748,18 @@ scheduling_replication_by_index_returning_not_existing_file_should_not_fail(Conf
     ).
 
 
-scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
+scheduling_replication_by_empty_view_should_succeed(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
-    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+    transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction,
         [], [ProviderId2]
     ),
-    ?assertIndexQuery([], WorkerP2, SpaceId, IndexName,  []),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([], WorkerP2, SpaceId, ViewName,  []),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -1769,9 +1769,9 @@ scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1789,7 +1789,7 @@ scheduling_replication_by_empty_index_should_succeed(Config, Type) ->
         }
     ).
 
-scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type) ->
+scheduling_replication_by_not_existing_key_in_view_should_succeed(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1817,13 +1817,13 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
     ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+    transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction,
         [], [ProviderId2]
     ),
-    ?assertIndexQuery([FileId], WorkerP2, SpaceId, IndexName,  [{key, XattrValue}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery([FileId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1833,9 +1833,9 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue2}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -1855,7 +1855,7 @@ scheduling_replication_by_not_existing_key_in_index_should_succeed(Config, Type)
         }
     ).
 
-schedule_replication_of_100_regular_files_by_index(Config, Type) ->
+schedule_replication_of_100_regular_files_by_view(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId2 = ?DEFAULT_SESSION(WorkerP2, Config),
     SpaceId = ?SPACE_ID,
@@ -1888,13 +1888,13 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
         FileId
     end, FileGuidsAndPaths),
 
-    IndexName = transfers_test_utils:random_index_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
-    transfers_test_utils:create_index(WorkerP2, SpaceId, IndexName, MapFunction,
+    transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction,
         [], [ProviderId2]
     ),
-    ?assertIndexQuery(FileIds, WorkerP2, SpaceId, IndexName, [{key, XattrValue}]),
-    ?assertIndexVisible(WorkerP1, SpaceId, IndexName),
+    ?assertViewQuery(FileIds, WorkerP2, SpaceId, ViewName, [{key, XattrValue}]),
+    ?assertViewVisible(WorkerP1, SpaceId, ViewName),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -1904,9 +1904,9 @@ schedule_replication_of_100_regular_files_by_index(Config, Type) ->
                 schedule_node = WorkerP1,
                 replicating_nodes = [WorkerP2],
                 space_id = SpaceId,
-                function = fun transfers_test_mechanism:replicate_files_from_index/2,
+                function = fun transfers_test_mechanism:replicate_files_from_view/2,
                 query_view_params = [{key, XattrValue}],
-                index_name = IndexName
+                view_name = ViewName
             },
             expected = #expected{
                 expected_transfer = #{
@@ -2099,17 +2099,17 @@ init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
     end),
     init_per_testcase(all, Config);
 
-init_per_testcase(schedule_replication_of_100_regular_files_by_index_with_batch_100, Config) ->
+init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_100, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_index_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_index_batch, 100),
-    init_per_testcase(all, [{replication_by_index_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
+    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 100),
+    init_per_testcase(all, [{replication_by_view_batch, OldValue} | Config]);
 
-init_per_testcase(schedule_replication_of_100_regular_files_by_index_with_batch_10, Config) ->
+init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_10, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_index_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_index_batch, 10),
-    init_per_testcase(all, [{replication_by_index_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
+    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 10),
+    init_per_testcase(all, [{replication_by_view_batch, OldValue} | Config]);
 
 init_per_testcase(file_removed_during_replication, Config) ->
     ct:timetrap(timer:minutes(60)),
@@ -2147,12 +2147,12 @@ end_per_testcase(Case, Config) when
     end_per_testcase(all, Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= schedule_replication_of_100_regular_files_by_index_with_batch_100;
-    Case =:= schedule_replication_of_100_regular_files_by_index_with_batch_10
+    Case =:= schedule_replication_of_100_regular_files_by_view_with_batch_100;
+    Case =:= schedule_replication_of_100_regular_files_by_view_with_batch_10
 ->
     Nodes = ?config(op_worker_nodes, Config),
-    OldValue = ?config(replication_by_index_batch, Config),
-    test_utils:set_env(Nodes, op_worker, replication_by_index_batch, OldValue),
+    OldValue = ?config(replication_by_view_batch, Config),
+    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldValue),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
@@ -2160,7 +2160,7 @@ end_per_testcase(_Case, Config) ->
     transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
-    transfers_test_utils:remove_all_indices(Workers, ?SPACE_ID),
+    transfers_test_utils:remove_all_views(Workers, ?SPACE_ID),
     transfers_test_utils:ensure_transfers_removed(Config).
 
 end_per_suite(Config) ->

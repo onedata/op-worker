@@ -30,7 +30,7 @@
 %% Processes monitoring related events.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_monitoring_events(Evts :: [event:type()], Ctx :: maps:map()) ->
+-spec handle_monitoring_events(Evts :: [event:type()], Ctx :: map()) ->
     [ok | {error, Reason :: term()}].
 handle_monitoring_events(Evts, Ctx) ->
     SpaceIds = get_space_ids(Evts),

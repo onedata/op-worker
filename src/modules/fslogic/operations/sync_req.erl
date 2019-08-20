@@ -28,7 +28,7 @@
 -type fuse_response() :: fslogic_worker:fuse_response().
 -type provider_response() :: fslogic_worker:provider_response().
 
--export_type([block/0, transfer_id/0, provider_id/0]).
+-export_type([block/0, transfer_id/0, provider_id/0, query_view_params/0, provider_response/0]).
 
 %% API
 -export([
@@ -171,14 +171,14 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback(), transfer:index_name(),
+    od_provider:id(), transfer:callback(), transfer:view_name(),
     query_view_params(), pid() | undefined) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-    IndexName, QueryViewParams, QosJobPID
+    ViewName, QueryViewParams, QosJobPID
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, IndexName, QueryViewParams, QosJobPID).
+        Callback, ViewName, QueryViewParams, QosJobPID).
 
 %%%===================================================================
 %%% Internal functions
@@ -193,14 +193,14 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), od_provider:id(), transfer:callback(),
-    transfer:index_name(), query_view_params(), pid() | undefined) -> provider_response().
+    transfer:view_name(), query_view_params(), pid() | undefined) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
-    IndexName, QueryViewParams, QosJobPID
+    ViewName, QueryViewParams, QosJobPID
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, IndexName, QueryViewParams, QosJobPID),
+        TargetProviderId, Callback, ViewName, QueryViewParams, QosJobPID),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{

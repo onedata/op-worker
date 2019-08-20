@@ -42,7 +42,7 @@
     Ranges :: undefined | [range()]) ->
     cowboy_req:req().
 stream_binary(HttpStatus, Req, #cdmi_req{
-    client = ?USER(_UserId, SessionId),
+    auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid, size = Size}
 }, Ranges0) ->
     Ranges = case Ranges0 of
@@ -74,7 +74,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
     ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
     JsonBodySuffix :: binary()) -> cowboy_req:req() | no_return().
 stream_cdmi(Req, #cdmi_req{
-    client = ?USER(_UserId, SessionId),
+    auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid, size = Size}
 }, Range0, Encoding, JsonBodyPrefix, JsonBodySuffix) ->
     {ok, BufferSize0} = application:get_env(?APP_NAME, download_buffer_size),

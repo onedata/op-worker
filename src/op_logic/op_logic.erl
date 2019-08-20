@@ -35,12 +35,13 @@
 % for better readability of logic modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
--type client() :: #client{}.
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
 -type entity() :: undefined | #od_share{} | #transfer{}.
 -type entity_id() :: undefined | od_share:id() | transfer:id().
+-type revision() :: gs_protocol:revision().
+-type versioned_entity() :: gs_protocol:versioned_entity().
 -type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
@@ -56,11 +57,13 @@
 -type error() :: gs_protocol:error().
 
 -export_type([
-    client/0,
+    req/0,
     op_plugin/0,
     operation/0,
     entity_id/0,
     entity/0,
+    revision/0,
+    versioned_entity/0,
     aspect/0,
     scope/0,
     gri/0,
@@ -79,12 +82,13 @@
 -record(req_ctx, {
     req = #op_req{} :: req(),
     plugin = undefined :: op_plugin(),
-    entity = undefined :: entity()
+    versioned_entity = {undefined, 1} :: versioned_entity()
 }).
 -type req_ctx() :: #req_ctx{}.
 
 %% API
 -export([handle/1, handle/2]).
+-export([is_authorized/2]).
 -export([client_to_string/1]).
 
 
@@ -99,7 +103,7 @@
 %%--------------------------------------------------------------------
 -spec handle(req()) -> result().
 handle(OpReq) ->
-    handle(OpReq, undefined).
+    handle(OpReq, {undefined, 1}).
 
 
 %%--------------------------------------------------------------------
@@ -108,13 +112,13 @@ handle(OpReq) ->
 %% Entity can be provided if it was prefetched.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(req(), entity()) -> result().
-handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
+-spec handle(req(), versioned_entity()) -> result().
+handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
         ReqCtx0 = #req_ctx{
             req = OpReq,
             plugin = EntityType:op_logic_plugin(),
-            entity = Entity
+            versioned_entity = VersionedEntity
         },
         ensure_operation_supported(ReqCtx0),
         ReqCtx1 = sanitize_request(ReqCtx0),
@@ -144,10 +148,32 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, Entity) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Return if given client is authorized to perform given request, as specified
+%% in the #op_req{} record. Entity can be provided if it was prefetched.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), versioned_entity()) ->
+    {true, gs_protocol:gri()} | false.
+is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEntity) ->
+    try
+        ensure_authorized(#req_ctx{
+            req = OpReq,
+            plugin = EntityType:op_logic_plugin(),
+            versioned_entity = VersionedEntity
+        }),
+        {true, GRI}
+    catch
+        _:_ ->
+            false
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns a readable string representing provided client.
 %% @end
 %%--------------------------------------------------------------------
--spec client_to_string(client()) -> string().
+-spec client_to_string(aai:auth()) -> string().
 client_to_string(?NOBODY) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
 client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
@@ -213,14 +239,17 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_fetch_entity(req_ctx()) -> req_ctx().
-maybe_fetch_entity(#req_ctx{entity = Entity} = ReqCtx) when Entity /= undefined ->
+maybe_fetch_entity(#req_ctx{versioned_entity = {Entity, _}} = ReqCtx) when Entity /= undefined ->
     ReqCtx;
 maybe_fetch_entity(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = ReqCtx) ->
-    ReqCtx;
+    % Skip when creating an instance with predefined Id, set revision to 1
+    ReqCtx#req_ctx{versioned_entity = {undefined, 1}};
 maybe_fetch_entity(#req_ctx{plugin = Plugin, req = Req} = ReqCtx) ->
     case Plugin:fetch_entity(Req) of
-        {ok, Entity} ->
-            ReqCtx#req_ctx{entity = Entity};
+        {ok, {_Entity, _Revision} = VersionedEntity} ->
+            ReqCtx#req_ctx{versioned_entity = VersionedEntity};
+        ?ERROR_FORBIDDEN ->
+            throw(?ERROR_FORBIDDEN);
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND)
     end.
@@ -239,7 +268,7 @@ ensure_exists(#req_ctx{req = #op_req{operation = create}}) ->
 ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
     % Aspects where entity id is undefined always exist.
     ok;
-ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
+ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
     try Plugin:exists(OpReq, Entity) of
         true -> ok;
         false -> throw(?ERROR_NOT_FOUND)
@@ -258,11 +287,11 @@ ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized(req_ctx()) -> ok | no_return().
-ensure_authorized(#req_ctx{req = #op_req{client = ?ROOT}}) ->
+ensure_authorized(#req_ctx{req = #op_req{auth = ?ROOT}}) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     ok;
-ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
+ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
     Result = try
         Plugin:authorize(OpReq, Entity)
     catch _:_ ->
@@ -274,7 +303,7 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
         true ->
             ok;
         false ->
-            case OpReq#op_req.client of
+            case OpReq#op_req.auth of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
@@ -293,7 +322,7 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, entity = Entity}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec validate_request(req_ctx()) -> ok | no_return().
-validate_request(#req_ctx{plugin = Plugin, entity = Entity, req = Req}) ->
+validate_request(#req_ctx{plugin = Plugin, versioned_entity = {Entity, _}, req = Req}) ->
     ok = Plugin:validate(Req, Entity).
 
 
@@ -306,11 +335,11 @@ validate_request(#req_ctx{plugin = Plugin, entity = Entity, req = Req}) ->
 -spec process_request(req_ctx()) -> result().
 process_request(#req_ctx{
     plugin = Plugin,
-    req = #op_req{operation = create} = Req
+    req = #op_req{operation = create, return_revision = RR} = Req
 }) ->
     Result = Plugin:create(Req),
     case {Result, Req} of
-        {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, client = Cl}} ->
+        {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, auth = Cl}} ->
             % If an entity instance is created, log an information about it
             % (it's a significant operation and this information might be useful).
             {EntType, _EntId} = case Resource of
@@ -324,12 +353,30 @@ process_request(#req_ctx{
             Result;
         _ ->
             Result
+    end,
+
+    case {Result, RR} of
+        {{ok, resource, {ResultGri, ResultData}}, true} ->
+            % TODO rm hack after implementing subscriptions
+            {ok, resource, {ResultGri, {ResultData, 1}}};
+        _ ->
+            Result
     end;
 
 process_request(#req_ctx{
-    plugin = Plugin, 
-    req = #op_req{operation = get} = Req, 
-    entity = Entity
+    plugin = Plugin,
+    req = #op_req{operation = get, return_revision = true} = Req,
+    versioned_entity = {Entity, Rev}
+}) ->
+    case Plugin:get(Req, Entity) of
+        {ok, Data} -> {ok, {Data, Rev}};
+        {error, _} = Error -> Error
+    end;
+
+process_request(#req_ctx{
+    plugin = Plugin,
+    req = #op_req{operation = get} = Req,
+    versioned_entity = {Entity, _}
 }) ->
     Plugin:get(Req, Entity);
 
@@ -341,7 +388,7 @@ process_request(#req_ctx{
 
 process_request(#req_ctx{
     plugin = Plugin, 
-    req = #op_req{operation = delete, client = Cl, gri = GRI} = Req
+    req = #op_req{operation = delete, auth = Cl, gri = GRI} = Req
 }) ->
     case {Plugin:delete(Req), GRI} of
         {ok, #gri{type = Type, id = Id, aspect = instance}} ->

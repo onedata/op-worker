@@ -12,5 +12,4 @@
 -author("Michal Stanisz").
 
 -define(TIMEOUT, timer:minutes(1)).
--define(MACAROON, <<"DUMMY-MACAROON">>).
--define(DISCH_MACAROONS, [<<"DM1">>, <<"DM2">>]).
+-define(TOKEN, <<"DUMMY-TOKEN">>).

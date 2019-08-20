@@ -91,24 +91,24 @@ get_cacerts_dir() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec auth_to_rest_client(Auth :: term()) ->
-    {user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
-    {provider, Macaroon :: binary()} |
+    {user, token, tokens:serialized()} |
+    {provider, tokens:serialized()} |
     none.
 auth_to_rest_client(none) ->
     none;
 
-auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
-    {user, macaroon, {Mac, DMacs}};
+auth_to_rest_client(#token_auth{token = Token}) ->
+    {user, token, Token};
 
 auth_to_rest_client(provider) ->
-    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
-    {provider, ProviderMacaroon};
+    {ok, ProviderAccessToken} = provider_auth:get_access_token(),
+    {provider, ProviderAccessToken};
 
 auth_to_rest_client(?ROOT_SESS_ID) ->
     auth_to_rest_client(provider);
 
 auth_to_rest_client(?GUEST_SESS_ID) ->
-    auth_to_rest_client(provider);
+    none;
 
 auth_to_rest_client(SessId) when is_binary(SessId) ->
     {ok, #document{

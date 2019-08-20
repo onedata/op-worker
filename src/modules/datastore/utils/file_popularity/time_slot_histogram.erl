@@ -29,6 +29,8 @@
 -type histogram() :: #time_slot_histogram{}.
 -type values() :: histogram:histogram() | cumulative_histogram:histogram().
 
+-export_type([histogram/0]).
+
 %% API
 -export([
     new/2, new/3, new/4,
@@ -240,7 +242,7 @@ shift_size(#time_slot_histogram{
     last_update_time = LastUpdate,
     time_window = TimeWindow
 }, CurrentTimestamp) ->
-    (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow.
+    max(0, (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow).
 
 %%-------------------------------------------------------------------
 %% @private

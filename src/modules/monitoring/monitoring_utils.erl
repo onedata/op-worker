@@ -38,7 +38,7 @@ create_and_update(SpaceId, MonitoringId) ->
 %% this slot was not performed earlier.
 %% @end
 %%--------------------------------------------------------------------
--spec create_and_update(datastore:key(), #monitoring_id{}, maps:map()) -> ok.
+-spec create_and_update(datastore:key(), #monitoring_id{}, map()) -> ok.
 create_and_update(SpaceId, MonitoringId, UpdateValue) ->
     try
         CurrentTime = time_utils:cluster_time_seconds(),
@@ -92,7 +92,7 @@ create(SpaceId, MonitoringId, CreationTime) ->
 %% Updates rrd with value corresponding to metric type.
 %% @end
 %%--------------------------------------------------------------------
--spec update(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), maps:map()) -> ok.
+-spec update(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), map()) -> ok.
 update(#monitoring_id{main_subject_type = space, metric_type = storage_used,
     secondary_subject_type = user} = MonitoringId, MonitoringState, UpdateTime, UpdateValue) ->
 

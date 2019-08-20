@@ -68,6 +68,7 @@ start() ->
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
         {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
+        {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
         rest_handler:rest_routes()
@@ -75,9 +76,10 @@ start() ->
 
     DynamicPageRoutes = [
         {?NAGIOS_OZ_CONNECTIVITY_PATH, [<<"GET">>], page_oz_connectivity},
-        {?IDENTITY_MACAROON_PATH, [<<"GET">>], page_identity_macaroon},
+        {?IDENTITY_TOKEN_PATH, [<<"GET">>], page_identity_token},
         {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
+        {?DEPRECATED_FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload_deprecated},
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},

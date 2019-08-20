@@ -63,7 +63,7 @@ generate_file_id() ->
 %% Creates storage test file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+-spec create_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
     Content :: binary().
 create_test_file(Helper, UserCtx, FileId) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
@@ -79,7 +79,7 @@ create_test_file(Helper, UserCtx, FileId) ->
 %% Returns content of storage test file.
 %% @end
 %%--------------------------------------------------------------------
--spec read_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+-spec read_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
     Content :: binary().
 read_test_file(Helper, UserCtx, FileId) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
@@ -93,7 +93,7 @@ read_test_file(Helper, UserCtx, FileId) ->
 %% Updates and returns content of a storage test file.
 %% @end
 %%--------------------------------------------------------------------
--spec update_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+-spec update_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
     Content :: binary().
 update_test_file(Helper, UserCtx, FileId) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
@@ -108,7 +108,7 @@ update_test_file(Helper, UserCtx, FileId) ->
 %% Removes storage test file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
+-spec remove_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
     Size :: non_neg_integer()) -> ok | no_return().
 remove_test_file(Helper, UserCtx, FileId, Size) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
@@ -156,7 +156,7 @@ verify_storage_on_all_nodes(Helper) ->
 %% Verifies content of storage test file and removes it.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_test_file(helpers:helper(), helpers:user_ctx(), helpers:file_id(),
+-spec verify_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
     Content :: binary()) -> ok | {error, term()}.
 verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
     try
@@ -199,7 +199,7 @@ random_ascii_lowercase_sequence(Length) ->
 %% on the next node from the Nodes list.
 %% @end
 %%-------------------------------------------------------------------
--spec verify_storage_internal(helpers:helper(), helpers:user_ctx(), [node()],
+-spec verify_storage_internal(helpers:helper(), helper:user_ctx(), [node()],
     helpers:file_id(), Content :: binary()) ->
     {ok, {helpers:file_id(), binary()}} |
     {error, term()} | {error, term(), Stacktrace :: list()}.
@@ -220,7 +220,7 @@ verify_storage_internal(Helper, AdminCtx, [Node | Nodes], FileId, ExpectedFileCo
             Error
     end.
 
--spec create_test_file(node(), helpers:helper(), helpers:user_ctx(), helpers:file_id()) ->
+-spec create_test_file(node(), helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
     {ok, Content :: binary()} | {error, Reason :: term(), Stacktrace :: list()}.
 create_test_file(Node, Helper, UserCtx, FileId) ->
     case rpc:call(Node, ?MODULE, create_test_file, [Helper, UserCtx, FileId]) of
@@ -230,7 +230,7 @@ create_test_file(Node, Helper, UserCtx, FileId) ->
             {ok, Content}
     end.
 
--spec verify_test_file(node(), helpers:helper(), helpers:user_ctx(),
+-spec verify_test_file(node(), helpers:helper(), helper:user_ctx(),
     helpers:file_id(), Content :: binary()) ->
     ok | {error, term()} | {error, term(), Stacktrace :: list()}.
 verify_test_file(Node, Helper, UserCtx, FileId, ExpectedFileContent) ->

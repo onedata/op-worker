@@ -131,7 +131,7 @@ check_permission([#access_control_entity{} | Rest], User = #document{}, Operatio
 %% @end
 %%--------------------------------------------------------------------
 -spec from_acl_to_json_format(Acl :: [ace()]) ->
-    custom_metadata:json_array().
+    [map()].
 from_acl_to_json_format(Acl) ->
     [ace_to_map(Ace) || Ace <- Acl].
 
@@ -140,7 +140,7 @@ from_acl_to_json_format(Acl) ->
 %% list of access control entities
 %% @end
 %%--------------------------------------------------------------------
--spec from_json_format_to_acl(custom_metadata:json_array()) -> [ace()].
+-spec from_json_format_to_acl([map()]) -> [ace()].
 from_json_format_to_acl(JsonAcl) ->
     [map_to_ace(AceProplist) || AceProplist <- JsonAcl].
 
@@ -148,7 +148,7 @@ from_json_format_to_acl(JsonAcl) ->
 %%--------------------------------------------------------------------
 %% @doc Parses access control entity to format suitable for jiffy:encode
 %%--------------------------------------------------------------------
--spec ace_to_map(ace()) -> custom_metadata:json_object().
+-spec ace_to_map(ace()) -> map().
 ace_to_map(#access_control_entity{acetype = Type, aceflags = Flags,
     identifier = Identifier, name = Name, acemask = AccessMask}) ->
     #{
@@ -163,7 +163,7 @@ ace_to_map(#access_control_entity{acetype = Type, aceflags = Flags,
 %% access control entity
 %% @end
 %%--------------------------------------------------------------------
--spec map_to_ace(custom_metadata:json_object()) -> ace().
+-spec map_to_ace(map()) -> ace().
 map_to_ace(Map) ->
     Type = maps:get(<<"acetype">>, Map, undefined),
     Flags = maps:get(<<"aceflags">>, Map, undefined),

@@ -32,7 +32,7 @@
 
 % State of REST handler
 -record(state, {
-    client = undefined :: undefined | op_logic:client(),
+    auth = undefined :: undefined | aai:auth(),
     rest_req = undefined :: undefined | #rest_req{},
     allowed_methods :: [method()]
 }).
@@ -140,7 +140,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 is_authorized(Req, State) ->
     % Check if the request carries any authorization
     Result = try
-        http_auth:authenticate(Req)
+        http_auth:authenticate(Req, rest)
     catch
         throw:Err ->
             Err;
@@ -152,9 +152,9 @@ is_authorized(Req, State) ->
     end,
 
     case Result of
-        {ok, Client} ->
+        {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
-            {true, Req, State#state{client = Client}};
+            {true, Req, State#state{auth = Auth}};
         {error, _} = Error ->
             RestResp = rest_translator:error_response(Error),
             {stop, send_response(RestResp, Req), State}
@@ -199,7 +199,7 @@ delete_resource(Req, State) ->
 %% Returns all REST routes in the cowboy router format.
 %% @end
 %%--------------------------------------------------------------------
--spec rest_routes() -> [{binary(), module(), maps:map()}].
+-spec rest_routes() -> [{binary(), module(), map()}].
 rest_routes() ->
     AllRoutes = lists:flatten([
         file_routes:routes(),
@@ -245,18 +245,18 @@ rest_routes() ->
     {stop, cowboy_req:req(), state()}.
 process_request(Req, State) ->
     try
-        #state{client = Cl, rest_req = #rest_req{
+        #state{auth = Auth, rest_req = #rest_req{
             method = Method,
             parse_body = ParseBody,
             consumes = Consumes,
             b_gri = GriWithBindings
         }} = State,
         Operation = method_to_operation(Method),
-        GRI = resolve_gri_bindings(Cl#client.session_id, GriWithBindings, Req),
+        GRI = resolve_gri_bindings(Auth#auth.session_id, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody, Consumes),
         OpReq = #op_req{
             operation = Operation,
-            client = Cl,
+            auth = Auth,
             gri = GRI,
             data = Data
         },
@@ -426,7 +426,7 @@ get_data(Req, as_is, Consumes) ->
 %% specified multiple times it's values are merged into list.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_query_string(cowboy_req:req()) -> maps:map().
+-spec parse_query_string(cowboy_req:req()) -> map().
 parse_query_string(Req) ->
     Params = lists:foldl(fun({Key, Val}, AccMap) ->
         maps:update_with(Key, fun(OldVal) ->

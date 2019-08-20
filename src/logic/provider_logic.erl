@@ -24,6 +24,7 @@
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
 -export([get_as_map/0]).
@@ -46,7 +47,7 @@
 -export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_time_seconds/0]).
 -export([zone_get_offline_access_idps/0]).
--export([fetch_compatibility_config/1]).
+-export([fetch_peer_version/1]).
 -export([assert_zone_compatibility/0]).
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
@@ -275,13 +276,13 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 %% Supports a space based on support_space_token and support size.
 %% @end
 %%--------------------------------------------------------------------
--spec support_space(Token :: token:id() | macaroon:macaroon(), SupportSize :: integer()) ->
+-spec support_space(tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | gs_protocol:error().
 support_space(Token, SupportSize) ->
     support_space(?ROOT_SESS_ID, Token, SupportSize).
 
 -spec support_space(SessionId :: gs_client_worker:client(),
-    Token :: binary() | macaroon:macaroon(), SupportSize :: integer()) ->
+    tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | gs_protocol:error().
 support_space(SessionId, Token, SupportSize) ->
     Data = #{<<"token">> => Token, <<"size">> => SupportSize},
@@ -732,7 +733,7 @@ zone_get_offline_access_idps() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Contacts given provider and retrieves his identity macaroon, and then
+%% Contacts given provider and retrieves his identity token, and then
 %% verifies it in Onezone.
 %% @end
 %%--------------------------------------------------------------------
@@ -740,11 +741,14 @@ zone_get_offline_access_idps() ->
 verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
-        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_MACAROON_PATH]),
+        %% @todo VFS-5554 Deprecated, included for backward compatibility
+        %% Must be supported in the 19.09.* line, later the counterpart in the
+        %% configuration endpoint can be used.
+        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, #{}, <<>>, SslOpts) of
-            {ok, 200, _, IdentityMacaroon} ->
-                verify_provider_identity(ProviderId, IdentityMacaroon);
+            {ok, 200, _, IdentityToken} ->
+                verify_provider_identity(ProviderId, IdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
             {error, _} = Error ->
@@ -761,18 +765,20 @@ verify_provider_identity(ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies given provider in Onezone based on its identity macaroon.
+%% Verifies given provider in Onezone based on its identity token.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_provider_identity(od_provider:id(), IdentityMacaroon :: binary()) ->
+-spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
     ok | gs_protocol:error().
-verify_provider_identity(ProviderId, IdentityMacaroon) ->
+verify_provider_identity(ProviderId, IdentityToken) ->
     ?CREATE_RETURN_OK(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_provider, id = undefined, aspect = verify_provider_identity},
         data = #{
             <<"providerId">> => ProviderId,
-            <<"macaroon">> => IdentityMacaroon
+            <<"token">> => IdentityToken,
+            %% @todo VFS-5554 Deprecated, included for backward compatibility
+            <<"macaroon">> => IdentityToken
         }
     })).
 
@@ -812,22 +818,18 @@ verify_provider_nonce(ProviderId, Nonce) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Performs request fetching compatibility information from
-%% Onezone or another Oneprovider.
+%% Performs request fetching peer version from Onezone
+%% or another Oneprovider.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_compatibility_config(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
-    {ok, PeerVersion :: binary(), CompatibleOpVersions :: [binary()]} |
-    {error, {bad_response, Code :: integer(), Body :: binary()}} |
-    {error, term()}.
-fetch_compatibility_config(Service) ->
+-spec fetch_peer_version(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, PeerVersion :: binary()} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} | {error, term()}.
+fetch_peer_version(Service) ->
     case fetch_service_configuration(Service) of
         {ok, JsonMap} ->
             PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
-            CompatibleOpVersions = maps:get(
-                <<"compatibleOneproviderVersions">>, JsonMap, []
-            ),
-            {ok, PeerVersion, CompatibleOpVersions};
+            {ok, PeerVersion};
         {error, Error} ->
             {error, Error}
     end.
@@ -840,29 +842,27 @@ fetch_compatibility_config(Service) ->
 %%--------------------------------------------------------------------
 -spec assert_zone_compatibility() -> ok | no_return().
 assert_zone_compatibility() ->
-    case fetch_compatibility_config(onezone) of
-        {ok, OzVersion, CompOpVersionsBin} ->
+    case fetch_peer_version(onezone) of
+        {ok, OzVersion} ->
             OpVersion = oneprovider:get_version(),
-            CompOzVersions = application:get_env(
-                ?APP_NAME, compatible_oz_versions, []
-            ),
-            CompOzVersionsBin = strings_to_binaries(CompOzVersions),
-            case lists:member(OzVersion, CompOzVersionsBin) orelse
-                lists:member(OpVersion, CompOpVersionsBin) of
+            case compatibility:check_products_compatibility(
+                ?ONEPROVIDER, OpVersion, ?ONEZONE, OzVersion
+            ) of
                 true ->
                     ok;
-                false ->
+                {false, CompOzVersions} ->
                     ?critical("This provider is not compatible with its Onezone "
                     "service.~n"
                     "Oneprovider version: ~s, supports zones: ~p~n"
-                    "Onezone version: ~s, supports providers: ~p~n"
+                    "Onezone version: ~s~n"
                     "The application will be terminated.", [
                         OpVersion,
-                        CompOzVersions,
-                        OzVersion,
-                        binaries_to_strings(CompOpVersionsBin)
+                        binaries_to_strings(CompOzVersions),
+                        OzVersion
                     ]),
-                    init:stop()
+                    init:stop();
+                {error, Error} ->
+                    error(Error)
             end;
         {error, {bad_response, Code, ResponseBody}} ->
             ?critical("Failure while checking Onezone version. The application "
@@ -894,23 +894,23 @@ provider_connection_ssl_opts(Domain) ->
 %%--------------------------------------------------------------------
 -spec assert_provider_compatibility(Domain :: binary()) -> ok | no_return().
 assert_provider_compatibility(Domain) ->
-    case fetch_compatibility_config({oneprovider, Domain, Domain}) of
-        {ok, RemoteOpVersion, RemoteCompOpVersionsBin} ->
+    case fetch_peer_version({oneprovider, Domain, Domain}) of
+        {ok, RemoteOpVersion} ->
             OpVersion = oneprovider:get_version(),
-            CompOpVersions = application:get_env(
-                ?APP_NAME, compatible_op_versions, []
-            ),
-            CompOpVersionsBin = strings_to_binaries(CompOpVersions),
-            case lists:member(OpVersion, RemoteCompOpVersionsBin) orelse
-                lists:member(RemoteOpVersion, CompOpVersionsBin) of
+
+            case compatibility:check_products_compatibility(
+                ?ONEPROVIDER, RemoteOpVersion, ?ONEPROVIDER, OpVersion
+            ) of
                 true ->
                     ok;
-                false ->
+                {false, RemoteCompOpVersions} ->
                     throw({
                         incompatible_peer_op_version,
                         RemoteOpVersion,
-                        binaries_to_strings(RemoteCompOpVersionsBin)
-                    })
+                        binaries_to_strings(RemoteCompOpVersions)
+                    });
+                {error, Error} ->
+                    error(Error)
             end;
         {error, {bad_response, Code, _ResponseBody}} ->
             throw({cannot_check_peer_op_version, Code});
@@ -1000,12 +1000,6 @@ http_get_configuration(URL, SslOpts) ->
         {error, Error} ->
             {error, Error}
     end.
-
-
-%% @private
--spec strings_to_binaries([string()]) -> [binary()].
-strings_to_binaries(List) ->
-    [list_to_binary(S) || S <- List].
 
 
 %% @private

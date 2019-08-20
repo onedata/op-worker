@@ -17,7 +17,7 @@
 -type rule_setting() :: #autocleaning_rule_setting{}.
 -type key() :: enabled | value.
 -type value() :: boolean() | non_neg_integer().
--type rule_setting_map() :: maps:map(key(), value()).
+-type rule_setting_map() :: #{key() => value()}.
 
 -export_type([rule_setting/0, rule_setting_map/0, value/0]).
 
@@ -37,7 +37,7 @@ is_enabled(#{enabled := Enabled}) -> Enabled.
 get_value(#autocleaning_rule_setting{value = Value}) -> Value;
 get_value(#{value := Value}) -> Value.
 
--spec to_map(rule_setting()) -> maps:map().
+-spec to_map(rule_setting()) -> map().
 to_map(#autocleaning_rule_setting{
     enabled = Enabled,
     value = Value
@@ -47,7 +47,7 @@ to_map(#autocleaning_rule_setting{
         value => Value
     }.
 
--spec update(rule_setting(), maps:map()) -> rule_setting().
+-spec update(rule_setting(), map()) -> rule_setting().
 update(#autocleaning_rule_setting{
     enabled = CurrentEnabled,
     value = CurrentValue

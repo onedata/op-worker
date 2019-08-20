@@ -18,7 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([mkdir/4, read_dir/5, read_dir_plus/5]).
+-export([mkdir/4, read_dir/5, read_dir/6, read_dir_plus/5]).
 
 %%%===================================================================
 %%% API
@@ -38,17 +38,34 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
         fun mkdir_insecure/4).
 
 %%--------------------------------------------------------------------
-%% @equiv read_dir_insecure/4 with permission checks
+%% @doc
+%% @equiv read_dir(UserCtx, FileCtx, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
-    Token :: undefined | binary()) -> fslogic_worker:fuse_response().
+    Token :: undefined | binary()
+) ->
+    fslogic_worker:fuse_response().
 read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
+    read_dir(UserCtx, FileCtx, Offset, Limit, Token, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv read_dir_insecure/6 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Token :: undefined | binary(),
+    StartId :: undefined | file_meta:name()
+) ->
+    fslogic_worker:fuse_response().
+read_dir(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
     check_permissions:execute(
         [traverse_ancestors, ?list_container],
-        [UserCtx, FileCtx, Offset, Limit, Token],
-        fun read_dir_insecure/5).
+        [UserCtx, FileCtx, Offset, Limit, Token, StartId],
+        fun read_dir_insecure/6).
 
 %%--------------------------------------------------------------------
 %% @equiv read_dir_plus_insecure/5 with permission checks
@@ -104,14 +121,19 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
-    Token :: undefined | binary()) -> fslogic_worker:fuse_response().
-read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
+    Offset :: integer(), Limit :: non_neg_integer(),
+    Token :: undefined | binary(),
+    StartId :: undefined | file_meta:name()
+) ->
+    fslogic_worker:fuse_response().
+read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
     {Token2, CachePid} = get_cached_token(Token),
 
-    {Children, NewToken, IsLast, FileCtx2} = case
-        file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2) of
-        {C, FC}  -> {C, <<"">>, length(C) < Limit, FC};
+    {Children, NewToken, IsLast, FileCtx2} = case file_ctx:get_file_children(
+        FileCtx, UserCtx, Offset, Limit, Token2, StartId
+    ) of
+        {C, FC}  ->
+            {C, <<"">>, length(C) < Limit, FC};
         {C, NT, FC} ->
             IL = NT#link_token.is_last,
             NT2 = case IL of
@@ -121,12 +143,12 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
             {C, NT2, IL, FC}
     end,
 
-    ChildrenLinks =
-        lists:map(fun(ChildFile) ->
-            ChildGuid = file_ctx:get_guid_const(ChildFile),
-            {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
-            #child_link{name = ChildName, guid = ChildGuid}
-        end, Children),
+    ChildrenLinks = lists:map(fun(ChildFile) ->
+        ChildGuid = file_ctx:get_guid_const(ChildFile),
+        {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
+        #child_link{name = ChildName, guid = ChildGuid}
+    end, Children),
+
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{

@@ -197,7 +197,7 @@ get_helpers(StorageId) ->
 %% Returns map describing luma configuration
 %% @end
 %%-------------------------------------------------------------------
--spec get_luma_config_map(record() | doc()) -> maps:map().
+-spec get_luma_config_map(record() | doc()) -> map().
 get_luma_config_map(#storage{luma_config = undefined}) ->
     #{enabled => false};
 get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
@@ -214,7 +214,7 @@ get_luma_config_map(#document{value = Storage}) ->
 %% Selects storage helper by its name form the list of configured storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec select_helper(record() | doc(), helpers:name() | [helpers:name()]) ->
+-spec select_helper(record() | doc(), helper:name() | [helper:name()]) ->
     {ok, helper() | [helper()]} | {error, Reason :: term()}.
 select_helper(Storage, HelperNames) when is_list(HelperNames) ->
     Helpers = lists:filter(fun(Helper) ->

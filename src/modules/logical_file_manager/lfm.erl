@@ -43,13 +43,13 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, read_dir_plus/4, read_dir_plus/5,
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5,
     get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([mv/3, cp/3, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
+-export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
     schedule_file_replication/4, schedule_file_replication/5,
-    schedule_replica_eviction/4, schedule_replication_by_index/6, schedule_replica_eviction_by_index/6]).
+    schedule_replica_eviction/4, schedule_replication_by_view/6, schedule_replica_eviction_by_view/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     silent_read/3, truncate/3, release/1, get_file_distribution/2,
@@ -121,8 +121,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% @equiv ls(SessId, FileKey, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
@@ -130,7 +129,25 @@ ls(SessId, FileKey, Offset, Limit) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
         IsLast :: boolean()} | error_reply().
 ls(SessId, FileKey, Offset, Limit, Token) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token) end).
+    ls(SessId, FileKey, Offset, Limit, Token, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists some contents of a directory starting from specified startId.
+%% Returns up to Limit of entries, starting with Offset-th entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec ls(session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    Token :: undefined | binary(),
+    StartId :: undefined | file_meta:name()
+) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
+        IsLast :: boolean()} | error_reply().
+ls(SessId, FileKey, Offset, Limit, Token, StartId) ->
+    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token, StartId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,6 +218,16 @@ mv(SessId, FileEntry, TargetPath) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Moves a file or directory to a new location.
+%% @end
+%%--------------------------------------------------------------------
+-spec mv(session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | error_reply().
+mv(SessId, FileKey, TargetParentKey, TargetName) ->
+    ?run(fun() -> lfm_files:mv(SessId, FileKey, TargetParentKey, TargetName) end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
@@ -208,6 +235,16 @@ mv(SessId, FileEntry, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 cp(SessId, FileEntry, TargetPath) ->
     ?run(fun() -> lfm_files:cp(SessId, FileEntry, TargetPath) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Copies a file or directory to given location.
+%% @end
+%%--------------------------------------------------------------------
+-spec cp(session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | error_reply().
+cp(SessId, FileKey, TargetParentKey, TargetName) ->
+    ?run(fun() -> lfm_files:cp(SessId, FileKey, TargetParentKey, TargetName) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -268,14 +305,14 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID
 %% Schedules file replication to given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replication_by_index(session:id(), TargetProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:index_name(),
+-spec schedule_replication_by_view(session:id(), TargetProviderId :: oneprovider:id(),
+    transfer:callback(), od_space:id(), transfer:view_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
-schedule_replication_by_index(SessId, TargetProviderId, Callback, SpaceId,
-    IndexName, QueryParams
+schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId,
+    ViewName, QueryParams
 ) ->
-    ?run(fun() -> lfm_files:schedule_replication_by_index(
-        SessId, TargetProviderId, Callback, SpaceId, IndexName, QueryParams
+    ?run(fun() -> lfm_files:schedule_replication_by_view(
+        SessId, TargetProviderId, Callback, SpaceId, ViewName, QueryParams
     ) end).
 
 %%--------------------------------------------------------------------
@@ -298,16 +335,16 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
 %% to provider given as MigrateProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_replica_eviction_by_index(session:id(), oneprovider:id(),
+-spec schedule_replica_eviction_by_view(session:id(), oneprovider:id(),
     undefined | oneprovider:id(), od_space:id(),
-    transfer:index_name(), transfer:query_view_params()) ->
+    transfer:view_name(), transfer:query_view_params()) ->
     {ok, transfer:id()} | error_reply().
-schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProviderId,
-    SpaceId, IndexName, QueryViewParams
+schedule_replica_eviction_by_view(SessId, EvictingProviderId, ReplicatingProviderId,
+    SpaceId, ViewName, QueryViewParams
 ) ->
-    ?run(fun() -> lfm_files:schedule_replica_eviction_by_index(
+    ?run(fun() -> lfm_files:schedule_replica_eviction_by_view(
         SessId, EvictingProviderId, ReplicatingProviderId,
-        SpaceId, IndexName, QueryViewParams
+        SpaceId, ViewName, QueryViewParams
     ) end).
 
 %%--------------------------------------------------------------------
@@ -316,7 +353,7 @@ schedule_replica_eviction_by_index(SessId, EvictingProviderId, ReplicatingProvid
 %% @end
 %%--------------------------------------------------------------------
 -spec create(session:id(), Path :: file_meta:path()) ->
-    {ok, file_meta:file_guid()} | error_reply().
+    {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path) ->
     ?run(fun() -> lfm_files:create(SessId, Path) end).
 

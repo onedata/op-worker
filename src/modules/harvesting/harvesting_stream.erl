@@ -250,7 +250,7 @@
 %% accordingly to harvesting_stream type.
 %% @end
 %%-------------------------------------------------------------------
--callback custom_error_handling(harversting_stream:state(),
+-callback custom_error_handling(harvesting_stream:state(),
     harvesting_result:result()) -> handling_result().
 
 %%-------------------------------------------------------------------

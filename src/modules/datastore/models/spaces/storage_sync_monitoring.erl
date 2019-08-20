@@ -47,7 +47,7 @@
 
 -type id() :: binary().
 -type storage_sync_monitoring() :: #storage_sync_monitoring{}.
--type doc() :: datastore:doc(storage_sync_monitoring()).
+-type doc() :: datastore_doc:doc(storage_sync_monitoring()).
 -type diff() :: datastore_doc:diff(storage_sync_monitoring()).
 -type timestamp() :: non_neg_integer().
 

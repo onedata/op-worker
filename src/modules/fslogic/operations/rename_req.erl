@@ -95,7 +95,7 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
     TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
-    case copy_utils:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
+    case file_copy:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
         {ok, NewCopiedGuid, ChildEntries} ->
             case lfm:rm_recursive(SessId, {guid, SourceGuid}) of
                 ok ->
@@ -265,7 +265,7 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 %%--------------------------------------------------------------------
 -spec rename_file_on_flat_storage(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
-    TargetGuid :: undefined | file_ctx:ctx()) -> #fuse_response{}.
+    TargetGuid :: undefined | fslogic_worker:file_guid()) -> #fuse_response{}.
 rename_file_on_flat_storage(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
     check_permissions:execute(
         [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
@@ -284,7 +284,7 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetN
 %%--------------------------------------------------------------------
 -spec rename_file_on_flat_storage_insecure(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
-    TargetGuid :: undefined | file_ctx:ctx()) -> #fuse_response{}.
+    TargetGuid :: undefined | fslogic_worker:file_guid()) -> #fuse_response{}.
 rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
     {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),

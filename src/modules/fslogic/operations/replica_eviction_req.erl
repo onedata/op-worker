@@ -33,14 +33,14 @@
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(user_ctx:ctx(), file_ctx:ctx(),
     SourceProviderId :: sync_req:provider_id(),
-    MigrationProviderId :: sync_req:provider_id(), transfer:index_name(),
+    MigrationProviderId :: sync_req:provider_id(), transfer:view_name(),
     sync_req:query_view_params()) -> sync_req:provider_response().
 schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
-    MigrationProviderId, IndexName, QueryViewParams
+    MigrationProviderId, ViewName, QueryViewParams
 ) ->
     check_permissions:execute(
         [], %todo VFS-4844
-        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId, IndexName, QueryViewParams],
+        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId, ViewName, QueryViewParams],
         fun schedule_replica_eviction_insecure/6).
 
 %%%===================================================================
@@ -55,16 +55,16 @@ schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    sync_req:provider_id(), sync_req:provider_id(), transfer:index_name(),
+    sync_req:provider_id(), sync_req:provider_id(), transfer:view_name(),
     sync_req:query_view_params()) -> sync_req:provider_response().
 schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
-    MigrationProviderId, IndexName, QueryViewParams
+    MigrationProviderId, ViewName, QueryViewParams
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
-        SourceProviderId, MigrationProviderId, undefined, IndexName, QueryViewParams,
+        SourceProviderId, MigrationProviderId, undefined, ViewName, QueryViewParams,
         undefined),
     #provider_response{
         status = #status{code = ?OK},

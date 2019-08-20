@@ -506,7 +506,7 @@ new_replication_or_migration(#document{
         file_uuid = FileUuid,
         space_id = SpaceId,
         callback = Callback,
-        index_name = IndexName,
+        index_name = ViewName,
         query_view_params = QueryViewParams
     }
 }) ->
@@ -518,7 +518,7 @@ new_replication_or_migration(#document{
         FileGuid,
         Callback,
         transfer:is_migration(Transfer),
-        IndexName,
+        ViewName,
         QueryViewParams
     }).
 
@@ -538,7 +538,7 @@ new_replica_eviction(#document{
         space_id = SpaceId,
         callback = Callback,
         replicating_provider = TargetProviderId,
-        index_name = IndexName,
+        index_name = ViewName,
         query_view_params = QueryViewParams
     }
 }) ->
@@ -546,6 +546,6 @@ new_replica_eviction(#document{
     {ok, _Pid} = gen_server2:start(replica_eviction_controller,
         [session_utils:root_session_id(),
             TransferId, FileGuid, Callback, TargetProviderId,
-            IndexName, QueryViewParams],
+            ViewName, QueryViewParams],
         []),
     ok.

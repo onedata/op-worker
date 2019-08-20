@@ -43,7 +43,7 @@
 -type helper_handle() :: #helper_handle{}.
 -type file_handle() :: #file_handle{}.
 
--export_type([file_id/0, open_flag/0, helper/0, helper_handle/0, file_handle/0]).
+-export_type([file_id/0, open_flag/0, file_type_flag/0, helper/0, helper_handle/0, file_handle/0]).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -78,7 +78,7 @@ get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
 %% Calls {@link helpers_nif:refresh_params/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_params(helper_handle() | file_handle(), maps:map()) ->
+-spec refresh_params(helper_handle() | file_handle(), map()) ->
     ok | {error, Reason :: term()}.
 refresh_params(#helper_handle{} = Handle, Args) ->
     ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
@@ -199,7 +199,7 @@ chmod(Handle, FileId, Mode) ->
 %% Calls {@link helpers_nif:chown/4} function.
 %% @end
 %%--------------------------------------------------------------------
--spec chown(helper_handle(), file_id(), posix_user:uid(), posix_user:gid()) ->
+-spec chown(helper_handle(), file_id(), luma:uid(), luma:gid()) ->
     ok | {error, Reason :: term()}.
 chown(Handle, FileId, UID, GID) ->
     ?MODULE:apply_helper_nif(Handle, chown, [FileId, UID, GID]).
@@ -276,7 +276,7 @@ open(#helper_handle{timeout = Timeout} = Handle, FileId, Flag) ->
 %% Calls {@link helpers_nif:refresh_params/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_helper_params(file_handle(), maps:map()) ->
+-spec refresh_helper_params(file_handle(), map()) ->
     ok | {error, Reason :: term()}.
 refresh_helper_params(Handle, Args) ->
     ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
@@ -425,7 +425,7 @@ receive_loop(ResponseRef, Timeout) ->
 %% Converts a file type from helpers API to an argument for NIF function.
 %% @end
 %%--------------------------------------------------------------------
--spec file_type_for_nif(file_type_flag()) -> helpers_nif:file_type_flag().
+-spec file_type_for_nif(file_type_flag()) -> helpers_nif:file_type().
 file_type_for_nif(reg) -> 'S_IFREG';
 file_type_for_nif(chr) -> 'S_IFCHR';
 file_type_for_nif(blk) -> 'S_IFBLK';

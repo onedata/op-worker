@@ -100,36 +100,36 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
-fetch_entity(#op_req{operation = get, client = Client, gri = #gri{
+fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance
 }}) ->
-    fetch_share(Client, ShareId);
+    fetch_share(Auth, ShareId);
 
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
-fetch_entity(#op_req{operation = update, client = Client, gri = #gri{
+fetch_entity(#op_req{operation = update, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance
 }}) ->
-    fetch_share(Client, ShareId);
+    fetch_share(Auth, ShareId);
 
 fetch_entity(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
-fetch_entity(#op_req{operation = delete, client = Client, gri = #gri{
+fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance
 }}) ->
-    fetch_share(Client, ShareId);
+    fetch_share(Auth, ShareId);
 
 fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
-    {ok, undefined}.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -151,51 +151,51 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, client = Client, gri = #gri{
+authorize(#op_req{operation = create, auth = Auth, gri = #gri{
     id = DirGuid,
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{aspect = instance}},
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
 ) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, client = Client, gri = #gri{
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = DirGuid,
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = update, client = Client, gri = #gri{aspect = instance}},
+authorize(#op_req{operation = update, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
 ) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = update, client = Client, gri = #gri{
+authorize(#op_req{operation = update, auth = Auth, gri = #gri{
     id = DirGuid,
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = delete, client = Client, gri = #gri{aspect = instance}},
+authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
 ) ->
-    op_logic_utils:is_eff_space_member(Client, SpaceId);
+    op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = delete, client = Client, gri = #gri{
+authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = DirGuid,
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:is_eff_space_member(Client, SpaceId).
+    op_logic_utils:is_eff_space_member(Auth, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -242,10 +242,9 @@ validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = shared_di
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    SessionId = Cl#client.session_id,
+create(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
     Name = maps:get(<<"name">>, Req#op_req.data),
-    case lfm:create_share(SessionId, {guid, DirGuid}, Name) of
+    case lfm:create_share(Auth#auth.session_id, {guid, DirGuid}, Name) of
         {ok, {ShareId, _ShareGuid}} ->
             {ok, value, ShareId};
         {error, Errno} ->
@@ -259,10 +258,10 @@ create(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
-    ShareId = resolve_share_id(Cl, DirGuid),
-    case fetch_share(Cl, ShareId) of
-        {ok, Share} ->
+get(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
+    ShareId = resolve_share_id(Auth, DirGuid),
+    case fetch_share(Auth, ShareId) of
+        {ok, {Share, _}} ->
             get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
@@ -293,14 +292,14 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    ShareId = resolve_share_id(Cl, DirGuid),
+update(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
+    ShareId = resolve_share_id(Auth, DirGuid),
     NewName = maps:get(<<"name">>, Req#op_req.data),
-    share_logic:update_name(Cl#client.session_id, ShareId, NewName);
+    share_logic:update_name(Auth#auth.session_id, ShareId, NewName);
 
-update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
+update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
     NewName = maps:get(<<"name">>, Req#op_req.data),
-    share_logic:update_name(Cl#client.session_id, ShareId, NewName).
+    share_logic:update_name(Auth#auth.session_id, ShareId, NewName).
 
 
 %%--------------------------------------------------------------------
@@ -309,16 +308,15 @@ update(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#op_req{client = Cl, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
-    SessionId = Cl#client.session_id,
-    ShareId = resolve_share_id(Cl, DirGuid),
-    case lfm:remove_share(SessionId, ShareId) of
+delete(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
+    ShareId = resolve_share_id(Auth, DirGuid),
+    case lfm:remove_share(Auth#auth.session_id, ShareId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end;
 
-delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
-    case lfm:remove_share(Cl#client.session_id, ShareId) of
+delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
+    case lfm:remove_share(Auth#auth.session_id, ShareId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
@@ -330,21 +328,21 @@ delete(#op_req{client = Cl, gri = #gri{id = ShareId, aspect = instance}}) ->
 
 
 %% @private
--spec fetch_share(op_logic:client(), od_share:id()) ->
-    {ok, #od_share{}} | ?ERROR_NOT_FOUND.
-fetch_share(#client{session_id = SessionId}, ShareId) ->
+-spec fetch_share(aai:auth(), od_share:id()) ->
+    {ok, {#od_share{}, op_logic:revision()}} | ?ERROR_NOT_FOUND.
+fetch_share(?USER(_UserId, SessionId), ShareId) ->
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = Share}} ->
-            {ok, Share};
+            {ok, {Share, 1}};
         _ ->
             ?ERROR_NOT_FOUND
     end.
 
 
 %% @private
--spec resolve_share_id(op_logic:client(), file_id:file_guid()) ->
+-spec resolve_share_id(aai:auth(), file_id:file_guid()) ->
     od_share:id() | ?ERROR_NOT_FOUND.
-resolve_share_id(#client{session_id = SessionId}, DirGuid) ->
+resolve_share_id(?USER(_UserId, SessionId), DirGuid) ->
     case lfm:stat(SessionId, {guid, DirGuid}) of
         {ok, #file_attr{shares = [ShareId]}} ->
             ShareId;

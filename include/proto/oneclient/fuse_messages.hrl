@@ -41,7 +41,8 @@
 -record(get_file_children, {
     offset :: file_meta:offset(),
     size :: file_meta:size(),
-    index_token :: undefined | binary()
+    index_token = undefined :: undefined | binary(),
+    index_startid = undefined :: undefined | binary()
 }).
 
 -record(get_file_children_attrs, {

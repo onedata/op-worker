@@ -20,16 +20,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_authorized/2, authenticate/1]).
+-export([is_authorized/2, authenticate/2]).
 
-% opaque type of auth token that is necessary to perform operations on files.
--type auth() :: any().
-
--export_type([auth/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,9 +34,10 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | stop, req(), maps:map()}.
+-spec is_authorized(cowboy_req:req(), map()) ->
+    {true | {false, binary()} | stop, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    case authenticate(Req) of
+    case authenticate(Req, rest) of
         {ok, ?USER(UserId, SessionId)} ->
             {true, Req, State#{
                 user_id => UserId,
@@ -62,64 +60,31 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(req()) -> op_logic:client() | {error, term()}.
-authenticate(Req) ->
-    case resolve_auth(Req) of
-        {error, not_found} ->
+-spec authenticate(#token_auth{} | cowboy_req:req(), rest | gui) ->
+    aai:auth() | {error, term()}.
+authenticate(#token_auth{} = Credentials, Type) ->
+    case user_identity:get_or_fetch(Credentials) of
+        {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
+            Result = case Type of
+                rest ->
+                    session_manager:reuse_or_create_rest_session(Iden, Credentials);
+                gui ->
+                    session_manager:reuse_or_create_gui_session(Iden, Credentials)
+            end,
+            case Result of
+                {ok, SessionId} ->
+                    {ok, ?USER(UserId, SessionId)};
+                {error, {invalid_identity, _}} ->
+                    user_identity:delete(Credentials),
+                    authenticate(Credentials, Type)
+            end;
+        Error ->
+            Error
+    end;
+authenticate(Req, Type) ->
+    case tokens:parse_access_token_header(Req) of
+        undefined ->
             {ok, ?NOBODY};
-        Auth ->
-            case user_identity:get_or_fetch(Auth) of
-                {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
-                    case session_manager:reuse_or_create_rest_session(Iden, Auth) of
-                        {ok, SessId} ->
-                            {ok, ?USER(UserId, SessId)};
-                        {error, {invalid_identity, _}} ->
-                            user_identity:delete(Auth),
-                            authenticate(Req)
-                    end;
-                Error ->
-                    Error
-            end
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Resolves authorization carried by request (if any).
-%% @end
-%%--------------------------------------------------------------------
--spec resolve_auth(req()) -> user_identity:credentials() | {error, not_found}.
-resolve_auth(Req) ->
-    case parse_macaroon_from_header(Req) of
-        undefined -> {error, not_found};
-        Macaroon -> #macaroon_auth{macaroon = Macaroon}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Parses macaroon from request headers, accepted headers:
-%%  * Macaroon
-%%  * X-Auth-Token
-%%  * Bearer Authentication
-%% @end
-%%--------------------------------------------------------------------
--spec parse_macaroon_from_header(req()) -> undefined | binary().
-parse_macaroon_from_header(Req) ->
-    case cowboy_req:header(<<"authorization">>, Req) of
-        <<"Bearer ", Macaroon/binary>> ->
-            Macaroon;
-        _ ->
-            case cowboy_req:header(<<"macaroon">>, Req) of
-                undefined ->
-                    cowboy_req:header(<<"x-auth-token">>, Req);
-                Value ->
-                    Value
-            end
+        AccessToken ->
+            authenticate(#token_auth{token = AccessToken}, Type)
     end.

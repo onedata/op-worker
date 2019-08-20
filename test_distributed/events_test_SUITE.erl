@@ -266,7 +266,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #user_identity{user_id = <<"user1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Self]
+        reuse_or_create_fuse_session, [SessId, Iden, #token_auth{}, Self]
     )),
     {ok, SessId}.
 
@@ -381,7 +381,7 @@ unsubscribe(Worker, SessId, SubId) ->
 %% Emits an event to event manager associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:object()) -> ok.
+-spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:type()) -> ok.
 emit(Worker, SessId, Evt) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt, SessId])).
 

@@ -43,99 +43,99 @@ routes() -> [
     {<<"/spaces/:sid/indexes">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = indices}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = views}
     }},
     %% Create index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
     %% Get index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
     %% Remove index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
     %% Update index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
     %% Remove index reduce function
     {<<"/spaces/:sid/indexes/:index_name/reduce">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index_reduce_function, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view_reduce_function, ?BINDING(index_name)}}
     }},
     %% Update index reduce function (deprecated)
     {<<"/spaces/:sid/indexes/:index_name/reduce">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index_reduce_function, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view_reduce_function, ?BINDING(index_name)}}
     }},
     %% Query index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name/query">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {query_index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {query_view, ?BINDING(index_name)}}
     }},
-    %% Get all space indices
-    {<<"/spaces/:sid/indices">>, rest_handler, #rest_req{
+    %% Get all space views
+    {<<"/spaces/:sid/views">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = indices}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = views}
     }},
-    %% Create index
-    {<<"/spaces/:sid/indices/:index_name">>, rest_handler, #rest_req{
+    %% Create view
+    {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(view_name)}}
     }},
-    %% Get index
-    {<<"/spaces/:sid/indices/:index_name">>, rest_handler, #rest_req{
+    %% Get view
+    {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(view_name)}}
     }},
-    %% Remove index
-    {<<"/spaces/:sid/indices/:index_name">>, rest_handler, #rest_req{
+    %% Remove view
+    {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(view_name)}}
     }},
-    %% Update index
-    {<<"/spaces/:sid/indices/:index_name">>, rest_handler, #rest_req{
+    %% Update view
+    {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(view_name)}}
     }},
-    %% Remove index reduce function
-    {<<"/spaces/:sid/indices/:index_name/reduce">>, rest_handler, #rest_req{
+    %% Remove view reduce function
+    {<<"/spaces/:sid/views/:view_name/reduce">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index_reduce_function, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view_reduce_function, ?BINDING(view_name)}}
     }},
-    %% Update index reduce function
-    {<<"/spaces/:sid/indices/:index_name/reduce">>, rest_handler, #rest_req{
+    %% Update view reduce function
+    {<<"/spaces/:sid/views/:view_name/reduce">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {index_reduce_function, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view_reduce_function, ?BINDING(view_name)}}
     }},
-    %% Query index
-    {<<"/spaces/:sid/indices/:index_name/query">>, rest_handler, #rest_req{
+    %% Query view
+    {<<"/spaces/:sid/views/:view_name/query">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {query_index, ?BINDING(index_name)}}
+        b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {query_view, ?BINDING(view_name)}}
     }},
     %% Get all transfers
     {<<"/spaces/:sid/transfers">>, rest_handler, #rest_req{

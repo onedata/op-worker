@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -54,8 +55,8 @@ all() ->
 %%%===================================================================
 
 
-% Providers should not connect because incorrect compatible_op_versions
-% env variables are defined using in env_up_posthook
+% Providers should not connect because in env_up_posthook op version
+% is mocked to be incompatible with current one
 incompatible_providers_should_not_connect(Config) ->
     % providers should start connecting right after init_per_testcase
     % (spaces creation); just in case wait some time before checking
@@ -75,12 +76,7 @@ incompatible_providers_should_not_connect(Config) ->
     ?assertMatch(false, connection_exists(P1, P2)),
     ?assertMatch(false, connection_exists(P2, P1)),
 
-    {_AppId, _AppName, AppVersion} = lists:keyfind(
-        ?APP_NAME, 1, rpc:call(hd(Nodes), application, loaded_applications, [])
-    ),
-    rpc:multicall(Nodes, application, set_env, [
-        ?APP_NAME, compatible_op_versions, [AppVersion]
-    ]),
+    test_utils:mock_unload(Nodes, oneprovider),
     ?assertMatch(true, connection_exists(P1, P2), ?ATTEMPTS),
     ?assertMatch(true, connection_exists(P2, P1), ?ATTEMPTS),
 
@@ -254,9 +250,11 @@ provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         Nodes = ?config(op_worker_nodes, NewConfig),
-        rpc:multicall(Nodes, application, set_env, [
-            ?APP_NAME, compatible_op_versions, ["16.04-rc5"]
-        ]),
+        test_utils:mock_new(Nodes, oneprovider),
+        % Set op version to old one, that for sure is not compatible with current one
+        test_utils:mock_expect(Nodes, oneprovider, get_version, fun() -> <<"16.04-rc5">> end),
+        % Make sure provider identity token is not regenerated between requests
+        rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_token_ttl_sec, 999999999]),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -361,13 +359,15 @@ get_outgoing_connection_manager(Provider, SessId) ->
 
 -spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
 expected_configuration(Node) ->
-    {ok, CompOzVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oz_versions),
-    {ok, CompOpVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_op_versions),
-    {ok, CompOcVersions} = test_utils:get_env(Node, ?APP_NAME, compatible_oc_versions),
+    Version = rpc:call(Node, oneprovider, get_version, []),
+    {ok, CompOzVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEZONE]),
+    {ok, CompOpVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEPROVIDER]),
+    {ok, CompOcVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONECLIENT]),
     {ok, TransferConfig} = test_utils:get_env(Node, rtransfer_link, transfer),
     RtransferPort = proplists:get_value(server_port, TransferConfig),
     {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
     {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+    {ok, IdentityToken} = rpc:call(Node, provider_auth, get_identity_token, []),
 
     #{
         <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
@@ -377,15 +377,11 @@ expected_configuration(Node) ->
         <<"version">> => rpc:call(Node, oneprovider, get_version, []),
         <<"build">> => rpc:call(Node, oneprovider, get_build, []),
         <<"rtransferPort">> => RtransferPort,
-        <<"compatibleOnezoneVersions">> => to_binaries(CompOzVersions),
-        <<"compatibleOneproviderVersions">> => to_binaries(CompOpVersions),
-        <<"compatibleOneclientVersions">> => to_binaries(CompOcVersions)
+        <<"compatibleOnezoneVersions">> => CompOzVersions,
+        <<"compatibleOneproviderVersions">> => CompOpVersions,
+        <<"compatibleOneclientVersions">> => CompOcVersions,
+        <<"identityToken">> => IdentityToken
     }.
-
-
--spec to_binaries([string()]) -> [binary()].
-to_binaries(Strings) ->
-    [list_to_binary(S) || S <- Strings].
 
 
 -spec ip_to_binary(inet:ip4_address()) -> binary().

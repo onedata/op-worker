@@ -23,6 +23,7 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -40,7 +41,6 @@
 -export([
     provider_connection_test/1,
     client_connection_test/1,
-    forward_compatible_client_connection_test/1,
     python_client_test/1,
     multi_connection_test/1,
 
@@ -74,7 +74,6 @@
 -define(NORMAL_CASES, [
     provider_connection_test,
     client_connection_test,
-    forward_compatible_client_connection_test,
     python_client_test,
     multi_connection_test,
 
@@ -134,50 +133,20 @@ provider_connection_test(Config) ->
 
 client_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
+    OpVersion = rpc:call(Worker1, oneprovider, get_version, []),
     {ok, [CompatibleVersion | _]} = rpc:call(
-        Worker1, application, get_env, [?APP_NAME, compatible_oc_versions]
+        Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
     Macaroon = #'Macaroon'{
-        macaroon = ?MACAROON,
-        disch_macaroons = ?DISCH_MACAROONS
+        macaroon = ?TOKEN
     },
 
     lists:foreach(fun({Macaroon, Version, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_client(Worker1, Macaroon, Version))
     end, [
         {Macaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
-        {Macaroon, CompatibleVersion, 'OK'}
+        {Macaroon, binary_to_list(CompatibleVersion), 'OK'}
     ]).
-
-
-forward_compatible_client_connection_test(Config) ->
-    % given
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    OpVersion = rpc:call(Node, oneprovider, get_version, []),
-
-    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
-        #'ClientHandshakeRequest'{session_id = crypto:strong_rand_bytes(10),
-            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
-            version = <<"30.01.01-very-future-version">>,
-            compatible_oneprovider_versions = [OpVersion, <<"30.01.01-very-future-version">>]
-        }
-    }},
-    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
-    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-
-    % when
-    {ok, Sock} = fuse_test_utils:connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
-
-    % then
-    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
-        status = Status
-    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
-        fuse_test_utils:receive_server_message()
-    ),
-    ?assertMatch('OK', Status),
-    ok.
 
 
 python_client_test(Config) ->
@@ -205,15 +174,16 @@ python_client_test_base(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
+    OpVersion = rpc:call(Worker1, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
-        Worker1, application, get_env, [?APP_NAME, compatible_oc_versions]
+        Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = <<"session_id">>,
-            macaroon = #'Macaroon'{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS},
-            version = list_to_binary(Version)
+            macaroon = #'Macaroon'{macaroon = ?TOKEN},
+            version = Version
         }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
@@ -278,7 +248,7 @@ multi_connection_test_base(Config) ->
 
     % when
     Connections = lists:map(fun(_) ->
-        fuse_test_utils:connect_via_macaroon(Worker1, [])
+        fuse_test_utils:connect_via_token(Worker1, [])
     end, ConnNumbersList),
 
     % then
@@ -293,7 +263,7 @@ multi_connection_test_base(Config) ->
 protobuf_message_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1),
     {Major, Minor} = fuse_test_utils:get_protocol_version(Sock),
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
@@ -326,7 +296,7 @@ sequential_ping_pong_test_base(Config) ->
     end, lists:seq(1, MsgNum)),
 
     % when
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1),
 
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun({MsgId, Ping}) ->
@@ -385,7 +355,7 @@ multi_ping_pong_test_base(Config) ->
     [
         spawn_link(fun() ->
             % when
-            {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}]),
+            {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
             lists:foreach(fun(E) ->
                 ok = ssl:send(Sock, E)
                           end, RawPings),
@@ -444,7 +414,7 @@ bandwidth_test_base(Config) ->
     end),
 
     % when
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
         ok = ssl:send(Sock, PacketRaw)
@@ -505,7 +475,7 @@ bandwidth_test2_base(Config) ->
     end),
 
     % when
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}]),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
     T2 = erlang:monotonic_time(milli_seconds),
@@ -565,7 +535,7 @@ rtransfer_nodes_ips_test(Config) ->
 sending_server_msg_via_incoming_connection_should_succeed(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1),
 
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
@@ -591,7 +561,7 @@ sending_server_msg_via_incoming_connection_should_succeed(Config) ->
 sending_client_msg_via_incoming_connection_should_fail(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1),
 
     ClientMsg = #client_message{message_body = #status{
         code = ?OK,
@@ -613,7 +583,7 @@ sending_client_msg_via_incoming_connection_should_fail(Config) ->
 errors_other_then_socket_ones_should_not_terminate_connection(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1),
     Ping = fuse_test_utils:generate_ping_message(),
 
     lists:foreach(fun({MockFun, UnMockFun}) ->
@@ -634,7 +604,7 @@ errors_other_then_socket_ones_should_not_terminate_connection(Config) ->
 socket_error_should_terminate_connection(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1),
 
     mock_ranch_ssl(Worker1),
     Ping = fuse_test_utils:generate_ping_message(),
@@ -704,7 +674,7 @@ init_per_testcase(_Case, Config) ->
     mock_identity(Workers),
 
     initializer:mock_provider_id(
-        Workers, <<"providerId">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
     ),
     Config.
 
@@ -756,9 +726,9 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
     end.
 
 
-handshake_as_client(Node, Macaroon, Version) ->
+handshake_as_client(Node, Token, Version) ->
     SessId = crypto:strong_rand_bytes(10),
-    case fuse_test_utils:connect_as_client(Node, SessId, Macaroon, Version) of
+    case fuse_test_utils:connect_as_client(Node, SessId, Token, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';
@@ -779,7 +749,7 @@ send_sync_msg(Node, SessId, Msg) ->
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).

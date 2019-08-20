@@ -59,7 +59,7 @@
     replicating_nodes :: [node()],
     evicting_nodes :: [node()],
     function :: function(),
-    index_name :: binary(),
+    view_name :: binary(),
     query_view_params :: list(),
     space_id :: od_space:id()
 }).
@@ -126,23 +126,23 @@ end).
 -define(OLD_TRANSFERS_KEY, old_transfer_ids).
 -define(SPACE_ID_KEY, space_id).
 
--define(assertIndexVisible(Worker, SpaceId, IndexName),
-    ?assertIndexVisible(Worker, SpaceId, IndexName, ?ATTEMPTS)).
+-define(assertViewVisible(Worker, SpaceId, ViewName),
+    ?assertViewVisible(Worker, SpaceId, ViewName, ?ATTEMPTS)).
 
--define(assertIndexVisible(Worker, SpaceId, IndexName, Attempts),
+-define(assertViewVisible(Worker, SpaceId, ViewName, Attempts),
     ?assertMatch(true, begin
         ListResult = rpc:call(Worker, index, list, [SpaceId]),
-        GetResult = rpc:call(Worker, index, get, [IndexName, SpaceId]),
+        GetResult = rpc:call(Worker, index, get, [ViewName, SpaceId]),
         case {ListResult, GetResult} of
-            {{ok, Indices}, {ok, __Doc}} -> lists:member(IndexName, Indices);
+            {{ok, Views}, {ok, __Doc}} -> lists:member(ViewName, Views);
             Other -> Other
         end
     end, Attempts)).
 
--define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options),
-    ?assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
+-define(assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options),
+    ?assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, ?ATTEMPTS)).
 
--define(assertIndexQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, Attempts),
+-define(assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, Attempts),
     ?assertEqual(lists:sort(ExpectedValues), begin
         try
             {ok, {Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),

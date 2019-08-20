@@ -10,7 +10,7 @@
 %%% callback is called for all changes - remote (dbsync) and local (posthook).
 %%% @end
 %%%-------------------------------------------------------------------
--module(index_changes).
+-module(view_changes).
 -author("Bartosz Walkowicz").
 -author("Jakub Kudzia").
 
@@ -19,6 +19,12 @@
 
 %% API
 -export([handle/1]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
 
 -spec handle(index:doc()) -> ok.
 handle(Doc = #document{value = #index{providers = ProviderIds}}) ->
@@ -34,15 +40,17 @@ handle(Doc = #document{value = #index{providers = ProviderIds}}) ->
             end
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 -spec create_or_update_db_view(index:doc()) -> ok.
 create_or_update_db_view(#document{
     key = Id,
     value = #index{
-        name = IndexName,
+        name = ViewName,
         space_id = SpaceId,
         spatial = Spatial,
         map_function = MapFunction,
@@ -54,13 +62,14 @@ create_or_update_db_view(#document{
         true ->
             ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options);
         false ->
-            ?warning("Creation of index ~p with id ~p requested within not supported space ~p",
-                [IndexName, Id, SpaceId])
+            ?warning("Creation of view ~p with id ~p requested within not supported space ~p",
+                [ViewName, Id, SpaceId])
     end.
 
+
 -spec remove_db_view(index:doc()) -> ok.
-remove_db_view(#document{key = IndexId}) ->
-    case index:delete_db_view(IndexId) of
+remove_db_view(#document{key = Id}) ->
+    case index:delete_db_view(Id) of
         ok ->
             ok;
         {error, {<<"not_found">>, <<"missing">>}} ->
@@ -68,6 +77,6 @@ remove_db_view(#document{key = IndexId}) ->
         {error, {<<"not_found">>, <<"deleted">>}} ->
             ok;
         {error, Error} = Err ->
-            ?error("Removal of db view ~p from provider failed due to ~p", [IndexId, Error]),
+            ?error("Removal of db view ~p from provider failed due to ~p", [Id, Error]),
             Err
     end.

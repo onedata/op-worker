@@ -62,6 +62,7 @@
   readdir_plus_should_work_with_token2/1,
   readdir_should_work_with_token/1,
   readdir_should_work_with_token2/1,
+  readdir_should_work_with_startid/1,
   lfm_recreate_handle_test/1,
   lfm_open_failure_test/1,
   lfm_create_and_open_failure_test/1,
@@ -116,6 +117,7 @@
   readdir_plus_should_work_with_size_greater_than_dir_size,
   readdir_plus_should_work_with_token,
   readdir_plus_should_work_with_token2,
+  readdir_should_work_with_startid,
   readdir_should_work_with_token,
   readdir_should_work_with_token2,
   lfm_recreate_handle_test,
@@ -199,6 +201,9 @@ readdir_should_work_with_token(Config) ->
 
 readdir_should_work_with_token2(Config) ->
    lfm_files_test_base:readdir_should_work_with_token2(Config).
+
+readdir_should_work_with_startid(Config) ->
+  lfm_files_test_base:readdir_should_work_with_startid(Config).
 
 echo_loop_test(Config) ->
    lfm_files_test_base:echo_loop(Config).

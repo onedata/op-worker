@@ -23,14 +23,10 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
-% Testing of "authorize" RPC
--define(MOCK_CAVEAT_ID, <<"mockCaveat">>).
--define(MOCK_DISCH_MACAROON, <<"mockDischMac">>).
-
 -define(DUMMY_PROVIDER_ID, <<"dummyProviderId">>).
 
--define(MOCK_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
--define(MOCK_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
+-define(MOCK_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
+-define(MOCK_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
 
 % WebSocket path is used to control gs_client:start_link mock behaviour
 -define(PATH_CAUSING_CONN_ERROR, "/conn_err").
@@ -58,9 +54,9 @@
 -define(HARVESTER_2, <<"harvester2Id">>).
 
 % User authorizations
-% Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
--define(USER_INTERNAL_MACAROON_AUTH(__User), #macaroon_auth{macaroon = __User, disch_macaroons = [__User]}).
--define(USER_GS_MACAROON_AUTH(__User), {macaroon, __User, [__User]}).
+% Token auth is translated to {token, Token} before graph sync request.
+-define(USER_INTERNAL_TOKEN_AUTH(__User), #token_auth{token = __User}).
+-define(USER_GS_TOKEN_AUTH(__User), {token, __User}).
 
 
 -define(USER_PERMS_IN_GROUP_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?GROUP_VIEW, utf8)], ?USER_2 => [atom_to_binary(?GROUP_VIEW, utf8)]}).

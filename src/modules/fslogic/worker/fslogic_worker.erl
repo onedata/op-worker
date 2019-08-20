@@ -47,8 +47,8 @@
 -type file_guid() :: file_id:file_guid().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
--export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
-    posix_permissions/0, file_guid/0, file_guid_or_path/0]).
+-export_type([request/0, response/0, file/0, ext_file/0, open_flag/0, posix_permissions/0,
+    file_guid/0, file_guid_or_path/0, fuse_response/0, provider_response/0, proxyio_response/0]).
 
 % requests
 -define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
@@ -339,6 +339,8 @@ handle_request_locally(UserCtx, #proxyio_request{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
+handle_request_remotely(_UserCtx, _Req, []) ->
+    #status{code = ?ENOTSUP};
 handle_request_remotely(UserCtx, Req, Providers) ->
     ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
     fslogic_remote:reroute(UserCtx, ProviderId, Req).
@@ -400,9 +402,13 @@ handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
     delete_req:delete(UserCtx, FileCtx, Silent);
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
-handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size,
-    index_token = Token}, FileCtx) ->
-    dir_req:read_dir(UserCtx, FileCtx, Offset, Size, Token);
+handle_file_request(UserCtx, #get_file_children{
+    offset = Offset,
+    size = Size,
+    index_token = Token,
+    index_startid = StartId
+}, FileCtx) ->
+    dir_req:read_dir(UserCtx, FileCtx, Offset, Size, Token, StartId);
 handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
     size = Size, index_token = Token}, FileCtx) ->
     dir_req:read_dir_plus(UserCtx, FileCtx, Offset, Size, Token);
@@ -473,24 +479,24 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    index_name = IndexName, query_view_params = QueryViewParams,
+    view_name = ViewName, query_view_params = QueryViewParams,
     qos_job_pid = undefined
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, IndexName, QueryViewParams);
+        Callback, ViewName, QueryViewParams);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    index_name = IndexName, query_view_params = QueryViewParams, qos_job_pid = QosJobPID
+    view_name = ViewName, query_view_params = QueryViewParams, qos_job_pid = QosJobPID
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, IndexName, QueryViewParams, QosJobPID
+        Callback, ViewName, QueryViewParams, QosJobPID
     );
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
-    index_name = IndexName, query_view_params = QueryViewParams
+    view_name = ViewName, query_view_params = QueryViewParams
 }, FileCtx) ->
     replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
-        SourceProviderId, TargetProviderId, IndexName, QueryViewParams
+        SourceProviderId, TargetProviderId, ViewName, QueryViewParams
     );
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);

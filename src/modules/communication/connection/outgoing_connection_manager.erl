@@ -32,6 +32,7 @@
 -include("modules/communication/connection.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% API
 -export([start_link/1]).
@@ -253,14 +254,16 @@ renew_connections(#state{
             ]),
             {ok, schedule_next_renewal(State)};
         throw:{incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions} ->
+            Version = oneprovider:get_version(),
+            {ok, CompatibleOpVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEPROVIDER),
             ?warning("Discarding connections renewal to provider ~ts "
                      "because of incompatible version. ~n"
                      "Local version: ~s, supports providers: ~p~n"
                      "Remote version: ~s, supports providers: ~p~n"
                      "Next retry not sooner than ~p s. ~n", [
                 provider_logic:to_string(ProviderId),
-                oneprovider:get_version(),
-                application:get_env(?APP_NAME, compatible_op_versions, []),
+                Version,
+                [binary_to_list(B) || B <- CompatibleOpVersions],
                 PeerOpVersion, PeerCompOpVersions,
                 RenewalInterval / 1000
             ]),

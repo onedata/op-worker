@@ -9,7 +9,7 @@
 %%% Util functions for operating on index links trees.
 %%% @end
 %%%-------------------------------------------------------------------
--module(index_links).
+-module(view_links).
 -author("Bartosz Walkowicz").
 -author("Jakub Kudzia").
 
@@ -20,34 +20,40 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([add_link/3, list/4, delete_links/2, get_index_id/2]).
+-export([add_link/3, list/4, delete_links/2, get_view_id/2]).
 
 -define(CTX, (index:get_ctx())).
 -define(LINK_PREFIX, <<"INDEXES">>).
--define(INDEX_ID_TREE_ID_SEPARATOR, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR).
+-define(VIEW_ID_TREE_ID_SEPARATOR, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 
 -spec add_link(index:name(), index:id(), od_space:id()) -> ok | {error, term()}.
-add_link(IndexName, IndexId, SpaceId) ->
+add_link(ViewName, ViewId, SpaceId) ->
     TreeId = oneprovider:get_id(),
     Ctx = ?CTX#{scope => SpaceId},
     LinkRoot = link_root(SpaceId),
-    ?extract_ok(datastore_model:add_links(Ctx, LinkRoot, TreeId, {IndexName, IndexId})).
+    ?extract_ok(datastore_model:add_links(Ctx, LinkRoot, TreeId, {ViewName, ViewId})).
 
--spec get_index_id(index:name(), od_space:id()) -> {ok, index:id()} | {error, term()}.
-get_index_id(IndexName, SpaceId) ->
-    Tokens = binary:split(IndexName, ?INDEX_ID_TREE_ID_SEPARATOR, [global]),
+
+-spec get_view_id(index:name(), od_space:id()) -> {ok, index:id()} | {error, term()}.
+get_view_id(ViewName, SpaceId) ->
+    Tokens = binary:split(ViewName, ?VIEW_ID_TREE_ID_SEPARATOR, [global]),
     Ctx = ?CTX#{scope => SpaceId},
     LinkRoot = link_root(SpaceId),
     case lists:reverse(Tokens) of
-        [IndexName] ->
-            case get_index_id(IndexName, oneprovider:get_id(), SpaceId) of
-                {ok, IndexId} -> {ok, IndexId};
-                {error, not_found} -> get_index_id(IndexName, all, SpaceId);
+        [ViewName] ->
+            case get_view_id(ViewName, oneprovider:get_id(), SpaceId) of
+                {ok, ViewId} -> {ok, ViewId};
+                {error, not_found} -> get_view_id(ViewName, all, SpaceId);
                 {error, Reason} -> {error, Reason}
             end;
         [TreeIdPrefix | Tokens2] ->
-            IndexName2 = list_to_binary(lists:reverse(Tokens2)),
+            ViewName2 = list_to_binary(lists:reverse(Tokens2)),
             PrefixSize = erlang:size(TreeIdPrefix),
             {ok, TreeIds} = datastore_model:get_links_trees(Ctx, LinkRoot),
             TreeIds2 = lists:filter(fun(TreeId) ->
@@ -58,31 +64,33 @@ get_index_id(IndexName, SpaceId) ->
             end, TreeIds),
             case TreeIds2 of
                 [TreeId] ->
-                    case get_index_id(IndexName2, TreeId, SpaceId) of
-                        {ok, IndexId} ->
-                            {ok, IndexId};
+                    case get_view_id(ViewName2, TreeId, SpaceId) of
+                        {ok, ViewId} ->
+                            {ok, ViewId};
                         {error, Reason} ->
                             {error, Reason}
                     end;
                 [] ->
-                    get_index_id(IndexName, all, SpaceId)
+                    get_view_id(ViewName, all, SpaceId)
             end
     end.
 
--spec get_index_id(index:name(), datastore_model:tree_ids(),
+
+-spec get_view_id(index:name(), datastore_model:tree_ids(),
     od_space:id()) -> {ok, index:id()} | {error, term()}.
-get_index_id(IndexName, TreeIds, SpaceId) ->
+get_view_id(ViewName, TreeIds, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
     LinkRoot = link_root(SpaceId),
-    case datastore_model:get_links(Ctx, LinkRoot, TreeIds, IndexName) of
-        {ok, [#link{target = IndexId}]} ->
-            {ok, IndexId};
+    case datastore_model:get_links(Ctx, LinkRoot, TreeIds, ViewName) of
+        {ok, [#link{target = ViewId}]} ->
+            {ok, ViewId};
         {ok, [#link{} | _]} ->
-            ?error("More than one link associated with index name ~p ", [IndexName]),
+            ?error("More than one link associated with view name ~p ", [ViewName]),
             {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}
     end.
+
 
 -spec list(SpaceId :: od_space:id(), undefined | index:name(), non_neg_integer(),
     non_neg_integer() | all) -> {ok, [index:name()]} | {error, term()}.
@@ -109,10 +117,11 @@ list(SpaceId, StartId, Offset, Limit) ->
             Error
     end.
 
+
 -spec delete_links(index:name(), od_space:id()) -> ok.
-delete_links(IndexName, SpaceId) ->
+delete_links(ViewName, SpaceId) ->
     LinkRoot = link_root(SpaceId),
-    case datastore_model:get_links(?CTX, LinkRoot, all, IndexName) of
+    case datastore_model:get_links(?CTX, LinkRoot, all, ViewName) of
         {error, not_found} ->
             ok;
         {ok, Links} ->
@@ -132,13 +141,16 @@ delete_links(IndexName, SpaceId) ->
             end, Links)
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 -spec link_root(od_space:id()) -> binary().
 link_root(SpaceId) ->
     <<?LINK_PREFIX/binary, "_", SpaceId/binary>>.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -177,6 +189,6 @@ tag_indices(Links) ->
                 (#link{
                     tree_id = TreeId, name = Name
                 }, Children2) ->
-                    [<<Name/binary, ?INDEX_ID_TREE_ID_SEPARATOR/binary, TreeId:Len2/binary>> | Children2]
+                    [<<Name/binary, ?VIEW_ID_TREE_ID_SEPARATOR/binary, TreeId:Len2/binary>> | Children2]
             end, Children, LocalLinks ++ RemoteLinks)
     end, [], [Group2 | Groups2]).

@@ -47,6 +47,8 @@
 -type server_message() :: #server_message{}.
 -type message() :: client_message() | server_message().
 
+-export_type([rib/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -174,10 +176,10 @@ route_and_ignore_answer(ClientMsg = #client_message{
 }) ->
     Req = {dbsync_message, effective_session_id(ClientMsg), Msg},
     ok = worker_proxy:cast(dbsync_worker, Req);
-% Message that updates the #macaroon_auth{} record in given session
+% Message that updates the #token_auth{} record in given session
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
-    message_body = #macaroon_auth{} = Auth
+    message_body = #token_auth{} = Auth
 } = Msg) ->
     EffSessionId = effective_session_id(Msg),
     % This function performs an async call to session manager worker.
@@ -197,7 +199,7 @@ route_and_ignore_answer(ClientMsg) ->
 %% reply address. Otherwise delegates it to event_router.
 %% @end
 %%--------------------------------------------------------------------
--spec answer_or_delegate(client_message(), connection_api:reply_to()) ->
+-spec answer_or_delegate(client_message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
 answer_or_delegate(#client_message{
     message_id = MsgId,

@@ -30,9 +30,9 @@
     mock_prolonged_replication/3, mock_replica_synchronizer_failure/1,
     mock_prolonged_replica_eviction/3, unmock_prolonged_replica_eviction/1,
     mock_replica_eviction_failure/1, unmock_replica_eviction_failure/1,
-    unmock_replica_synchronizer_failure/1, remove_all_indices/2, random_job_name/1,
+    unmock_replica_synchronizer_failure/1, remove_all_views/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
-    create_index/7, create_index/6, random_index_name/1]).
+    create_view/7, create_view/6, random_view_name/1]).
 
 -define(RANDOM_NAMESPACE_SIZE, 1073741824). % 1024 ^ 3
 
@@ -196,12 +196,12 @@ mock_replica_eviction_failure(Node) ->
 unmock_replica_eviction_failure(Node) ->
     ok = test_utils:mock_unload(Node, replica_deletion_req).
 
-remove_all_indices(Nodes, SpaceId) ->
+remove_all_views(Nodes, SpaceId) ->
     lists:foreach(fun(Node) ->
-        {ok, IndexNames} = rpc:call(Node, index, list, [SpaceId]),
-        lists:foreach(fun(IndexName) ->
-            ok = rpc:call(Node, index, delete, [SpaceId, IndexName])
-        end, IndexNames)
+        {ok, ViewNames} = rpc:call(Node, index, list, [SpaceId]),
+        lists:foreach(fun(ViewName) ->
+            ok = rpc:call(Node, index, delete, [SpaceId, ViewName])
+        end, ViewNames)
     end, Nodes).
 
 random_job_name(FunctionName) ->
@@ -209,10 +209,10 @@ random_job_name(FunctionName) ->
     RandomIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
     <<"job_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
 
-random_index_name(FunctionName) ->
+random_view_name(FunctionName) ->
     FunctionNameBin = str_utils:to_binary(FunctionName),
     RandomIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
-    <<"index_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
+    <<"view_", FunctionNameBin/binary, "_", RandomIntBin/binary>>.
 
 test_map_function(XattrName) ->
     <<"function (id, type, meta, ctx) {
@@ -240,11 +240,11 @@ test_reduce_function(XattrValue) ->
         return filtered;
     }">>.
 
-create_index(Worker, SpaceId, IndexName, MapFunction, Options, Providers) ->
-    create_index(Worker, SpaceId, IndexName, MapFunction, undefined, Options, Providers).
+create_view(Worker, SpaceId, ViewName, MapFunction, Options, Providers) ->
+    create_view(Worker, SpaceId, ViewName, MapFunction, undefined, Options, Providers).
 
-create_index(Worker, SpaceId, IndexName, MapFunction, ReduceFunction, Options, Providers) ->
-    ok = rpc:call(Worker, index, save, [SpaceId, IndexName, MapFunction, ReduceFunction,
+create_view(Worker, SpaceId, ViewName, MapFunction, ReduceFunction, Options, Providers) ->
+    ok = rpc:call(Worker, index, save, [SpaceId, ViewName, MapFunction, ReduceFunction,
         Options, false, Providers]).
 
 %%%===================================================================

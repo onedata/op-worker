@@ -48,6 +48,8 @@
 -type summary() :: #{summary_key() => harvesting_destination:destination()} | gs_protocol:error().
 -type acc() :: #acc{}.
 
+-export_type([failure_map/0, result/0]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================

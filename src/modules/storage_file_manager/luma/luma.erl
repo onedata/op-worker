@@ -29,10 +29,11 @@
 
 -type user_ctx() :: helper:user_ctx().
 -type group_ctx() :: helper:group_ctx().
+-type uid() :: non_neg_integer().
 -type gid() :: non_neg_integer().
--type posix_user_ctx() :: {Uid :: non_neg_integer(), Gid :: non_neg_integer()}.
+-type posix_user_ctx() :: {uid(), gid()}.
 
--export_type([user_ctx/0, posix_user_ctx/0, gid/0, group_ctx/0]).
+-export_type([user_ctx/0, posix_user_ctx/0, gid/0, group_ctx/0, uid/0]).
 
 -define(KEY_SEPARATOR, <<"::">>).
 
@@ -51,7 +52,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_server_user_ctx(session:id(), od_user:id(), od_space:id(),
-    storage:doc(), helpers:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+    storage:doc(), helper:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
 get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
         {ok, Helper} ->
@@ -85,7 +86,7 @@ get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_client_user_ctx(session:id(), od_user:id(), od_space:id(),
-    storage:doc(), helpers:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+    storage:doc(), helper:name()) -> {ok, user_ctx()} | {error, Reason :: term()}.
 get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
     case storage:select_helper(StorageDoc, HelperName) of
         {ok, Helper} ->
@@ -342,7 +343,7 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
 }, _Helper, OAuth2IdP) ->
     {ok, {IdPAccessToken, TTL}} =
         idp_access_token:acquire(AdminId,
-            #macaroon_auth{macaroon = OnedataAccessToken}, OAuth2IdP),
+            #token_auth{token = OnedataAccessToken}, OAuth2IdP),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
@@ -362,7 +363,7 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
     <<"adminId">> := AdminId
 }, #helper{insecure = true}, OAuth2IdP) ->
     {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId,
-        #macaroon_auth{macaroon = OnedataAccessToken}, OAuth2IdP),
+        #token_auth{token = OnedataAccessToken}, OAuth2IdP),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,

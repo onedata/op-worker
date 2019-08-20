@@ -36,10 +36,10 @@
 -export([mock_share_logic/1, unmock_share_logic/1]).
 -export([put_into_cache/1]).
 
--define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
+-define(DUMMY_USER_TOKEN(__UserId), <<"DUMMY-USER-TOKEN-", __UserId/binary>>).
 
--define(DUMMY_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
--define(DUMMY_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
+-define(DUMMY_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
+-define(DUMMY_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
 
 -record(user_config, {
     id :: od_user:id(),
@@ -47,7 +47,7 @@
     default_space :: binary(),
     spaces :: [],
     groups :: [],
-    macaroon :: binary()
+    token :: binary()
 }).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -235,7 +235,7 @@ clear_subscriptions(Worker) ->
 setup_session(_Worker, [], Config) ->
     Config;
 setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
-    macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
+    token = Token, groups = Groups, name = UserName}} | R], Config) ->
 
     Name = fun(Text, User) ->
         list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
@@ -250,7 +250,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         end
     end, Spaces),
 
-    Auth = #macaroon_auth{macaroon = Macaroon},
+    Auth = #token_auth{token = Token},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
@@ -458,7 +458,7 @@ mock_provider_ids(Config) ->
     lists:foreach(fun(Domain) ->
         CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
-        mock_provider_id(CWorkers, ProviderId, <<"AuthMacaroon">>, <<"IdentityMacaroon">>)
+        mock_provider_id(CWorkers, ProviderId, <<"AuthToken">>, <<"IdentityToken">>)
     end, Domains).
 
 %%--------------------------------------------------------------------
@@ -467,16 +467,16 @@ mock_provider_ids(Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
-mock_provider_id(Workers, ProviderId, AuthMacaroon, IdentityMacaroon) ->
-    % Mock cached auth and identity macaroons with large TTL
+mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
+    % Mock cached auth and identity tokens with large TTL
     ExpirationTime = time_utils:system_time_seconds() + 999999999,
     rpc:call(hd(Workers), datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
             provider_id = ProviderId,
-            root_macaroon = <<>>,
-            cached_auth_macaroon = {ExpirationTime, AuthMacaroon},
-            cached_identity_macaroon = {ExpirationTime, IdentityMacaroon}
+            root_token = <<>>,
+            cached_access_token = {ExpirationTime, AccessToken},
+            cached_identity_token = {ExpirationTime, IdentityToken}
         }}]),
     ok.
 
@@ -536,7 +536,7 @@ unmock_share_logic(Config) ->
 
 
 %% Puts an od_* document in the provider's cache, which triggers posthooks
--spec put_into_cache(datastore_doc:doc()) -> {ok, datastore_doc:doc()}.
+-spec put_into_cache(datastore:doc()) -> {ok, datastore:doc()}.
 put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type = element(1, Record),
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
@@ -593,7 +593,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
                     ok;
                 Workers ->
                     mock_provider_id(
-                        Workers, Id, ?DUMMY_PROVIDER_AUTH_MACAROON(Id), ?DUMMY_PROVIDER_IDENTITY_MACAROON(Id)
+                        Workers, Id, ?DUMMY_PROVIDER_ACCESS_TOKEN(Id), ?DUMMY_PROVIDER_IDENTITY_TOKEN(Id)
                     )
             end
         end, Providers0)
@@ -668,14 +668,14 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Macaroon = ?DUMMY_USER_MACAROON(UserId),
+        Token = ?DUMMY_USER_TOKEN(UserId),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{UserId, #user_config{
             id = UserId,
             name = Name("name", UserId),
             spaces = SpacesList,
-            macaroon = Macaroon,
+            token = Token,
             default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}
@@ -808,8 +808,8 @@ user_logic_mock_setup(Workers, Users) ->
     end,
 
     UsersByAuth = lists:flatmap(
-        fun({UserId, #user_config{macaroon = Macaroon}}) -> [
-            {#macaroon_auth{macaroon = Macaroon}, UserId}
+        fun({UserId, #user_config{token = Token}}) -> [
+            {#token_auth{token = Token}, UserId}
         ]
         end, Users),
 
@@ -1207,16 +1207,16 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             ok
         end),
 
-    VerifyProviderIdentityFun = fun(ProviderId, Macaroon) ->
-        case Macaroon of
-            ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId) -> ok;
-            _ -> {error, bad_macaroon}
+    VerifyProviderIdentityFun = fun(ProviderId, Token) ->
+        case Token of
+            ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId) -> ok;
+            _ -> ?ERROR_BAD_TOKEN
         end
     end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
         fun(ProviderId) ->
-            VerifyProviderIdentityFun(ProviderId, ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId))
+            VerifyProviderIdentityFun(ProviderId, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId))
         end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,

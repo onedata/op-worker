@@ -43,7 +43,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
--type auth() :: #macaroon_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
+-type auth() :: #token_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -338,8 +338,7 @@ get_auth(#document{value = Session}) ->
 %% Sets direct_io property of session.
 %% @end
 %%--------------------------------------------------------------------
--spec set_direct_io(id(), boolean()) ->
-    ok | datastore:update_error().
+-spec set_direct_io(id(), boolean()) -> ok | {error, term()}.
 set_direct_io(SessId, DirectIO) ->
     Diff = fun(Sess) ->
         {ok, Sess#session{direct_io = DirectIO}}

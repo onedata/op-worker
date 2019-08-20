@@ -30,7 +30,7 @@ enable(SpaceId) ->
         max_avg_open_count_per_day => ?DEFAULT_MAX_AVG_OPEN_COUNT_PER_DAY
     }).
 
--spec configure(file_popularity_config:id(), maps:map()) -> ok | {error, term()}.
+-spec configure(file_popularity_config:id(), map()) -> ok | {error, term()}.
 configure(SpaceId, #{enabled := false}) ->
     disable(SpaceId);
 configure(SpaceId, NewConfiguration) ->
@@ -61,7 +61,7 @@ delete_config(SpaceId) ->
 is_enabled(SpaceId) ->
     file_popularity_config:is_enabled(SpaceId).
 
--spec get_configuration(file_popularity_config:id()) -> maps:map().
+-spec get_configuration(file_popularity_config:id()) -> {ok, map()} | {error, term()}.
 get_configuration(SpaceId) ->
     case file_popularity_config:get(SpaceId) of
         {ok, FPCDoc} ->
@@ -90,7 +90,7 @@ query(SpaceId, Limit) ->
 query(SpaceId, IndexToken, Limit) ->
     file_popularity_view:query(SpaceId, IndexToken, Limit).
 
--spec assert_types_and_values(maps:map()) -> ok | {error, term()}.
+-spec assert_types_and_values(map()) -> ok | {error, term()}.
 assert_types_and_values(Configuration) ->
     maps:fold(fun
         (_Key, _Value, Error = {error, _}) ->

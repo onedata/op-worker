@@ -67,7 +67,7 @@
     target_provider_id :: oneprovider:id(),
     block :: undefined | #file_block{},
     callback :: transfer:callback(),
-    index_name :: transfer:index_name(),
+    view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params(),
 
     % pid of process that scheduled this replication to fulfill QoS
@@ -80,7 +80,7 @@
     % in definition of transfer record
     source_provider_id :: oneprovider:id(),
     target_provider_id :: undefined | oneprovider:id(),
-    index_name :: transfer:index_name(),
+    view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()
 }).
 

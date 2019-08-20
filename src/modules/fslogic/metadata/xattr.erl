@@ -18,7 +18,7 @@
     set/5, list/2]).
 
 -type name() :: binary().
--type value() :: custom_metadata:json_term().
+-type value() :: binary() | [map()].
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
@@ -66,7 +66,7 @@ delete_by_name(FileCtx, XattrName) ->
 %% Checks existence of extended attribute with given name
 %% @end
 %%--------------------------------------------------------------------
--spec exists_by_name(file_ctx:ctx(), xattr:name()) -> datastore:exists_return().
+-spec exists_by_name(file_ctx:ctx(), xattr:name()) -> boolean().
 exists_by_name(FileCtx0, XattrName) ->
     {#document{}, FileCtx} = file_ctx:get_file_doc(FileCtx0), % check if file exists
     FileUuid = file_ctx:get_uuid_const(FileCtx),

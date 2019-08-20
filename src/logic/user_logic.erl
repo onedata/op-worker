@@ -29,10 +29,9 @@
 -export([get_full_name/2, get_full_name/3]).
 -export([fetch_idp_access_token/3]).
 -export([has_eff_group/2, has_eff_group/3]).
--export([get_eff_spaces/2]).
+-export([get_eff_spaces/1, get_eff_spaces/2]).
 -export([has_eff_space/2, has_eff_space/3]).
 -export([get_space_by_name/3]).
--export([authorize/1]).
 
 %%%===================================================================
 %%% API
@@ -190,10 +189,12 @@ has_eff_group(Client, UserId, GroupId) when is_binary(UserId) ->
     end.
 
 
--spec get_eff_spaces(od_user:doc()) ->
+-spec get_eff_spaces(od_user:doc() | od_user:record()) ->
     {ok, [od_space:id()]} | gs_protocol:error().
-get_eff_spaces(#document{value = #od_user{eff_spaces = EffSpaces}}) ->
-    {ok, EffSpaces}.
+get_eff_spaces(#od_user{eff_spaces = EffSpaces}) ->
+    {ok, EffSpaces};
+get_eff_spaces(#document{value = User}) ->
+    get_eff_spaces(User).
 
 
 -spec get_eff_spaces(gs_client_worker:client(), od_user:id()) ->
@@ -249,17 +250,3 @@ get_space_by_name_internal(Client, SpaceName, [SpaceId | Rest]) ->
         _ ->
             get_space_by_name_internal(Client, SpaceName, Rest)
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Collects discharge macaroon from OZ to verify if user is authenticated.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(CaveatId :: binary()) ->
-    {ok, DischMacaroon :: binary()} | gs_protocol:error().
-authorize(CaveatId) ->
-    gs_client_worker:request(#gs_req_rpc{
-        function = <<"authorizeUser">>,
-        args = #{<<"identifier">> => CaveatId}
-    }).

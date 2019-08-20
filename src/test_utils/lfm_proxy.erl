@@ -19,8 +19,8 @@
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5,
     create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
-    read/4, silent_read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5,
-    ls/6, read_dir_plus/5, read_dir_plus/6, set_perms/4,
+    read/4, silent_read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, ls/6, ls/7,
+    read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
     get_acl/3, set_acl/4, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
@@ -28,7 +28,7 @@
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
-    schedule_replication_by_index/6, schedule_replica_eviction_by_index/7,
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/7,
     get_file_qos/3, add_qos/5, get_qos_details/3, remove_qos/3, check_qos_fulfilled/3]).
 
 -define(EXEC(Worker, Function),
@@ -286,7 +286,13 @@ ls(Worker, SessId, FileKey, Offset, Limit) ->
     integer(), integer(), undefined | binary()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], binary(), boolean()} | lfm:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit, Token) ->
-    ?EXEC(Worker, lfm:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
+    ls(Worker, SessId, FileKey, Offset, Limit, Token, undefined).
+
+-spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer(), undefined | binary(), undefined | file_meta:name()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
+ls(Worker, SessId, FileKey, Offset, Limit, Token, StartId) ->
+    ?EXEC(Worker, lfm:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token, StartId)).
 
 -spec read_dir_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
     {ok, [#file_attr{}]} | lfm:error_reply().
@@ -448,7 +454,7 @@ remove_share(Worker, SessId, FileKey) ->
 remove_share_by_guid(Worker, SessId, ShareGuid) ->
     ?EXEC(Worker, lfm:remove_share_by_guid(SessId, ShareGuid)).
 
--spec resolve_guid(node(), session:id(), file_ctx:path()) ->
+-spec resolve_guid(node(), session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 resolve_guid(Worker, SessId, Path) ->
     ?EXEC(Worker, remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
@@ -467,21 +473,21 @@ schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationPro
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
     ?EXEC(Worker, lfm:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
 
--spec schedule_replication_by_index(node(), session:id(),
-    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), IndexName :: transfer:index_name(),
+-spec schedule_replication_by_view(node(), session:id(),
+    ProviderId :: oneprovider:id(), SpaceId :: od_space:id(), ViewName :: transfer:view_name(),
     transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
-schedule_replication_by_index(Worker, SessId, ProviderId, SpaceId, IndexName, QueryViewParams) ->
-    ?EXEC(Worker, lfm:schedule_replication_by_index(SessId,
-        ProviderId, undefined, SpaceId, IndexName, QueryViewParams)).
+schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, QueryViewParams) ->
+    ?EXEC(Worker, lfm:schedule_replication_by_view(SessId,
+        ProviderId, undefined, SpaceId, ViewName, QueryViewParams)).
 
--spec schedule_replica_eviction_by_index(node(), session:id(), ProviderId :: oneprovider:id(),
+-spec schedule_replica_eviction_by_view(node(), session:id(), ProviderId :: oneprovider:id(),
     MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:index_name(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
-schedule_replica_eviction_by_index(Worker, SessId, ProviderId, MigrationProviderId,
-    SpaceId, IndexName, QueryViewParams
+    transfer:view_name(), transfer:query_view_params()) -> {ok, transfer:id()} | {error, term()}.
+schedule_replica_eviction_by_view(Worker, SessId, ProviderId, MigrationProviderId,
+    SpaceId, ViewName, QueryViewParams
 ) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction_by_index(
-        SessId, ProviderId, MigrationProviderId, SpaceId, IndexName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_replica_eviction_by_view(
+        SessId, ProviderId, MigrationProviderId, SpaceId, ViewName, QueryViewParams
     )).
 
 -spec get_file_distribution(node(), session:id(), lfm:file_key()) -> {ok, list()}.

@@ -20,7 +20,9 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -41,8 +43,6 @@
     <<"mtime">>, <<"storage_group_id">>, <<"storage_user_id">>, <<"name">>,
     <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
 ]).
-
--define(run(__FunctionCall), check_result(__FunctionCall)).
 
 
 %%%===================================================================
@@ -66,16 +66,20 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
+operation_supported(create, instance, private) -> true;
 operation_supported(create, attrs, private) -> true;
 operation_supported(create, xattrs, private) -> true;
 operation_supported(create, json_metadata, private) -> true;
 operation_supported(create, rdf_metadata, private) -> true;
 
+operation_supported(get, instance, private) -> true;
 operation_supported(get, list, private) -> true;
 operation_supported(get, attrs, private) -> true;
 operation_supported(get, xattrs, private) -> true;
 operation_supported(get, json_metadata, private) -> true;
 operation_supported(get, rdf_metadata, private) -> true;
+
+operation_supported(delete, instance, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -86,6 +90,24 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
+    required => #{
+        <<"name">> => {binary, non_empty},
+        <<"type">> => {binary, [<<"file">>, <<"dir">>]},
+        <<"parent">> => {binary, fun(Parent) ->
+            try gs_protocol:string_to_gri(Parent) of
+                #gri{type = op_file, id = ParentGuid, aspect = instance} ->
+                    {true, ParentGuid};
+                _ ->
+                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"parent">>))
+            catch _:_ ->
+                false
+            end
+        end}
+    },
+    optional => #{<<"createAttempts">> => {integer, {between, 1, 200}}}
+};
+
 data_spec(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
     required => #{<<"mode">> => {binary,
         fun(Mode) ->
@@ -127,6 +149,9 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = rdf_metadata}}) -> #{
     required => #{<<"application/rdf+xml">> => {binary, any}}
 };
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
+
 data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) -> #{
     optional => #{
         <<"limit">> => {integer, {between, 1, 1000}},
@@ -154,6 +179,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = json_metadata}}) -> #{
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
+    undefined;
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
 
 
@@ -163,9 +191,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(_) ->
-    {ok, undefined}.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -189,8 +217,12 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{client = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
+
+authorize(#op_req{operation = create, gri = #gri{aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Req#op_req.data)),
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
 
 authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
@@ -198,18 +230,21 @@ authorize(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req,
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_space_membership(Req#op_req.client, Guid);
-
-authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    check_space_membership(Req#op_req.client, Guid);
+    has_access_to_file(Req#op_req.auth, Guid);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= list;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    check_space_membership(Req#op_req.client, Guid).
+    has_access_to_file(Req#op_req.auth, Guid);
+
+authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -218,24 +253,31 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{aspect = instance}} = Req, _) ->
+    SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Req#op_req.data)),
+    op_logic_utils:assert_space_supported_locally(SpaceId);
+
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_space_supported_locally(Req#op_req.client, Guid);
-
-validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = list}} = Req, _) ->
-    assert_space_supported_locally(Req#op_req.client, Guid);
+    assert_file_managed_locally(Req#op_req.auth, Guid);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= list;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_space_supported_locally(Req#op_req.client, Guid).
+    assert_file_managed_locally(Req#op_req.auth, Guid);
+
+validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}}, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -244,16 +286,31 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
-    Mode = maps:get(<<"mode">>, Data),
-    ?run(lfm:set_perms(Cl#client.session_id, {guid, Guid}, Mode));
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
+    SessionId = Auth#auth.session_id,
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
+    {ok, Guid} = create_file(
+        SessionId,
+        maps:get(<<"parent">>, Data),
+        maps:get(<<"name">>, Data),
+        binary_to_atom(maps:get(<<"type">>, Data), utf8),
+        0,
+        maps:get(<<"createAttempts">>, Data, 1)
+    ),
+
+    {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
+    {ok, resource, {GRI#gri{id = Guid}, Attrs}};
+
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
+    Mode = maps:get(<<"mode">>, Data),
+    ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, Mode));
+
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
     [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
     Xattr = #xattr{name = Name, value = Value},
-    ?run(lfm:set_xattr(Cl#client.session_id, {guid, Guid}, Xattr, false, false));
+    ?check(lfm:set_xattr(Auth#auth.session_id, {guid, Guid}, Xattr, false, false));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
     JSON = maps:get(<<"application/json">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -265,11 +322,11 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = json_met
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
      end,
-    ?run(lfm:set_metadata(Cl#client.session_id, {guid, Guid}, json, JSON, FilterList));
+    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, json, JSON, FilterList));
 
-create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?run(lfm:set_metadata(Cl#client.session_id, {guid, Guid}, rdf, Rdf, [])).
+    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%--------------------------------------------------------------------
@@ -278,15 +335,18 @@ create(#op_req{client = Cl, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
+    ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid}));
+
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
+    SessionId = Auth#auth.session_id,
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-    {ok, Path} = ?run(lfm:get_file_path(SessionId, FileGuid)),
+    {ok, Path} = ?check(lfm:get_file_path(SessionId, FileGuid)),
 
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children} = ?run(lfm:ls(SessionId, {guid, Guid}, Offset, Limit)),
+            {ok, Children} = ?check(lfm:ls(SessionId, {guid, Guid}, Offset, Limit)),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
                     #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
@@ -298,26 +358,26 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = list}},
             ?ERROR_POSIX(Errno)
    end;
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
+    SessionId = Auth#auth.session_id,
     Attributes = case maps:get(<<"attribute">>, Data, undefined) of
         undefined -> ?ALL_BASIC_ATTRIBUTES;
         Attr -> [Attr]
     end,
-    {ok, Attrs} = ?run(lfm:stat(SessionId, {guid, FileGuid})),
+    {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, FileGuid})),
     {ok, gather_attributes(#{}, Attributes, Attrs)};
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
+    SessionId = Auth#auth.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
-            {ok, Xattrs} = ?run(lfm:list_xattr(
+            {ok, Xattrs} = ?check(lfm:list_xattr(
                 SessionId, {guid, FileGuid}, Inherited, true
             )),
             {ok, lists:foldl(fun(XattrName, Acc) ->
-                {ok, #xattr{value = Value}} = ?run(lfm:get_xattr(
+                {ok, #xattr{value = Value}} = ?check(lfm:get_xattr(
                     SessionId,
                     {guid, FileGuid},
                     XattrName,
@@ -326,14 +386,14 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
                 Acc#{XattrName => Value}
             end, #{}, Xattrs)};
         XattrName ->
-            {ok, #xattr{value = Val}} = ?run(lfm:get_xattr(
+            {ok, #xattr{value = Val}} = ?check(lfm:get_xattr(
                 SessionId, {guid, FileGuid}, XattrName, Inherited
             )),
             {ok, #{XattrName => Val}}
     end;
 
-get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
-    SessionId = Cl#client.session_id,
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
+    SessionId = Auth#auth.session_id,
 
     Inherited = maps:get(<<"inherited">>, Data, false),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -348,10 +408,10 @@ get(#op_req{client = Cl, data = Data, gri = #gri{id = FileGuid, aspect = json_me
              binary:split(Filter, <<".">>, [global])
      end,
 
-    ?run(lfm:get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
+    ?check(lfm:get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
 
-get(#op_req{client = Cl, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?run(lfm:get_metadata(Cl#client.session_id, {guid, FileGuid}, rdf, [], false)).
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
+    ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false)).
 
 
 %%--------------------------------------------------------------------
@@ -370,8 +430,8 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
+    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%%===================================================================
@@ -386,14 +446,14 @@ delete(_) ->
 %% in case of user root dir since it doesn't belong to any space.
 %% @end
 %%--------------------------------------------------------------------
--spec check_space_membership(op_logic:client(), file_id:file_guid()) -> boolean().
-check_space_membership(Client, Guid) ->
-    case fslogic_uuid:user_root_dir_guid(Client#client.id) of
+-spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
+has_access_to_file(?USER(UserId) = Auth, Guid) ->
+    case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
             true;
         _ ->
             SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:is_eff_space_member(Client, SpaceId)
+            op_logic_utils:is_eff_space_member(Auth, SpaceId)
     end.
 
 
@@ -405,9 +465,9 @@ check_space_membership(Client, Guid) ->
 %% and can be reached from any provider.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_space_supported_locally(op_logic:client(), file_id:file_guid()) ->
+-spec assert_file_managed_locally(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
-assert_space_supported_locally(#client{id = UserId}, Guid) ->
+assert_file_managed_locally(?USER(UserId), Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
             ok;
@@ -417,11 +477,51 @@ assert_space_supported_locally(#client{id = UserId}, Guid) ->
     end.
 
 
--spec check_result(ok | {ok, term()} | {error, term()}) ->
-    ok | {ok, term()} | no_return().
-check_result(ok) -> ok;
-check_result({ok, _} = Res) -> Res;
-check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
+%% @private
+-spec create_file(session:id(), file_id:file_guid(), file_meta:name(), file | dir) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(SessionId, ParentGuid, Name, file) ->
+    lfm:create(SessionId, ParentGuid, Name, undefined);
+create_file(SessionId, ParentGuid, Name, dir) ->
+    lfm:mkdir(SessionId, ParentGuid, Name, undefined).
+
+
+%% @private
+-spec create_file(
+    SessionId :: session:id(),
+    ParentGuid :: file_id:file_guid(),
+    Name :: file_meta:name(),
+    Type :: file | dir,
+    Counter :: non_neg_integer(),
+    Attempts :: non_neg_integer()
+) ->
+    {ok, file_id:file_guid()} | no_return().
+create_file(_SessId, _ParentGuid, _OriginalName, _Type, Counter, Counter) ->
+    throw(?ERROR_POSIX(?EEXIST));
+create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
+    Name = maybe_add_file_suffix(OriginalName, Counter),
+    case create_file(SessId, ParentGuid, Name, Type) of
+        {ok, Guid} ->
+            {ok, Guid};
+        {error, ?EEXIST} ->
+            create_file(
+                SessId, ParentGuid, OriginalName, Type,
+                Counter + 1, Attempts
+            );
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
+    end.
+
+
+%% @private
+-spec maybe_add_file_suffix(file_meta:name(), Counter :: non_neg_integer()) ->
+    file_meta:name().
+maybe_add_file_suffix(OriginalName, 0) ->
+    OriginalName;
+maybe_add_file_suffix(OriginalName, Counter) ->
+    RootName = filename:rootname(OriginalName),
+    Ext = filename:extension(OriginalName),
+    str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext]).
 
 
 %%--------------------------------------------------------------------
@@ -430,7 +530,7 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 %% Adds attributes listed in list, to given map.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_attributes(maps:map(), list(), #file_attr{}) -> maps:map().
+-spec gather_attributes(map(), list(), #file_attr{}) -> map().
 gather_attributes(Map, [], _Attr) ->
     Map;
 gather_attributes(Map, [<<"mode">> | Rest], Attr = #file_attr{mode = Mode}) ->
