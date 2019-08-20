@@ -18,12 +18,13 @@
 %% API
 -export([
     storage_new/4, storage_create/1, storage_safe_remove/1,
-    storage_supports_any_space/1, storage_list_ids/0, get_storage/1,
-    get_space_storage/1, space_storage_get_storage_ids/1,
+    storage_supports_any_space/1, storage_list_ids/0,
+    storage_get_helpers/1, storage_get_luma_config_map/1, get_storage/1,
+    storage_describe/1, get_space_storage/1, space_storage_get_storage_ids/1,
     space_storage_get_mounted_in_root/1, file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1, autocleaning_api_configure/2,
     autocleaning_api_get_configuration/1, invalidate_luma_cache/1,
-    new_helper/5
+    new_helper/5, new_luma_config/2, verify_storage_on_all_nodes/1
 ]).
 
 
@@ -55,7 +56,7 @@ storage_supports_any_space(StorageId) ->
     storage:supports_any_space(StorageId).
 
 
--spec storage_list_ids() -> {ok, [storage:doc()]} | {error, term()}.
+-spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
 storage_list_ids() ->
     case storage:list() of
         {ok, Docs} -> {ok, lists:map(fun storage:get_id/1, Docs)};
@@ -63,9 +64,25 @@ storage_list_ids() ->
     end.
 
 
+-spec storage_get_helpers(storage:doc()) -> [helper()].
+storage_get_helpers(StorageDoc) ->
+    storage:get_helpers(StorageDoc).
+
+
+-spec storage_get_luma_config_map(storage:doc()) -> map().
+storage_get_luma_config_map(StorageDoc) ->
+    storage:get_luma_config_map(StorageDoc).
+
+
 -spec get_storage(storage:id()) -> {ok, storage:doc()} | {error, term()}.
 get_storage(Key) ->
     storage:get(Key).
+
+
+-spec storage_describe(storage:id()) ->
+    {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
+storage_describe(StorageId) ->
+    storage:describe(StorageId).
 
 
 -spec get_space_storage(space_storage:id()) ->
@@ -117,6 +134,13 @@ new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
     helper:new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType).
 
 
-new_luma_config() ->
-    luma_config:new()
+-spec new_luma_config(luma_config:url(), luma_config:api_key()) ->
+    luma_config:config().
+new_luma_config(URL, ApiKey) ->
+    luma_config:new(URL, ApiKey).
 
+
+-spec verify_storage_on_all_nodes(helpers:helper()) ->
+    ok | {error, term()} | {error, term(), Stacktrace :: list()}.
+verify_storage_on_all_nodes(Helper) ->
+    storage_detector:verify_storage_on_all_nodes(Helper).

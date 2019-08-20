@@ -26,7 +26,7 @@
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
-    set_readonly/2, safe_remove/1]).
+    set_readonly/2, safe_remove/1, describe/1]).
 -export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
@@ -400,6 +400,35 @@ is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
 is_luma_enabled(#document{value = #storage{} = Storage}) ->
     is_luma_enabled(Storage).
 
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns map describing the storage. The data is redacted to
+%% remove sensitive information.
+%% @end
+%%-------------------------------------------------------------------
+-spec describe(id()) ->
+    {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
+describe(StorageId) ->
+    case ?MODULE:get(StorageId) of
+        {ok, #document{value = Storage}} ->
+            [Helper | _] = get_helpers(Storage),
+            AdminCtx = helper:get_redacted_admin_ctx(Helper),
+            HelperArgs = helper:get_args(Helper),
+            LumaConfigMap = get_luma_config_map(Storage),
+            Base = maps:merge(HelperArgs, AdminCtx),
+            {ok, Base#{
+                <<"id">> => StorageId,
+                <<"name">> => get_name(Storage),
+                <<"type">> => helper:get_name(Helper),
+                <<"readonly">> => is_readonly(Storage),
+                <<"insecure">> => helper:is_insecure(Helper),
+                <<"storagePathType">> => helper:get_storage_path_type(Helper),
+                <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
+                <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined)
+            }};
+        {error, _} = Error -> Error
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks
