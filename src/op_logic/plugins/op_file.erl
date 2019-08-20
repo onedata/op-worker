@@ -496,7 +496,7 @@ create_file(SessionId, ParentGuid, Name, dir) ->
     Attempts :: non_neg_integer()
 ) ->
     {ok, file_id:file_guid()} | no_return().
-create_file(_SessId, _ParentGuid, _OriginalName, _Type, Counter, Counter) ->
+create_file(_, _, _, _, Counter, Attempts) when Counter >= Attempts ->
     throw(?ERROR_POSIX(?EEXIST));
 create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),
