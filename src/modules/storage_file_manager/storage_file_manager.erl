@@ -22,8 +22,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([new_handle/2, new_handle/3, new_handle/6, set_size/1, increase_size/2]).
--export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/4, link/2, readdir/3,
-    get_child_handle/2]).
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
+    get_child_handle/2, listobjects/4]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
     truncate/3, unlink/2, fsync/2, rmdir/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
@@ -267,20 +267,18 @@ chmod(SFMHandle = #sfm_handle{
 %% Changes owner of a file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec chown(FileHandle :: handle(), user_id(), group_id()| undefined, od_space:id()) ->
-    ok | error_reply().
+-spec chown(FileHandle :: handle(), non_neg_integer(), non_neg_integer()) -> ok | error_reply().
 chown(SFMHandle = #sfm_handle{
     storage = Storage,
     file = FileId,
     session_id = ?ROOT_SESS_ID,
     space_id = SpaceId
-}, UserId, GroupId, SpaceId) ->
+}, Uid, Gid) ->
     {ok, HelperHandle} = session_helpers:get_helper(?ROOT_SESS_ID, SpaceId, Storage),
     ?RUN(SFMHandle, fun() ->
-        {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, UserId, GroupId, SpaceId),
         helpers:chown(HelperHandle, FileId, Uid, Gid)
     end, HelperHandle);
-chown(_, _, _, _) ->
+chown(_, _, _) ->
     throw(?EPERM).
 
 %%--------------------------------------------------------------------
@@ -338,6 +336,23 @@ readdir(SFMHandle = #sfm_handle{
         helpers:readdir(HelperHandle, FileId, Offset, Count)
     end, HelperHandle).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of file's children ids.
+%% @end
+%%--------------------------------------------------------------------
+-spec listobjects(FileHandle :: handle(), Marker :: binary(), Offset :: non_neg_integer(),
+    Count :: non_neg_integer()) -> {ok, [helpers:file_id()]} | error_reply().
+listobjects(SFMHandle = #sfm_handle{
+    storage = Storage,
+    file = FileId,
+    space_id = SpaceId,
+    session_id = SessionId
+}, Marker, Offset, Count) ->
+    {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
+    ?RUN(SFMHandle, fun() ->
+        helpers:listobjects(HelperHandle, FileId, Marker, Offset, Count)
+    end, HelperHandle).
 
 %%--------------------------------------------------------------------
 %% @doc

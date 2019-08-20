@@ -12,6 +12,7 @@
 %%%-------------------------------------------------------------------
 -module(space_sync_worker).
 -author("Rafal Slota").
+-author("Jakub Kudzia").
 -behavior(worker_plugin_behaviour).
 
 -include("modules/datastore/datastore_models.hrl").

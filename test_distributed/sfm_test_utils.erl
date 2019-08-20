@@ -17,9 +17,9 @@
 
 
 %% API
--export([get_storage_id/2, get_storage_doc/2, new_handle/3, new_child_handle/2]).
+-export([get_storage_id/2, get_storage_doc/2, new_handle/4, new_child_handle/2]).
 -export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
-    chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3]).
+    chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5]).
 
 -define(DEFAULT_TIMEOUT, timer:minutes(1)).
 
@@ -34,9 +34,7 @@ get_storage_id(Worker, SpaceId) ->
 get_storage_doc(Worker, StorageId) ->
     rpc:call(Worker, storage, get, [StorageId]).
 
-new_handle(Worker, SpaceId, StorageFileId) ->
-    StorageId = get_storage_id(Worker, SpaceId),
-    {ok, StorageDoc} = get_storage_doc(Worker, StorageId),
+new_handle(Worker, SpaceId, StorageFileId, StorageDoc) ->
     rpc:call(Worker, storage_file_manager, new_handle,
         [?ROOT_SESS_ID, SpaceId, undefined, StorageDoc, StorageFileId, undefined]).
 
@@ -44,13 +42,13 @@ new_child_handle(ParentHandle, ChildName) ->
     storage_file_manager:get_child_handle(ParentHandle, ChildName).
 
 mkdir(Worker, SFMHandle, Mode) ->
-    ok = rpc:call(Worker, storage_file_manager, mkdir, [SFMHandle, Mode, true]).
+    rpc:call(Worker, storage_file_manager, mkdir, [SFMHandle, Mode, true]).
 
 create_file(Worker, SFMHandle, Mode) ->
     ok = rpc:call(Worker, storage_file_manager, create, [SFMHandle, Mode, true]).
 
 open(Worker, SFMHandle, Flag) ->
-    rpc:call(Worker, storage_file_manager, open, [SFMHandle, Flag]).
+    rpc:call(Worker, storage_file_manager, open_insecure, [SFMHandle, Flag]).
 
 write_file(Node, SFMHandle, Offset, Data) ->
     % this function opens and writes to file to ensure that file_handle is not deleted
@@ -117,8 +115,11 @@ stat(Worker, SFMHandle) ->
 ls(Worker, SFMHandle, Offset, Count) ->
     rpc:call(Worker, storage_file_manager, readdir, [SFMHandle, Offset, Count]).
 
+listobjects(Worker, SFMHandle, Marker, Offset, Count) ->
+    rpc:call(Worker, storage_file_manager, listobjects, [SFMHandle, Marker, Offset, Count]).
+
 rmdir(Worker, SFMHandle) ->
-    ok = rpc:call(Worker, storage_file_manager, rmdir, [SFMHandle]).
+    rpc:call(Worker, storage_file_manager, rmdir, [SFMHandle]).
 
 truncate(Worker, SFMHandle, NewSize, CurrentSize) ->
     ok = rpc:call(Worker, storage_file_manager, truncate, [SFMHandle, NewSize, CurrentSize]).
@@ -139,7 +140,7 @@ size(Worker, SFMHandle) ->
             Error
     end.
 
-recursive_rm(Worker, SFMHandle) ->
+recursive_rm(Worker, SFMHandle = #sfm_handle{storage = StorageDoc}) ->
     case type(Worker, SFMHandle) of
         ?REGULAR_FILE_TYPE ->
             case size(Worker, SFMHandle) of
@@ -149,26 +150,41 @@ recursive_rm(Worker, SFMHandle) ->
                     unlink(Worker, SFMHandle, Size)
             end;
         ?DIRECTORY_TYPE ->
-            recursive_rm(Worker, SFMHandle, 0, 1000);
+            Helper = storage:get_helper(StorageDoc),
+            HelperName = helper:get_name(Helper),
+            case HelperName of
+                ?POSIX_HELPER_NAME ->
+                    recursive_rm_posix(Worker, SFMHandle, 0, 1000);
+                ?S3_HELPER_NAME ->
+                    recursive_rm_s3(Worker, SFMHandle, <<"/">>, 0, 1000)
+            end;
         {error, ?ENOENT} ->
             ok
     end.
 
-recursive_rm(Worker, SFMHandle = #sfm_handle{storage = StorageDoc}, Offset, Count) ->
-    Helper = storage:get_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    case HelperName of
-        ?POSIX_HELPER_NAME ->
-            case ls(Worker, SFMHandle, Offset, Count) of
-                {ok, Children} when length(Children) < Count ->
-                    rm_children(Worker, SFMHandle, Children),
-                    rmdir(Worker, SFMHandle);
-                {ok, Children} ->
-                    rm_children(Worker, SFMHandle, Children),
-                    recursive_rm(Worker, SFMHandle, Offset + Count, Count)
+recursive_rm_posix(Worker, SFMHandle, Offset, Count) ->
+    case ls(Worker, SFMHandle, Offset, Count) of
+        {ok, Children} when length(Children) < Count ->
+            rm_children(Worker, SFMHandle, Children),
+            case rmdir(Worker, SFMHandle) of
+                ok -> ok;
+                {error, ?EBUSY} -> ok;
+                {error, ?ENOENT} -> ok
             end;
-        ?S3_HELPER_NAME ->
-            todo
+        {ok, Children} ->
+            rm_children(Worker, SFMHandle, Children),
+            recursive_rm_posix(Worker, SFMHandle, Offset + Count, Count)
+    end.
+
+recursive_rm_s3(Worker, SFMHandle, Marker, Offset, Count) ->
+    case listobjects(Worker, SFMHandle, Marker, Offset, Count) of
+        {ok, Children} when length(Children) < Count ->
+            rm_children(Worker, SFMHandle, Children),
+            ok;
+        {ok, Children} ->
+            rm_children(Worker, SFMHandle, Children),
+            NewMarker = lists:last(Children),
+            recursive_rm_s3(Worker, SFMHandle, NewMarker, Offset, Count)
     end.
 
 

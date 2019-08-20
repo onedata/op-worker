@@ -64,7 +64,7 @@
     delete_and_update_files_simultaneously_update_test/1,
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/1,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed/1,
     sync_works_properly_after_delete_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -87,7 +87,7 @@
     create_file_import_test,
     import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_in_dir_import_test,
@@ -137,14 +137,15 @@ create_directory_import_error_test(Config) ->
 
 update_syncs_files_after_import_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestDirPath =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, true),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, true),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
 
     %% Create dir on storage
-    ok = file:make_dir(StorageTestDirPath),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#775),
     %ensure that import will start with different timestamp than dir was created
     timer:sleep(timer:seconds(1)),
 
@@ -154,20 +155,21 @@ update_syncs_files_after_import_failed_test(Config) ->
             data = #{file_name := FileName}
         }, _) ->
             case FileName of
-                ?TEST_DIR ->
+                ?TEST_FILE1 ->
                     throw(test_error);
                 _ ->
                     meck:passthrough([Job])
             end
         end),
-    storage_sync_test_base:enable_storage_import(Config),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dir was not imported
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH})),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -192,7 +194,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     }, ?SPACE_ID),
 
     test_utils:mock_unload(W1, simple_scan),
-    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
 
@@ -216,19 +218,19 @@ update_syncs_files_after_import_failed_test(Config) ->
     }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestDirPath =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, true),
-
-    storage_sync_test_base:enable_storage_import(Config),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, true),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
@@ -255,20 +257,20 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
     %% Create dir on storage
     timer:sleep(timer:seconds(1)),
-    ok = file:make_dir(StorageTestDirPath),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#775),
     timer:sleep(timer:seconds(1)),
     test_utils:mock_new(W1, simple_scan),
     test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
         data = #{file_name := FileName}}, _
     ) ->
         case FileName of
-            ?TEST_DIR ->
+            ?TEST_FILE1 ->
                 throw(test_error);
             _ ->
                 meck:passthrough([Job])
         end
     end),
-    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     test_utils:mock_unload(W1, simple_scan),
 
@@ -295,9 +297,9 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
     %% Check if dir was not imported
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH})),
 
     %next scan should import file
     ?assertMonitoring(W1, #{
@@ -323,12 +325,12 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     }, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
-sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config) ->
-    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config, true).
+sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config) ->
+    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config, true).
 
 create_directory_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
@@ -372,25 +374,25 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 create_file_in_dir_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    W1MountPoint = storage_sync_test_base:get_host_mount_point(Config, RDWRStorage),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
 
-    StorageTestDirPath =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestDirPath2 =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
+    StorageTestDirPath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    StorageTestDirPath2 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
     StorageTestFileinDirPath1 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+        storage_sync_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    SFMHandle2 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
+    FileInDirSFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
 
     %% Create dirs on storage
-    ok = file:make_dir(StorageTestDirPath),
-    ok = file:make_dir(StorageTestDirPath2),
-    ok = file:change_mode(StorageTestDirPath, 8#777),
-    ok = file:change_mode(StorageTestDirPath2, 8#777),
-
-    storage_sync_test_base:enable_storage_import(Config),
-
+    ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#777),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle2, 8#777),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dirs were imported on W1
@@ -423,8 +425,9 @@ create_file_in_dir_update_test(Config) ->
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
-    ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_update(Config),
+    ok = sfm_test_utils:create_file(W1, FileInDirSFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileInDirSFMHandle, 0, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
 
@@ -461,14 +464,14 @@ create_file_in_dir_update_test(Config) ->
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle5),
 
-    SpaceStoragePath = storage_sync_test_base:storage_test_dir_path(
+    SpaceStoragePath = storage_sync_test_base:storage_path(
         W1MountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
-    storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(SpaceStoragePath,
-        W1MountPoint, ?SPACE_ID, true), 0),
+    storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
+        SpaceStoragePath, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
-        StorageTestDirPath2, W1MountPoint, ?SPACE_ID, true), 0),
+        StorageTestDirPath2, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results_gte(History, ?assertMtimeChangedFun(
-        StorageTestDirPath, W1MountPoint, ?SPACE_ID, true), 1),
+        StorageTestDirPath, ?SPACE_ID, true), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -479,41 +482,44 @@ create_file_in_dir_update_test(Config) ->
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
-    % in this test dir_batch_size is set in init_per_testcase to 2
+    % in this test storage_sync_dir_batch_size is set in init_per_testcase to 2
     MountSpaceInRoot = true,
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
 
-    StorageTestDirPath =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestDirPath2 =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
-    StorageTestFilePath1 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
-    StorageTestFilePath2 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE2, MountSpaceInRoot),
-    StorageTestFilePath3 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE3, MountSpaceInRoot),
-    StorageTestFilePath4 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE4, MountSpaceInRoot),
+    StorageTestDirPath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    StorageTestDirPath2 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
+    StorageTestFilePath1 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath2 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE2, MountSpaceInRoot),
+    StorageTestFilePath3 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE3, MountSpaceInRoot),
+    StorageTestFilePath4 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE4, MountSpaceInRoot),
     StorageTestFileinDirPath1 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+        storage_sync_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    SFMHandle2 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
+    FileSFMHandle1 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath1, RDWRStorage),
+    FileSFMHandle2 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath2, RDWRStorage),
+    FileSFMHandle3 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath3, RDWRStorage),
+    FileSFMHandle4 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath4, RDWRStorage),
+    FileInDirSFMHandle1 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
 
     %% Create dir on storage
-    ok = file:make_dir(StorageTestDirPath),
-    ok = file:make_dir(StorageTestDirPath2),
-    ok = file:change_mode(StorageTestDirPath, 8#777),
-    ok = file:change_mode(StorageTestDirPath2, 8#777),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#777),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle2, 8#777),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath1, ?TEST_DATA),
-    ok = file:write_file(StorageTestFilePath2, ?TEST_DATA),
-    ok = file:write_file(StorageTestFilePath3, ?TEST_DATA),
-    ok = file:write_file(StorageTestFilePath4, ?TEST_DATA),
-
-    storage_sync_test_base:enable_storage_import(Config),
-
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle1, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle1, 0, ?TEST_DATA),
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle2, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle2, 0, ?TEST_DATA),
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle3, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle3, 0, ?TEST_DATA),
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle4, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle4, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if files were imported on W1
@@ -553,8 +559,9 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
     }, ?SPACE_ID),
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
-    ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_update(Config),
+    ok = sfm_test_utils:create_file(W1, FileInDirSFMHandle1, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileInDirSFMHandle1, 0, ?TEST_DATA),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
 
@@ -593,11 +600,11 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
     lfm_proxy:close(W1, Handle5),
 
     storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
-        StorageTestDirPath, W1MountPoint, ?SPACE_ID, true), 0),
+        StorageTestDirPath, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
-        StorageTestDirPath2, W1MountPoint, ?SPACE_ID, true), 0),
+        StorageTestDirPath2, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results_gte(History, ?assertMtimeChangedFun(
-        StorageTestDirPath, W1MountPoint, ?SPACE_ID, true), 1),
+        StorageTestDirPath, ?SPACE_ID, true), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -619,20 +626,27 @@ sync_works_properly_after_delete_test(Config) ->
 delete_and_update_files_simultaneously_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    StorageTestDirPath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
     StorageTestFileinDirPath1 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+        storage_sync_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
     StorageTestFileinDirPath2 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE2]), MountSpaceInRoot),
+        storage_sync_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE2]), MountSpaceInRoot),
     NewMode = 8#600,
 
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    FileSFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
+    FileSFMHandle2 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath2, RDWRStorage),
+
     %% Create dir on storage
-    ok = file:make_dir(StorageTestDirPath),
-    ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
-    ok = file:write_file(StorageTestFileinDirPath2, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#775),
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle, 0, ?TEST_DATA),
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle2, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle2, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
@@ -673,10 +687,10 @@ delete_and_update_files_simultaneously_update_test(Config) ->
     }, ?SPACE_ID),
 
     %% Delete dir on storage
-    storage_sync_test_base:recursive_rm(StorageTestFileinDirPath1),
-    file:change_mode(StorageTestFileinDirPath2, NewMode),
+    sfm_test_utils:recursive_rm(W1, FileSFMHandle),
+    sfm_test_utils:chmod(W1, FileSFMHandle2, NewMode),
 
-    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
 
@@ -720,13 +734,16 @@ delete_many_subfiles_test(Config) ->
 append_file_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+        storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -759,8 +776,8 @@ append_file_update_test(Config) ->
     }, ?SPACE_ID),
 
     %% Append to file
-    storage_sync_test_base:append(StorageTestFilePath, ?TEST_DATA2),
-    storage_sync_test_base:enable_storage_update(Config),
+    sfm_test_utils:write_file(W1, SFMHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if appended bytes were imported on worker1
@@ -796,14 +813,16 @@ append_file_update_test(Config) ->
 append_file_not_changing_mtime_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
@@ -846,11 +865,11 @@ append_file_not_changing_mtime_update_test(Config) ->
     }, ?SPACE_ID),
 
     %% Append to file
-    {ok, #file_info{mtime = StMtime}} = file:read_file_info(StorageTestFilePath, [{time, posix}]),
-    storage_sync_test_base:append(StorageTestFilePath, ?TEST_DATA2),
+    {ok, #statbuf{st_mtime = StMtime}} = sfm_test_utils:stat(W1, SFMHandle),
+    sfm_test_utils:write_file(W1, SFMHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
     storage_sync_test_base:change_time(StorageTestFilePath, StMtime),
 
-    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if appended bytes were imported on worker1
@@ -893,13 +912,14 @@ append_file_not_changing_mtime_update_test(Config) ->
 append_empty_file_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, <<"">>),
-    storage_sync_test_base:enable_storage_import(Config),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
@@ -932,8 +952,8 @@ append_empty_file_update_test(Config) ->
     }, ?SPACE_ID),
 
     %% Append to file
-    storage_sync_test_base:append(StorageTestFilePath, ?TEST_DATA2),
-    storage_sync_test_base:enable_storage_update(Config),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA2),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if appended bytes were imported on worker1
@@ -974,13 +994,15 @@ move_file_update_test(Config) ->
 truncate_file_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
@@ -1016,8 +1038,9 @@ truncate_file_update_test(Config) ->
 
     timer:sleep(timer:seconds(2)),  %ensure that modify time is different from read time
     %% Truncate file
-    storage_sync_test_base:truncate(StorageTestFilePath, 1),
-    storage_sync_test_base:enable_storage_update(Config),
+    {ok, SFMHandle2} = sfm_test_utils:open(W1, SFMHandle, write),
+    sfm_test_utils:truncate(W1, SFMHandle2, 1, ?TEST_DATA_SIZE),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     %% Check if file was truncated
     ?assertMatch({ok, #file_attr{size = 1}},
@@ -1048,21 +1071,23 @@ truncate_file_update_test(Config) ->
 chmod_file_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-
     StorageTestDirPath =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-
+        storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
     StorageTestFileinDirPath1 =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+        storage_sync_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
 
-    NewMode = 8#600,
+    NewMode = 8#644,
     %% Create dirs on storage
-    ok = file:make_dir(StorageTestDirPath),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#775),
     %% Create file on storage
-    ok = file:write_file(StorageTestFileinDirPath1, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    FileSFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, FileSFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
@@ -1090,7 +1115,7 @@ chmod_file_update_test(Config) ->
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{mode = 8#644}},
+    ?assertMatch({ok, #file_attr{mode = 8#664}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
@@ -1102,8 +1127,8 @@ chmod_file_update_test(Config) ->
 
     timer:sleep(timer:seconds(2)),  %ensure that modify time is different from read time
     %% Change file permissions
-    file:change_mode(StorageTestFileinDirPath1, NewMode),
-    storage_sync_test_base:enable_storage_update(Config),
+    ok = sfm_test_utils:chmod(W1, FileSFMHandle, NewMode),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if file permissions were changed
@@ -1112,7 +1137,7 @@ chmod_file_update_test(Config) ->
     History = rpc:call(W1, meck, history, [storage_sync_changes]),
 
     storage_sync_test_base:assert_num_results_gte(History, ?assertHashChangedFun(
-        StorageTestDirPath, W1MountPoint, ?SPACE_ID, true), 1),
+        StorageTestDirPath, ?SPACE_ID, true), 1),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1146,39 +1171,45 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config)
     storage_sync_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config, true).
 
 chmod_file_update2_test(Config) ->
-    % in this test dir_batch_size is set in init_per_testcase to 2
+    % in this test storage_sync_dir_batch_size is set in init_per_testcase to 2
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
 
     Files = lists:map(fun(TestFile) ->
         filename:join([?TEST_DIR, TestFile])
     end, [?TEST_FILE1, ?TEST_FILE2, ?TEST_FILE3]),
 
-    StorageTestDirPath =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestDirPath2 =
-        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
+    StorageTestDirPath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    StorageTestDirPath2 = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
 
     [StTestFile1 | _] = StorageFiles =
-        storage_sync_test_base:to_storage_files(Files, W1MountPoint, ?SPACE_ID, MountSpaceInRoot),
+        storage_sync_test_base:to_storage_files(Files, ?SPACE_ID, MountSpaceInRoot),
 
     NewMode = 8#600,
     %% Create files on storage
-    ok = file:make_dir(StorageTestDirPath),
-    ok = file:make_dir(StorageTestDirPath2),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#775),
+    SFMHandle2 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
+    ok = sfm_test_utils:mkdir(W1, SFMHandle2, 8#775),
+    FileSFMHandle1 = sfm_test_utils:new_handle(W1, ?SPACE_ID, StTestFile1, RDWRStorage),
+
     lists:foreach(fun(StorageTestFilePath) ->
-        ok = file:write_file(StorageTestFilePath, ?TEST_DATA)
+        FileSFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+        ok = sfm_test_utils:create_file(W1, FileSFMHandle, 8#664),
+        {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle, 0, ?TEST_DATA)
     end, StorageFiles),
-    storage_sync_test_base:enable_storage_import(Config),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if files were imported
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+
     lists:foreach(fun(SpaceFile) ->
-        ?assertMatch({ok, #file_attr{mode = 8#644}},
+        ?assertMatch({ok, #file_attr{mode = 8#664}},
             lfm_proxy:stat(W1, SessId, {path, SpaceFile}), ?ATTEMPTS),
         {ok, Handle1} = ?assertMatch({ok, _},
             lfm_proxy:open(W1, SessId, {path, SpaceFile}, read)),
@@ -1212,8 +1243,8 @@ chmod_file_update2_test(Config) ->
 
     timer:sleep(timer:seconds(2)),
     %% Change file permissions
-    ok = file:change_mode(StTestFile1, NewMode),
-    storage_sync_test_base:enable_storage_update(Config),
+    ok = sfm_test_utils:chmod(W1, FileSFMHandle1, NewMode),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if file permissions were changed
@@ -1223,9 +1254,9 @@ chmod_file_update2_test(Config) ->
         test_utils:mock_unload(W1, storage_sync_changes),
 
     storage_sync_test_base:assert_num_results_gte(History, ?assertHashChangedFun(
-        StorageTestDirPath, W1MountPoint, ?SPACE_ID, true), 1),
+        StorageTestDirPath, ?SPACE_ID, true), 1),
     storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
-        StorageTestDirPath, W1MountPoint, ?SPACE_ID, true), 0),
+        StorageTestDirPath, ?SPACE_ID, true), 0),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1245,13 +1276,16 @@ chmod_file_update2_test(Config) ->
 update_timestamps_file_import_test(Config) ->
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#777),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
@@ -1288,8 +1322,12 @@ update_timestamps_file_import_test(Config) ->
 
     %% Change file timestamp
     NewTimestamp = 9999999999,
-    storage_sync_test_base:change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
-    storage_sync_test_base:enable_storage_update(Config),
+    PathOnContainer = storage_sync_test_base:storage_path(storage_sync_test_base:get_mount_point(RDWRStorage),
+        ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    ok = rpc:call(W1, storage_sync_test_base, change_time, [PathOnContainer, NewTimestamp, NewTimestamp]),
+
+%%    storage_sync_test_base:change_time(Path, NewTimestamp, NewTimestamp),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
@@ -1321,13 +1359,15 @@ update_timestamps_file_import_test(Config) ->
 should_not_detect_timestamp_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#777),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if file was imported
@@ -1358,8 +1398,10 @@ should_not_detect_timestamp_update_test(Config) ->
 
     %% Change file permissions
     NewTimestamp = 9999999999,
-    storage_sync_test_base:change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
-    storage_sync_test_base:enable_storage_update(Config),
+    PathOnContainer = storage_sync_test_base:storage_path(storage_sync_test_base:get_mount_point(RDWRStorage),
+        ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    ok = rpc:call(W1, storage_sync_test_base, change_time, [PathOnContainer, NewTimestamp, NewTimestamp]),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     %% Check if timestamps hasn't changed
@@ -1394,15 +1436,16 @@ import_nfs_acl_test(Config) ->
 update_nfs_acl_test(Config) ->
     MountSpaceInRoot = true,
     Workers = [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath =
-        storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
-
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    storage_sync_test_base:enable_storage_import(Config),
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     %% Check if file was imported
@@ -1457,7 +1500,7 @@ update_nfs_acl_test(Config) ->
         (#sfm_handle{}, _) ->
             {ok, EncACL}
     end),
-    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     %% User1 should not be allowed to read acl
@@ -1517,7 +1560,7 @@ init_per_suite(Config) ->
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
-    [{?LOAD_MODULES, [initializer, storage_sync_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, storage_sync_test_base, sfm_test_utils]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     ok = wpool:stop_sup_pool(?VERIFY_POOL),
@@ -1605,13 +1648,13 @@ init_per_testcase(Case, Config) when
     Case =:= create_file_in_dir_exceed_batch_update_test
     ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
-    test_utils:set_env(W1, op_worker, dir_batch_size, 2),
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
+    test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 2),
     Config2 = [
         {update_config, #{
             delete_enable => false,
             write_once => true}},
-        {old_dir_batch_size, OldDirBatchSize}
+        {old_storage_sync_dir_batch_size, OldDirBatchSize}
         | Config
     ],
     init_per_testcase(default, Config2);
@@ -1620,9 +1663,9 @@ init_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test
     ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
-    test_utils:set_env(W1, op_worker, dir_batch_size, 2),
-    Config2 = [{old_dir_batch_size, OldDirBatchSize} | Config],
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
+    test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 2),
+    Config2 = [{old_storage_sync_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(default, Config2);
 
 init_per_testcase(Case, Config) when
@@ -1681,17 +1724,18 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),
     ConfigWithProxy = lfm_proxy:init(Config),
-    Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
-    storage_sync_test_base:create_init_file(Config2, true),
-    Config2.
+    Config2 = storage_sync_test_base:add_synced_storages(ConfigWithProxy),
+    Config3 = storage_sync_test_base:add_rdwr_storages(Config2),
+    storage_sync_test_base:create_init_file(Config3, true),
+    Config3.
 
 end_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test;
     Case =:= create_file_in_dir_exceed_batch_update_test
     ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    OldDirBatchSize = ?config(old_dir_batch_size, Config),
-    test_utils:set_env(W1, op_worker, dir_batch_size, OldDirBatchSize),
+    OldDirBatchSize = ?config(old_storage_sync_dir_batch_size, Config),
+    test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
@@ -1717,7 +1761,7 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     ok = test_utils:mock_unload(Workers, [storage_file_manager]),
     end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes, Config) ->
+end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
     end_per_testcase(default, Config);
@@ -1727,7 +1771,7 @@ end_per_testcase(_Case, Config) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     ok = storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
-    storage_sync_test_base:clean_storage(Config, true),
+    storage_sync_test_base:clean_synced_storage(Config, true),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
     test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes]),

@@ -114,16 +114,21 @@ strategy_init_jobs(_,
     space_id := SpaceId,
     storage_id := StorageId
 }) ->
-    % it will be first update
-    CurrentTimestamp = time_utils:cluster_time_seconds(),
-    case should_init_update_job(ImportStartTime, ImportFinishTime,
-        ScanIntervalSeconds, CurrentTimestamp)
-    of
-        true ->
-            ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
-            init_update_job(CurrentTimestamp, Args, Data);
+    case storage_sync:is_syncable(StorageId) of
+        {true, SyncMode} ->
+            % it will be first update
+            CurrentTimestamp = time_utils:cluster_time_seconds(),
+            case should_init_update_job(ImportStartTime, ImportFinishTime,
+                ScanIntervalSeconds, CurrentTimestamp)
+            of
+                true ->
+                    ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
+                    init_update_job(CurrentTimestamp, Args, Data#{sync_mode => SyncMode});
+                false ->
+                    []
+            end;
         false ->
-            []
+            ?error("Storage ~p cannot be synced in current configuration.", [StorageId])
     end;
 strategy_init_jobs(simple_scan, _, #{last_update_finish_time := undefined}) ->
     []; %update is in progress
@@ -135,15 +140,20 @@ strategy_init_jobs(simple_scan,
         space_id := SpaceId,
         storage_id := StorageId
 }) ->
-    CurrentTimestamp = time_utils:cluster_time_seconds(),
-    case should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
-        ScanIntervalSeconds, CurrentTimestamp)
-    of
-        true ->
-            ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
-            init_update_job(CurrentTimestamp, Args, Data);
+    case storage_sync:is_syncable(StorageId) of
+        {true, SyncMode} ->
+            CurrentTimestamp = time_utils:cluster_time_seconds(),
+            case should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
+                ScanIntervalSeconds, CurrentTimestamp)
+            of
+                true ->
+                    ?debug("Starting storage_update for space: ~p and storage: ~p", [SpaceId, StorageId]),
+                    init_update_job(CurrentTimestamp, Args, Data#{sync_mode => SyncMode});
+                false ->
+                    []
+            end;
         false ->
-            []
+            ?error("Storage ~p cannot be synced in current configuration.", [StorageId])
     end;
 strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StrategyArgs, InitData}]).
@@ -234,7 +244,8 @@ start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, LastUpdateStartTime
         space_id => SpaceId,
         storage_id => StorageId,
         file_name => FileName,
-        parent_ctx => ParentCtx
+        parent_ctx => ParentCtx,
+        mounted_in_root => lists:member(StorageId, space_storage:get_mounted_in_root(SpaceId))
     },
     ImportInit = space_sync_worker:init(?MODULE, SpaceId, StorageId,
         InitialImportJobData),
@@ -285,31 +296,37 @@ import_children(Job = #space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
     }},
-    ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
+    ?DIRECTORY_TYPE, ScanToken, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
-
-    BatchKey = Offset div BatchSize,
+    BatchKey = simple_scan:batch_key(ScanToken, BatchSize),
     % don't count hash for this case
     {ChildrenStorageCtxsBatch1, Data1} =
         case storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data0) of
             {undefined, _} ->
-                get_children_ctxs_batch(Offset, BatchSize, Data0, StorageFileCtx);
+                get_children_ctxs_batch(ScanToken, BatchSize, Data0, StorageFileCtx);
             {ChildrenStorageCtxsBatch0, Data2} ->
                 {ChildrenStorageCtxsBatch0, Data2}
         end,
 
-    {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
-        Job#space_strategy_job{data = Data1}, Offset, FileCtx, ChildrenStorageCtxsBatch1),
-    FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
+    {FilesJobs, DirsJobs, NextBatchJob} = simple_scan:generate_jobs_for_importing_children(
+        Job#space_strategy_job{data = Data1}, ScanToken, FileCtx, ChildrenStorageCtxsBatch1),
+
+
+    {FilesToHandleNum, DirsJobs2} = case NextBatchJob of
+        undefined ->
+            {length(FilesJobs) + length(DirsJobs), DirsJobs};
+        _ ->
+            {length(FilesJobs) + length(DirsJobs) + 1, [NextBatchJob | DirsJobs]}
+    end,
+
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
 
     case StrategyType:strategy_merge_result(FilesJobs, FilesResults) of
         ok ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            case storage_sync_utils:all_children_imported(DirsJobs, FileUuid) of
-                true ->
+            case NextBatchJob of
+                undefined ->
                     {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
                     storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
                         {ok, SSI#storage_sync_info{mtime = Mtime}}
@@ -319,7 +336,7 @@ import_children(Job = #space_strategy_job{
             end;
         _ -> ok
     end,
-    DirsJobs;
+    DirsJobs2;
 import_children(Job = #space_strategy_job{
     strategy_type = StrategyType,
     strategy_args = Args = #{write_once := false},
@@ -330,23 +347,30 @@ import_children(Job = #space_strategy_job{
         space_id := SpaceId,
         storage_id := StorageId
     }},
-    ?DIRECTORY_TYPE, Offset, FileCtx, BatchSize
+    ?DIRECTORY_TYPE, ScanToken, FileCtx, BatchSize
 ) when MaxDepth > 0 ->
 
-    BatchKey = Offset div BatchSize,
+    BatchKey = simple_scan:batch_key(ScanToken, BatchSize),
     {BatchHash, ChildrenStorageCtxsBatch, Data} =
         case storage_sync_utils:take_hash_for_batch(BatchKey, Data0) of
             {undefined, _} ->
                 SyncAcl = maps:get(sync_acl, Args, false),
-                count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx, SyncAcl);
+                count_batch_hash(ScanToken, BatchSize, Data0, StorageFileCtx, SyncAcl);
             {BatchHash0, Data1} ->
                 {ChildrenStorageCtxsBatch0, Data2} =
                     storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data1),
                 {BatchHash0, ChildrenStorageCtxsBatch0, Data2}
         end,
-    {FilesJobs, DirsJobs} = simple_scan:generate_jobs_for_importing_children(
-        Job#space_strategy_job{data = Data}, Offset, FileCtx, ChildrenStorageCtxsBatch),
-    FilesToHandleNum = length(FilesJobs) + length(DirsJobs),
+    {FilesJobs, DirsJobs, NextBatchJob} = simple_scan:generate_jobs_for_importing_children(
+        Job#space_strategy_job{data = Data}, ScanToken, FileCtx, ChildrenStorageCtxsBatch),
+
+    {FilesToHandleNum, DirsJobs2} = case NextBatchJob of
+        undefined ->
+            {length(FilesJobs) + length(DirsJobs), DirsJobs};
+        _ ->
+            {length(FilesJobs) + length(DirsJobs) + 1, [NextBatchJob | DirsJobs]}
+    end,
+
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, FilesToHandleNum),
 
     FilesResults = simple_scan:import_regular_subfiles(FilesJobs),
@@ -374,7 +398,7 @@ import_children(Job = #space_strategy_job{
             end;
         _ -> ok
     end,
-    DirsJobs;
+    DirsJobs2;
 import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
     [].
 
@@ -414,17 +438,15 @@ handle_already_imported_directory(Job = #space_strategy_job{
     #file_attr{}, file_ctx:ctx()) -> {ok, space_strategy:job()}.
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := true},
-    data = Data
+    data = Data = #{sync_mode := ?STORAGE_SYNC_POSIX_MODE}
 }, FileAttr, FileCtx) ->
-    case maps:get(dir_offset, Data, 0) of
+    case maps:get(scan_token, Data, 0) of
         0 ->
             full_update:run(Job, FileCtx);
         _ ->
             simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
     end;
-handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
-    strategy_args = #{delete_enable := false}
-}, FileAttr, FileCtx) ->
+handle_already_imported_directory_changed_mtime(Job, FileAttr, FileCtx) ->
     simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx).
 
 %%-------------------------------------------------------------------
@@ -440,16 +462,17 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = Args = #{write_once := false},
     data = Data0 = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx) ->
-    Offset = maps:get(dir_offset, Data0, 0),
+    ScanToken = maps:get(scan_token, Data0, simple_scan:default_scan_token(Job)),
+    DirBatchSize = simple_scan:batch_size(Job),
     {ChildrenStorageCtxsBatch, _} = storage_file_ctx:get_children_ctxs_batch(
-        StorageFileCtx, Offset, ?DIR_BATCH),
+        StorageFileCtx, ScanToken, DirBatchSize),
     SyncAcl = maps:get(sync_acl, Args, false),
     {BatchHash, ChildrenStorageCtxsBatch2} =
         storage_sync_changes:count_files_attrs_hash(ChildrenStorageCtxsBatch, SyncAcl),
 
     ChildrenStorageCtxs = maps:get(children_storage_file_ctxs, Data0, #{}),
     HashesMap = maps:get(hashes_map, Data0, #{}),
-    BatchKey = Offset div ?DIR_BATCH,
+    BatchKey = simple_scan:batch_key(ScanToken, DirBatchSize),
 
     Job2 = Job#space_strategy_job{
         data = Data0#{
@@ -459,7 +482,7 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
             hashes_map => HashesMap#{
                 BatchKey => BatchHash
             },
-            dir_offset => Offset
+            scan_token => ScanToken
         }},
 
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
@@ -490,10 +513,12 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
     #file_attr{}, file_ctx:ctx(), storage_sync_changes:hash()) ->
     {simple_scan:job_result(), space_strategy:job()}.
 handle_already_imported_directory_changed_hash(Job = #space_strategy_job{
-    data = #{dir_offset := Offset}
+    data = #{scan_token := ScanToken}
 }, FileAttr, FileCtx, CurrentHash
 ) ->
-    HashesMap = #{Offset div ?DIR_BATCH => CurrentHash},
+    DirBatchSize = simple_scan:batch_size(Job),
+    BatchKey = simple_scan:batch_key(ScanToken, DirBatchSize),
+    HashesMap = #{BatchKey => CurrentHash},
     Job2 = space_strategy:update_job_data(hashes_map, HashesMap, Job),
     simple_scan:handle_already_imported_file(Job2, FileAttr, FileCtx).
 
@@ -518,12 +543,12 @@ import_dirs_only(Job = #space_strategy_job{}, FileAttr, FileCtx) ->
 -spec count_batch_hash(non_neg_integer(), non_neg_integer(),
     space_strategy:job_data(), storage_file_ctx:ctx(), boolean()) ->
     {binary(), [storage_file_ctx:ctx()], space_strategy:job_data()}.
-count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx, SyncAcl) ->
-    BatchKey = Offset div BatchSize,
+count_batch_hash(ScanToken, BatchSize, Data0, StorageFileCtx, SyncAcl) ->
+    BatchKey = simple_scan:batch_key(ScanToken, BatchSize),
     {ChildrenStorageCtxsBatch1, Data1} =
         case storage_sync_utils:take_children_storage_ctxs_for_batch(BatchKey, Data0) of
             {undefined, _} ->
-                get_children_ctxs_batch(Offset, BatchSize, Data0, StorageFileCtx);
+                get_children_ctxs_batch(ScanToken, BatchSize, Data0, StorageFileCtx);
             {ChildrenStorageCtxsBatch0, Data2} ->
                 {ChildrenStorageCtxsBatch0, Data2}
         end,
@@ -543,8 +568,7 @@ count_batch_hash(Offset, BatchSize, Data0, StorageFileCtx, SyncAcl) ->
     {[storage_file_ctx:ctx()], space_strategy:job_data()}.
 get_children_ctxs_batch(Offset, BatchSize, Data0, StorageFileCtx) ->
     {ChildrenStorageCtxsBatch0, _} =
-        storage_file_ctx:get_children_ctxs_batch(
-            StorageFileCtx, Offset, BatchSize),
+        storage_file_ctx:get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize),
     {ChildrenStorageCtxsBatch0, Data0}.
 
 

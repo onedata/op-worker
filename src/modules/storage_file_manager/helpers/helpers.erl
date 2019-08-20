@@ -45,8 +45,8 @@
 -type helper_handle() :: #helper_handle{}.
 -type file_handle() :: #file_handle{}.
 
--export_type([file_id/0, open_flag/0, file_type_flag/0, helper/0, helper_handle/0, file_handle/0]).
-
+-export_type([file_id/0, open_flag/0, file_type_flag/0, helper/0, helper_handle/0, file_handle/0,
+    marker/0]).
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
     list_to_atom(atom_to_list(Param) ++ "_time"))).

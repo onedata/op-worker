@@ -53,7 +53,7 @@ mtime_has_changed(#document{
 %% synchronization.
 %% @end
 %%-------------------------------------------------------------------
--spec children_attrs_hash_has_changed(storage_sync_info:doc() | undefined, hash(), non_neg_integer()) ->
+-spec children_attrs_hash_has_changed(storage_sync_info:doc() | undefined, hash(), binary()) ->
     boolean().
 children_attrs_hash_has_changed(undefined, _CurrentChildrenAttrsHash, _Key) ->
     true;
@@ -136,7 +136,7 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
             %% don't count hash for directory as it will be scanned anyway
             {<<"">>, StorageFileCtx3};
         ?REGULAR_FILE_TYPE ->
-            FileId = storage_file_ctx:get_file_id_const(StorageFileCtx2),
+            FileId = storage_file_ctx:get_file_name_const(StorageFileCtx2),
             {hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
 

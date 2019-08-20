@@ -18,7 +18,7 @@
 
 %% API
 -export([new/2, new/4]).
--export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, get_luma_config_map/1]).
+-export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, get_luma_config_map/1, get_helper/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
 -export([supports_any_space/1]).
@@ -175,6 +175,16 @@ is_readonly(#storage{readonly = ReadOnly}) ->
     ReadOnly;
 is_readonly(#document{value = #storage{} = Value}) ->
     is_readonly(Value).
+
+
+-spec get_helper(record() | doc() | id()) -> helper().
+get_helper(#storage{helpers = [Helper | _]}) ->
+    Helper;
+get_helper(#document{value = #storage{} = Value}) ->
+    get_helper(Value);
+get_helper(StorageId) ->
+    {ok, StorageDoc} = ?MODULE:get(StorageId),
+    get_helper(StorageDoc).
 
 
 %%--------------------------------------------------------------------

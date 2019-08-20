@@ -69,7 +69,8 @@ chown_file(FileCtx) ->
     }}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     % TODO VFS-3868 implement chown in s3/ceph and remove this catch
-    (catch storage_file_manager:chown(SFMHandle, OwnerUserId, GroupOwnerId, SpaceId)),
+    {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, OwnerUserId, GroupOwnerId, SpaceId),
+    (catch storage_file_manager:chown(SFMHandle, Uid, Gid)),
     FileCtx3.
 
 %%--------------------------------------------------------------------

@@ -13,20 +13,24 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -record(storage_file_ctx, {
-    id :: helpers:file_id(),
-    canonical_path :: helpers:file_id(),
+    name :: helpers:file_id(),
+    storage_file_id :: helpers:file_id(),
+    canonical_path :: file_meta:name(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     handle = undefined :: undefined | storage_file_manager:handle(),
     stat = undefined :: undefined | #statbuf{},
     stat_timestamp :: undefined | non_neg_integer(),
-    xattr = undefined :: undefined | binary()
+    xattr = undefined :: undefined | binary(),
+    sync_mode :: space_strategy:sync_mode(),
+    mounted_in_root :: boolean()
 }).
 
 -type ctx() :: #storage_file_ctx{}.
@@ -34,10 +38,10 @@
 -export_type([ctx/0]).
 
 %% API
--export([new/3, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
--export([get_stat_buf/1, get_handle/1, get_file_id_const/1,
+-export([new/4, get_child_ctx/2, get_children_ctxs_batch/3, reset/1]).
+-export([get_stat_buf/1, get_handle/1, get_file_name_const/1,
     get_storage_doc/1, get_nfs4_acl/1, get_space_id_const/1,
-    get_stat_timestamp_const/1]).
+    get_stat_timestamp_const/1, get_canonical_path_const/1, get_storage_file_id_const/1, get_parent_ctx_const/1]).
 
 
 %%-------------------------------------------------------------------
@@ -45,14 +49,19 @@
 %% Returns initialized #storage_file_ctx{}.
 %% @end
 %%-------------------------------------------------------------------
--spec new(file_meta:name(), od_space:id(), storage:id()) -> ctx().
-new(CanonicalPath, SpaceId, StorageId) ->
+-spec new(file_meta:name(), od_space:id(), storage:id(), space_strategy:sync_mode()) -> ctx().
+new(CanonicalPath, SpaceId, StorageId, SyncMode) ->
     FileName = filename:basename(CanonicalPath),
+    MiRStorages = space_storage:get_mounted_in_root(SpaceId),
+    StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, CanonicalPath),
     Ctx = #storage_file_ctx{
-        id = FileName,
+        name = FileName,
+        storage_file_id = StorageFileId,
         canonical_path = CanonicalPath,
         space_id = SpaceId,
-        storage_id = StorageId
+        storage_id = StorageId,
+        sync_mode = SyncMode,
+        mounted_in_root = lists:member(StorageId, MiRStorages)
     },
     set_sfm_handle(Ctx).
 
@@ -73,9 +82,13 @@ reset(Ctx = #storage_file_ctx{}) ->
 %% Returns file id from storage_file_ctx.
 %% @end
 %%-------------------------------------------------------------------
--spec get_file_id_const(ctx()) -> helpers:file_id().
-get_file_id_const(#storage_file_ctx{id = FileId}) ->
-    FileId.
+-spec get_file_name_const(ctx()) -> helpers:file_id().
+get_file_name_const(#storage_file_ctx{name = FileName}) ->
+    FileName.
+
+-spec get_storage_file_id_const(ctx()) -> helpers:file_id().
+get_storage_file_id_const(#storage_file_ctx{storage_file_id = StorageFileId}) ->
+    StorageFileId.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -84,8 +97,8 @@ get_file_id_const(#storage_file_ctx{id = FileId}) ->
 %%-------------------------------------------------------------------
 -spec get_children_ctxs_batch(ctx(), non_neg_integer(),
     non_neg_integer()) -> {ChildrenCtxs :: [ctx()], NewParentCtx :: ctx()}.
-get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
-    {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
+get_children_ctxs_batch(StorageFileCtx = #storage_file_ctx{sync_mode = ?STORAGE_SYNC_POSIX_MODE}, Offset, BatchSize) ->
+    {SFMHandle, StorageFileCtx2} = get_handle(StorageFileCtx),
     case storage_file_manager:readdir(SFMHandle, Offset, BatchSize) of
         {error, ?ENOENT} ->
             {[], StorageFileCtx2};
@@ -94,8 +107,32 @@ get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
         {ok, ChildrenIds} ->
             lists:foldr(fun(ChildId, {ChildrenCtxs, ParentCtx0}) ->
                 BaseName = filename:basename(ChildId),
-                {ChildCtx, ParentCtx} = storage_file_ctx:get_child_ctx(ParentCtx0, BaseName),
+                {ChildCtx, ParentCtx} = get_child_ctx(ParentCtx0, BaseName),
                 {[ChildCtx | ChildrenCtxs], ParentCtx}
+            end, {[], StorageFileCtx2}, ChildrenIds)
+    end;
+get_children_ctxs_batch(StorageFileCtx = #storage_file_ctx{
+    sync_mode = ?STORAGE_SYNC_OBJECT_MODE,
+    space_id = SpaceId,
+    storage_id = StorageId,
+    mounted_in_root = MiR
+}, Marker, BatchSize) ->
+    {SFMHandle, StorageFileCtx2} = get_handle(StorageFileCtx),
+    case storage_file_manager:listobjects(SFMHandle, Marker, 0, BatchSize) of
+        {error, ?ENOENT} ->
+            {[], StorageFileCtx2};
+        {error, ?EACCES} ->
+            {[], StorageFileCtx2};
+        {ok, ChildrenIds} ->
+            lists:foldr(fun(ChildId, {ChildrenCtxs, ParentCtx0}) ->
+                CanonicalPath = case MiR of
+                    true ->
+                        filename:join([<<"/">>, SpaceId, ChildId]);
+                    false ->
+                        filename:join([<<"/">>, ChildId])
+                end,
+                ChildCtx = new(CanonicalPath, SpaceId, StorageId, ?STORAGE_SYNC_OBJECT_MODE),
+                {[ChildCtx | ChildrenCtxs], ParentCtx0}
             end, {[], StorageFileCtx2}, ChildrenIds)
     end.
 
@@ -108,16 +145,53 @@ get_children_ctxs_batch(StorageFileCtx, Offset, BatchSize) ->
 get_child_ctx(ParentCtx = #storage_file_ctx{handle = undefined}, ChildName) ->
     get_child_ctx(set_sfm_handle(ParentCtx), ChildName);
 get_child_ctx(ParentCtx = #storage_file_ctx{
+    space_id = SpaceId,
+    storage_id = StorageId,
     canonical_path = ParentCanonicalPath,
-    handle = ParentHandle
+    handle = ParentHandle,
+    sync_mode = SyncMode,
+    mounted_in_root = MountedInRoot
 }, ChildName) ->
-    ChildCtx = ParentCtx#storage_file_ctx{
-        id = ChildName,
-        canonical_path = filename:join([ParentCanonicalPath, ChildName]),
+    ChildCanonicalPath = filename:join([ParentCanonicalPath, ChildName]),
+    ChildCtx = #storage_file_ctx{
+        name = ChildName,
+        storage_file_id = filename_mapping:to_storage_path(SpaceId, StorageId, ChildCanonicalPath),
+        canonical_path = ChildCanonicalPath,
+        space_id = SpaceId,
+        storage_id = StorageId,
+        handle = storage_file_manager:get_child_handle(ParentHandle, ChildName),
         stat = undefined,
-        handle = storage_file_manager:get_child_handle(ParentHandle, ChildName)
+        stat_timestamp = undefined,
+        xattr = undefined,
+        sync_mode = SyncMode,
+        mounted_in_root = MountedInRoot
     },
     {ChildCtx, ParentCtx}.
+
+-spec get_parent_ctx_const(ctx()) -> ParentCtx :: ctx().
+get_parent_ctx_const(#storage_file_ctx{
+    storage_file_id = ChildStorageFileId,
+    canonical_path = ChildCanonicalPath,
+    space_id = SpaceId,
+    storage_id = StorageId,
+    sync_mode = SyncMode,
+    mounted_in_root = MountedInRoot
+}) ->
+    {_, ParentCanonicalPath} = fslogic_path:basename_and_parent(ChildCanonicalPath),
+    {_, ParentStorageFileId} = fslogic_path:basename_and_parent(ChildStorageFileId),
+    {ParentName, _} = fslogic_path:basename_and_parent(ParentStorageFileId),
+    #storage_file_ctx{
+        name = ParentName,
+        storage_file_id = ParentStorageFileId,
+        canonical_path = ParentCanonicalPath,
+        space_id = SpaceId,
+        storage_id = StorageId,
+        stat = undefined,
+        stat_timestamp = undefined,
+        xattr = undefined,
+        sync_mode = SyncMode,
+        mounted_in_root = MountedInRoot
+    }.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -175,7 +249,7 @@ get_storage_doc(StorageFileCtx = #storage_file_ctx{handle = undefined}) ->
 get_storage_doc(StorageFileCtx = #storage_file_ctx{
     handle = #sfm_handle{
         storage = StorageDoc = #document{}
-}}) ->
+    }}) ->
     {StorageDoc, StorageFileCtx}.
 
 
@@ -188,6 +262,10 @@ get_storage_doc(StorageFileCtx = #storage_file_ctx{
 -spec get_space_id_const(ctx()) -> od_space:id().
 get_space_id_const(#storage_file_ctx{space_id = SpaceId}) ->
     SpaceId.
+
+-spec get_canonical_path_const(ctx()) -> od_space:id().
+get_canonical_path_const(#storage_file_ctx{canonical_path = CanonicalPath}) ->
+    CanonicalPath.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -223,7 +301,9 @@ get_xattr(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}, XattrName) ->
         {error, ?ENOENT} ->
             throw(?ENOENT);
         {error, ?ENODATA} ->
-            throw(?ENODATA)
+            throw(?ENODATA);
+        {error, 'Function not implemented'} ->
+            throw(?ENOTSUP)
     end.
 
 %%%===================================================================

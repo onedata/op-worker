@@ -18,9 +18,8 @@
 
 -define(FILES_IMPORT_TIMEOUT, timer:hours(24)).
 
--define(DIR_BATCH,
-    begin
-        {ok, __Batch} = application:get_env(?APP_NAME, dir_batch_size),
-        __Batch
-    end
-).
+-define(DIR_BATCH, application:get_env(?APP_NAME, storage_sync_dir_batch_size, 100)).
+-define(OBJECT_DIR_BATCH, application:get_env(?APP_NAME, storage_sync_object_dir_batch_size, 1000)).
+
+-define(STORAGE_SYNC_POSIX_MODE, storage_sync_posix_mode).
+-define(STORAGE_SYNC_OBJECT_MODE, storage_sync_object_mode).

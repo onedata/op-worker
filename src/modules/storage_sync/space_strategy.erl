@@ -13,6 +13,7 @@
 -author("Rafal Slota").
 
 -include("modules/storage_sync/strategy_config.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
 -include("global_definitions.hrl").
 
 
@@ -39,6 +40,7 @@
 
 -type job_merge_type()  :: return_none | return_first | merge_all.
 -type runnable()        :: {job_merge_type(), [job()]}.
+-type sync_mode()       :: ?STORAGE_SYNC_POSIX_MODE | ?STORAGE_SYNC_OBJECT_MODE.
 
 %%%===================================================================
 %%% Exports
@@ -49,6 +51,7 @@
     argument_type/0, argument_value/0, timestamp/0]).
 -export_type([job/0, arguments/0, job_result/0, job_data/0, config/0, type/0]).
 -export_type([job_merge_type/0, runnable/0]).
+-export_type([sync_mode/0]).
 
 %% API
 -export([types/0, default_worker_pool_config/0, default_main_worker_pool/0,

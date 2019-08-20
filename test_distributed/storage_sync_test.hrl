@@ -16,8 +16,8 @@
 
 -define(ATTEMPTS, 30).
 
--define(STORAGE(Config, Mnt),
-    atom_to_binary(?config(host_path, ?config(Mnt, ?config(posix, ?config(storages, Config)))), latin1)).
+-define(SYNCED_STORAGE, todo).
+-define(RDWR_STORAGE, todo).
 
 %% defaults
 -define(SCAN_INTERVAL, 10).
@@ -34,6 +34,7 @@
 -define(SPACE_ID, <<"space1">>).
 -define(SPACE_NAME, <<"space_name1">>).
 -define(SPACE_PATH, <<"/", (?SPACE_NAME)/binary>>).
+-define(SPACE_CANONICAL_PATH, <<"/", (?SPACE_ID)/binary>>).
 -define(TEST_DIR, <<"test_dir">>).
 -define(TEST_DIR2, <<"test_dir2">>).
 -define(TEST_FILE1, <<"test_file">>).
@@ -54,9 +55,13 @@
 -define(SPACE_TEST_FILE_IN_DIR_PATH3, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE3])).
 -define(SPACE_INIT_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?INIT_FILE])).
 -define(TEST_DATA, <<"test_data">>).
+-define(TEST_DATA_SIZE, byte_size(?TEST_DATA)).
+-define(CHANGED_BYTE, <<"-">>).
+-define(CHANGED_BYTE_OFFSET, 4).
 -define(TEST_DATA_ONE_BYTE_CHANGED, <<"test-data">>).
 -define(TEST_DATA_CHANGED, <<"test_modified_file">>).
 -define(TEST_DATA2, <<"test_data2">>).
+-define(TEST_DATA_SIZE2, byte_size(?TEST_DATA2)).
 
 -define(TEST_UID, 1000).
 -define(TEST_GID, 1000).
@@ -79,14 +84,12 @@
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId),
     ?assertMonitoring(Worker, ExpectedSSM, SpaceId, 1)).
 
--define(assertHashChangedFun(StorageFilePath, MountPoint, SpaceId, ExpectedResult0),
+-define(assertHashChangedFun(StorageFileId, SpaceId, ExpectedResult0),
     fun
         ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, Result})
             when Result =:= ExpectedResult0
         ->
-            __StorageFileId = storage_sync_test_base:to_storage_file_id(
-                StorageFilePath, MountPoint),
-            Id = storage_sync_info:id(__StorageFileId, SpaceId),
+            Id = storage_sync_info:id(StorageFileId, SpaceId),
             case hd(Args) of
                 #document{key = Id} -> 1;
                 _ -> 0
@@ -96,14 +99,12 @@
     end
 ).
 
--define(assertMtimeChangedFun(StorageFilePath, MountPoint, SpaceId, ExpectedResult0),
+-define(assertMtimeChangedFun(StorageFileId, SpaceId, ExpectedResult0),
     fun
         ({_, {storage_sync_changes, mtime_has_changed, Args}, Result})
             when Result =:= ExpectedResult0
         ->
-            __StorageFileId = storage_sync_test_base:to_storage_file_id(
-                StorageFilePath, MountPoint),
-            Id = storage_sync_info:id(__StorageFileId, SpaceId),
+            Id = storage_sync_info:id(StorageFileId, SpaceId),
             case hd(Args) of
                 #document{key = Id} -> 1;
                 _ -> 0

@@ -243,7 +243,6 @@ shift_size(#time_slot_histogram{
     time_window = TimeWindow
 }, CurrentTimestamp) ->
     max(0, (CurrentTimestamp - StartTime) div TimeWindow - (LastUpdate - StartTime) div TimeWindow).
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc

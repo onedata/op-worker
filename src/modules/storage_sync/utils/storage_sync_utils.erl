@@ -26,7 +26,7 @@
 %% Takes list of storage_file_ctxs for given batch from job Data.
 %% @end
 %%-------------------------------------------------------------------
--spec take_children_storage_ctxs_for_batch(non_neg_integer(),
+-spec take_children_storage_ctxs_for_batch(binary(),
     space_strategy:job_data()) -> {undefined | [storage_file_ctx:ctx()], space_strategy:job_data()}.
 take_children_storage_ctxs_for_batch(BatchKey, Data) ->
     recursive_take([children_storage_file_ctxs, BatchKey], Data).
@@ -36,7 +36,7 @@ take_children_storage_ctxs_for_batch(BatchKey, Data) ->
 %% Takes hash of file attributes for given batch from job Data.
 %% @end
 %%-------------------------------------------------------------------
--spec take_hash_for_batch(non_neg_integer(), space_strategy:job_data()) ->
+-spec take_hash_for_batch(binary(), space_strategy:job_data()) ->
     {binary() | undefined, space_strategy:job_data()}.
 take_hash_for_batch(BatchKey, Data) ->
     recursive_take([hashes_map, BatchKey], Data).

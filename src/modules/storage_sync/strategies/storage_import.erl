@@ -95,14 +95,22 @@ strategy_init_jobs(simple_scan, Args = #{
         space_id := SpaceId,
         storage_id := StorageId
 }) ->
-    CurrentTimestamp = time_utils:cluster_time_seconds(),
-    {ok, _} = storage_sync_monitoring:prepare_new_import_scan(SpaceId, StorageId, CurrentTimestamp),
-    ?debug("Starting storage_import for space: ~p and storage: ~p", [SpaceId, StorageId]),
-    [#space_strategy_job{
-        strategy_name = simple_scan,
-        strategy_args = Args,
-        data = Data#{max_depth => MaxDepth}
-    }];
+    case storage_sync:is_syncable(StorageId) of
+        {true, SyncMode} ->
+            CurrentTimestamp = time_utils:cluster_time_seconds(),
+            {ok, _} = storage_sync_monitoring:prepare_new_import_scan(SpaceId, StorageId, CurrentTimestamp),
+            ?debug("Starting storage_import for space: ~p and storage: ~p", [SpaceId, StorageId]),
+            [#space_strategy_job{
+                strategy_name = simple_scan,
+                strategy_args = Args,
+                data = Data#{
+                    max_depth => MaxDepth,
+                    sync_mode => SyncMode
+                }
+            }];
+        false ->
+            ?error("Storage ~p cannot be synced in current configuration.", [StorageId])
+    end;
 strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StrategyArgs, InitData}]).
 
@@ -192,7 +200,8 @@ start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, ParentCtx, FileName
         space_id => SpaceId,
         storage_id => StorageId,
         file_name => FileName,
-        parent_ctx => ParentCtx
+        parent_ctx => ParentCtx,
+        mounted_in_root => lists:member(StorageId, space_storage:get_mounted_in_root(SpaceId))
     },
     ImportInit = space_sync_worker:init(?MODULE, SpaceId, StorageId, InitialImportJobData),
     space_sync_worker:run(ImportInit).

@@ -136,7 +136,7 @@ get_record_struct(2) ->
     ]};
 get_record_struct(3) ->
     {record, [
-        {children_attrs_hash, #{integer => binary}},
+        {children_attrs_hash, #{binary => binary}},
         {mtime, integer},
         {last_stat, integer}
     ]}.

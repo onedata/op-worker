@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage_sync/storage_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -20,8 +21,8 @@
     start_simple_scan_import/4, stop_storage_import/1,
     modify_storage_import/3, modify_storage_import/4,
     start_simple_scan_update/7, stop_storage_update/1,
-    modify_storage_update/4, modify_storage_update/3
-]).
+    modify_storage_update/4, modify_storage_update/3,
+    is_syncable/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -99,8 +100,21 @@ modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
         {StrategyName, no_import} when StrategyName =/= no_update ->
             {error, import_disabled};
         _ ->
-            space_strategies:set_strategy(SpaceId, StorageId, storage_update,
-                StrategyName, Args)
+            case maps:get(delete_enable, Args, undefined) of
+                true ->
+                    Helper = storage:get_helper(StorageId),
+                    HelperName = helper:get_name(Helper),
+                    case HelperName =:= ?S3_HELPER_NAME of
+                        true ->
+                            {error, 'Detecting deletions not implemented on s3'};
+                        false ->
+                            space_strategies:set_strategy(SpaceId, StorageId, storage_update,
+                                StrategyName, Args)
+                    end;
+                _ ->
+                    space_strategies:set_strategy(SpaceId, StorageId, storage_update,
+                        StrategyName, Args)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -131,6 +145,33 @@ start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
     {ok, datastore:key()} | {error, term()}.
 stop_storage_update(SpaceId) ->
     modify_storage_update(SpaceId, no_update, #{}).
+
+-spec is_syncable(storage:doc() | storage:id()) -> {true, space_strategy:sync_mode()} | false.
+is_syncable(StorageDoc = #document{value = #storage{}}) ->
+    Helper = storage:get_helper(StorageDoc),
+    HelperName = helper:get_name(Helper),
+    StoragePathType = helper:get_storage_path_type(Helper),
+    case lists:member(HelperName, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?WEBDAV_HELPER_NAME]) of
+        true ->
+            {true, ?STORAGE_SYNC_POSIX_MODE};
+        false when HelperName =:= ?S3_HELPER_NAME andalso StoragePathType =:= ?CANONICAL_STORAGE_PATH ->
+            Args = helper:get_args(Helper),
+            case maps:get(<<"blockSize">>, Args, undefined) of
+                <<"0">> ->
+                    {true, ?STORAGE_SYNC_OBJECT_MODE};
+                _ ->
+                    false
+            end;
+        false ->
+            false
+    end;
+is_syncable(StorageId) when is_binary(StorageId) ->
+    case storage:get(StorageId) of
+        {ok, StorageDoc} ->
+            is_syncable(StorageDoc);
+        _ ->
+            false
+    end.
 
 %%%===================================================================
 %%% Internal functions

@@ -244,7 +244,7 @@
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
-    file_size :: undefined | non_neg_integer(),
+    file_size = 0 :: non_neg_integer(),
     share_id :: undefined | od_share:id()
 }).
 

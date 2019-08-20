@@ -28,7 +28,8 @@
                     "name": "synced_storage",
                     "bucket": "onedata",
                     "block_size": "0",
-                    "storage_path_type": "canonical"
+                    "storage_path_type": "canonical",
+                    "readonly": true
                 }
 
             ],
@@ -143,7 +144,8 @@
                         "storage": "/mnt/st1"
                     },
                     "p2": {
-                        "storage": "synced_storage"
+                        "storage": "synced_storage",
+                        "mounted_in_root": "true"
                     }
                 }
             }

@@ -752,6 +752,12 @@ static ERL_NIF_TERM sh_refresh_params(
     return wrap(refresh_params, env, argv);
 }
 
+static ERL_NIF_TERM sh_listobjects(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(listobjects, env, argv);
+}
+
 static ERL_NIF_TERM sh_readdir(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -899,7 +905,8 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"refresh_params", 2, sh_refresh_params},
     {"refresh_helper_params", 2, sh_refresh_helper_params},
     {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
-    {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
+    {"readdir", 4, sh_readdir}, {"listobjects", 5, sh_listobjects},
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
     {"unlink", 3, sh_unlink}, {"rmdir", 2, sh_rmdir},
     {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
     {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
