@@ -144,41 +144,39 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
             }
         },
 
-        ParentScope = ParentDoc#document.scope,
-        TreeIds = case ParentScope of
-            <<>> ->
-                % If file is not synchronized (e.g. user root dir)
-                % checks only local tree
-                oneprovider:get_id();
-            SpaceScope ->
-                {ok, Ids} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceScope),
-                Ids
-        end,
+        LocalTreeId = oneprovider:get_id(),
+        Ctx = ?CTX#{scope => ParentDoc#document.scope},
 
-        Ctx = ?CTX#{scope => ParentScope},
-        FileDoesNotExists = case datastore_model:get_links(
-            Ctx, ParentUuid, TreeIds, FileName
-        ) of
+        FileExists = case datastore_model:get_links(Ctx, ParentUuid, all, FileName) of
             {ok, Links} ->
-                lists:all(fun(#link{target = TargetUuid}) ->
-                    case datastore_model:get(Ctx#{include_deleted => true}, TargetUuid) of
+                lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
+                    Deleted = case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
                         {ok, #document{deleted = true}} ->
                             true;
                         {ok, #document{value = #file_meta{deleted = true}}} ->
                             true;
                         _ ->
                             false
+                    end,
+                    case {Deleted, TreeId} of
+                        {true, LocalTreeId} ->
+                            datastore_model:delete_links(
+                                Ctx, ParentUuid,
+                                LocalTreeId, FileName
+                            ),
+                            false;
+                        _ ->
+                            not Deleted
                     end
                 end, Links);
             {error, not_found} ->
-                true;
+                false;
             {error, _} = Err ->
                 Err
         end,
 
-        case FileDoesNotExists of
-            true ->
-                LocalTreeId = oneprovider:get_id(),
+        case FileExists of
+            false ->
                 Link = {FileName, FileUuid},
                 case datastore_model:add_links(Ctx, ParentUuid, LocalTreeId, Link) of
                     {ok, #link{}} ->
@@ -186,35 +184,12 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
                             {ok, FileUuid} -> {ok, FileUuid};
                             Error -> Error
                         end;
-                    {error, already_exists} = Eexists ->
-                        case datastore_model:get_links(Ctx, ParentUuid, LocalTreeId, FileName) of
-                            {ok, [#link{target = OldUuid}]} ->
-                                Deleted = case datastore_model:get(
-                                    Ctx#{include_deleted => true}, OldUuid) of
-                                    {ok, #document{deleted = true}} ->
-                                        true;
-                                    {ok, #document{value = #file_meta{deleted = true}}} ->
-                                        true;
-                                    _ ->
-                                        false
-                                end,
-                                case Deleted of
-                                    true ->
-                                        datastore_model:delete_links(
-                                            Ctx, ParentUuid,
-                                            LocalTreeId, FileName
-                                        ),
-                                        create({uuid, ParentUuid}, FileDoc);
-                                    _ ->
-                                        Eexists
-                                end;
-                            _ ->
-                                Eexists
-                        end;
+                    {error, already_exists} ->
+                        create({uuid, ParentUuid}, FileDoc);
                     {error, Reason} ->
                         {error, Reason}
                 end;
-            false ->
+            true ->
                 {error, already_exists};
             Error ->
                 Error
