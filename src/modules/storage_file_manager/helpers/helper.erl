@@ -160,10 +160,10 @@ get_admin_ctx(#helper{admin_ctx = Ctx}) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns part of admin context without sensitive information
-%% (passwords, acces codes).
+%% (passwords, access codes).
 %% @end
 %%--------------------------------------------------------------------
--spec get_admin_ctx(helpers:helper()) -> user_ctx().
+-spec get_redacted_admin_ctx(helpers:helper()) -> user_ctx().
 get_redacted_admin_ctx(Helper) ->
     maps:with([<<"username">>, <<"accessKey">>, <<"credentialsType">>],
         get_admin_ctx(Helper)).
