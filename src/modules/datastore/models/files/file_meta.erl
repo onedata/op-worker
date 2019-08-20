@@ -143,40 +143,81 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
                 parent_uuid = ParentUuid
             }
         },
-        TreeId = oneprovider:get_id(),
-        Ctx = ?CTX#{scope => ParentDoc#document.scope},
-        Link = {FileName, FileUuid},
-        case datastore_model:add_links(Ctx, ParentUuid, TreeId, Link) of
-            {ok, #link{}} ->
-                case file_meta:save(FileDoc3) of
-                    {ok, FileUuid} -> {ok, FileUuid};
-                    Error -> Error
-                end;
-            {error, already_exists} = Eexists ->
-                case datastore_model:get_links(Ctx, ParentUuid, TreeId, FileName) of
-                    {ok, [#link{target = OldUuid}]} ->
-                        Deleted = case datastore_model:get(
-                            Ctx#{include_deleted => true}, OldUuid) of
-                            {ok, #document{deleted = true}} ->
-                                true;
-                            {ok, #document{value = #file_meta{deleted = true}}} ->
-                                true;
-                            _ ->
-                                false
-                        end,
-                        case Deleted of
-                            true ->
-                                datastore_model:delete_links(Ctx, ParentUuid,
-                                    TreeId, FileName),
-                                create({uuid, ParentUuid}, FileDoc);
+
+        ParentScope = ParentDoc#document.scope,
+        TreeIds = case ParentScope of
+            <<>> ->
+                % If file is not synchronized (e.g. user root dir)
+                % checks only local tree
+                oneprovider:get_id();
+            SpaceScope ->
+                {ok, Ids} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceScope),
+                Ids
+        end,
+
+        Ctx = ?CTX#{scope => ParentScope},
+        FileDoesNotExists = case datastore_model:get_links(
+            Ctx, ParentUuid, TreeIds, FileName
+        ) of
+            {ok, Links} ->
+                lists:all(fun(#link{target = TargetUuid}) ->
+                    case datastore_model:get(Ctx#{include_deleted => true}, TargetUuid) of
+                        {ok, #document{deleted = true}} ->
+                            true;
+                        {ok, #document{value = #file_meta{deleted = true}}} ->
+                            true;
+                        _ ->
+                            false
+                    end
+                end, Links);
+            {error, not_found} ->
+                true;
+            {error, _} = Err ->
+                Err
+        end,
+
+        case FileDoesNotExists of
+            true ->
+                LocalTreeId = oneprovider:get_id(),
+                Link = {FileName, FileUuid},
+                case datastore_model:add_links(Ctx, ParentUuid, LocalTreeId, Link) of
+                    {ok, #link{}} ->
+                        case file_meta:save(FileDoc3) of
+                            {ok, FileUuid} -> {ok, FileUuid};
+                            Error -> Error
+                        end;
+                    {error, already_exists} = Eexists ->
+                        case datastore_model:get_links(Ctx, ParentUuid, LocalTreeId, FileName) of
+                            {ok, [#link{target = OldUuid}]} ->
+                                Deleted = case datastore_model:get(
+                                    Ctx#{include_deleted => true}, OldUuid) of
+                                    {ok, #document{deleted = true}} ->
+                                        true;
+                                    {ok, #document{value = #file_meta{deleted = true}}} ->
+                                        true;
+                                    _ ->
+                                        false
+                                end,
+                                case Deleted of
+                                    true ->
+                                        datastore_model:delete_links(
+                                            Ctx, ParentUuid,
+                                            LocalTreeId, FileName
+                                        ),
+                                        create({uuid, ParentUuid}, FileDoc);
+                                    _ ->
+                                        Eexists
+                                end;
                             _ ->
                                 Eexists
                         end;
-                    _ ->
-                        Eexists
+                    {error, Reason} ->
+                        {error, Reason}
                 end;
-            {error, Reason} ->
-                {error, Reason}
+            false ->
+                {error, already_exists};
+            Error ->
+                Error
         end
     end).
 
