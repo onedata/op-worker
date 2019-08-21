@@ -118,7 +118,7 @@ enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
 %%
 %% Schedules safe file_replica_deletion via replica_deletion mechanism.
-%% If SupportingProviderId is undefined, it will bo chosen from
+%% If SupportingProviderId is undefined, it will be chosen from
 %% providers who have given file replicated.
 %% @end
 %%--------------------------------------------------------------------

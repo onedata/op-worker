@@ -244,7 +244,6 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
     FulfillmentStatus = qos_status:check_fulfilment(QosId, file_ctx:get_guid_const(FileCtx)),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #qos_fulfillment{
-        qos_id = QosId,
         fulfilled = FulfillmentStatus
     }}.
 

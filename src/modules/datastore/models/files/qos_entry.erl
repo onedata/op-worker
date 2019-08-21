@@ -41,6 +41,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type status() :: ?QOS_IN_PROGRESS_STATUS | ?QOS_TRAVERSE_FINISHED_STATUS | ?QOS_IMPOSSIBLE_STATUS.
 -type replicas_num() :: pos_integer().
+-type one_or_many(Type) :: Type | [Type].
 
 -export_type([id/0, status/0, replicas_num/0]).
 
@@ -98,8 +99,8 @@ delete(QosId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    {datastore:link_name(), datastore:link_target()}) ->
-    {ok, datastore:link()} | {error, term()}.
+    one_or_many({datastore:link_name(), datastore:link_target()})) ->
+    one_or_many({ok, datastore:link()} | {error, term()}).
 add_links(Scope, Key, TreeId, Links) ->
     datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
@@ -109,8 +110,8 @@ add_links(Scope, Key, TreeId, Links) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    datastore:link_name() | {datastore:link_name(), datastore:link_rev()}) ->
-    ok | {error, term()}.
+    one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
+    one_or_many(ok | {error, term()}).
 delete_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
@@ -141,7 +142,7 @@ set_status(QosId, Status) ->
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok | {error, term()}.
 add_impossible_qos(QosId, Scope) ->
-    update(QosId, fun(QosItem) ->
+    {ok, _} = update(QosId, fun(QosItem) ->
         {ok, QosItem#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
     end),
     {ok, _} = add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}),

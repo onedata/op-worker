@@ -36,7 +36,7 @@
 
 %% higher-level functions operating on file_qos record.
 -export([get_effective/1, remove_qos_id/2,
-    add_qos/4, check_qos_protected/2
+    add_qos/4, check_file_protected/2
 ]).
 
 %% datastore_model callbacks
@@ -135,7 +135,7 @@ get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
     CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], []) of
         {ok, EffQos, _} -> EffQos;
-        _ -> undefined
+        _ -> undefined % documents are not synchronized yet
     end;
 get_effective(FileUuid) ->
     case file_meta:get(FileUuid) of
@@ -205,8 +205,8 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_protected(file_meta:uuid(), storage:id()) -> boolean().
-check_qos_protected(FileUuid, StorageId) ->
+-spec check_file_protected(file_meta:uuid(), storage:id()) -> boolean().
+check_file_protected(FileUuid, StorageId) ->
     QosStorages = case file_qos:get_effective(FileUuid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS
