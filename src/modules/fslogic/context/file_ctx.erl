@@ -487,41 +487,47 @@ get_storage_file_id(FileCtx) ->
 -spec get_storage_file_id(ctx(), boolean()) ->
     {StorageFileId :: helpers:file_id() | undefined, ctx()}.
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
-    case get_local_file_location_doc(FileCtx0, false) of
-        {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
-            when ID =/= undefined, SFC or Generate ->
-            {ID, FileCtx};
-        {_, FileCtx} ->
-            % Check if id should be generated
-            {Continue, FileCtx2} = case Generate of
-                true -> {true, FileCtx};
-                _ -> is_dir(FileCtx)
-            end,
-            case Continue of
-                true ->
-                    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx2),
-                    #document{value = #storage{helpers
-                    = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
-                    case StoragePathType of
-                        ?FLAT_STORAGE_PATH ->
-                            FileId = get_flat_path_const(FileCtx2),
-                            % TODO - do not get_canonical_path (fix acceptance tests before)
-                            {_, FileCtx3} = get_canonical_path(FileCtx2),
-                            {FileId, FileCtx3#file_ctx{storage_file_id = FileId}};
-                        ?CANONICAL_STORAGE_PATH ->
-                            {FileIdTokens, FileCtx3} = get_canonical_path_tokens(FileCtx2),
-                            {MiR, FileCtx4} = get_mounted_in_root(FileCtx3),
-                            FileId = case {MiR, FileIdTokens} of
-                                         {true, [Root, _SpaceID | Path]} ->
-                                             filename:join([Root | Path]);
-                                         _ ->
-                                             filename:join(FileIdTokens)
-                                     end,
+    case is_root_dir_const(FileCtx0) of
+        true ->
+            StorageFileId = ?DIRECTORY_SEPARATOR_BINARY,
+            {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
+        false ->
+            case get_local_file_location_doc(FileCtx0, false) of
+                {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
+                    when ID =/= undefined, SFC or Generate ->
+                    {ID, FileCtx};
+                {_, FileCtx} ->
+                    % Check if id should be generated
+                    {Continue, FileCtx2} = case Generate of
+                        true -> {true, FileCtx};
+                        _ -> is_dir(FileCtx)
+                    end,
+                    case Continue of
+                        true ->
+                            {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx2),
+                            #document{value = #storage{helpers
+                            = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
+                            case StoragePathType of
+                                ?FLAT_STORAGE_PATH ->
+                                    FileId = get_flat_path_const(FileCtx2),
+                                    % TODO - do not get_canonical_path (fix acceptance tests before)
+                                    {_, FileCtx3} = get_canonical_path(FileCtx2),
+                                    {FileId, FileCtx3#file_ctx{storage_file_id = FileId}};
+                                ?CANONICAL_STORAGE_PATH ->
+                                    {FileIdTokens, FileCtx3} = get_canonical_path_tokens(FileCtx2),
+                                    {MiR, FileCtx4} = get_mounted_in_root(FileCtx3),
+                                    FileId = case {MiR, FileIdTokens} of
+                                        {true, [Root, _SpaceID | Path]} ->
+                                            filename:join([Root | Path]);
+                                        _ ->
+                                            filename:join(FileIdTokens)
+                                    end,
 
-                            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}}
-                    end;
-                _ ->
-                    {undefined, FileCtx}
+                                    {FileId, FileCtx4#file_ctx{storage_file_id = FileId}}
+                            end;
+                        _ ->
+                            {undefined, FileCtx}
+                    end
             end
     end;
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->

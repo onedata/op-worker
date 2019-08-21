@@ -17,7 +17,7 @@
 
 
 %% API
--export([decode_and_normalize/2, encode/1]).
+-export([decode_and_normalize/3, encode/1]).
 
 %%%===================================================================
 %%% API
@@ -32,11 +32,11 @@
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec decode_and_normalize(binary(), storage_file_ctx:ctx()) ->
+-spec decode_and_normalize(binary(), od_space:id(), storage:id()) ->
     {ok, acl:acl()}.
-decode_and_normalize(ACLBin, StorageFileCtx) ->
+decode_and_normalize(ACLBin, SpaceId, StorageId) ->
     {ok, ACL} = decode(ACLBin),
-    normalize(ACL, StorageFileCtx).
+    normalize(ACL, SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -77,10 +77,10 @@ decode(ACLBin) ->
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl:acl(), storage_file_ctx:ctx()) ->
+-spec normalize(acl:acl(), od_space:id(), storage:id()) ->
     {ok, acl:acl()}.
-normalize(Acl, StorageFileCtx) ->
-    {ok, normalize(Acl, [], StorageFileCtx)}.
+normalize(Acl, SpaceId, StorageId) ->
+    {ok, normalize(Acl, [], SpaceId, StorageId)}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -155,13 +155,13 @@ encode_ace(#access_control_entity{
 %% Tail-recursive helper function for normalize/2.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl:acl(), acl:acl(), storage_file_ctx:ctx()) ->
+-spec normalize(acl:acl(), acl:acl(), od_space:id(), storage:id()) ->
     acl:acl().
-normalize([], NormalizedACL, _StorageFileCtx) ->
+normalize([], NormalizedACL, _SpaceId, _StorageId) ->
     lists:reverse(NormalizedACL);
-normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->
-    {NormalizedACE, StorageFileCtx2} = normalize_ace(ACE, StorageFileCtx),
-    normalize(Rest, [NormalizedACE | NormalizedACL], StorageFileCtx2).
+normalize([ACE | Rest], NormalizedACL, SpaceId, StorageId) ->
+    NormalizedACE = normalize_ace(ACE, SpaceId, StorageId),
+    normalize(Rest, [NormalizedACE | NormalizedACL], SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -169,20 +169,19 @@ normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->
 %% Normalizes given #access_control_entity.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_ace(ace:ace(), storage_file_ctx:ctx()) ->
-    {ace:ace(), storage_file_ctx:ctx()}.
-normalize_ace(ACE = #access_control_entity{identifier = ?owner}, StorageFileCtx) ->
-    {ACE, StorageFileCtx};
-normalize_ace(ACE = #access_control_entity{identifier = ?group}, StorageFileCtx) ->
-    {ACE, StorageFileCtx};
-normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, StorageFileCtx) ->
-    {ACE, StorageFileCtx};
+-spec normalize_ace(ace:ace(), storage_file_ctx:ctx()) -> {ace:ace(), od_space:id(), storage:id()}.
+normalize_ace(ACE = #access_control_entity{identifier = ?owner}, _SpaceId, _StorageId) ->
+    ACE;
+normalize_ace(ACE = #access_control_entity{identifier = ?group}, _SpaceId, _StorageId) ->
+    ACE;
+normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, _SpaceId, _StorageId) ->
+    ACE;
 normalize_ace(ACE = #access_control_entity{
     aceflags = Flags,
     identifier = Who
-}, StorageFileCtx) ->
-    {NormalizedWho, StorageFileCtx2} = normalize_who(Flags, Who, StorageFileCtx),
-    {ACE#access_control_entity{identifier = NormalizedWho}, StorageFileCtx2}.
+}, SpaceId, StorageId) ->
+    NormalizedWho = normalize_who(Flags, Who, SpaceId, StorageId),
+    ACE#access_control_entity{identifier = NormalizedWho}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -192,14 +191,11 @@ normalize_ace(ACE = #access_control_entity{
 %% user or group is determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->
-    {od_user:id() | od_group:id(), storage_file_ctx:ctx()}.
-normalize_who(Flags, Who, StorageFileCtx) when ?has_flag(Flags, ?identifier_group_mask) ->
-    {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
-    {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, SpaceId, StorageDoc),
-    {GroupId, StorageFileCtx2};
-normalize_who(_, Who, StorageFileCtx) ->
-    {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
-    {ok, UserId} = reverse_luma:get_user_id_by_name(Who, StorageDoc),
-    {UserId, StorageFileCtx2}.
+-spec normalize_who(non_neg_integer(), binary(), od_space:id(), storage:id()) ->
+    od_user:id() | od_group:id().
+normalize_who(Flags, Who, SpaceId, StorageId) when ?has_flag(Flags, ?identifier_group_mask) ->
+    {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, SpaceId, StorageId),
+    GroupId;
+normalize_who(_, Who, _SpaceId, StorageId) ->
+    {ok, UserId} = reverse_luma:get_user_id_by_name(Who, StorageId),
+    UserId.

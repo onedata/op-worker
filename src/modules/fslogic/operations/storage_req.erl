@@ -78,13 +78,10 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
         ?FORCE_DIRECT_HELPER_MODE ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
-            HelperName = helper:get_name(Helper),
             {ok, StorageDoc2} = storage:get(StorageId),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc2, HelperName) of
+            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc2) of
                 {ok, ClientStorageUserCtx} ->
-                    HelperParams = helper:get_params(Helper,
-                        ClientStorageUserCtx),
+                    HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = HelperParams};
@@ -117,12 +114,11 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
 
-    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
+    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc) of
         {ok, ClientStorageUserCtx} ->
             {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc, HelperName),
+                StorageDoc),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
 
             {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
@@ -160,8 +156,7 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
+    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 

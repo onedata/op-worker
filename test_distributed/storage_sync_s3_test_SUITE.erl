@@ -12,7 +12,6 @@
 -author("Jakub Kudzia").
 
 -include("storage_sync_test.hrl").
--include("modules/storage_sync/strategy_config.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -32,6 +31,7 @@
     create_file_in_dir_import_test/1,
     create_subfiles_import_many_test/1,
     create_subfiles_import_many2_test/1,
+
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
     update_syncs_files_after_import_failed_test/1,
@@ -54,7 +54,7 @@
     create_file_import_race_test/1,
     close_file_import_race_test/1
 ]).
-
+% todo dodac testy deletowania
 -define(TEST_CASES,[
     create_empty_file_import_test,
     create_file_import_test,
@@ -85,6 +85,7 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(WRITE_TEXT, <<"overwrite_test_data">>).
 
+% todo usunac duplikacje kodu w tej i suicie readonly
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
@@ -227,19 +228,22 @@ create_subfiles_import_many_test(Config) ->
         {ok, _} = sfm_test_utils:write_file(W1, SFMFileHandle, 0, ?TEST_DATA)
     end, lists:seq(1, DirsNumber)),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    Start = time_utils:system_time_millis(),
     storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+    End = time_utils:system_time_millis(),
+    ct:print("Import took ~p", [(End - Start) /  1000]),
 
     storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 201,
+        <<"toProcess">> => 203,
         <<"imported">> => 200,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 2,
         <<"importedSum">> => 200,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -265,27 +269,24 @@ create_subfiles_import_many2_test(Config) ->
     storage_sync_test_base:create_nested_directory_tree(W1, DirStructure, RootSFMHandle),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
 
-    % todo sprobowac symulwoac drzewo, przegladac liste i importoweac bezp[osrednie dzeic a dla glebsyz robic subjoby i tak rekurenycjnie
-
-    ct:pal("START"),
-    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     Files = storage_sync_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
+    Start = time_utils:system_time_millis(),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
 
     Timeout = 600,
-    storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
-
-    ct:pal("FINITO"),
-
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, Timeout),
+    End = time_utils:system_time_millis(),
+    ct:print("Import took ~p", [(End - Start) /  1000]),
+    storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1002,
+        <<"toProcess">> => 1011,
         <<"imported">> => 1000,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 10,
         <<"importedSum">> => 1000,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -389,7 +390,7 @@ create_file_in_dir_update_test(Config) ->
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
     MountSpaceInRoot = false,
-    % in this test storage_sync_object_dir_batch_size is set in init_per_testcase to 2
+    % in this test storage_traverse_batch_size is set in init_per_testcase to 2
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
@@ -522,18 +523,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     %ensure that import will start with different timestamp than dir was created
     timer:sleep(timer:seconds(1)),
 
-    test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file,
-        fun(Job = #space_strategy_job{
-            data = #{file_name := FileName}
-        }, Uuid) ->
-            case FileName of
-                ?TEST_FILE1 ->
-                    throw(test_error);
-                _ ->
-                    meck:passthrough([Job, Uuid])
-            end
-        end),
+    storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
     storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
 
@@ -567,7 +557,7 @@ update_syncs_files_after_import_failed_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
-    test_utils:mock_unload(W1, simple_scan),
+    storage_sync_test_base:unmock_import_file_error(W1),
     storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
@@ -635,20 +625,10 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
     {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
     timer:sleep(timer:seconds(1)),
-    test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
-        data = #{file_name := FileName}}, Uuid
-    ) ->
-        case FileName of
-            ?TEST_FILE1 ->
-                throw(test_error);
-            _ ->
-                meck:passthrough([Job, Uuid])
-        end
-    end),
+    storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
-    test_utils:mock_unload(W1, simple_scan),
+    storage_sync_test_base:unmock_import_file_error(W1),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1014,15 +994,18 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, H3, 0, 100)),
     ok = lfm_proxy:close(W1, H3),
 
+    ct:pal("G1: ~p", [G1]),
+    ct:pal("G2: ~p", [G2]),
+
     % there should be 2 files on storage
     ?assertMatch({ok, [_, _]}, sfm_test_utils:listobjects(W1, SpaceSFMHandle, ?SPACE_CANONICAL_PATH, 0, 10)),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+
+%%    tracer:start(W1),
+%%    tracer:trace_calls(storage_sync_traverse, process_file),
+
     storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
-
-    % there should be only 2 files visible in the space
-    ?assertMatch({ok, [_, _]},
-        lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -1045,6 +1028,18 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
+
+%%    ct:pal("SLEEP"),
+%%    ct:pal("SessionId1 = ~p.", [SessId]),
+%%    ct:pal("SessionId2 = ~p.", [SessId2]),
+%%    ct:timetrap({hours, 10}),
+%%    ct:sleep({hours, 10}),
+
+
+    % there should be only 2 files visible in the space
+    ?assertMatch({ok, [_, _]}, lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
+
+    tracer:stop(),
 
     % change one byte in the suffixed file
     {ok, 1} = sfm_test_utils:write_file(W1, FileWithSuffixHandle, ?CHANGED_BYTE_OFFSET, ?CHANGED_BYTE),
@@ -1157,12 +1152,12 @@ create_file_import_race_test(Config) ->
         Master ! {create_ans, Ans}
     end),
 
-    test_utils:mock_new(Workers, simple_scan, [passthrough]),
-    test_utils:mock_expect(Workers, simple_scan, import_file,
-        fun(Job, FileUuid) ->
+    test_utils:mock_new(Workers, storage_sync_engine, [passthrough]),
+    test_utils:mock_expect(Workers, storage_sync_engine, import_file_unsafe,
+        fun(StorageFileCtx, FileUuid, Info) ->
             CreateProc ! create,
             timer:sleep(5000),
-            meck:passthrough([Job, FileUuid])
+            meck:passthrough([StorageFileCtx, FileUuid, Info])
         end),
 
     StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, false),
@@ -1292,8 +1287,7 @@ close_file_import_race_test(Config) ->
     }, ?SPACE_ID, ?ATTEMPTS),
 
     %% Check if file was imported on W1
-    ?assertMatch({error, enoent},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
+    ?assertMatch({error, enoent}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -1305,7 +1299,10 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        multi_provider_file_ops_test_base:init_env(NewConfig)
+        NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
+        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
+        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
+        NewConfig2
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
@@ -1329,13 +1326,13 @@ init_per_testcase(create_file_in_dir_update_test, Config) ->
 
 init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_object_dir_batch_size),
-    test_utils:set_env(W1, op_worker, storage_sync_object_dir_batch_size, 2),
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_traverse_batch_size),
+    test_utils:set_env(W1, op_worker, storage_traverse_batch_size, 2),
     Config2 = [
         {update_config, #{
             delete_enable => false,
             write_once => true}},
-        {old_storage_sync_object_dir_batch_size, OldDirBatchSize}
+        {old_storage_traverse_batch_size, OldDirBatchSize}
         | Config
     ],
     init_per_testcase(default, Config2);
@@ -1350,18 +1347,19 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    OldDirBatchSize = ?config(old_storage_sync_object_dir_batch_size, Config),
-    test_utils:set_env(W1, op_worker, storage_sync_object_dir_batch_size, OldDirBatchSize),
+    OldDirBatchSize = ?config(old_storage_traverse_batch_size, Config),
+    test_utils:set_env(W1, op_worker, storage_traverse_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    storage_sync_test_base:clean_traverse_tasks(W1),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_synced_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils]),
+    test_utils:mock_unload(Workers, [storage_sync_engine, storage_sync_changes, link_utils]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).

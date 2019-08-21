@@ -17,7 +17,7 @@
 
 
 %% API
--export([get_storage_id/2, get_storage_doc/2, new_handle/4, new_child_handle/2]).
+-export([get_storage_id/2, get_storage_doc/2, new_handle/4, new_child_handle/2, setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3]).
 -export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
     chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5]).
 
@@ -28,15 +28,17 @@
 %%%===================================================================
 
 get_storage_id(Worker, SpaceId) ->
-    [StorageId | _] = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
     StorageId.
 
 get_storage_doc(Worker, StorageId) ->
     rpc:call(Worker, storage, get, [StorageId]).
 
-new_handle(Worker, SpaceId, StorageFileId, StorageDoc) ->
+new_handle(Worker, SpaceId, StorageFileId, #document{key = StorageId}) ->
+    new_handle(Worker, SpaceId, StorageFileId, StorageId);
+new_handle(Worker, SpaceId, StorageFileId, StorageId) when is_binary(StorageId) ->
     rpc:call(Worker, storage_file_manager, new_handle,
-        [?ROOT_SESS_ID, SpaceId, undefined, StorageDoc, StorageFileId, undefined]).
+        [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId, undefined]).
 
 new_child_handle(ParentHandle, ChildName) ->
     storage_file_manager:get_child_handle(ParentHandle, ChildName).
@@ -140,7 +142,10 @@ size(Worker, SFMHandle) ->
             Error
     end.
 
-recursive_rm(Worker, SFMHandle = #sfm_handle{storage = StorageDoc}) ->
+recursive_rm(Worker, SFMHandle) ->
+    recursive_rm(Worker, SFMHandle, false).
+
+recursive_rm(Worker, SFMHandle = #sfm_handle{storage_id = StorageId}, DoNotDeleteRoot) ->
     case type(Worker, SFMHandle) of
         ?REGULAR_FILE_TYPE ->
             case size(Worker, SFMHandle) of
@@ -150,11 +155,12 @@ recursive_rm(Worker, SFMHandle = #sfm_handle{storage = StorageDoc}) ->
                     unlink(Worker, SFMHandle, Size)
             end;
         ?DIRECTORY_TYPE ->
-            Helper = storage:get_helper(StorageDoc),
+            {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
+            Helper = storage:get_helper(Storage),
             HelperName = helper:get_name(Helper),
             case HelperName of
                 ?POSIX_HELPER_NAME ->
-                    recursive_rm_posix(Worker, SFMHandle, 0, 1000);
+                    recursive_rm_posix(Worker, SFMHandle, 0, 1000, DoNotDeleteRoot);
                 ?S3_HELPER_NAME ->
                     recursive_rm_s3(Worker, SFMHandle, <<"/">>, 0, 1000)
             end;
@@ -162,18 +168,23 @@ recursive_rm(Worker, SFMHandle = #sfm_handle{storage = StorageDoc}) ->
             ok
     end.
 
-recursive_rm_posix(Worker, SFMHandle, Offset, Count) ->
+recursive_rm_posix(Worker, SFMHandle, Offset, Count, DoNotDeleteRoot) ->
     case ls(Worker, SFMHandle, Offset, Count) of
         {ok, Children} when length(Children) < Count ->
             rm_children(Worker, SFMHandle, Children),
-            case rmdir(Worker, SFMHandle) of
-                ok -> ok;
-                {error, ?EBUSY} -> ok;
-                {error, ?ENOENT} -> ok
+            case DoNotDeleteRoot of
+                true ->
+                    ok;
+                false ->
+                    case rmdir(Worker, SFMHandle) of
+                        ok -> ok;
+                        {error, ?EBUSY} -> ok;
+                        {error, ?ENOENT} -> ok
+                    end
             end;
         {ok, Children} ->
             rm_children(Worker, SFMHandle, Children),
-            recursive_rm_posix(Worker, SFMHandle, Offset + Count, Count)
+            recursive_rm_posix(Worker, SFMHandle, Offset + Count, Count, false)
     end.
 
 recursive_rm_s3(Worker, SFMHandle, Marker, Offset, Count) ->
@@ -193,3 +204,54 @@ rm_children(Worker, ParentHandle, ChildrenNames) ->
         ChildHandle = new_child_handle(ParentHandle, ChildName),
         recursive_rm(Worker, ChildHandle)
     end, ChildrenNames).
+
+
+setup_test_files_structure(W, RootHandle, Structure) ->
+    setup_test_files_structure(W, RootHandle, Structure, [], [], false).
+
+setup_test_files_structure(W, RootHandle, Structure, OnlyGenerateNames) ->
+    setup_test_files_structure(W, RootHandle, Structure, [], [], OnlyGenerateNames).
+
+setup_test_files_structure(_W, _RootHandle, [], _CreatedDirs, _CreatedFiles, _OnlyGenerateNames) ->
+    {[], []};
+setup_test_files_structure(W, RootHandle, [{Dirs, Files}], CreatedDirs, CreatedFiles, OnlyGenerateNames) ->
+    CreatedDirs2 = lists:foldl(fun(I, CreatedDirsIn) ->
+        SubDirHandle = new_child_handle(RootHandle, <<"dir", (integer_to_binary(I))/binary>>),
+        case OnlyGenerateNames of
+            true ->
+                ok;
+            false ->
+                ok = sfm_test_utils:mkdir(W, SubDirHandle, 8#755)
+        end,
+        NewDirId = storage_file_manager:get_storage_file_id(SubDirHandle),
+        [NewDirId | CreatedDirsIn]
+    end, CreatedDirs, lists:seq(1, Dirs)),
+    {CreatedDirs2, create_files(W, RootHandle, Files, CreatedFiles, OnlyGenerateNames)};
+setup_test_files_structure(W, RootHandle, [{Dirs, Files} | Rest], CreatedDirs, CreatedFiles, OnlyGenerateNames) ->
+    {CreatedDirs2, CreatedFiles2} = lists:foldl(fun(I, {CreatedDirsIn, CreatedFilesIn}) ->
+        SubDirHandle = new_child_handle(RootHandle, <<"dir", (integer_to_binary(I))/binary>>),
+        case OnlyGenerateNames of
+            true ->
+                ok;
+            false ->
+                ok = sfm_test_utils:mkdir(W, SubDirHandle, 8#755)
+        end,
+        {CreatedDirsIn2, CreatedFilesIn2} =
+            setup_test_files_structure(W, SubDirHandle, Rest, CreatedDirsIn, CreatedFilesIn, OnlyGenerateNames),
+        NewDirId = storage_file_manager:get_storage_file_id(SubDirHandle),
+        {[NewDirId | CreatedDirsIn2], CreatedFilesIn2}
+    end, {CreatedDirs, CreatedFiles}, lists:seq(1, Dirs)),
+    {CreatedDirs2, create_files(W, RootHandle, Files, CreatedFiles2, OnlyGenerateNames)}.
+
+create_files(W, RootHandle, FilesNum, CreatedFiles, OnlyGenerateNames) ->
+    lists:foldl(fun(I, CreatedFilesIn) ->
+        SubDirHandle = new_child_handle(RootHandle, <<"file", (integer_to_binary(I))/binary>>),
+        case OnlyGenerateNames of
+            true ->
+                ok;
+            false ->
+                ok = sfm_test_utils:create_file(W, SubDirHandle, 8#664)
+        end,
+        NewFileId = storage_file_manager:get_storage_file_id(SubDirHandle),
+        [NewFileId | CreatedFilesIn]
+    end, CreatedFiles, lists:seq(1, FilesNum)).

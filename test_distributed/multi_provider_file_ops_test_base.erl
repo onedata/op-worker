@@ -1836,8 +1836,8 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
@@ -1845,7 +1845,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
+    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId, undefined),
     FileContent = <<"abc">>,
     storage_file_manager:unlink(SFMHandle1, size(FileContent)),
     ok = storage_file_manager:create(SFMHandle1, 8#775),

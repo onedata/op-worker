@@ -71,13 +71,13 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 %% Renames file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_storage_file(session:id(), od_space:id(), storage:doc(),
+-spec rename_storage_file(session:id(), od_space:id(), storage:id(),
     file_meta:uuid(), helpers:file_id(), helpers:file_id()) -> ok | {error, term()}.
-rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFileId) ->
+rename_storage_file(SessId, SpaceId, StorageId, FileUuid, SourceFileId, TargetFileId) ->
     %create target dir
     TargetDir = filename:dirname(TargetFileId),
     TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
-        SpaceId, undefined, Storage, TargetDir, undefined),
+        SpaceId, undefined, StorageId, TargetDir, undefined),
     case storage_file_manager:mkdir(TargetDirHandle,
         ?AUTO_CREATED_PARENT_DIR_MODE, true)
     of
@@ -90,7 +90,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
     case SourceFileId =/= TargetFileId of
         true ->
             SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
-                FileUuid, Storage, SourceFileId, undefined),
+                FileUuid, StorageId, SourceFileId, undefined),
             storage_file_manager:mv(SourceHandle, TargetFileId);
             % TODO VFS-5290 - solution resutls in problems with sed
 %%            TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
@@ -187,14 +187,60 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
             files_to_chown:chown_or_schedule_chowning(ParentCtx),
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
-        Other ->
-            {Other, FileCtx3}
+        ok ->
+            {StorageDoc, FileCtx4} = file_ctx:get_storage_doc(FileCtx3),
+            FileCtx6 = case storage_sync_worker:is_syncable_s3(StorageDoc) of
+                true ->
+                    {ParentCtx, FileCtx5} = file_ctx:get_parent(FileCtx4, UserCtx),
+                    pretend_parent_dirs_created_on_storage(ParentCtx, UserCtx),
+                    FileCtx5;
+                false ->
+                    FileCtx4
+            end,
+            {ok, FileCtx6}
     end,
 
     case Chown of
         true -> files_to_chown:chown_or_schedule_chowning(FinalCtx);
         _ -> FinalCtx
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% WRITEME
+%% @end
+%%-------------------------------------------------------------------
+pretend_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
+    pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, []).
+
+
+pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, ParentCtxs) ->
+    case file_ctx:is_space_dir_const(DirCtx) of
+        true ->
+            SpaceId = file_ctx:get_space_id_const(DirCtx),
+            pretend_parent_dirs_created_on_storage_down(ParentCtxs, SpaceId);
+        false ->
+            case file_ctx:get_dir_location_doc(DirCtx) of
+                {DirLocation, DirCtx2} ->
+                    case dir_location:is_storage_file_created(DirLocation) of
+                        true ->
+                            SpaceId = file_ctx:get_space_id_const(DirCtx),
+                            pretend_parent_dirs_created_on_storage_down(ParentCtxs, SpaceId);
+                        false ->
+                            {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
+                            pretend_parent_dirs_created_on_storage_up(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
+                    end
+
+            end
+    end.
+
+pretend_parent_dirs_created_on_storage_down([], _SpaceId) ->
+    ok;
+pretend_parent_dirs_created_on_storage_down([DirCtx | RestCtxs], SpaceId) ->
+    Uuid = file_ctx:get_uuid_const(DirCtx),
+    dir_location:mark_dir_created_on_storage(Uuid, SpaceId),
+    pretend_parent_dirs_created_on_storage_down(RestCtxs, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -304,9 +350,9 @@ retry_dir_deletion(SFMHandle = #sfm_handle{
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx),
+    {#document{key = StorageId}, FileCtx3} = file_ctx:get_storage_doc(FileCtx),
     {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
-    create_parent_dirs(ParentCtx, [], SpaceId, Storage),
+    create_parent_dirs(ParentCtx, [], SpaceId, StorageId),
     FileCtx4.
 
 
@@ -320,19 +366,18 @@ create_parent_dirs(FileCtx) ->
 %% Tail recursive helper function of ?MODULE:create_parent_dirs/1
 %% @end
 %%-------------------------------------------------------------------
--spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(),
-    storage:doc()) -> ok.
-create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
+-spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(), storage:id()) -> ok.
+create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
             lists:foreach(fun(Ctx) ->
-                create_dir(Ctx, SpaceId, Storage)
+                create_dir(Ctx, SpaceId, StorageId)
             end, [FileCtx | ChildrenDirCtxs]);
         false ->
             %TODO VFS-4297 stop recursion when parent file exists on storage,
             %TODO currently recursion stops in space dir
             {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
-            create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, Storage)
+            create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, StorageId)
     end.
 
 %%-------------------------------------------------------------------
@@ -342,10 +387,10 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec create_dir(file_ctx:ctx(), od_space:id(), storage:doc()) -> file_ctx:ctx().
-create_dir(FileCtx, SpaceId, Storage) ->
+create_dir(FileCtx, SpaceId, StorageId) ->
     {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
-        undefined, Storage, FileId, undefined),
+        undefined, StorageId, FileId, undefined),
     try
         {#document{value = #file_meta{
             mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),

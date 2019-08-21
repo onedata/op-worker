@@ -25,7 +25,7 @@
 %% Test API
 -export([process_file_links/3]).
 
--type delete_filemeta_opts() :: boolean() | deletion_link.
+-type delete_file_meta_opts() :: boolean() | deletion_link.
 
 %%%===================================================================
 %%% API
@@ -131,7 +131,7 @@ remove_auxiliary_documents(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-    delete_filemeta_opts()) -> ok.
+    delete_file_meta_opts()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
     % TODO VFS-5270
     replica_synchronizer:apply(FileCtx, fun() ->

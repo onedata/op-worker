@@ -366,7 +366,7 @@ space_storage_mock(Workers, StorageId) ->
     test_utils:mock_expect(Workers, space_strategies, get, fun(_) ->
         {ok, #document{
             value = #space_strategies{
-                storage_strategies = maps:put(StorageId, #storage_strategies{}, #{})
+                sync_configs = maps:put(StorageId, #storage_sync_config{}, #{})
             }
         }}
     end).

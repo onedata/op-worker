@@ -86,10 +86,9 @@
 
 -define(assertHashChangedFun(StorageFileId, SpaceId, ExpectedResult0),
     fun
-        ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, Result})
-            when Result =:= ExpectedResult0
-        ->
+        ({_, {storage_sync_changes, children_attrs_hash_has_changed, Args}, ExpectedResult0}) ->
             Id = storage_sync_info:id(StorageFileId, SpaceId),
+            ct:pal("Id: ~p", [Id]),
             case hd(Args) of
                 #document{key = Id} -> 1;
                 _ -> 0
@@ -101,9 +100,7 @@
 
 -define(assertMtimeChangedFun(StorageFileId, SpaceId, ExpectedResult0),
     fun
-        ({_, {storage_sync_changes, mtime_has_changed, Args}, Result})
-            when Result =:= ExpectedResult0
-        ->
+        ({_, {storage_sync_changes, mtime_has_changed, Args}, ExpectedResult0}) ->
             Id = storage_sync_info:id(StorageFileId, SpaceId),
             case hd(Args) of
                 #document{key = Id} -> 1;

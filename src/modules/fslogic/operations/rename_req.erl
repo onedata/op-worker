@@ -459,13 +459,16 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+    #document{
+        key = StorageId,
+        value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}
+    } = Storage,
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
         ok;
       _ ->
         case sfm_utils:rename_storage_file(
-          user_ctx:get_session_id(UserCtx), SpaceId, Storage, FileUuid, SourceFileId, TargetFileId)
+          user_ctx:get_session_id(UserCtx), SpaceId, StorageId, FileUuid, SourceFileId, TargetFileId)
         of
           ok -> ok;
           {error, ?ENOENT} -> ok

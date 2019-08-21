@@ -21,7 +21,7 @@
 -export([ensure_created/2,
     prepare_new_import_scan/3,
     prepare_new_update_scan/3,
-    delete/2]).
+    delete/2, reset/2]).
 
 -export([
     increase_to_process_counter/3,
@@ -29,13 +29,14 @@
     mark_updated_file/2,
     mark_deleted_file/2,
     mark_processed_file/2,
-    mark_failed_file/2
-]).
+    mark_failed_file/2, mark_finished_scan/2]).
 
 -export([get/2,
-    get_import_state/1, get_update_state/1,
-    get_previous_sync_timestamps/2, get_info/2, get_metric/3
-]).
+    get_import_status/1, get_import_status/2,
+    get_update_status/1, get_update_status/2,
+    get_info/2, get_metric/3,
+    is_scan_in_progress/1, is_scan_in_progress/2,
+    get_scans_num/1, get_import_finish_time/1, get_last_update_finish_time/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -45,10 +46,10 @@
     routing => global
 }).
 
--type id() :: binary().
--type storage_sync_monitoring() :: #storage_sync_monitoring{}.
--type doc() :: datastore_doc:doc(storage_sync_monitoring()).
--type diff() :: datastore_doc:diff(storage_sync_monitoring()).
+-type id() :: datastore:key().
+-type record() :: #storage_sync_monitoring{}.
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 -type timestamp() :: non_neg_integer().
 
 -type window() :: day | hour | minute.
@@ -56,7 +57,7 @@
 -type error() :: {error, term()}.
 
 
--export_type([storage_sync_monitoring/0, doc/0, window/0, plot_counter_type/0]).
+-export_type([record/0, doc/0, window/0, plot_counter_type/0]).
 
 
 -define(HISTOGRAM_LENGTH,
@@ -85,7 +86,7 @@ ensure_created(SpaceId, StorageId) ->
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
             end;
-        Error  ->
+        Error ->
             ?error("Failed to check if storage_sync_monitoring document for space ~p and storage ~p exists due to ~p",
                 [SpaceId, StorageId, Error])
     end.
@@ -100,10 +101,9 @@ ensure_created(SpaceId, StorageId) ->
 %% This function also sets scan start_time.
 %% @end
 %%-------------------------------------------------------------------
--spec prepare_new_import_scan(od_space:id(), storage:id(), non_neg_integer()) ->
-    {ok, doc()}.
+-spec prepare_new_import_scan(od_space:id(), storage:id(), non_neg_integer()) -> {ok, doc()}.
 prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
+    {ok, _} = (update(SpaceId, StorageId, fun(SSM) ->
         SSM2 = reset_queue_length_histograms(SSM, Timestamp),
         SSM3 = increment_queue_length_histograms(SSM2, Timestamp, 1),
         SSM4 = reset_control_counters(SSM3),
@@ -111,7 +111,7 @@ prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
             to_process = 1,
             import_start_time = Timestamp
         }}
-    end).
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -123,10 +123,9 @@ prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
 %% This function also sets scan start_time.
 %% @end
 %%-------------------------------------------------------------------
--spec prepare_new_update_scan(od_space:id(), storage:id(), non_neg_integer()) ->
-    {ok, doc()}.
+-spec prepare_new_update_scan(od_space:id(), storage:id(), non_neg_integer()) -> {ok, doc()}.
 prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
+    {ok, _} = (update(SpaceId, StorageId, fun(SSM) ->
         SSM2 = reset_queue_length_histograms(SSM, Timestamp),
         SSM3 = increment_queue_length_histograms(SSM2, Timestamp, 1),
         SSM4 = reset_control_counters(SSM3),
@@ -134,7 +133,7 @@ prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
             to_process = 1,
             last_update_start_time = Timestamp
         }}
-    end).
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -143,15 +142,15 @@ prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec increase_to_process_counter(od_space:id(), storage:id(),
-    non_neg_integer()) -> {ok, doc()}.
+    non_neg_integer()) -> ok.
 increase_to_process_counter(SpaceId, StorageId, Value) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         to_process = FilesToProcess
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
         SSM2 = SSM#storage_sync_monitoring{to_process = FilesToProcess + Value},
         {ok, increment_queue_length_histograms(SSM2, Timestamp, Value)}
-    end).
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -160,9 +159,9 @@ increase_to_process_counter(SpaceId, StorageId, Value) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_imported_file(od_space:id(), storage:id()) -> {ok, doc()}.
+-spec mark_imported_file(od_space:id(), storage:id()) -> ok.
 mark_imported_file(SpaceId, StorageId) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         imported = ImportedFiles,
         imported_sum = ImportedFilesSum,
         imported_min_hist = MinHist,
@@ -178,8 +177,8 @@ mark_imported_file(SpaceId, StorageId) ->
             imported_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
         },
         SSM3 = decrement_queue_length_histograms(SSM2, Timestamp),
-        {ok, maybe_mark_finished_scan(SSM3)}
-    end).
+        {ok, SSM3}
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -188,9 +187,9 @@ mark_imported_file(SpaceId, StorageId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_updated_file(od_space:id(), storage:id()) -> {ok, doc()}.
+-spec mark_updated_file(od_space:id(), storage:id()) -> ok.
 mark_updated_file(SpaceId, StorageId) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         updated = UpdatedFiles,
         updated_sum = UpdatedFilesSum,
         updated_min_hist = MinHist,
@@ -206,8 +205,8 @@ mark_updated_file(SpaceId, StorageId) ->
             updated_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
         },
         SSM3 = decrement_queue_length_histograms(SSM2, Timestamp),
-        {ok, maybe_mark_finished_scan(SSM3)}
-    end).
+        {ok, SSM3}
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -216,9 +215,9 @@ mark_updated_file(SpaceId, StorageId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_deleted_file(od_space:id(), storage:id()) -> {ok, doc()}.
+-spec mark_deleted_file(od_space:id(), storage:id()) -> ok.
 mark_deleted_file(SpaceId, StorageId) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         deleted = DeletedFiles,
         deleted_sum = DeletedFilesSum,
         deleted_min_hist = MinHist,
@@ -234,8 +233,8 @@ mark_deleted_file(SpaceId, StorageId) ->
             deleted_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
         },
         SSM3 = decrement_queue_length_histograms(SSM2, Timestamp),
-        {ok, maybe_mark_finished_scan(SSM3)}
-    end).
+        {ok, SSM3}
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -246,16 +245,16 @@ mark_deleted_file(SpaceId, StorageId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_file(od_space:id(), storage:id()) -> {ok, doc()}.
+-spec mark_processed_file(od_space:id(), storage:id()) -> ok.
 mark_processed_file(SpaceId, StorageId) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         other_processed = FilesProcessed
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
         SSM2 = SSM#storage_sync_monitoring{other_processed = FilesProcessed + 1},
         SSM3 = decrement_queue_length_histograms(SSM2, Timestamp),
-        {ok, maybe_mark_finished_scan(SSM3)}
-    end).
+        {ok, SSM3}
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -264,16 +263,16 @@ mark_processed_file(SpaceId, StorageId) ->
 %% decreases queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed_file(od_space:id(), storage:id()) -> {ok, doc()}.
+-spec mark_failed_file(od_space:id(), storage:id()) -> ok.
 mark_failed_file(SpaceId, StorageId) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         failed = FilesFailed
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
         SSM2 = SSM#storage_sync_monitoring{failed = FilesFailed + 1},
         SSM3 = decrement_queue_length_histograms(SSM2, Timestamp),
-        {ok, maybe_mark_finished_scan(SSM3)}
-    end).
+        {ok, SSM3}
+    end)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -368,66 +367,33 @@ get_info(SpaceId, StorageId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function returns timestamps of previous import and update scans.
-%% It takes into consideration whether it is a FirstRun (first after
-%% start/restart of provider).
-%% @end
-%%-------------------------------------------------------------------
--spec get_previous_sync_timestamps(storage_sync_monitoring(),
-    FirstRun :: boolean()) -> tuple().
-get_previous_sync_timestamps(#storage_sync_monitoring{
-    import_start_time = _ImportStartTime,
-    import_finish_time = undefined
-}, true) ->
-    % no previous import or import was in progress when provider was restarted
-    {undefined, undefined, undefined, undefined};
-get_previous_sync_timestamps(#storage_sync_monitoring{
-    import_start_time = ImportStartTime,
-    import_finish_time = ImportFinishTime,
-    last_update_start_time = _LastUpdateStartTime,
-    last_update_finish_time = undefined
-}, true) ->
-    % there was no update or update was in progress when provider was stopped
-    {ImportStartTime, ImportFinishTime, undefined, undefined};
-get_previous_sync_timestamps(#storage_sync_monitoring{
-    import_start_time = ImportStartTime,
-    import_finish_time = ImportFinishTime,
-    last_update_start_time = LastUpdateStartTime,
-    last_update_finish_time = LastUpdateFinishTime
-}, true) when LastUpdateFinishTime < LastUpdateStartTime ->
-    % there was update in progress when provider was stopped
-    {ImportStartTime, ImportFinishTime, undefined, undefined};
-get_previous_sync_timestamps(SSM = #storage_sync_monitoring{}, true) ->
-    get_previous_sync_timestamps(SSM, false);
-get_previous_sync_timestamps(#storage_sync_monitoring{
-    import_start_time = ImportStartTime,
-    import_finish_time = ImportFinishTime,
-    last_update_start_time = LastUpdateStartTime,
-    last_update_finish_time = LastUpdateFinishTime
-}, false) ->
-    {ImportStartTime, ImportFinishTime, LastUpdateStartTime, LastUpdateFinishTime}.
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Returns state of import. Possible values: not_started, in_progress, finished.
 %% @end
 %%-------------------------------------------
--spec get_import_state(od_space:id()) -> storage_import:state().
-get_import_state(SpaceId) ->
+-spec get_import_status(od_space:id()) -> storage_sync_traverse:scan_status().
+get_import_status(SpaceId) ->
     StorageId = get_storage_id(SpaceId),
-    {ok, #document{
-        value = #storage_sync_monitoring{
-            import_start_time = ImportStartTime,
-            import_finish_time = ImportFinishTime
-        }
-    }} = ?MODULE:get(SpaceId, StorageId),
-    case {ImportStartTime, ImportFinishTime} of
-        {undefined, undefined} ->
-            not_started;
-        {_, undefined} ->
-            in_progress;
-        {ImportStartTime, ImportFinishTime} when ImportStartTime =/= undefined ->
-            finished
+    get_import_status(SpaceId, StorageId).
+
+-spec get_import_status(od_space:id(), storage:id()) -> storage_sync_traverse:scan_status().
+get_import_status(SpaceId, StorageId) ->
+    case get(SpaceId, StorageId) of
+        {ok, #document{
+            value = #storage_sync_monitoring{
+                import_start_time = ImportStartTime,
+                import_finish_time = ImportFinishTime
+            }
+        }} ->
+            case {ImportStartTime, ImportFinishTime} of
+                {undefined, undefined} ->
+                    not_started;
+                {_, undefined} ->
+                    in_progress;
+                {ImportStartTime, ImportFinishTime} when ImportStartTime =/= undefined ->
+                    finished
+            end;
+        {error, not_found} ->
+            not_started
     end.
 
 %%-------------------------------------------------------------------
@@ -435,23 +401,56 @@ get_import_state(SpaceId) ->
 %% Returns state of update. Possible values: not_started, in_progress, finished.
 %% @end
 %%-------------------------------------------------------------------
--spec get_update_state(od_space:id()) -> storage_update:state().
-get_update_state(SpaceId) ->
+-spec get_update_status(od_space:id()) -> storage_sync_traverse:scan_status().
+get_update_status(#document{value = SSM = #storage_sync_monitoring{}}) ->
+    get_update_status(SSM);
+get_update_status(#storage_sync_monitoring{
+    last_update_start_time = undefined,
+    last_update_finish_time = undefined
+}) ->
+    not_started;
+get_update_status(#storage_sync_monitoring{
+    last_update_finish_time = undefined
+}) ->
+    in_progress;
+get_update_status(#storage_sync_monitoring{
+    last_update_start_time = LastUpdateStartTime,
+    last_update_finish_time = LastUpdateFinishTime
+}) when (LastUpdateStartTime =/= undefined) andalso (LastUpdateStartTime > LastUpdateFinishTime) ->
+    in_progress;
+get_update_status(#storage_sync_monitoring{
+    last_update_start_time = LastUpdateStartTime
+}) when (LastUpdateStartTime =/= undefined) ->
+    finished;
+get_update_status(SpaceId) when is_binary(SpaceId) ->
     StorageId = get_storage_id(SpaceId),
-    {ok, #document{
-        value = #storage_sync_monitoring{
-            last_update_start_time = LastUpdateStartTime,
-            last_update_finish_time = LastUpdateFinishTime
-        }
-    }} = ?MODULE:get(SpaceId, StorageId),
-    case {LastUpdateStartTime, LastUpdateFinishTime} of
-        {undefined, undefined} ->
-            not_started;
-        {_, undefined} ->
-            in_progress;
-        {LastUpdateStartTime, LastUpdateFinishTime} when LastUpdateStartTime =/= undefined ->
-            finished
+    get_update_status(SpaceId, StorageId).
+
+-spec get_update_status(od_space:id(), storage:id()) -> storage_sync_traverse:scan_status().
+get_update_status(SpaceId, StorageId) ->
+    StorageId = get_storage_id(SpaceId),
+    case get(SpaceId, StorageId) of
+        {ok, Doc} -> get_update_status(Doc);
+        {error, not_found} -> not_started
     end.
+
+-spec get_scans_num(doc() | record()) -> non_neg_integer().
+get_scans_num(#storage_sync_monitoring{scans = Scans}) ->
+    Scans;
+get_scans_num(#document{value = SSM}) ->
+    get_scans_num(SSM).
+
+-spec get_import_finish_time(doc() | record()) -> non_neg_integer().
+get_import_finish_time(#storage_sync_monitoring{import_finish_time = ImportFinishTime}) ->
+    ImportFinishTime;
+get_import_finish_time(#document{value = SSM}) ->
+    get_import_finish_time(SSM).
+
+-spec get_last_update_finish_time(doc() | record()) -> non_neg_integer().
+get_last_update_finish_time(#storage_sync_monitoring{last_update_finish_time = ImportFinishTime}) ->
+    ImportFinishTime;
+get_last_update_finish_time(#document{value = SSM}) ->
+    get_last_update_finish_time(SSM).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -470,6 +469,33 @@ get_metric(SpaceId, Type, Window) ->
             return_empty_histogram_and_timestamp()
     end.
 
+-spec is_scan_in_progress(od_space:id(), storage:id()) -> boolean().
+is_scan_in_progress(SpaceId, StorageId) ->
+    case get(SpaceId, StorageId) of
+        {error, not_found} ->
+            false;
+        {ok, Doc} ->
+            is_scan_in_progress(Doc)
+    end.
+
+
+-spec reset(od_space:id(), storage:id()) -> ok.
+reset(SpaceId, StorageId) ->
+    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM) ->
+        case is_scan_in_progress(SSM) of
+            true ->
+                SSM2 = case SSM of
+                    #storage_sync_monitoring{import_finish_time = undefined} ->
+                        SSM#storage_sync_monitoring{import_finish_time = time_utils:cluster_time_seconds()};
+                    _ ->
+                        SSM#storage_sync_monitoring{last_update_finish_time = time_utils:cluster_time_seconds()}
+                end,
+                {ok, reset_control_counters(SSM2)};
+            false ->
+                {ok, SSM}
+        end
+    end)).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -485,25 +511,17 @@ get_metric(SpaceId, Type, Window) ->
 id(SpaceId, StorageId) ->
     datastore_utils:gen_key(SpaceId, StorageId).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% @equiv datastore_model:update(?CTX, id(SpaceId, StorageId), Diff).
-%% @end
-%%-------------------------------------------------------------------
 -spec update(od_space:id(), storage:id(), diff()) -> {ok, doc()} | error().
 update(SpaceId, StorageId, Diff) ->
     datastore_model:update(?CTX, id(SpaceId, StorageId), Diff).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns initialized storage_sync_monitoring doc.
-%% @end
-%%-------------------------------------------------------------------
+
 -spec new_doc(od_space:id(), storage:id()) -> doc().
 new_doc(SpaceId, StorageId) ->
-    Timestamp = time_utils:cluster_time_seconds(),
+    new_doc(SpaceId, StorageId, time_utils:cluster_time_seconds()).
+
+-spec new_doc(od_space:id(), storage:id(), non_neg_integer()) -> doc().
+new_doc(SpaceId, StorageId, Timestamp) ->
     EmptyMinHist = time_slot_histogram:new(Timestamp, ?MIN_HIST_SLOT, ?HISTOGRAM_LENGTH),
     EmptyHourHist = time_slot_histogram:new(Timestamp, ?HOUR_HIST_SLOT, ?HISTOGRAM_LENGTH),
     EmptyDayHist = time_slot_histogram:new(Timestamp, ?DAY_HIST_SLOT, ?HISTOGRAM_LENGTH),
@@ -523,12 +541,12 @@ new_doc(SpaceId, StorageId) ->
             deleted_hour_hist = EmptyHourHist,
             deleted_day_hist = EmptyDayHist,
 
-            queue_length_min_hist = 
-                time_slot_histogram:new_cumulative(Timestamp, ?MIN_HIST_SLOT, ?HISTOGRAM_LENGTH),
-            queue_length_hour_hist = 
-                time_slot_histogram:new_cumulative(Timestamp, ?HOUR_HIST_SLOT, ?HISTOGRAM_LENGTH),
-            queue_length_day_hist = 
-                time_slot_histogram:new_cumulative(Timestamp, ?DAY_HIST_SLOT, ?HISTOGRAM_LENGTH)
+            queue_length_min_hist =
+            time_slot_histogram:new_cumulative(Timestamp, ?MIN_HIST_SLOT, ?HISTOGRAM_LENGTH),
+            queue_length_hour_hist =
+            time_slot_histogram:new_cumulative(Timestamp, ?HOUR_HIST_SLOT, ?HISTOGRAM_LENGTH),
+            queue_length_day_hist =
+            time_slot_histogram:new_cumulative(Timestamp, ?DAY_HIST_SLOT, ?HISTOGRAM_LENGTH)
         },
         scope = SpaceId
     }.
@@ -540,7 +558,7 @@ new_doc(SpaceId, StorageId) ->
 %% given storage_sync_monitoring record.
 %% @end
 %%-------------------------------------------------------------------
--spec reset_control_counters(storage_sync_monitoring()) -> storage_sync_monitoring().
+-spec reset_control_counters(record()) -> record().
 reset_control_counters(SSM) ->
     SSM#storage_sync_monitoring{
         to_process = 0,
@@ -557,8 +575,8 @@ reset_control_counters(SSM) ->
 %% This function increments all queue_length histograms with given value.
 %% @end
 %%-------------------------------------------------------------------
--spec increment_queue_length_histograms(storage_sync_monitoring(), timestamp(),
-    non_neg_integer()) -> storage_sync_monitoring().
+-spec increment_queue_length_histograms(record(), timestamp(),
+    non_neg_integer()) -> record().
 increment_queue_length_histograms(SSM = #storage_sync_monitoring{
     queue_length_min_hist = MinHist,
     queue_length_hour_hist = HourHist,
@@ -576,8 +594,8 @@ increment_queue_length_histograms(SSM = #storage_sync_monitoring{
 %% This function decrements all queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec decrement_queue_length_histograms(storage_sync_monitoring(), timestamp()) ->
-    storage_sync_monitoring().
+-spec decrement_queue_length_histograms(record(), timestamp()) ->
+    record().
 decrement_queue_length_histograms(SSM = #storage_sync_monitoring{
     queue_length_min_hist = MinHist,
     queue_length_hour_hist = HourHist,
@@ -600,9 +618,9 @@ decrement_queue_length_histograms(SSM = #storage_sync_monitoring{
 get_storage_id(SpaceId) ->
     {ok, #document{
         value = #space_strategies{
-            storage_strategies = StorageStrategies
+            sync_configs = SyncConfigs
         }}} = space_strategies:get(SpaceId),
-    hd(maps:keys(StorageStrategies)).
+    hd(maps:keys(SyncConfigs)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -611,7 +629,7 @@ get_storage_id(SpaceId) ->
 %% it updates suitable counters and histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mark_finished_scan(storage_sync_monitoring()) -> storage_sync_monitoring().
+-spec maybe_mark_finished_scan(record()) -> record().
 maybe_mark_finished_scan(SSM = #storage_sync_monitoring{
     import_finish_time = undefined
 }) ->
@@ -619,7 +637,7 @@ maybe_mark_finished_scan(SSM = #storage_sync_monitoring{
 maybe_mark_finished_scan(SSM = #storage_sync_monitoring{
     last_update_start_time = LastUpdateStartTime,
     last_update_finish_time = LastUpdateFinishTime
-}) when  LastUpdateStartTime > LastUpdateFinishTime ->
+}) when LastUpdateStartTime > LastUpdateFinishTime ->
     maybe_mark_finished_update_scan(SSM);
 maybe_mark_finished_scan(SSM = #storage_sync_monitoring{
     last_update_finish_time = undefined
@@ -628,6 +646,9 @@ maybe_mark_finished_scan(SSM = #storage_sync_monitoring{
 maybe_mark_finished_scan(SSM) ->
     SSM.
 
+mark_finished_scan(SpaceId, StorageId) ->
+    update(SpaceId, StorageId, fun(SSM) -> {ok, maybe_mark_finished_scan(SSM)} end).
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -635,21 +656,16 @@ maybe_mark_finished_scan(SSM) ->
 %% it updates suitable counters and histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mark_finished_import_scan(storage_sync_monitoring())
-        -> storage_sync_monitoring().
+-spec maybe_mark_finished_import_scan(record())
+        -> record().
 maybe_mark_finished_import_scan(SSM = #storage_sync_monitoring{
     scans = Scans,
     import_finish_time = undefined
 }) ->
-    case get_unhandled_jobs_value(SSM) of
-        0 ->
-            SSM#storage_sync_monitoring{
-                scans = Scans + 1,
-                import_finish_time = time_utils:cluster_time_seconds()
-            };
-        _ ->
-            SSM
-    end.
+    SSM#storage_sync_monitoring{
+        scans = Scans + 1,
+        import_finish_time = time_utils:cluster_time_seconds()
+    }.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -658,20 +674,32 @@ maybe_mark_finished_import_scan(SSM = #storage_sync_monitoring{
 %% it updates suitable counters and histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mark_finished_update_scan(storage_sync_monitoring())
-        -> storage_sync_monitoring().
+-spec maybe_mark_finished_update_scan(record())
+        -> record().
 maybe_mark_finished_update_scan(SSM = #storage_sync_monitoring{
     scans = Scans
 }) ->
-    case get_unhandled_jobs_value(SSM) of
-        0 ->
-            SSM#storage_sync_monitoring{
-                scans = Scans + 1,
-                last_update_finish_time = time_utils:cluster_time_seconds()
-            };
-        _ ->
-            SSM
-    end.
+    SSM#storage_sync_monitoring{
+        scans = Scans + 1,
+        last_update_finish_time = time_utils:cluster_time_seconds()
+    }.
+
+-spec is_scan_in_progress(doc() | record()) -> boolean().
+is_scan_in_progress(#document{value = SSM = #storage_sync_monitoring{}}) ->
+    is_scan_in_progress(SSM);
+is_scan_in_progress(#storage_sync_monitoring{import_start_time = undefined}) ->
+    false;
+is_scan_in_progress(#storage_sync_monitoring{import_finish_time = undefined}) ->
+    true;
+is_scan_in_progress(#storage_sync_monitoring{last_update_start_time = undefined}) ->
+    false;
+is_scan_in_progress(#storage_sync_monitoring{last_update_finish_time = undefined}) ->
+    true;
+is_scan_in_progress(SSM = #storage_sync_monitoring{
+    last_update_start_time = LastUpdateStartTime,
+    last_update_finish_time = LastUpdateFinishTime
+}) ->
+    LastUpdateStartTime > LastUpdateFinishTime orelse get_unhandled_jobs_value(SSM) > 0.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -701,7 +729,7 @@ get_histogram_timestamp(Histogram) ->
 %% This function returns number of unhandled jobs.
 %% @end
 %%-------------------------------------------------------------------
--spec get_unhandled_jobs_value(storage_sync_monitoring()) -> integer().
+-spec get_unhandled_jobs_value(record()) -> integer().
 get_unhandled_jobs_value(#storage_sync_monitoring{
     to_process = ToProcess,
     imported = Imported,
@@ -720,8 +748,8 @@ get_unhandled_jobs_value(#storage_sync_monitoring{
 %% scans.
 %% @end
 %%-------------------------------------------------------------------
--spec reset_queue_length_histograms(storage_sync_monitoring(),
-    non_neg_integer()) -> storage_sync_monitoring().
+-spec reset_queue_length_histograms(record(),
+    non_neg_integer()) -> record().
 reset_queue_length_histograms(SSM = #storage_sync_monitoring{
     queue_length_min_hist = QueueLengthMinHist,
     queue_length_hour_hist = QueueLengthHourHist,
@@ -754,7 +782,7 @@ return_empty_histogram_and_timestamp() ->
 %% format acceptable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec return_histogram_and_timestamp(storage_sync_monitoring(),
+-spec return_histogram_and_timestamp(record(),
     plot_counter_type(), window()) -> proplists:proplist().
 return_histogram_and_timestamp(SSM, imported_files, minute) ->
     prepare(SSM#storage_sync_monitoring.imported_min_hist);

@@ -27,7 +27,7 @@
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
     set_readonly/2, safe_remove/1, describe/1]).
--export([get_luma_config/1, is_luma_enabled/1]).
+-export([get_luma_config/1, is_luma_enabled/1, type/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -218,6 +218,9 @@ get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).
 
+type(Storage) ->
+    Helper = get_helper(Storage),
+    helper:type(Helper).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -368,7 +371,8 @@ safe_remove(StorageId) ->
 supports_any_space(StorageId) ->
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:any(fun(SpaceId) ->
-        lists:member(StorageId, space_storage:get_storage_ids(SpaceId))
+        {ok, StorageIds} = space_storage:get_storage_ids(SpaceId),
+        lists:member(StorageId, StorageIds)
     end, Spaces).
 
 

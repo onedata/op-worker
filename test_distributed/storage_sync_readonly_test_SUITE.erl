@@ -13,7 +13,6 @@
 -author("Rafal Slota").
 -author("Jakub Kudzia").
 
--include("modules/storage_sync/strategy_config.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -64,7 +63,7 @@
     delete_and_update_files_simultaneously_update_test/1,
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed/1,
+    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/1,
     sync_works_properly_after_delete_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -87,7 +86,7 @@
     create_file_import_test,
     import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed,
+    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_in_dir_import_test,
@@ -148,19 +147,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     ok = sfm_test_utils:mkdir(W1, SFMHandle, 8#775),
     %ensure that import will start with different timestamp than dir was created
     timer:sleep(timer:seconds(1)),
-
-    test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file,
-        fun(Job = #space_strategy_job{
-            data = #{file_name := FileName}
-        }, _) ->
-            case FileName of
-                ?TEST_FILE1 ->
-                    throw(test_error);
-                _ ->
-                    meck:passthrough([Job])
-            end
-        end),
+    storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
     storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
@@ -193,7 +180,7 @@ update_syncs_files_after_import_failed_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
-    test_utils:mock_unload(W1, simple_scan),
+    storage_sync_test_base:unmock_import_file_error(W1),
     storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
@@ -259,20 +246,10 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     timer:sleep(timer:seconds(1)),
     ok = sfm_test_utils:create_file(W1, SFMHandle, 8#775),
     timer:sleep(timer:seconds(1)),
-    test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
-        data = #{file_name := FileName}}, _
-    ) ->
-        case FileName of
-            ?TEST_FILE1 ->
-                throw(test_error);
-            _ ->
-                meck:passthrough([Job])
-        end
-    end),
+    storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
-    test_utils:mock_unload(W1, simple_scan),
+    storage_sync_test_base:unmock_import_file_error(W1),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -329,8 +306,67 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
-sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config) ->
-    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config, true).
+sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
+    MountSpaceInRoot = true,
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    %% Create file on storage
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
+    SFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
+    {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"toProcess">> => 1,
+        <<"imported">> => 0,
+        <<"updated">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID).
 
 create_directory_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
@@ -469,9 +505,9 @@ create_file_in_dir_update_test(Config) ->
     storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
         SpaceStoragePath, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
-        StorageTestDirPath2, ?SPACE_ID, true), 0),
+        StorageTestDirPath2, ?SPACE_ID, {true, _}), 0),
     storage_sync_test_base:assert_num_results_gte(History, ?assertMtimeChangedFun(
-        StorageTestDirPath, ?SPACE_ID, true), 1),
+        StorageTestDirPath, ?SPACE_ID, {true, _}), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -599,12 +635,12 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle5),
 
-    storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
-        StorageTestDirPath, ?SPACE_ID, true), 0),
-    storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
-        StorageTestDirPath2, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results_gte(History, ?assertMtimeChangedFun(
+        StorageTestDirPath, ?SPACE_ID, {true, _}), 1),
+    storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
         StorageTestDirPath, ?SPACE_ID, true), 1),
+    storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
+        StorageTestDirPath2, ?SPACE_ID, {false, _}), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -716,7 +752,7 @@ delete_and_update_files_simultaneously_update_test(Config) ->
         <<"deletedDayHist">> => 1
     }, ?SPACE_ID),
 
-    %% Check if File1 was deleted in and if File2 was updated
+    %% Check if File1 was deleted and if File2 was updated
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT},
@@ -1256,7 +1292,7 @@ chmod_file_update2_test(Config) ->
     storage_sync_test_base:assert_num_results_gte(History, ?assertHashChangedFun(
         StorageTestDirPath, ?SPACE_ID, true), 1),
     storage_sync_test_base:assert_num_results(History, ?assertMtimeChangedFun(
-        StorageTestDirPath, ?SPACE_ID, true), 0),
+        StorageTestDirPath, ?SPACE_ID, {true, _}), 0),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1556,7 +1592,10 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        multi_provider_file_ops_test_base:init_env(NewConfig)
+        NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
+        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
+        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
+        NewConfig2
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
@@ -1574,15 +1613,11 @@ init_per_testcase(Case, Config) when
     Case =:= create_file_import_check_user_id_test ->
 
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
-    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
-        {StorageDoc = #document{value = Storage = #storage{}}, Ctx2} = meck:passthrough([Ctx]),
-        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
-    end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
+    ok = test_utils:mock_new(Workers, [reverse_luma]),
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_group_id, fun(_, _, _) ->
         {ok, ?GROUP}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_user_id, fun(_, _) ->
         {ok, ?USER}
     end),
     init_per_testcase(default, Config);
@@ -1592,15 +1627,11 @@ init_per_testcase(Case, Config) when
     Case =:= create_file_import_check_user_id_error_test ->
 
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [reverse_luma_proxy, storage_file_ctx]),
-    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
-        {StorageDoc = #document{value = Storage = #storage{}}, Ctx2} = meck:passthrough([Ctx]),
-        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
-    end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
+    ok = test_utils:mock_new(Workers, [reverse_luma]),
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_group_id, fun(_, _, _) ->
         {ok, ?GROUP}
     end),
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_user_id, fun(_, _) ->
         error(test_error)
     end),
     init_per_testcase(default, Config);
@@ -1673,26 +1704,20 @@ init_per_testcase(Case, Config) when
     Case =:= update_nfs_acl_test
     ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [storage_file_manager, reverse_luma_proxy, storage_file_ctx]),
-
-    test_utils:mock_expect(Workers, storage_file_ctx, get_storage_doc, fun(Ctx) ->
-        {StorageDoc = #document{value = Storage = #storage{}}, Ctx2} = meck:passthrough([Ctx]),
-        {StorageDoc#document{value = Storage#storage{luma_config = ?LUMA_CONFIG}}, Ctx2}
-    end),
-
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id_by_name, fun(_, _, _, _) ->
+    ok = test_utils:mock_new(Workers, [storage_file_manager, reverse_luma]),
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_user_id_by_name, fun(_, _) ->
         {ok, ?USER}
     end),
 
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_user_id, fun(_, _, _, _) ->
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_user_id, fun(_, _) ->
         {ok, ?USER}
     end),
 
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id, fun(_, _, _, _, _) ->
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_group_id, fun(_, _, _) ->
         {ok, ?GROUP}
     end),
 
-    test_utils:mock_expect(Workers, reverse_luma_proxy, get_group_id_by_name, fun(_, _, _, _, _) ->
+    ok = test_utils:mock_expect(Workers, reverse_luma, get_group_id_by_name, fun(_, _, _) ->
         {ok, ?GROUP2}
     end),
 
@@ -1745,7 +1770,7 @@ end_per_testcase(Case, Config) when
     Case =:= create_file_import_check_user_id_error_test ->
 
     Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx]),
+    ok = test_utils:mock_unload(Workers, [reverse_luma]),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
@@ -1753,7 +1778,7 @@ end_per_testcase(Case, Config) when
     Case =:= update_nfs_acl_test
     ->
     Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [reverse_luma_proxy, storage_file_ctx, storage_file_manager]),
+    ok = test_utils:mock_unload(Workers, [reverse_luma, storage_file_manager]),
     end_per_testcase(default, Config);
 
 end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
@@ -1761,7 +1786,7 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     ok = test_utils:mock_unload(Workers, [storage_file_manager]),
     end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed, Config) ->
+end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
     end_per_testcase(default, Config);
@@ -1771,13 +1796,10 @@ end_per_testcase(_Case, Config) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     ok = storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
+    storage_sync_test_base:clean_traverse_tasks(W1),
     storage_sync_test_base:clean_synced_storage(Config, true),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes]),
+    test_utils:mock_unload(Workers, [storage_sync_engine, storage_sync_changes]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

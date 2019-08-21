@@ -12,16 +12,27 @@
 -module(filename_mapping).
 -author("Jakub Kudzia").
 
+-include("modules/fslogic/fslogic_common.hrl").
+
 %%%===================================================================
 %%% Exports
 %%%===================================================================
 
 %% API
--export([to_storage_path/3]).
+-export([to_storage_path/3, space_dir_path/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns path on storage to directory where space is mounted.
+%% @end
+%%-------------------------------------------------------------------
+-spec space_dir_path(od_space:id(), storage:id()) -> helpers:file_id().
+space_dir_path(SpaceId, StorageId) ->
+    to_storage_path(SpaceId, StorageId, <<(?DIRECTORY_SEPARATOR_BINARY)/binary, SpaceId/binary>>).
 
 %%--------------------------------------------------------------------
 %% @doc

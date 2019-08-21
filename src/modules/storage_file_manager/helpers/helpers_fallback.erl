@@ -34,16 +34,16 @@
 apply_and_maybe_handle_ekeyexpired(#sfm_handle{
     session_id = SessionId,
     space_id = SpaceId,
-    storage = Storage
+    storage_id = StorageId
 }, Operation, HelperOrFileHandle) ->
     case Operation() of
         Result = {error, ?EKEYEXPIRED} ->
-            {ok, Helper} = fslogic_storage:select_helper(Storage),
+            {ok, Helper} = storage:get_helper(StorageId),
             case helper:get_name(Helper) of
                 ?WEBDAV_HELPER_NAME ->
                     % called by module for CT tests
                     helpers_reload:refresh_handle_params(HelperOrFileHandle,
-                        SessionId, SpaceId, Storage),
+                        SessionId, SpaceId, StorageId),
                     Operation();
                 _ ->
                     Result

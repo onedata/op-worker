@@ -261,21 +261,18 @@ handle_request_and_process_response(SessId, Request) ->
 -spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
     file_partial_ctx:ctx() | undefined) -> response().
 handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
-    {FileCtx, SpaceID} = case FilePartialCtx of
+    {FileCtx, _SpaceID} = case FilePartialCtx of
         undefined ->
             {undefined, undefined};
         _ ->
             file_ctx:new_by_partial_context(FilePartialCtx)
     end,
-    Response = try
+    try
         handle_request_locally(UserCtx, Request, FileCtx)
     catch
         Type:Error ->
             fslogic_errors:handle_error(Request, Type, Error)
-    end,
-
-    %todo TL move this storage_sync logic out of here
-    process_response(UserCtx, Request, Response, SpaceID).
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -521,77 +518,6 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     HandleId) ->
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
-%%--------------------------------------------------------------------
-%% @todo refactor
-%% @private
-%% @doc
-%% Do posthook for request response
-%% @end
-%%--------------------------------------------------------------------
--spec process_response(user_ctx:ctx(), request(), response(),
-    od_space:id() | undefined) -> response().
-process_response(_, _, Response, undefined) ->
-    Response;
-process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
-    file_request = #get_child_attr{name = FileName},
-    context_guid = ParentGuid
-}}, Response = #fuse_response{status = #status{code = ?ENOENT}},
-    SpaceId) ->
-    case space_strategies:is_import_on(SpaceId) of
-        true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            Path0 = fslogic_uuid:uuid_to_path(SessId, file_id:guid_to_uuid(ParentGuid)),
-            {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
-            Tokens = Tokens0 ++ [FileName],
-            Path = fslogic_path:join(Tokens),
-            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-                {path, P} ->
-                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-                    case Tokens1 of
-                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{
-                                response => Response,
-                                path => Path,
-                                ctx => UserCtx,
-                                space_id => SpaceId,
-                                request => Request
-                            },
-                            Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
-                            space_sync_worker:run(Init);
-                        _ -> Response
-                    end;
-                _ ->
-                    Response
-            end;
-        _ ->
-            Response
-    end;
-process_response(UserCtx,
-    Request = #fuse_request{fuse_request = #resolve_guid{path = Path}},
-    Response = #fuse_response{status = #status{code = ?ENOENT}}, SpaceId) ->
-    case space_strategies:is_import_on(SpaceId) of
-        true ->
-            {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-                {path, P} ->
-                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-                    case Tokens1 of
-                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{response => Response, path => Path, ctx => UserCtx,
-                                space_id => SpaceId, request => Request},
-                            Init = space_sync_worker:init(enoent_handling,
-                                SpaceId, undefined, Data),
-                            space_sync_worker:run(Init);
-                        _ -> Response
-                    end;
-                _ ->
-                    Response
-            end;
-        _ ->
-            Response
-    end;
-process_response(_, _, Response, _) ->
-    Response.
 
 -spec schedule_invalidate_permissions_cache() -> ok.
 schedule_invalidate_permissions_cache() ->

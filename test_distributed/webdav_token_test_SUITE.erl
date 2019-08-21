@@ -57,7 +57,7 @@ all() -> [
     storage:get_id(__Storage)
     end
 ).
--define(FILE_PATH, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
+-define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
 -define(USER, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
 -define(SESSION(User, Worker, Config),
@@ -107,7 +107,7 @@ user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     SessionId = ?SESSION(W, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 0,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
@@ -128,7 +128,7 @@ user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     SessionId = ?SESSION(W, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 5,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
@@ -158,7 +158,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 0,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
@@ -176,7 +176,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 5,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
 
@@ -296,9 +296,8 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
     end).
 
 get_sfm_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
-    {ok, StorageDoc} = rpc:call(Worker, storage, get, [StorageId]),
     rpc:call(Worker, storage_file_manager, new_handle,
-        [SessionId, SpaceId, Uuid, StorageDoc, FilePath, undefined]).
+        [SessionId, SpaceId, Uuid, StorageId, FilePath, undefined]).
 
 setxattr(Worker, SFMHandle, Key, Value) ->
     rpc:call(Worker, storage_file_manager, setxattr, [SFMHandle, Key, Value, true, true]).

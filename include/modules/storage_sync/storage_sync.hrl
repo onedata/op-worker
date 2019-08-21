@@ -9,17 +9,21 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-ifndef(STORAGE_SYNC_HRL).
+-define(STORAGE_SYNC_HRL, 1).
+
+
 -include("global_definitions.hrl").
 
--define(STORAGE_SYNC_FILE_POOL_NAME, storage_sync_file_worker_pool).
--define(STORAGE_SYNC_DIR_POOL_NAME, storage_sync_dir_worker_pool).
--define(STORAGE_SYNC_FILE_WORKERS_NUM, application:get_env(?APP_NAME, storage_sync_file_workers_num, 10)).
--define(STORAGE_SYNC_DIR_WORKERS_NUM, application:get_env(?APP_NAME, storage_sync_dir_workers_num, 10)).
 
--define(FILES_IMPORT_TIMEOUT, timer:hours(24)).
+-define(DEFAULT_DELETE_ENABLE, false).
+-define(DEFAULT_WRITE_ONCE, false).
+-define(DEFAULT_SCAN_INTERVAL, 10).
+-define(DEFAULT_SYNC_ACL, false).
+-define(DEFAULT_SYNC_MAX_DEPTH, 65535).
+-define(SYNC_DIR_BATCH_SIZE, application:get_env(?APP_NAME, storage_sync_dir_batch_size, 100)).
 
--define(DIR_BATCH, application:get_env(?APP_NAME, storage_sync_dir_batch_size, 100)).
--define(OBJECT_DIR_BATCH, application:get_env(?APP_NAME, storage_sync_object_dir_batch_size, 1000)).
+-define(STORAGE_TREE_PREFIX, <<"ss_storage_children">>).
+-define(DB_TREE_PREFIX, <<"ss_db_children">>).
 
--define(STORAGE_SYNC_POSIX_MODE, storage_sync_posix_mode).
--define(STORAGE_SYNC_OBJECT_MODE, storage_sync_object_mode).
+-endif.

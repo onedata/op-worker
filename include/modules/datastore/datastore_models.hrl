@@ -240,7 +240,6 @@
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
@@ -250,9 +249,15 @@
 
 -record(storage_sync_info, {
     children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
+    delayed_children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
     mtime :: undefined | non_neg_integer(),
-    last_stat :: undefined | non_neg_integer()
+    last_stat :: undefined | non_neg_integer(),
+    % todo comment, used only in deletion detection
+    batches_to_process = 0 :: non_neg_integer(),
+    batches_processed = 0:: non_neg_integer()
 }).
+
+-record(storage_sync_links, {}).
 
 -record(file_meta, {
     name :: undefined | file_meta:name(),
@@ -412,25 +417,19 @@
     storage_file_created = false :: boolean()
 }).
 
--define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
-
-%% Model that maps space to storage strategies
--record(storage_strategies, {
-    storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
-    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config()
+%% Model that stores configuration of storage_sync mechanism
+-record(storage_sync_config, {
+    import_enabled = false :: boolean(),
+    update_enabled = false :: boolean(),
+    import_config = #{} :: map(), % todo type
+    update_config = #{} :: map() % todo type
 }).
-
--define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
--define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
--define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
-    file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
-    file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
-    enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
+    % todo VFS-5717 rename model to storage_sync_configs?
+    % todo maybe merge space_strategies with storage_strategies to one model?
+    sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
 -record(storage_sync_monitoring, {

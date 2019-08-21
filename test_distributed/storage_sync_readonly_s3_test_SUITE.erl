@@ -12,7 +12,6 @@
 -author("Jakub Kudzia").
 
 -include("storage_sync_test.hrl").
--include("modules/storage_sync/strategy_config.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -214,12 +213,12 @@ create_subfiles_import_many_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 201,
+        <<"toProcess">> => 203,
         <<"imported">> => 200,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 2,
         <<"importedSum">> => 200,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -253,12 +252,12 @@ create_subfiles_import_many2_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1002,
+        <<"toProcess">> => 1011,
         <<"imported">> => 1000,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 10,
         <<"importedSum">> => 1000,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -362,7 +361,7 @@ create_file_in_dir_update_test(Config) ->
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
     MountSpaceInRoot = true,
-    % in this test storage_sync_object_dir_batch_size is set in init_per_testcase to 2
+    % in this test storage_traverse_batch_size is set in init_per_testcase to 2
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
@@ -495,18 +494,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     %ensure that import will start with different timestamp than dir was created
     timer:sleep(timer:seconds(1)),
 
-    test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file,
-        fun(Job = #space_strategy_job{
-            data = #{file_name := FileName}
-        }, Uuid) ->
-            case FileName of
-                ?TEST_FILE1 ->
-                    throw(test_error);
-                _ ->
-                    meck:passthrough([Job, Uuid])
-            end
-        end),
+    storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
 
     storage_sync_test_base:enable_storage_import(Config, ?SPACE_ID, SyncedStorage),
@@ -540,7 +528,7 @@ update_syncs_files_after_import_failed_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
-    test_utils:mock_unload(W1, simple_scan),
+    storage_sync_test_base:unmock_import_file_error(W1),
     storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_storage_update(Config),
@@ -608,20 +596,10 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     ok = sfm_test_utils:create_file(W1, SFMHandle, 8#664),
     {ok, _} = sfm_test_utils:write_file(W1, SFMHandle, 0, ?TEST_DATA),
     timer:sleep(timer:seconds(1)),
-    test_utils:mock_new(W1, simple_scan),
-    test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
-        data = #{file_name := FileName}}, Uuid
-    ) ->
-        case FileName of
-            ?TEST_FILE1 ->
-                throw(test_error);
-            _ ->
-                meck:passthrough([Job, Uuid])
-        end
-    end),
+    storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     storage_sync_test_base:enable_storage_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
-    test_utils:mock_unload(W1, simple_scan),
+    storage_sync_test_base:unmock_import_file_error(W1),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -705,7 +683,10 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
-        multi_provider_file_ops_test_base:init_env(NewConfig)
+        NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
+        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
+        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
+        NewConfig2
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     {ok, _} = worker_pool:start_sup_pool(?VERIFY_POOL, [{workers, 8}]),
@@ -729,13 +710,13 @@ init_per_testcase(create_file_in_dir_update_test, Config) ->
 
 init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_object_dir_batch_size),
-    test_utils:set_env(W1, op_worker, storage_sync_object_dir_batch_size, 2),
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_traverse_batch_size),
+    test_utils:set_env(W1, op_worker, storage_traverse_batch_size, 2),
     Config2 = [
         {update_config, #{
             delete_enable => false,
             write_once => true}},
-        {old_storage_sync_object_dir_batch_size, OldDirBatchSize}
+        {old_storage_traverse_batch_size, OldDirBatchSize}
         | Config
     ],
     init_per_testcase(default, Config2);
@@ -750,18 +731,19 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    OldDirBatchSize = ?config(old_storage_sync_object_dir_batch_size, Config),
-    test_utils:set_env(W1, op_worker, storage_sync_object_dir_batch_size, OldDirBatchSize),
+    OldDirBatchSize = ?config(old_storage_traverse_batch_size, Config),
+    test_utils:set_env(W1, op_worker, storage_traverse_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    storage_sync_test_base:clean_traverse_tasks(W1),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
     storage_sync_test_base:clean_synced_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils]),
+    test_utils:mock_unload(Workers, [storage_sync_engine, storage_sync_changes, link_utils]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
