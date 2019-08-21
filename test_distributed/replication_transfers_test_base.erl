@@ -1843,7 +1843,7 @@ rtransfer_works_between_providers_with_different_ports(Config, Type) ->
             assertion_nodes = [WorkerP1, WorkerP2]
         }
     },
-    
+
     Config1 = transfers_test_mechanism:run_test(Config, TransferTestSpec),
     Config2 = transfers_test_mechanism:move_transfer_ids_to_old_key(Config1),
 
@@ -1851,6 +1851,7 @@ rtransfer_works_between_providers_with_different_ports(Config, Type) ->
     TransferTestSpec2 = TransferTestSpec#transfer_test_spec{
         setup = Setup#setup{
             setup_node = WorkerP2,
+            root_directory = <<"root_dir">>,
             assertion_nodes = [WorkerP1],
             distribution = [
                 #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}

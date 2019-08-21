@@ -25,6 +25,7 @@
 %% API
 %% export for tests
 -export([
+    create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
@@ -80,6 +81,44 @@
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
+
+create_on_different_providers_test_base(Config) ->
+    [W1, _, W2 | _] = ?config(op_worker_nodes, Config),
+
+    UserW1SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    UserW2SessId = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W2)}}, Config),
+
+    SpaceRootDir = <<"/space1/">>,
+
+    % create file on provider1
+    FileName = generator:gen_name(),
+    FilePath = <<SpaceRootDir/binary, FileName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:create(W1, UserW1SessId, FilePath, 8#755)),
+
+    % file creation on provider2 after synchronizing documents should fail
+    ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:ls(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W2, UserW2SessId, FilePath, 8#755)),
+
+    % file creation on provider2 after synchronizing documents should succeed
+    % after deleting it on provider1
+    ?assertMatch(ok, lfm_proxy:unlink(W1, UserW1SessId, {path, FilePath})),
+    ?assertMatch({ok, _}, lfm_proxy:create(W2, UserW2SessId, FilePath, 8#755), 60),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, FilePath})),
+
+    % create dir on provider1
+    DirName = generator:gen_name(),
+    DirPath = <<SpaceRootDir/binary, DirName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, UserW1SessId, DirPath, 8#755)),
+
+    % dir creation on provider2 after synchronizing documents should fail
+    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:ls(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath, 8#755)),
+
+    % file creation on provider2 after synchronizing documents should succeed
+    % after deleting it on provider1
+    ?assertMatch(ok, lfm_proxy:unlink(W1, UserW1SessId, {path, DirPath})),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath, 8#755), 60),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, DirPath})).
 
 synchronizer_test_base(Config0) ->
     Config = extend_config(Config0, <<"user1">>, {2,0,0,1}, 1),
