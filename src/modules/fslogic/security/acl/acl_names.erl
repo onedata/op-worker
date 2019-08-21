@@ -24,6 +24,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes name from access_control_entity record (sets its value to undefined).
@@ -59,9 +60,11 @@ add(Acl) ->
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @private
-%% @doc Transforms global id to acl name representation (name and hash suffix)
+%% @doc
+%% Transforms global id to acl name representation (name and hash suffix)
 %% i. e. "fif3nhh238hdfg33f3" -> "John Dow#fif3n"
 %% @end
 %%--------------------------------------------------------------------
@@ -76,9 +79,11 @@ uid_to_ace_name(Uid) ->
     {ok, FullName} = user_logic:get_full_name(?ROOT_SESS_ID, Uid),
     FullName.
 
+
 %%--------------------------------------------------------------------
 %% @private
-%% @doc Transforms global group id to acl group name representation (name and hash suffix)
+%% @doc
+%% Transforms global group id to acl group name representation (name and hash suffix)
 %% i. e. "fif3nhh238hdfg33f3" -> "group1#fif3n"
 %% @end
 %%--------------------------------------------------------------------
