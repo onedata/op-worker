@@ -926,7 +926,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode(Value))};
+    #acl{value = acl:from_json(json_utils:decode(Value))};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{
@@ -1937,7 +1937,7 @@ translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
     {acl, #'Acl'{
-        value = json_utils:encode(acl_logic:from_acl_to_json_format(Value))}
+        value = json_utils:encode(acl:to_json(Value))}
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};

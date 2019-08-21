@@ -26,27 +26,27 @@ bitmask_acl_conversion_test() ->
     GroupName = <<"GroupName">>,
 
     % when
-    AceName1 = acl_logic:identifier_acl_to_json(UserId, UserName),
-    AceName2 = acl_logic:identifier_acl_to_json(GroupId, GroupName),
+    AceName1 = acl:identifier_acl_to_json(UserId, UserName),
+    AceName2 = acl:identifier_acl_to_json(GroupId, GroupName),
 
     % then
     ?assert(is_binary(AceName1)),
     ?assert(is_binary(AceName2)),
 
     % when
-    Acl = acl_logic:from_json_format_to_acl(
+    Acl = acl:from_json(
         [
             #{
-                <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
+                <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
                 <<"identifier">> => AceName1,
-                <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-                <<"acemask">> => acl_logic:bitmask_to_binary(?read_mask bor ?write_mask)
+                <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
+                <<"acemask">> => acl:bitmask_to_binary(?read_mask bor ?write_mask)
             },
             #{
-                <<"acetype">> => acl_logic:bitmask_to_binary(?deny_mask),
+                <<"acetype">> => acl:bitmask_to_binary(?deny_mask),
                 <<"identifier">> => AceName2,
-                <<"aceflags">> => acl_logic:bitmask_to_binary(?identifier_group_mask),
-                <<"acemask">> => acl_logic:bitmask_to_binary(?write_mask)
+                <<"aceflags">> => acl:bitmask_to_binary(?identifier_group_mask),
+                <<"acemask">> => acl:bitmask_to_binary(?write_mask)
             }
         ]
     ),
@@ -64,15 +64,15 @@ binary_acl_conversion_test() ->
     GroupName = <<"GroupName">>,
 
     % when
-    AceName1 = acl_logic:identifier_acl_to_json(UserId, UserName),
-    AceName2 = acl_logic:identifier_acl_to_json(GroupId, GroupName),
+    AceName1 = acl:identifier_acl_to_json(UserId, UserName),
+    AceName2 = acl:identifier_acl_to_json(GroupId, GroupName),
 
     % then
     ?assert(is_binary(AceName1)),
     ?assert(is_binary(AceName2)),
 
     % when
-    Acl = acl_logic:from_json_format_to_acl(
+    Acl = acl:from_json(
         [
             #{
                 <<"acetype">> => <<"ALLOW">>,
