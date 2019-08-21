@@ -4,6 +4,11 @@
 CHANGELOG
 ---------
 
+### 18.02.3
+
+* VFS-5706 do not allow to create file if it exists on other provider
+
+
 ### 18.02.2
 
 * VFS-5391 Reduced size of monitoring and throttling log files
