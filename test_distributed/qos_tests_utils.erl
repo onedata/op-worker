@@ -49,14 +49,14 @@ assert_file_qos_document(Worker, FileUuid, QosList, TargetStorages) ->
     ?assertMatch(ExpectedFileQosSorted, FileQosSorted).
 
 
-assert_effective_qos(Worker, FileGuid, QosList, TargetStorages) ->
+assert_effective_qos(Worker, FileUuid, QosList, TargetStorages) ->
     ExpectedFileQos = #file_qos{
         qos_list = QosList,
         target_storages = TargetStorages
     },
     ExpectedFileQosSorted = sort_file_qos(ExpectedFileQos),
 
-    EffQos = ?assertMatch(_EffQos, rpc:call(Worker, file_qos, get_effective, [FileGuid])),
+    EffQos = ?assertMatch(_EffQos, rpc:call(Worker, file_qos, get_effective, [FileUuid])),
     EffQosSorted = sort_file_qos(EffQos),
     ?assertMatch(ExpectedFileQosSorted, EffQosSorted).
 

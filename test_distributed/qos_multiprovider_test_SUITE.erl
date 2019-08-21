@@ -281,12 +281,12 @@ storage_mount_point(Worker, StorageId) ->
 
 mock_qos_restore(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, qos_req, [passthrough]),
-    test_utils:mock_expect(Workers, qos_req, restore_qos_on_storage, fun(_,_) -> ok end).
+    test_utils:mock_new(Workers, qos_hooks, [passthrough]),
+    test_utils:mock_expect(Workers, qos_hooks, maybe_update_file_on_storage, fun(_,_) -> ok end).
 
 unmock_qos_restore(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, qos_req).
+    test_utils:mock_unload(Workers, qos_hooks).
 
 mock_schedule_transfers(Config) ->
     Workers = ?config(op_worker_nodes, Config),

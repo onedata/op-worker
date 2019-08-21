@@ -142,7 +142,7 @@ transfer_regular_file(FileCtx, #transfer_params{
     {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {Size, FileCtx} = file_ctx:get_file_size(FileCtx2),
+    {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
     schedule_replica_deletion_task(

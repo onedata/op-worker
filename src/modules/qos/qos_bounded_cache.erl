@@ -110,5 +110,6 @@ invalidate_on_all_nodes(SpaceId) ->
     end,
 
     lists:foreach(fun({badrpc, _} = Error) ->
-        ?error("Failed to invalidate QoS bounded cache. Error: ~p~n", [Error])
+        ?error("Failed to invalidate QoS bounded cache. Error: ~p~n", [Error]);
+                     (ok) -> ok
     end, Res).

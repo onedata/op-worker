@@ -28,7 +28,7 @@
 
 %% higher-level functions operating on file_qos record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
-    set_status/2, get_qos_details/1, add_traverse_req/3, remove_traverse_req/2]).
+    set_status/2, get_qos_details/1, add_traverse_reqs/2, remove_traverse_req/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -41,6 +41,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type status() :: ?QOS_IN_PROGRESS_STATUS | ?QOS_TRAVERSE_FINISHED_STATUS | ?QOS_IMPOSSIBLE_STATUS.
 -type replicas_num() :: pos_integer().
+-type traverse_req() :: #qos_traverse_req{}.
 -type one_or_many(Type) :: Type | [Type].
 
 -export_type([id/0, status/0, replicas_num/0]).
@@ -170,24 +171,28 @@ get_qos_details(QosId) ->
     {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
     {QosEntry#qos_entry.expression, QosEntry#qos_entry.replicas_num, QosEntry#qos_entry.status}.
 
-% fixme doc and spec
-add_traverse_req(FileUuid, QosId, TargetStorage) ->
-    {ok, _} = update(QosId, fun(#qos_entry{traverse_req = TR} = QosEntry) ->
-        {ok, QosEntry#qos_entry{
-            traverse_req = [
-                #qos_traverse_req{
-                    task_id = ?QOS_TRAVERSE_TASK_ID(QosId, traverse),
-                    file_uuid = FileUuid,
-                    target_storage = TargetStorage}
-                | TR]
-        }}
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds traverse requests for given QoS.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_traverse_reqs(id(), [traverse_req()]) ->  ok.
+add_traverse_reqs(QosId, TraverseReqs) ->
+    {ok, _} = update(QosId, fun(QosEntry) ->
+        {ok, QosEntry#qos_entry{traverse_reqs = TraverseReqs}}
     end),
     ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes given traverse from requests list.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_traverse_req(id(), traverse:id()) ->  ok.
 remove_traverse_req(QosId, TaskId) ->
-    {ok, _} = update(QosId, fun(#qos_entry{traverse_req = TR} = QosEntry) ->
+    {ok, _} = update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
-            traverse_req = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
+            traverse_reqs = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
         }}
     end),
     ok.

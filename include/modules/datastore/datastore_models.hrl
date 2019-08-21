@@ -266,16 +266,27 @@
     target_storages = #{} :: file_qos:target_storages()
 }).
 
-%%fixme
+% This record holds information about single hook.
+% Must be defined here as delayed_hooks record depends on it.
+-record(hook, {
+    module :: module(),
+    function :: atom(),
+    args = [] :: [binary()]
+}).
+
+% This model can be related with file and holds information
+% about hooks for given file. All hooks will be executed for
+% change of given file's file_meta document.
+-record(delayed_hooks, {
+    hooks = [] :: [#hook{}]
+}).
+
+% This record is a request to remote provider to start QoS traverse.
+% Defined here as qos_entry record depends on it.
 -record(qos_traverse_req, {
     task_id :: traverse:id(),
     file_uuid :: file_meta:uuid(),
     target_storage :: storage:id()
-}).
-
-% fixme
--record(delayed_hooks, {
-    hooks = [] :: [binary()]
 }).
 
 % This model holds information about single QoS, that is QoS requirement
@@ -288,7 +299,7 @@
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status(),
-    traverse_req = [] :: [#qos_traverse_req{}]
+    traverse_reqs = [] :: [#qos_traverse_req{}]
 }).
 
 -record(file_meta, {

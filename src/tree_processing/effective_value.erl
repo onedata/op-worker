@@ -20,7 +20,7 @@
 
 %% API
 -export([get_or_calculate/3, get_or_calculate/4, get_or_calculate/5, get_or_calculate/6, get_or_calculate/7,
-    invalidate/1]).
+    get_or_calculate/8, invalidate/1]).
 
 -type initial_calculation_info() :: term(). % Function that calculates value returns additional information
                                             % (CalculationInfo) that can be useful for further work
@@ -63,7 +63,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo,
-%% Args, bounded_cache:get_timestamp())
+%% Args, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
@@ -71,18 +71,31 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args) ->
     get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args,
-        bounded_cache:get_timestamp()).
+        undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, Timestamp, false).
+%% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo,
+%% Args, DelayedHook, bounded_cache:get_timestamp())
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), bounded_cache:timestamp()) ->
+    initial_calculation_info(), args(), delayed_hooks:hook()) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
-get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, Timestamp) ->
-    get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, Timestamp, false).
+get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook) ->
+    get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args,
+        DelayedHook, bounded_cache:get_timestamp()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp, false).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
+    initial_calculation_info(), args(), delayed_hooks:hook(), bounded_cache:timestamp()) ->
+    {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
+get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp) ->
+    get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,37 +107,51 @@ get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, Ti
 %% file/directory file_meta document while ParentValue and CalculationInfo are results of calling this function on 
 %% parent. Function is called recursively starting from space document. ParentValue and CalculationInfo are set to
 %% undefined and InitialCalculationInfo for space document (it has no parent).
+%% When during calculation ParentDoc is not found (i.e. it is not DBSynced yet) DelayedHook is registered for this
+%% file (see delayed_hooks).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), bounded_cache:timestamp(), in_critical_section()) ->
+    initial_calculation_info(), args(), delayed_hooks:hook(), bounded_cache:timestamp(), in_critical_section()) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
-get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo, Args, Timestamp, true) ->
+get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo,
+    Args, DelayedHook, Timestamp, true) ->
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
             {ok, Value, InitialCalculationInfo};
         {error, not_found} ->
             critical_section:run(?CRITICAL_SECTION(Cache, Key), fun() ->
-                get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, Timestamp, parent)
+                get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args,
+                    DelayedHook, Timestamp, parent)
             end)
     end;
-get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo, Args, Timestamp,
-    InCriticalSection) ->
+get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo,
+    Args, DelayedHook, Timestamp, InCriticalSection) ->
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
             {ok, Value, InitialCalculationInfo};
         {error, not_found} ->
             case fslogic_uuid:space_dir_uuid_to_spaceid_no_error(Key) of % is space?
                 <<>> -> % not a space
-                    {ok, ParentDoc} = file_meta:get_parent(Doc),
-                    InCriticalSection2 = case InCriticalSection of
-                        parent -> true;
-                        _ -> InCriticalSection
-                    end,
-                    {ok, ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
-                        CalculateCallback, InitialCalculationInfo, Args, Timestamp, InCriticalSection2),
-                    bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
-                        [Doc, ParentValue, CalculationInfo | Args], Timestamp);
+                    {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
+                    case file_meta:get(ParentUuid) of
+                        {ok, ParentDoc} ->
+                            InCriticalSection2 = case InCriticalSection of
+                                parent -> true;
+                                _ -> InCriticalSection
+                            end,
+                            {ok, ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
+                                CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp,
+                                InCriticalSection2),
+                            bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
+                                [Doc, ParentValue, CalculationInfo | Args], Timestamp);
+                        _ ->
+                            case DelayedHook of
+                                undefined -> ok;
+                                _ -> delayed_hooks:add_hook(ParentUuid, DelayedHook)
+                            end,
+                            {ok, undefined, InitialCalculationInfo}
+                    end;
                 _ -> % space
                     bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
                         [Doc, undefined, InitialCalculationInfo | Args], Timestamp)

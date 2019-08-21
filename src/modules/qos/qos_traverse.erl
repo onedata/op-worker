@@ -32,7 +32,6 @@
 -type(qos_task_type() :: traverse | restore).
 
 -record(add_qos_traverse_args, {
-    task_id :: binary(),
     session_id :: session:id(),
     qos_id :: qos_entry:id(),
     file_path_tokens = [] :: [binary()],
@@ -62,7 +61,6 @@ fulfill_qos(SessionId, FileCtx, QosId, TargetStorages, TaskId) ->
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #add_qos_traverse_args{
-            task_id = TaskId,
             session_id = SessionId,
             qos_id = QosId,
             file_path_tokens = FilePathTokens,
@@ -99,7 +97,7 @@ get_job(DocOrID) ->
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
-% fixme spec
+-spec task_started(traverse:id()) -> ok.
 task_started(TaskId) ->
     [_, QosId, _TaskType] = binary:split(TaskId, <<"#">>, [global]),
     qos_entry:remove_traverse_req(QosId, TaskId).

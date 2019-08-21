@@ -65,7 +65,9 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    ok = delayed_hooks:execute_hooks(FileUuid),
+    ok = delayed_hooks:delete(FileUuid);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     deleted = false,
@@ -73,7 +75,9 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    ok = delayed_hooks:execute_hooks(FileUuid),
+    ok = delayed_hooks:delete(FileUuid);
 change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}
@@ -125,13 +129,12 @@ change_replicated_internal(SpaceId, #document{
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
 change_replicated_internal(SpaceId, #document{
     key = QosId,
-    value = #qos_entry{traverse_req = TR}
+    value = #qos_entry{traverse_reqs = TR}
 }) ->
     ?debug("change_replicated_internal: qos_entry ~p", [QosId]),
-    % fixme the same as in qos req
     lists:foreach(fun(#qos_traverse_req{task_id = TaskId, file_uuid = FileUuid, target_storage = TS}) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
-        qos_req:maybe_start_traverse(FileCtx, QosId, TS, TaskId)
+        qos_hooks:maybe_start_traverse(FileCtx, QosId, TS, TaskId)
     end, TR);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

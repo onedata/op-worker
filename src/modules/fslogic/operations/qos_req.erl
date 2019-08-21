@@ -20,7 +20,7 @@
 
 %% API
 -export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2,
-    check_fulfillment/3, restore_qos_on_storage/2, maybe_start_traverse/4]).
+    check_fulfillment/3]).
 
 % For test purpose
 -export([get_space_storages/2]).
@@ -94,45 +94,6 @@ check_fulfillment(UserCtx, FileCtx, QosId) ->
         fun check_fulfillment_insecure/3
     ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file replication to given storage if it is required by QoS.
-%% Uses QoS traverse pool.
-%% @end
-%%--------------------------------------------------------------------
--spec restore_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
-restore_qos_on_storage(FileCtx, StorageId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    EffFileQos = file_qos:get_effective(FileUuid),
-
-    case EffFileQos of
-        undefined ->
-            ok;
-        _ ->
-            QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
-            lists:foreach(fun(QosId) ->
-                ok = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId], restore)
-            end, QosToUpdate)
-    end.
-
-% fixme spec and docs
-% fixme maybe move to qos_traverse (or somewhere better)
-maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO VFS-5573 use storage id instead of provider
-    case oneprovider:get_id_or_undefined() of
-        Storage ->
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            {ok, _} = qos_traverse:fulfill_qos(
-                ?ROOT_SESS_ID, FileCtx, QosId, [Storage], TaskId
-            ),
-            true;
-        _ ->
-            false
-    end.
-
 %%%===================================================================
 %%% Insecure functions
 %%%===================================================================
@@ -140,7 +101,10 @@ maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
 %% @private
 %% @doc
 %% Creates new qos item document. Transforms expression to RPN form.
-%% Starts traverse job responsible for data management for given QoS.
+%% Delegates traverse jobs responsible for data management for given QoS
+%% to appropriate providers. This is done by creating qos_traverse_req for
+%% given QoS that holds information for which file and on which storage
+%% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_entry:replicas_num()) ->
@@ -172,12 +136,17 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             {ok, _} = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
-            lists:foreach(fun(Storage) ->
-                case ?MODULE:maybe_start_traverse(FileCtx, QosId, Storage, ?QOS_TRAVERSE_TASK_ID(QosId, traverse)) of
-                    true -> ok;
-                    false -> ok = qos_entry:add_traverse_req(FileUuid, QosId, Storage)
+            TraverseReqs = lists:filtermap(fun(Storage) ->
+                case qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, ?QOS_TRAVERSE_TASK_ID(QosId, traverse)) of
+                    true -> false;
+                    false -> {true, #qos_traverse_req{
+                        task_id = ?QOS_TRAVERSE_TASK_ID(QosId, traverse),
+                        file_uuid = FileUuid,
+                        target_storage = Storage
+                    }}
                 end
-            end, TargetStoragesList)
+            end, TargetStoragesList),
+            qos_entry:add_traverse_reqs(QosId, TraverseReqs)
     end,
 
     #provider_response{

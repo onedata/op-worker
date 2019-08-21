@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc Model that holds information about qos defined for given file.
 %%% It contains two fields:
-%%%     - qos_list - holds IDs of all qos_entrys defined for this file,
+%%%     - qos_list - holds IDs of all qos_entries defined for this file,
 %%%     - target_storages - holds mapping storage_id to list of all qos_entry IDs that
 %%%       requires file replica on this storage.
 %%% file_qos is updated in two cases:
@@ -35,7 +35,7 @@
 -export([create_or_update/2, delete/1]).
 
 %% higher-level functions operating on file_qos record.
--export([get_effective/1, remove_qos_id/2,
+-export([get_effective/1, get_effective/2, remove_qos_id/2,
     add_qos/4, check_file_protected/2
 ]).
 
@@ -46,7 +46,7 @@
 -export([get/1]).
 
 
--type key() :: datastore:key().
+-type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
@@ -112,13 +112,17 @@ delete(Key) ->
 %%% Higher-level functions operating on file_qos record.
 %%%===================================================================
 
+get_effective(FileUuidOrDoc) ->
+    get_effective(FileUuidOrDoc, undefined).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns effective file_qos for file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective(file_meta:doc() | file_meta:uuid()) -> record() | undefined.
-get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
+-spec get_effective(file_meta:doc() | file_meta:uuid(), delayed_hooks:callback() | undefined) ->
+    record() | undefined.
+get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}, DelayedHook) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
         case {file_qos:get(Uuid), ParentEffQos} of
             {{error, not_found}, _} ->
@@ -132,15 +136,19 @@ get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
     end,
 
     CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], []) of
+    case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], [], DelayedHook) of
         {ok, EffQos, _} -> EffQos;
         _ -> undefined % documents are not synchronized yet
     end;
-get_effective(FileUuid) ->
+get_effective(FileUuid, DelayedHook) ->
     case file_meta:get(FileUuid) of
         {ok, FileMeta} ->
             get_effective(FileMeta);
         _ ->
+            case DelayedHook of
+                undefined -> ok;
+                _ -> delayed_hooks:add_hook(FileUuid, DelayedHook)
+            end,
             undefined
     end.
 
