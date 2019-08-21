@@ -273,6 +273,11 @@
     target_storage :: storage:id()
 }).
 
+% fixme
+-record(delayed_hooks, {
+    hooks = [] :: [binary()]
+}).
+
 % This model holds information about single QoS, that is QoS requirement
 % defined by the user for file or directory through QoS expression and
 % number of required replicas. Each such requirement creates new qos_entry

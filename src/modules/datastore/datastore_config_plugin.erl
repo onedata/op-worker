@@ -74,7 +74,8 @@ get_models() -> [
     idp_access_token,
     tree_traverse_job,
     file_qos,
-    qos_entry
+    qos_entry,
+    delayed_hooks
 ].
 
 %%--------------------------------------------------------------------
