@@ -29,6 +29,7 @@
 -export([replicate_block/3]).
 
 -export([
+    create_on_different_providers_test/1,
     db_sync_basic_opts_test/1,
     db_sync_many_ops_test/1,
     db_sync_many_ops_test_base/1,
@@ -63,6 +64,7 @@
 ]).
 
 -define(TEST_CASES, [
+    create_on_different_providers_test,
     db_sync_basic_opts_test,
     db_sync_many_ops_test,
     db_sync_distributed_modification_test,
@@ -123,6 +125,9 @@ all() ->
             {description, ""}
         ]}
     ]).
+
+create_on_different_providers_test(Config) ->
+    multi_provider_file_ops_test_base:create_on_different_providers_test_base(Config).
 
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
