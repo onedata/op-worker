@@ -792,6 +792,6 @@ remove_qos(SessId, QosId) ->
 %% Check QoS fulfilled.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id()) -> ok | error_reply().
+-spec check_qos_fulfilled(session:id(), qos_entry:id()) -> boolean() | error_reply().
 check_qos_fulfilled(SessId, QosId) ->
     ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosId) end).

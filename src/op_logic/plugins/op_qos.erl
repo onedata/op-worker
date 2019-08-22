@@ -18,6 +18,7 @@
 -include("op_logic.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -87,9 +88,9 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 %% {@link op_logic_behaviour} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) -> {ok, op_logic:entity()} | op_logic:error().
+-spec fetch_entity(op_logic:req()) -> {ok, op_logic:versioned_entity()} | op_logic:error().
 fetch_entity(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     id = QosId,
@@ -98,7 +99,7 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     fetch_qos_entry(Auth, QosId);
 
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = effective_qos}}) ->
-    {ok, undefined};
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = QosId,
@@ -135,10 +136,11 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}},
-    #qos_entry{file_uuid = FileGuid}
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
+    _QosEntry
 ) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, Guid} = qos_entry:get_file_guid(QosId),
+    SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
@@ -148,10 +150,11 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance}},
-    #qos_entry{file_uuid = FileGuid}
+authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
+    _QosEntry
 ) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, Guid} = qos_entry:get_file_guid(QosId),
+    SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Auth, SpaceId).
 
 
@@ -165,9 +168,8 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}}, 
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #qos_entry{
-    file_uuid = Guid
-}) ->
+validate(#op_req{operation = get, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
+    {ok, Guid} = qos_entry:get_file_guid(QosId),
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
@@ -175,9 +177,8 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #qos_entry{
-    file_uuid = Guid
-}) ->
+validate(#op_req{operation = delete, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
+    {ok, Guid} = qos_entry:get_file_guid(QosId),
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId).
 
@@ -224,6 +225,7 @@ get(#op_req{auth = Auth, gri = #gri{id = QosId, aspect = instance}}, #qos_entry{
     expression = Expression,
     replicas_num = ReplicasNum
 }) ->
+
     SessionId = Auth#auth.session_id,
     {ok, #{
         <<"qosId">> => QosId,
@@ -263,11 +265,11 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosId, aspect = instance}}) ->
 
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
-    {ok, #qos_entry{}} | ?ERROR_NOT_FOUND.
+    {ok, {#qos_entry{}, op_logic:revision()}} | ?ERROR_NOT_FOUND.
 fetch_qos_entry(?USER(_UserId, SessionId), QosId) ->
     case lfm:get_qos_details(SessionId, QosId) of
         {ok, QosEntry} ->
-            {ok, QosEntry};
+            {ok, {QosEntry, 1}};
         _ ->
             ?ERROR_NOT_FOUND
     end.

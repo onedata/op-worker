@@ -22,7 +22,7 @@
 -export([fulfill_qos/4, init_pool/0]).
 
 %% Pool callbacks
--export([do_master_job/1, do_slave_job/1, task_finished/1, get_job/1,
+-export([do_master_job/2, do_slave_job/2, task_finished/1, get_job/1,
     get_sync_info/1, update_job_progress/5]).
 
 % For test purpose
@@ -34,10 +34,6 @@
     qos_entry :: #qos_entry{},
     file_path_tokens = [] :: [binary()],
     target_storages = undefined :: file_qos:target_storages() | undefined
-}).
-
--record(remove_qos_traverse_args, {
-    qos_id :: qos_entry:id()
 }).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -54,7 +50,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined)
-        -> {ok, traverse:id()}.
+        -> ok.
 fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
     {ok, #document{value = QosItem}} = qos_entry:get(QosId),
     QosOriginFileGuid = QosItem#qos_entry.file_uuid,
@@ -70,7 +66,8 @@ fulfill_qos(SessionId, FileCtx, QosId, TargetStorages) ->
         }
     },
 
-    tree_traverse:run(?POOL_NAME, FileCtx, Options).
+    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -111,9 +108,9 @@ task_finished(TaskId) ->
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
--spec do_master_job(tree_traverse:master_job()) -> {ok, traverse:master_job_map()}.
-do_master_job(Job) ->
-    tree_traverse:do_master_job(Job).
+-spec do_master_job(tree_traverse:master_job(), traverse:id()) -> {ok, traverse:master_job_map()}.
+do_master_job(Job, TaskId) ->
+    tree_traverse:do_master_job(Job, TaskId).
 
 
 %%--------------------------------------------------------------------
@@ -122,8 +119,8 @@ do_master_job(Job) ->
 %% to fulfill QoS requirements.
 %% @end
 %%--------------------------------------------------------------------
--spec do_slave_job(traverse:job()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}) ->
+-spec do_slave_job(traverse:job(), traverse:id()) -> ok.
+do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}, TaskId) ->
     create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs).
 
 %%%===================================================================

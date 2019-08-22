@@ -23,7 +23,6 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% API
 %% functions operating on record using datastore model API
 -export([get/1, delete/1, create/2, update/2]).
 
@@ -53,9 +52,6 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
-%%%===================================================================
-%%% API
-%%%===================================================================
 
 %%%===================================================================
 %%% Functions operating on record using datastore_model API

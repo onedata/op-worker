@@ -171,7 +171,7 @@ handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     init_qos_cache_for_space(SpaceId);
 handle(Msg = {?CHECK_QOS_CACHE, #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
     ?debug("Checking QoS bounded cache"),
-    check_qos_bounded_cache(Msg);
+    bounded_cache:check_cache_size(Msg);
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -479,13 +479,6 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    view_name = ViewName, query_view_params = QueryViewParams,
-    qos_job_pid = undefined
-}, FileCtx) ->
-    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, ViewName, QueryViewParams);
-handle_provider_request(UserCtx, #schedule_file_replication{
-    block = _Block, target_provider_id = TargetProviderId, callback = Callback,
     view_name = ViewName, query_view_params = QueryViewParams, qos_job_pid = QosJobPID
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
@@ -750,6 +743,3 @@ init_qos_cache_for_space(SpaceId) ->
         Error:Reason ->
             ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error, Reason}])
     end.
-
-check_qos_bounded_cache(Options) ->
-    bounded_cache:check_cache_size(Options).

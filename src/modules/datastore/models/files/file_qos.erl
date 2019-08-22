@@ -31,7 +31,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
-%% API
 %% functions operating on record using datastore model API
 -export([create_or_update/2, delete/1]).
 
@@ -62,10 +61,6 @@
     mutator => oneprovider:get_id_or_undefined()
 }).
 
-
-%%%===================================================================
-%%% API
-%%%===================================================================
 
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
@@ -137,7 +132,7 @@ get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
         end
     end,
 
-    CacheTableName = binary_to_atom(SpaceId, utf8),
+    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
     {ok, EffQos, _} = effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], []),
     EffQos;
 get_effective(FileUuid) ->
@@ -149,24 +144,23 @@ get_effective(FileUuid) ->
 %% Removes QosId from file_qos document.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_id(file_meta:uuid(), qos_entry:id()) -> {ok, key()} | {error, term}.
+-spec remove_qos_id(file_meta:uuid(), qos_entry:id()) -> ok.
 remove_qos_id(FileUuid, QosId) ->
     Diff = fun(FileQos = #file_qos{qos_list = QosList, target_storages = TS}) ->
         UpdatedQosList = lists:delete(QosId, QosList),
-        UpdatedTS = lists:foldl(
-            fun (StorageId, PartialTargetStorages) ->
-                QosList = maps:get(StorageId, PartialTargetStorages, []),
-                case lists:delete(QosId, QosList) of
-                    [] ->
-                        maps:remove(StorageId, PartialTargetStorages);
-                    List ->
-                        PartialTargetStorages#{StorageId => List}
-                end
-            end, TS, maps:keys(TS)),
+        UpdatedTS = maps:fold(fun(StorageId, QosList, UpdatedTSPartial) ->
+            case lists:delete(QosId, QosList) of
+                [] ->
+                    UpdatedTSPartial;
+                List ->
+                    UpdatedTSPartial#{StorageId => List}
+            end
+        end, #{}, TS),
         {ok, FileQos#file_qos{qos_list = UpdatedQosList, target_storages = UpdatedTS}}
     end,
 
-    update(FileUuid, Diff).
+    {ok, _} = update(FileUuid, Diff),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -175,8 +169,7 @@ remove_qos_id(FileUuid, QosId) ->
 %% created using QoS ID and list of target storages for that QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(file_meta:uuid(), od_space:id(),
-    qos_entry:id(), file_qos:target_storages()) -> ok.
+-spec add_qos(file_meta:uuid(), od_space:id(), qos_entry:id(), target_storages()) -> ok.
 add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
     NewTargetStorages = merge_storage_list_to_target_storages(
         QosId, TargetStoragesList, #{}

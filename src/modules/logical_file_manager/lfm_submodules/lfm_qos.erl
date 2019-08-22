@@ -63,7 +63,7 @@ get_file_qos(SessId, FileKey) ->
     {ok, qos_entry:record()} | logical_file_manager:error_reply().
 get_qos_details(SessId, QosId) ->
     case qos_entry:get_file_guid(QosId) of
-        FileGuid ->
+        {ok, FileGuid} ->
             remote_utils:call_fslogic(SessId, provider_request, FileGuid, #get_qos{id = QosId},
                 fun(Resp) ->
                     {ok, #qos_entry{

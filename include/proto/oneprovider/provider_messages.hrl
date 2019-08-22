@@ -200,7 +200,6 @@
 }).
 
 -record(qos_fulfillment, {
-    qos_id :: qos_entry:id(),
     fulfilled :: boolean()
 }).
 

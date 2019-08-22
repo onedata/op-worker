@@ -111,7 +111,7 @@ restore_qos_on_storage(FileCtx, StorageId) ->
         _ ->
             QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
             lists:foreach(fun(QosId) ->
-                {ok, _} = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId])
+                ok = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId])
             end, QosToUpdate)
     end.
 
@@ -145,21 +145,21 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
     % does not change in qos traverse task. Have to figure out how to
     % choose different storages for subdirs and/or file if multiple storage
     % fulfilling qos are available.
-    TargetStoragesList = get_target_storages(user_ctx:get_session_id(UserCtx),
+    TargetStoragesList = calculate_target_storages(user_ctx:get_session_id(UserCtx),
         FileCtx, QosExpressionInRPN, ReplicasNum),
 
     case TargetStoragesList of
         {error, ?ERROR_CANNOT_FULFILL_QOS} ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             {ok, _} = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, TargetStoragesList),
-            {ok, _} = qos_traverse:fulfill_qos(
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = qos_traverse:fulfill_qos(
                 user_ctx:get_session_id(UserCtx), FileCtx, QosId, TargetStoragesList
             )
     end,
-
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
 
     #provider_response{
         status = #status{code = ?OK},
@@ -225,7 +225,9 @@ remove_qos_insecure(_UserCtx, FileCtx, QosId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     % TODO: VFS-5567 For now QoS is added only for file or dir
     % for which QoS has been added, so starting traverse is not needed.
-    {ok, _} = file_qos:remove_qos_id(FileUuid, QosId),
+    ok = file_qos:remove_qos_id(FileUuid, QosId),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     ok = qos_entry:delete(QosId),
     #provider_response{status = #status{code = ?OK}}.
 
@@ -251,13 +253,13 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
 %%%===================================================================
 %%--------------------------------------------------------------------
 %% @doc
-%% Get list of storage id, on which file should be present according to
+%% Calculate list of storage id, on which file should be present according to
 %% qos requirements and available storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_storages(session:id(), file_ctx:ctx(),
+-spec calculate_target_storages(session:id(), file_ctx:ctx(),
     qos_expression:expression(), pos_integer()) -> [storage:id()].
-get_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
+calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     FileKey = {guid, FileGuid},
 
@@ -266,7 +268,7 @@ get_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     % call using ?MODULE macro for mocking in tests
     SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
-    qos_expression:get_target_storage(
+    qos_expression:get_target_storages(
         Expression, ReplicasNum, SpaceStorages, FileLocations
     ).
 

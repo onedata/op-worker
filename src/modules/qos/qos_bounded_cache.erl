@@ -25,8 +25,6 @@
     invalidate_on_all_nodes/1, invalidate/1
 ]).
 
--define(CACHE_TABLE_NAME(SpaceId), binary_to_atom(SpaceId, utf8)).
-
 
 %%%===================================================================
 %%% API
@@ -102,4 +100,4 @@ invalidate_on_all_nodes(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec invalidate(od_space:id()) -> ok.
 invalidate(SpaceId) ->
-    effective_value:invalidate(binary_to_atom(SpaceId, utf8)).
+    effective_value:invalidate(?CACHE_TABLE_NAME(SpaceId)).

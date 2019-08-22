@@ -15,7 +15,7 @@
 -include("modules/datastore/qos.hrl").
 
 %% API
--export([transform_to_rpn/1, get_target_storage/4]).
+-export([transform_to_rpn/1, get_target_storages/4]).
 
 -type expression() :: [binary()].
 
@@ -51,11 +51,11 @@ transform_to_rpn(Expression) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_storage(expression(), pos_integer(), [storage:id()], []) ->
+-spec get_target_storages(expression(), pos_integer(), [storage:id()], []) ->
     [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
-get_target_storage(_Expression, _ReplicasNum, [], _FileLocations) ->
+get_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
     {error, ?ERROR_CANNOT_FULFILL_QOS};
-get_target_storage(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
+get_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).
 
 %%%===================================================================
@@ -191,7 +191,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
             {get_storage_blocks_size(StorageId, FileLocations), StorageId}
     end, StorageList),
 
-    SortedStorageListWithBlocksSize = lists:sort(StorageListWithBlocksSize),
+    SortedStorageListWithBlocksSize = lists:reverse(lists:sort(StorageListWithBlocksSize)),
     StorageSublist = [StorageId ||
         {_, StorageId} <- lists:sublist(SortedStorageListWithBlocksSize, ReplicasNum)],
     case length(StorageSublist) of
