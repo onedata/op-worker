@@ -345,44 +345,39 @@ check(Perm, File, User, ShareId, Acl, _FileCtx) ->
 %% (POSIX permission check).
 %% @end
 %%--------------------------------------------------------------------
--spec validate_posix_access(check_permissions:access_definition(), file_ctx:ctx(),
-    user_ctx:ctx(), od_share:id() | undefined) ->
+-spec validate_posix_access(
+    read | write | exec | rdwr, file_ctx:ctx(),
+    user_ctx:ctx(), od_share:id() | undefined
+) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_posix_access(rdwr, FileCtx, UserCtx, ShareId) ->
     {ok, FileCtx2} = validate_posix_access(write, FileCtx, UserCtx, ShareId),
     validate_posix_access(read, FileCtx2, UserCtx, ShareId);
 validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
-    {#document{value = #file_meta{owner = OwnerId, mode = Mode}}, FileCtx2} =
-        file_ctx:get_file_doc_including_deleted(FileCtx),
-    ReqBit =
-        case AccessType of
-            read -> 8#4;
-            write -> 8#2;
-            exec -> 8#1
-        end,
-    CheckType =
-        case user_ctx:get_user_id(UserCtx) of
-            OwnerId ->
-                owner;
-            _ ->
-                case file_ctx:is_in_user_space_const(FileCtx, UserCtx) of
-                    true ->
-                        group;
-                    false ->
-                        other
-                end
-        end,
-    IsAccessible =
-        case CheckType of
-            owner ->
-                ((ReqBit bsl 6) band Mode) =:= (ReqBit bsl 6);
-            group ->
-                ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
-            other ->
-                (ReqBit band Mode) =:= ReqBit
-        end,
+    {#document{value = #file_meta{
+        owner = OwnerId,
+        mode = Mode
+    }}, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
 
-    case IsAccessible of
+    ReqBit0 = case AccessType of
+        read -> 8#4;
+        write -> 8#2;
+        exec -> 8#1
+    end,
+
+    ReqBit1 = case user_ctx:get_user_id(UserCtx) of
+        OwnerId ->
+            ReqBit0 bsl 6;
+        _ ->
+            case file_ctx:is_in_user_space_const(FileCtx, UserCtx) of
+                true ->
+                    ReqBit0 bsl 3;
+                false ->
+                    ReqBit0
+            end
+    end,
+
+    case ?has_flag(Mode, ReqBit1) of
         true -> {ok, FileCtx2};
         false -> throw(?EACCES)
     end.
@@ -424,11 +419,16 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_scope_privs(read, FileCtx, UserCtx, undefined) ->
-    UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_READ_DATA) of
-        true -> {ok, FileCtx};
-        false -> throw(?EACCES)
+    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
+        true ->
+            {ok, FileCtx};
+        false ->
+            UserId = user_ctx:get_user_id(UserCtx),
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_READ_DATA) of
+                true -> {ok, FileCtx};
+                false -> throw(?EACCES)
+            end
     end;
 validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
     UserId = user_ctx:get_user_id(UserCtx),
