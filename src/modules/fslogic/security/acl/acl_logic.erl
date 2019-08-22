@@ -19,7 +19,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([ensure_permission_granted/4]).
+-export([assert_permission_granted/4]).
 
 
 %%%===================================================================
@@ -33,24 +33,24 @@
 %% has all permissions specified in 'OperationMask' (according to given ACL).
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_permission_granted(acl:acl(), od_user:doc(), non_neg_integer(),
+-spec assert_permission_granted(acl:acl(), od_user:doc(), non_neg_integer(),
     file_ctx:ctx()) -> ok | no_return().
-ensure_permission_granted([], _User, ?no_flags_mask, _FileCtx) ->
+assert_permission_granted(_Acl, _User, ?no_flags_mask, _FileCtx) ->
     ok;
-ensure_permission_granted([], _User, _OperationMask, _FileCtx) ->
+assert_permission_granted([], _User, _OperationMask, _FileCtx) ->
     throw(?EACCES);
-ensure_permission_granted([Ace | Rest], User, Operation, FileCtx) ->
+assert_permission_granted([Ace | Rest], User, OperationMask, FileCtx) ->
     {IsAceApplicable, FileCtx2} = check_ace_applicability(User, FileCtx, Ace),
     case IsAceApplicable of
         true ->
-            case check_permission(Operation, Ace) of
+            case check_permission(OperationMask, Ace) of
                 ok ->
                     ok;
                 NewOpMask ->
-                    ensure_permission_granted(Rest, User, NewOpMask, FileCtx2)
+                    assert_permission_granted(Rest, User, NewOpMask, FileCtx2)
             end;
         false ->
-            ensure_permission_granted(Rest, User, Operation, FileCtx2)
+            assert_permission_granted(Rest, User, OperationMask, FileCtx2)
     end.
 
 

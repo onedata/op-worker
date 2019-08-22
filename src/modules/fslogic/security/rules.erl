@@ -26,6 +26,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if given access_definition is granted to given user.
@@ -42,6 +43,7 @@ check_normal_or_default_def({Type, SubjectCtx}, UserCtx, FileCtx) ->
     {ok, FileCtx};
 check_normal_or_default_def(Type, UserCtx, FileCtx) ->
     {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,9 +96,11 @@ check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
     {Acl, _} = file_ctx:get_acl(SubjectCtx2),
     check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx).
 
+
 %%%===================================================================
 %%% Internal Functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -206,93 +210,133 @@ check(?read_acl, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
     check(?read_acl, Doc, UserCtx, ShareId, undefined, FileCtx);
 
 % acl is specified, check access masks
-check(?read_object, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?read_object_mask, FileCtx),
-    {ok, FileCtx};
-check(?list_container, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?list_container_mask, FileCtx),
-    {ok, FileCtx};
+check(?read_object, _, UserCtx, ShareId, Acl, FileCtx) ->
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?read_object_mask, FileCtx
+    ),
+    validate_scope_privs(read, FileCtx, UserCtx, ShareId);
+check(?list_container, _, UserCtx, ShareId, Acl, FileCtx) ->
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?list_container_mask, FileCtx
+    ),
+    validate_scope_privs(read, FileCtx, UserCtx, ShareId);
 check(?write_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?write_object_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?write_object_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?add_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?add_object_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?add_object_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check(?append_data, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?append_data_mask, FileCtx),
-    {ok, FileCtx};
-check(?add_subcontainer, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?add_subcontainer_mask, FileCtx),
-    {ok, FileCtx};
-check(?read_metadata, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?read_metadata_mask, FileCtx),
-    {ok, FileCtx};
+check(?append_data, _, UserCtx, ShareId, Acl, FileCtx) ->
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?append_data_mask, FileCtx
+    ),
+    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
+check(?add_subcontainer, _, UserCtx, ShareId, Acl, FileCtx) ->
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?add_subcontainer_mask, FileCtx
+    ),
+    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
+check(?read_metadata, _, UserCtx, ShareId, Acl, FileCtx) ->
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?read_metadata_mask, FileCtx
+    ),
+    validate_scope_privs(read, FileCtx, UserCtx, ShareId);
 check(?write_metadata, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?write_metadata_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?write_metadata_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?execute, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?execute_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?execute_mask, FileCtx
+    ),
     {ok, FileCtx};
 check(?traverse_container, #document{value = #file_meta{is_scope = true}},
     UserCtx, ShareId, Acl, FileCtx
 ) ->
     validate_scope_access(FileCtx, UserCtx, ShareId),
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?traverse_container_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?traverse_container_mask, FileCtx
+    ),
     {ok, FileCtx};
 check(?traverse_container, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?traverse_container_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?traverse_container_mask, FileCtx
+    ),
     {ok, FileCtx};
 check(?delete_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?delete_object_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?delete_object_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?delete_subcontainer, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?delete_subcontainer_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?delete_subcontainer_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?read_attributes, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?read_attributes_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?read_attributes_mask, FileCtx
+    ),
     {ok, FileCtx};
-check(?write_attributes, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?write_attributes_mask, FileCtx),
-    {ok, FileCtx};
+check(?write_attributes, _, UserCtx, ShareId, Acl, FileCtx) ->
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?write_attributes_mask, FileCtx
+    ),
+    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?delete, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?delete_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?delete_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?read_acl, _, UserCtx, _, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?read_acl_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?read_acl_mask, FileCtx
+    ),
     {ok, FileCtx};
 check(?write_acl, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?write_acl_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?write_acl_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?write_owner, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl_logic:ensure_permission_granted(Acl, user_ctx:get_user(UserCtx),
-        ?write_owner_mask, FileCtx),
+    acl_logic:assert_permission_granted(
+        Acl, user_ctx:get_user(UserCtx),
+        ?write_owner_mask, FileCtx
+    ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(Perm, File, User, ShareId, Acl, _FileCtx) ->
     ?error("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)",
         [Perm, File, User, ShareId, Acl]),
     throw(?EACCES).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -343,6 +387,7 @@ validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
         false -> throw(?EACCES)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -365,6 +410,7 @@ validate_scope_access(FileCtx, UserCtx, undefined) ->
 validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
     {ok, FileCtx}.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -375,15 +421,19 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 -spec validate_scope_privs(check_permissions:access_definition(), file_ctx:ctx(),
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
-% TODO VFS-5603
+validate_scope_privs(read, FileCtx, UserCtx, _ShareId) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_READ_DATA) of
+        true -> {ok, FileCtx};
+        false -> throw(?EACCES)
+    end;
 validate_scope_privs(write, FileCtx, UserCtx, _ShareId) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_WRITE_DATA) of
-        true ->
-            {ok, FileCtx};
-        false ->
-            throw(?EACCES)
+        true -> {ok, FileCtx};
+        false -> throw(?EACCES)
     end;
 validate_scope_privs(_, FileCtx, _, _) ->
     {ok, FileCtx}.
