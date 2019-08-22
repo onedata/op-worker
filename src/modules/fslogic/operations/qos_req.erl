@@ -119,7 +119,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         expression = QosExpressionInRPN,
         replicas_num = ReplicasNum,
         file_uuid = FileUuid,
-        status = ?QOS_IN_PROGRESS_STATUS
+        status = ?QOS_NOT_FULFILLED
     }},
     {ok, #document{key = QosId}} = qos_entry:create(QosEntryToCreate, SpaceId),
 
@@ -134,13 +134,14 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         {error, ?ERROR_CANNOT_FULFILL_QOS} ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            {ok, _} = qos_entry:add_impossible_qos(QosId, SpaceId);
+            ok = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
             TraverseReqs = lists:filtermap(fun(Storage) ->
-                case qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, ?QOS_TRAVERSE_TASK_ID(QosId, traverse)) of
+                TaskId = ?QOS_TRAVERSE_TASK_ID(SpaceId, QosId, traverse),
+                case qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, TaskId) of
                     true -> false;
                     false -> {true, #qos_traverse_req{
-                        task_id = ?QOS_TRAVERSE_TASK_ID(QosId, traverse),
+                        task_id = TaskId,
                         file_uuid = FileUuid,
                         target_storage = Storage
                     }}

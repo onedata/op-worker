@@ -7,7 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This model holds information about hooks registered for given file.
-%%% All hooks will be executed once for change of given file's file_meta document.
+%%% All hooks will be executed once for next change of given file's file_meta
+%%% document, then hooks list will be cleared.
+%%% Any exported function that accept binaries as arguments can be used as hook.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(delayed_hooks).

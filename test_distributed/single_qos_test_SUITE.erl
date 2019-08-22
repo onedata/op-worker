@@ -893,9 +893,7 @@ mock_start_traverse(Config) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            {ok, _} = qos_traverse:fulfill_qos(
-                <<"0">>, FileCtx, QosId, [Storage], TaskId
-            ),
+            {ok, _} = qos_traverse:fulfill_qos(FileCtx, QosId, [Storage], TaskId),
             true
         end).
 
@@ -927,7 +925,7 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
+        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSES_STARTED_STATUS),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
@@ -980,7 +978,7 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
+        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSES_STARTED_STATUS),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
@@ -1033,7 +1031,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSE_FINISHED_STATUS),
+        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSES_STARTED_STATUS),
 
         DirGuid = qos_tests_utils:get_guid(Worker, SessId, DirPath),
         DirUuid = file_id:guid_to_uuid(DirGuid),
@@ -1049,7 +1047,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, ?QOS_TRAVERSE_FINISHED_STATUS
+            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, ?QOS_TRAVERSES_STARTED_STATUS
         ),
 
         QosNameIdMapping#{QosName => QosId}

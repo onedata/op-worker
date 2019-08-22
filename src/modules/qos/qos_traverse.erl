@@ -14,12 +14,12 @@
 -author("Michal Cwiertnia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/qos.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([fulfill_qos/5, init_pool/0]).
+-export([fulfill_qos/4, init_pool/0]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2,
@@ -29,10 +29,7 @@
 % For test purpose
 -export([schedule_transfers/4]).
 
--type(qos_task_type() :: traverse | restore).
-
 -record(add_qos_traverse_args, {
-    session_id :: session:id(),
     qos_id :: qos_entry:id(),
     file_path_tokens = [] :: [binary()],
     target_storages = undefined :: [storage:id()] | undefined
@@ -50,9 +47,8 @@
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(session:id(), file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined, qos_task_type()) ->
-    ok.
-fulfill_qos(SessionId, FileCtx, QosId, TargetStorages, TaskId) ->
+-spec fulfill_qos(file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined, traverse:id()) -> ok.
+fulfill_qos(FileCtx, QosId, TargetStorages, TaskId) ->
     {ok, #document{value = QosItem, scope = SpaceId}} = qos_entry:get(QosId),
     QosOriginFileUuid = QosItem#qos_entry.file_uuid,
     QosOriginFileGuid = file_id:pack_guid(QosOriginFileUuid, SpaceId),
@@ -61,13 +57,12 @@ fulfill_qos(SessionId, FileCtx, QosId, TargetStorages, TaskId) ->
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #add_qos_traverse_args{
-            session_id = SessionId,
             qos_id = QosId,
             file_path_tokens = FilePathTokens,
             target_storages = TargetStorages
         }
     },
-   {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
+    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
 
 %%--------------------------------------------------------------------
@@ -99,18 +94,21 @@ get_sync_info(Job) ->
 
 -spec task_started(traverse:id()) -> ok.
 task_started(TaskId) ->
-    [_, QosId, _TaskType] = binary:split(TaskId, <<"#">>, [global]),
-    qos_entry:remove_traverse_req(QosId, TaskId).
+    [_, SpaceId, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
+    case binary_to_atom(TaskType, utf8) of
+        traverse ->
+            ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
+            ok = qos_entry:remove_traverse_req(QosId, TaskId);
+        restore -> ok
+    end.
 
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
-    % fixme remove from qos_entry traverses list
-    [_, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
+    [_, SpaceId, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
     case binary_to_atom(TaskType, utf8) of
-        traverse -> {ok, _} = qos_entry:set_status(QosId, ?QOS_TRAVERSE_FINISHED_STATUS);
+        traverse -> ok = qos_entry:remove_traverse(SpaceId, QosId, TaskId);
         restore -> ok
-    end,
-    ok.
+    end.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
     tree_traverse:master_job(), traverse:pool(), traverse:id(),
@@ -134,12 +132,11 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
     #add_qos_traverse_args{target_storages = TargetStorages} = TraverseArgs}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = qos_status:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
-    SessId = TraverseArgs#add_qos_traverse_args.session_id,
     QosId = TraverseArgs#add_qos_traverse_args.qos_id,
     % TODO: add space check and optionally choose other storage
 
     OnTransferScheduledFun = fun(TransferId, StorageId) ->
-        {ok, _} = qos_status:add_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId, TransferId)
+        ok = qos_status:add_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId, TransferId)
     end,
     OnTransferFinishedFun = fun
         (undefined) -> ok;
@@ -147,7 +144,8 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
     end,
 
     % call using ?MODULE macro for mocking in tests
-    TransfersStorageProplist = ?MODULE:schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun),
+    TransfersStorageProplist =
+        ?MODULE:schedule_transfers(?ROOT_SESS_ID, FileGuid, TargetStorages, OnTransferScheduledFun),
     wait_for_transfers_completion(TransfersStorageProplist, OnTransferFinishedFun).
 
 

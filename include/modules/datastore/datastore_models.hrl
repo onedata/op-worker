@@ -298,7 +298,7 @@
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
-    status = ?QOS_IN_PROGRESS_STATUS :: qos_entry:status(),
+    status = ?QOS_NOT_FULFILLED :: qos_entry:status(),
     traverse_reqs = [] :: [#qos_traverse_req{}]
 }).
 

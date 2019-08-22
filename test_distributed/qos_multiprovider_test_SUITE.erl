@@ -79,9 +79,8 @@ qos_status_test(Config) ->
         end, Workers)
     end, maps:get(files, GuidsAndPaths)),
 
-    unmock_qos_restore(Config),
-
     % check status after restoration
+    unmock_qos_restore(Config),
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
 
     IsAncestor = fun(A, F) ->

@@ -26,9 +26,12 @@
 %% functions operating on record using datastore model API
 -export([get/1, delete/1, create/2, update/2, add_links/4, delete_links/4]).
 
-%% higher-level functions operating on file_qos record.
+%% higher-level functions operating on qos_entry record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
     set_status/2, get_qos_details/1, add_traverse_reqs/2, remove_traverse_req/2]).
+
+%% Functions operating on traverses list.
+-export([add_traverse/3, remove_traverse/3, list_traverses/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -39,7 +42,7 @@
 -type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type status() :: ?QOS_IN_PROGRESS_STATUS | ?QOS_TRAVERSE_FINISHED_STATUS | ?QOS_IMPOSSIBLE_STATUS.
+-type status() :: ?QOS_NOT_FULFILLED | ?QOS_TRAVERSES_STARTED_STATUS | ?QOS_IMPOSSIBLE_STATUS.
 -type replicas_num() :: pos_integer().
 -type traverse_req() :: #qos_traverse_req{}.
 -type one_or_many(Type) :: Type | [Type].
@@ -173,13 +176,13 @@ get_qos_details(QosId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds traverse requests for given QoS.
+%% Adds traverse requests for given QoS. Sets status to traverses_started.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_traverse_reqs(id(), [traverse_req()]) ->  ok.
 add_traverse_reqs(QosId, TraverseReqs) ->
     {ok, _} = update(QosId, fun(QosEntry) ->
-        {ok, QosEntry#qos_entry{traverse_reqs = TraverseReqs}}
+        {ok, QosEntry#qos_entry{traverse_reqs = TraverseReqs, status = ?QOS_TRAVERSES_STARTED_STATUS}}
     end),
     ok.
 
@@ -196,6 +199,46 @@ remove_traverse_req(QosId, TaskId) ->
         }}
     end),
     ok.
+
+%%%===================================================================
+%%% Functions operating on traverses list.
+%%%===================================================================
+
+-define(QOS_TRAVERSE_LIST(QosId), <<"qos_traverses", QosId/binary>>).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add given TraverseId to traverses list of given QosId.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_traverse(od_space:id(), id(), traverse:id()) ->  ok.
+add_traverse(SpaceId, QosId, TraverseId) ->
+    Link = {TraverseId, TraverseId},
+    {ok, _} = add_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), Link),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove given TraverseId from traverses list of given QosId.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_traverse(od_space:id(), id(), traverse:id()) ->  ok.
+remove_traverse(SpaceId, QosId, TraverseId) ->
+    ok = delete_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), TraverseId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List traverses of given QosId.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_traverses(id()) ->  [traverse:id()].
+list_traverses(QosId) ->
+    {ok, Traverses} = datastore_model:fold_links(?CTX, ?QOS_TRAVERSE_LIST(QosId), all,
+        fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
+        [], #{}
+    ),
+    Traverses.
+
 
 %%%===================================================================
 %%% datastore_model callbacks

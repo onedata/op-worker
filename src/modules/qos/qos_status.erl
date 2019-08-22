@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module is responsible for calculating QoS entry fulfillment status.
 %%% QoS is determined fulfilled when there is:
-%%%     - traverse task triggered by created this QoS entry is finished
+%%%     - all traverse tasks are finished
 %%%     - there are no remaining transfers, that were created to fulfill this QoS
 %%%
 %%% Active transfers are stored as links where value is transfer id and key is
@@ -27,6 +27,7 @@
 
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([add_status_link/6, delete_status_link/5, check_fulfilment/2, get_relative_path/2]).
@@ -35,6 +36,8 @@
 
 -define(QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId),
     <<RelativePath/binary, "###", TaskId/binary, "###", StorageId/binary>>).
+
+-define(QOS_STATUS_LINKS_KEY(QosId), <<"qos_status", QosId/binary>>).
 
 %%%===================================================================
 %%% API
@@ -49,7 +52,8 @@
     storage:id(), transfer:id()) ->  ok | {error, term()}.
 add_status_link(QosId, Scope, RelativePath, TaskId, StorageId, TransferId) ->
     Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId), TransferId},
-    qos_entry:add_links(Scope, QosId, oneprovider:get_id(), Link).
+    {ok, _} = qos_entry:add_links(Scope, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(), Link),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,7 +63,7 @@ add_status_link(QosId, Scope, RelativePath, TaskId, StorageId, TransferId) ->
 -spec delete_status_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
     storage:id()) -> ok | {error, term()}.
 delete_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
-    qos_entry:delete_links(Scope, QosId, oneprovider:get_id(),
+    ok = qos_entry:delete_links(Scope, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(),
         ?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId)).
 
 %%--------------------------------------------------------------------
@@ -70,8 +74,8 @@ delete_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosId, FileGuid) ->
-    {ok, #document{value = QosItem, scope = SpaceId}} = qos_entry:get(QosId),
-    check_fulfilment_internal(QosId, SpaceId, FileGuid, QosItem).
+    {ok, #document{value = QosEntry, scope = SpaceId}} = qos_entry:get(QosId),
+    check_fulfilment_internal(QosId, SpaceId, FileGuid, QosEntry).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,20 +100,26 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 
 -spec check_fulfilment_internal(qos_entry:id(), od_space:id(), file_meta:uuid(), qos_entry:record()) ->
     boolean().
-check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = OriginUuid, status = Status}) ->
-    case Status of
-        ?QOS_TRAVERSE_FINISHED_STATUS ->
-            OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
-            RelativePath = get_relative_path(OriginGuid, FileGuid),
-            case get_next_status_link(QosId, RelativePath) of
-                {ok, empty} ->
-                    true;
-                {ok, Path} ->
-                    not str_utils:binary_starts_with(Path, RelativePath)
-            end;
-        _ ->
-            %TODO VFS-5642 check if subtree was already traversed
-            false
+check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = OriginUuid} = QosEntry) ->
+    case QosEntry#qos_entry.status of
+        ?QOS_IMPOSSIBLE_STATUS -> false;
+        ?QOS_NOT_FULFILLED -> false;
+        ?QOS_TRAVERSES_STARTED_STATUS ->
+            % are all traverses finished?
+            case qos_entry:list_traverses(QosId) ++ QosEntry#qos_entry.traverse_reqs == [] of
+                true ->
+                    %TODO VFS-5642 check if subtree was already traversed
+                    OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
+                    RelativePath = get_relative_path(OriginGuid, FileGuid),
+                    case get_next_status_link(QosId, RelativePath) of
+                        {ok, empty} ->
+                            true;
+                        {ok, Path} ->
+                            not str_utils:binary_starts_with(Path, RelativePath)
+                    end;
+                false ->
+                    false
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -119,7 +129,7 @@ check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = Origi
 %%--------------------------------------------------------------------
 -spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.
 get_next_status_link(QosId, PrevName) ->
-    datastore_model:fold_links(qos_entry:get_ctx(), QosId, all,
+    datastore_model:fold_links(qos_entry:get_ctx(), ?QOS_STATUS_LINKS_KEY(QosId), all,
         fun(#link{name = N}, _Acc) -> {ok, N} end,
         empty,
         #{prev_link_name => PrevName, size => 1}

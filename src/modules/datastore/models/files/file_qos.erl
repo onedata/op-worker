@@ -112,15 +112,24 @@ delete(Key) ->
 %%% Higher-level functions operating on file_qos record.
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns effective file_qos for file.
+%% @equiv get_effective(FileUuidOrDoc, undefined)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective(file_meta:doc() | file_meta:uuid()) -> record() | undefined.
 get_effective(FileUuidOrDoc) ->
     get_effective(FileUuidOrDoc, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns effective file_qos for file.
+%% Returns effective file_qos for file. If effective value cannot be calculated
+%% because of file_meta documents not being synchronized yet registers
+%% DelayedHook for this file to be run when document is finally synchronized.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective(file_meta:doc() | file_meta:uuid(), delayed_hooks:callback() | undefined) ->
+-spec get_effective(file_meta:doc() | file_meta:uuid(), delayed_hooks:hook() | undefined) ->
     record() | undefined.
 get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}, DelayedHook) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->

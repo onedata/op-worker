@@ -124,7 +124,6 @@ change_replicated_internal(SpaceId, #document{
     key = QosId,
     value = #file_qos{}
 }) ->
-    % fixme conflict resolver
     ?debug("change_replicated_internal: file_qos ~p", [QosId]),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
 change_replicated_internal(SpaceId, #document{
