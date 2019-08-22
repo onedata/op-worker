@@ -40,7 +40,7 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
         _ ->
             QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
             lists:foreach(fun(QosId) ->
-                {ok, _} = qos_traverse:fulfill_qos(FileCtx, QosId, [StorageId],
+                ok = qos_traverse:fulfill_qos(FileCtx, QosId, [StorageId],
                     ?QOS_TRAVERSE_TASK_ID(SpaceId, QosId, restore))
             end, QosToUpdate)
     end.
@@ -72,7 +72,7 @@ maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
         Storage ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            {ok, _} = qos_traverse:fulfill_qos(FileCtx, QosId, [Storage], TaskId),
+            ok = qos_traverse:fulfill_qos(FileCtx, QosId, [Storage], TaskId),
             true;
         _ ->
             false

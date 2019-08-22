@@ -47,7 +47,7 @@
 -type traverse_req() :: #qos_traverse_req{}.
 -type one_or_many(Type) :: Type | [Type].
 
--export_type([id/0, status/0, replicas_num/0]).
+-export_type([id/0, record/0, status/0, replicas_num/0]).
 
 -define(CTX, #{
     model => ?MODULE,

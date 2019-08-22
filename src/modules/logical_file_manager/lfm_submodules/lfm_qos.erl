@@ -30,8 +30,8 @@
 %% Adds new qos for file or directory, returns QoS ID.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(session:id(), logical_file_manager:file_key(), binary(), qos_entry:replicas_num()) ->
-    {ok, qos_entry:id()} | logical_file_manager:error_reply().
+-spec add_qos(session:id(), lfm:file_key(), binary(), qos_entry:replicas_num()) ->
+    {ok, qos_entry:id()} | lfm:error_reply().
 add_qos(SessId, FileKey, Expression, ReplicasNum) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
@@ -45,8 +45,8 @@ add_qos(SessId, FileKey, Expression, ReplicasNum) ->
 %% Gets information about QoS defined for file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_qos(session:id(), logical_file_manager:file_key()) ->
-    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | logical_file_manager:error_reply().
+-spec get_file_qos(session:id(), lfm:file_key()) ->
+    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | lfm:error_reply().
 get_file_qos(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_effective_file_qos{},
@@ -60,7 +60,7 @@ get_file_qos(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_qos_details(session:id(), qos_entry:id()) ->
-    {ok, qos_entry:record()} | logical_file_manager:error_reply().
+    {ok, qos_entry:record()} | lfm:error_reply().
 get_qos_details(SessId, QosId) ->
     case qos_entry:get_file_guid(QosId) of
         {ok, FileGuid} ->
@@ -83,7 +83,7 @@ get_qos_details(SessId, QosId) ->
 %% Remove single qos.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(session:id(), qos_entry:id()) -> ok | logical_file_manager:error_reply().
+-spec remove_qos(session:id(), qos_entry:id()) -> ok | lfm:error_reply().
 remove_qos(SessId, QosId) ->
     case qos_entry:get_file_guid(QosId) of
         {ok, FileGuid} ->
@@ -108,7 +108,7 @@ check_qos_fulfilled(SessId, QosList) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
-    logical_file_manager:file_key()) -> boolean() | lfm:error_reply().
+    lfm:file_key() | undefined) -> boolean() | lfm:error_reply().
 check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
     lists:all(fun(QosId) -> true == check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
 check_qos_fulfilled(SessId, QosId, undefined) ->

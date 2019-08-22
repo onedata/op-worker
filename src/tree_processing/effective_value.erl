@@ -80,7 +80,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), delayed_hooks:hook()) ->
+    initial_calculation_info(), args(), delayed_hooks:hook() | undefined) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook) ->
     get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args,
@@ -92,7 +92,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), delayed_hooks:hook(), bounded_cache:timestamp()) ->
+    initial_calculation_info(), args(), delayed_hooks:hook() | undefined, bounded_cache:timestamp()) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp) ->
     get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp, false).
@@ -112,8 +112,8 @@ get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, De
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), delayed_hooks:hook(), bounded_cache:timestamp(), in_critical_section()) ->
-    {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
+    initial_calculation_info(), args(), delayed_hooks:hook() | undefined, bounded_cache:timestamp(),
+    in_critical_section()) -> {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo,
     Args, DelayedHook, Timestamp, true) ->
     case bounded_cache:get(Cache, Key) of

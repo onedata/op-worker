@@ -765,7 +765,7 @@ add_qos(SessId, FileKey, Expression, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_qos(session:id(), file_key()) ->
-    {ok, {file_qos:qos_list(), file_qos:traget_storages()}} | error_reply().
+    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | error_reply().
 get_file_qos(SessId, FileKey) ->
     ?run(fun() -> lfm_qos:get_file_qos(SessId, FileKey) end).
 

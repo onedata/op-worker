@@ -88,7 +88,7 @@ init_pool() ->
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
 
--spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:ctx_sync_info()}.
+-spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 

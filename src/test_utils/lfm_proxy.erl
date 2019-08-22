@@ -475,7 +475,7 @@ get_file_distribution(Worker, SessId, FileKey) ->
 add_qos(Worker, SessId, FileKey, Expression, ReplicasNum) ->
     ?EXEC(Worker, lfm:add_qos(SessId, FileKey, Expression, ReplicasNum)).
 
--spec get_file_qos(node(), session:id(), logical_file_manager:file_key()) ->
+-spec get_file_qos(node(), session:id(), lfm:file_key()) ->
     {ok, {file_qos:qos_list(), file_qos:target_storages()}} | lfm:error_reply().
 get_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_qos(SessId, FileKey)).
