@@ -416,12 +416,14 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 %% @doc
 %% Checks whether given user has permission to access given file with
 %% respect to scope settings.
+%% Exception to this are shared files which can be read without
+%% SPACE_READ_DATA privilege.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate_scope_privs(check_permissions:access_definition(), file_ctx:ctx(),
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
-validate_scope_privs(read, FileCtx, UserCtx, _ShareId) ->
+validate_scope_privs(read, FileCtx, UserCtx, undefined) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_READ_DATA) of
