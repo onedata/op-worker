@@ -129,7 +129,7 @@ check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = Origi
 %%--------------------------------------------------------------------
 -spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.
 get_next_status_link(QosId, PrevName) ->
-    datastore_model:fold_links(qos_entry:get_ctx(), ?QOS_STATUS_LINKS_KEY(QosId), all,
+    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosId),
         fun(#link{name = N}, _Acc) -> {ok, N} end,
         empty,
         #{prev_link_name => PrevName, size => 1}

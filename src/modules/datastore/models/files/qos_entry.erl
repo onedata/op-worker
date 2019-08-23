@@ -24,7 +24,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
--export([get/1, delete/1, create/2, update/2, add_links/4, delete_links/4]).
+-export([get/1, delete/1, create/2, update/2, add_links/4, delete_links/4, fold_links/4]).
 
 %% higher-level functions operating on qos_entry record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
@@ -119,6 +119,16 @@ add_links(Scope, Key, TreeId, Links) ->
 delete_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls Fun(Link, Acc) for each link.
+%% @end
+%%--------------------------------------------------------------------
+-spec fold_links(key(), datastore:fold_fun(datastore:link()), datastore:fold_acc(), datastore:fold_opts()) ->
+    {ok, datastore:fold_acc()} | {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
+fold_links(Key, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?CTX, Key, all, Fun, Acc, Opts).
+
 %%%===================================================================
 %%% Higher-level functions operating on qos_entry record.
 %%%===================================================================
@@ -159,7 +169,7 @@ add_impossible_qos(QosId, Scope) ->
 %%--------------------------------------------------------------------
 -spec list_impossible_qos() ->  {ok, [id()]} | {error, term()}.
 list_impossible_qos() ->
-    datastore_model:fold_links(?CTX, ?IMPOSSIBLE_QOS_KEY, all,
+    fold_links(?IMPOSSIBLE_QOS_KEY,
         fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
         [], #{}
     ).
@@ -233,7 +243,7 @@ remove_traverse(SpaceId, QosId, TraverseId) ->
 %%--------------------------------------------------------------------
 -spec list_traverses(id()) ->  [traverse:id()].
 list_traverses(QosId) ->
-    {ok, Traverses} = datastore_model:fold_links(?CTX, ?QOS_TRAVERSE_LIST(QosId), all,
+    {ok, Traverses} = fold_links(?QOS_TRAVERSE_LIST(QosId),
         fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
         [], #{}
     ),

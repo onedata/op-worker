@@ -66,8 +66,9 @@ ensure_exists_on_all_nodes(SpaceId) ->
             ok
     end,
 
-    lists:foreach(fun({badrpc, _} = Error) ->
-        ?error("Failed to ensure QoS bounded cache exists. Error: ~p~n", [Error])
+    lists:foreach(fun(ok) -> ok;
+                     ({badrpc, _} = Error) ->
+                         ?error("Failed to ensure QoS bounded cache exists. Error: ~p~n", [Error])
     end, Res).
 
 
@@ -109,7 +110,7 @@ invalidate_on_all_nodes(SpaceId) ->
             ok
     end,
 
-    lists:foreach(fun({badrpc, _} = Error) ->
-        ?error("Failed to invalidate QoS bounded cache. Error: ~p~n", [Error]);
-                     (ok) -> ok
+    lists:foreach(fun(ok) -> ok;
+                     ({badrpc, _} = Error) ->
+                         ?error("Failed to invalidate QoS bounded cache. Error: ~p~n", [Error])
     end, Res).
