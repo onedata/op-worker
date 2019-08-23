@@ -203,12 +203,12 @@ get_file_qos_insecure(_UserCtx, FileCtx) ->
 -spec get_qos_details_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
-    {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
+    {Expression, ReplicasNum, Status} = qos_entry:get_qos_details(QosId),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #get_qos_resp{
-        expression = QosEntry#qos_entry.expression,
-        replicas_num = QosEntry#qos_entry.replicas_num,
-        status = QosEntry#qos_entry.status
+        expression = Expression,
+        replicas_num = ReplicasNum,
+        status = Status
     }}.
 
 
@@ -268,7 +268,7 @@ calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     % call using ?MODULE macro for mocking in tests
     SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
-    qos_expression:get_target_storages(
+    qos_expression:calculate_target_storages(
         Expression, ReplicasNum, SpaceStorages, FileLocations
     ).
 

@@ -16,7 +16,7 @@
 -include("modules/datastore/qos.hrl").
 
 %% API
--export([transform_to_rpn/1, get_target_storages/4]).
+-export([transform_to_rpn/1, calculate_target_storages/4]).
 
 -type expression() :: [binary()].
 
@@ -47,16 +47,16 @@ transform_to_rpn(Expression) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get list of storages on which file should be replicated according to given
+%% Calculate list of storages on which file should be replicated according to given
 %% QoS expression and number of replicas.
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_storages(expression(), pos_integer(), [storage:id()], [#file_location{}]) ->
+-spec calculate_target_storages(expression(), pos_integer(), [storage:id()], [#file_location{}]) ->
     [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
-get_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
+calculate_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
     {error, ?ERROR_CANNOT_FULFILL_QOS};
-get_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
+calculate_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).
 
 %%%===================================================================
@@ -185,7 +185,8 @@ filter_storage(Key, Val, StorageSet) ->
 %% Storage with higher current blocks size are preferred.
 %% @end
 %%--------------------------------------------------------------------
--spec select([storage:id()], pos_integer(), []) -> [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
+-spec select([storage:id()], pos_integer(), [#file_location{}]) ->
+    [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
 select([], _ReplicasNum, _FileLocations) ->
     {error, ?ERROR_CANNOT_FULFILL_QOS};
 select(StorageList, ReplicasNum, FileLocations) ->
@@ -209,7 +210,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
 %% Returns blocks sum for given storage according to file_locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_blocks_size(storage:id(), []) -> integer().
+-spec get_storage_blocks_size(storage:id(), [#file_location{}]) -> integer().
 get_storage_blocks_size(StorageId, FileLocations) ->
     lists:foldl(fun (FileLocation, PartialStorageBlockSize) ->
         % TODO: VFS-5573 use storage qos

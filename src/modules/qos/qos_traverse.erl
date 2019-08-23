@@ -130,7 +130,7 @@ do_master_job(Job, TaskId) ->
 %%--------------------------------------------------------------------
 -spec do_slave_job(traverse:job(), traverse:id()) -> ok.
 do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_traverse_args{target_storages = TargetStorages}}, TaskId) ->
-    create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs).
+    create_qos_replicas(FileUuid, Scope, TargetStorages, TraverseArgs, TaskId).
 
 %%%===================================================================
 %%% Internal functions
@@ -142,8 +142,8 @@ do_slave_job({#document{key = FileUuid, scope = Scope}, TraverseArgs = #add_qos_
 %% @end
 %%--------------------------------------------------------------------
 -spec create_qos_replicas(file_meta:uuid(), datastore_doc:scope(), [storage:id()],
-    #add_qos_traverse_args{}) -> ok.
-create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs) ->
+    #add_qos_traverse_args{}, traverse:id()) -> ok.
+create_qos_replicas(FileUuid, SpaceId, TargetStorages, TraverseArgs, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = qos_status:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
     SessId = TraverseArgs#add_qos_traverse_args.session_id,

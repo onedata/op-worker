@@ -67,15 +67,13 @@
 -define(R_PAREN, <<")">>).
 -define(EQUALITY, <<"=">>).
 
-
--define(QOS_BOUNDED_CACHE_GROUP, <<"qos_cache_group">>).
-
 -define(ERROR_CANNOT_FULFILL_QOS, cannot_fulfill_qos).
 
 
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId), binary_to_atom(SpaceId, utf8)).
--define(QOS_BOUNDED_CACHE_GROUP, qos_cache_group).
+-define(QOS_BOUNDED_CACHE_GROUP, <<"qos_cache_group">>).
+
 
 % QoS status
 -define(QOS_IN_PROGRESS_STATUS, in_progress).

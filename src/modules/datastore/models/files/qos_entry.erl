@@ -28,7 +28,7 @@
 
 %% higher-level functions operating on file_qos record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
-    set_status/2]).
+    set_status/2, get_qos_details/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -159,6 +159,16 @@ list_impossible_qos() ->
         fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
         [], #{}
     ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get information about QoS requirement from qos_entry document.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_details(id()) -> {ok, {qos_expression:expression(), replicas_num(), status()}}.
+get_qos_details(QosId) ->
+    {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
+    {QosEntry#qos_entry.expression, QosEntry#qos_entry.replicas_num, QosEntry#qos_entry.status}.
 
 %%%===================================================================
 %%% datastore_model callbacks

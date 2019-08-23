@@ -22,7 +22,7 @@
 -export([
     init_group/0, init/1,
     ensure_exists_on_all_nodes/1, ensure_exists/1,
-    invalidate_on_all_nodes/1, invalidate/1
+    invalidate_on_all_nodes/1
 ]).
 
 
@@ -54,11 +54,21 @@ init(SpaceId) ->
 -spec ensure_exists_on_all_nodes(od_space:id()) -> ok.
 ensure_exists_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    case rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]) of
-        {_, BadNodes} when length(BadNodes) > 0 ->
-            ?error("Failed to ensure QoS bounded cache exists on following nodes: ~p~n", [BadNodes]);
-        _ -> ok
-    end.
+    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
+
+    case length(BadNodes) > 0 of
+        true ->
+            ?error(
+                "Cannot ensure QoS bounded cache exists on non existing nodes."
+                "Node list: ~p ~n", [BadNodes]
+            );
+        false ->
+            ok
+    end,
+
+    lists:foreach(fun({badrpc, _} = Error) ->
+        ?error("Failed to ensure QoS bounded cache exists. Error: ~p~n", [Error])
+    end, Res).
 
 
 %%--------------------------------------------------------------------
@@ -81,23 +91,24 @@ ensure_exists(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends request to perform invalidate/1 on all nodes.
+%% Sends request to invalidate cache to all nodes.
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_on_all_nodes(od_space:id()) -> ok.
 invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    case rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId]) of
-        {_, BadNodes} when length(BadNodes) > 0 ->
-            ?error("Failed to invalidate QoS bounded cache on following nodes: ~p~n", [BadNodes]);
-        _ -> ok
-    end.
+    {Res, BadNodes} = rpc:multicall(Nodes, effective_value, invalidate, [?CACHE_TABLE_NAME(SpaceId)]),
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Invalidates cache for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate(od_space:id()) -> ok.
-invalidate(SpaceId) ->
-    effective_value:invalidate(?CACHE_TABLE_NAME(SpaceId)).
+    case length(BadNodes) > 0 of
+        true ->
+            ?error(
+                "Cannot invalidate QoS bounded cache on non existing nodes."
+                "Node list: ~p ~n", [BadNodes]
+            );
+        false ->
+            ok
+    end,
+
+    lists:foreach(fun({badrpc, _} = Error) ->
+        ?error("Failed to invalidate QoS bounded cache. Error: ~p~n", [Error])
+    end, Res).
