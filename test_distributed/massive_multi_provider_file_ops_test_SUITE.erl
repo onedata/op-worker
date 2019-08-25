@@ -348,7 +348,7 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
         {cancel, Check} when Check =:= DirName ->
             ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskID]), 15)
     after
-        5000 ->
+        30000 ->
             timeout
     end,
     ?assertEqual(ok, RecAns),
@@ -402,7 +402,7 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
         {cancel, Check} when Check =:= DirName ->
             ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskID]), 15)
     after
-        5000 ->
+        30000 ->
             timeout
     end,
     ?assertEqual(ok, RecAns),
