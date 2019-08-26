@@ -16,6 +16,7 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -139,8 +140,7 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
     _QosEntry
 ) ->
-    {ok, Guid} = qos_entry:get_file_guid(QosId),
-    SpaceId = file_id:guid_to_space_id(Guid),
+    SpaceId = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
@@ -153,8 +153,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
 authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
     _QosEntry
 ) ->
-    {ok, Guid} = qos_entry:get_file_guid(QosId),
-    SpaceId = file_id:guid_to_space_id(Guid),
+    SpaceId = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:is_eff_space_member(Auth, SpaceId).
 
 
@@ -169,8 +168,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}}, 
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
-    {ok, Guid} = qos_entry:get_file_guid(QosId),
-    SpaceId = file_id:guid_to_space_id(Guid),
+    SpaceId = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}, _) ->
@@ -178,8 +176,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
-    {ok, Guid} = qos_entry:get_file_guid(QosId),
-    SpaceId = file_id:guid_to_space_id(Guid),
+    SpaceId = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -215,7 +212,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) 
             {ok, #{
                 <<"qosList">> => QosList,
                 <<"targetStorages">> => TargetStorages,
-                <<"fulfilled">> => lfm_qos:check_qos_fulfilled(SessionId, QosList, {guid, FileGuid})
+                <<"fulfilled">> => ?check(lfm_qos:check_qos_fulfilled(SessionId, QosList, {guid, FileGuid}))
             }};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
@@ -231,7 +228,7 @@ get(#op_req{auth = Auth, gri = #gri{id = QosId, aspect = instance}}, #qos_entry{
         <<"qosId">> => QosId,
         <<"expression">> => Expression,
         <<"replicasNum">> => ReplicasNum,
-        <<"fulfilled">> => lfm_qos:check_qos_fulfilled(SessionId, QosId)
+        <<"fulfilled">> => ?check(lfm_qos:check_qos_fulfilled(SessionId, QosId))
     }}.
 
 

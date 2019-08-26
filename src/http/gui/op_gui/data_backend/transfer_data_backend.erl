@@ -401,7 +401,7 @@ transfer_record(StateAndTransferId) ->
         space_id = SpaceId,
         schedule_time = ScheduleTime,
         start_time = StartTime,
-        index_name = IndexName,
+        view_name = IndexName,
         query_view_params = QueryViewParams
     }}} = transfer:get(TransferId),
     {DataSourceType, DataSourceIdentifier, DataSourceName} = case IndexName of

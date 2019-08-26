@@ -247,8 +247,7 @@ init_report() ->
 %%--------------------------------------------------------------------
 -spec schedule_init_qos_cache_for_space(od_space:id()) -> ok.
 schedule_init_qos_cache_for_space(SpaceId) ->
-    erlang:send_after(0, fslogic_worker, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
-    ok.
+    schedule({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}, 0).
 
 %%%===================================================================
 %%% Internal functions
@@ -652,7 +651,7 @@ schedule_init_qos_cache_for_all_spaces() ->
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
-    erlang:send_after(Timeout, self(), {sync_timer, Request}),
+    erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
     ok.
 
 -spec invalidate_permissions_cache() -> ok.
@@ -732,7 +731,8 @@ init_qos_cache_for_all_spaces() ->
             ?error("Unable to initialize qos bounded cache due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}]),
+            schedule_init_qos_cache_for_all_spaces()
     end.
 
 -spec init_qos_cache_for_space(od_space:id()) -> ok.

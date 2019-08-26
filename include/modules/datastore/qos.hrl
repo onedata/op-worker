@@ -26,9 +26,8 @@
 %%% replica only if currently existing replicas don't fulfill QoS requirements.
 %%% Multiple qos_entry documents can be created for the same file or directory.
 %%% Adding two identical QoS requirements for the same file results in two
-%%% different qos_entry documents. qos_entry document can be related with links
-%%% tree containing ID of transfers scheduled to fulfill QoS after file or
-%%% file in directory has been changed.
+%%% different qos_entry documents. Each transfer scheduled to fulfill QoS
+%%% is added to links tree.
 %%% QoS requirement is considered as fulfilled when:
 %%% - there is no active traverse tasks for this QoS
 %%% - status indicates that first traverse task has ended
@@ -36,7 +35,7 @@
 %%% The file_qos item contains aggregated information about QoS defined for file
 %%% or directory. It contains list of qos_entry IDs and mapping that maps storage_id
 %%% to list of qos_entry IDs that requires file replica on this storage. Each file
-%%% or directory can be related with at most one such document. It is created/updated
+%%% or directory can be associated with at most one such document. It is created/updated
 %%% in one of following cases:
 %%% - new qos_entry document is created for file or directory. In this case
 %%%   target storages are chosen according to QoS expression and number of
@@ -49,6 +48,10 @@
 %%% According to this getting full information about QoS defined for file or
 %%% directory requires calculating effective file_qos as file_qos document
 %%% is not created for each file separately.
+%%%
+%%% NOTE!!!
+%%% If you introduce any changes in this module, please ensure that
+%%% docs in file_qos.erl and qos_entry.erl are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -66,8 +69,6 @@
 -define(L_PAREN, <<"(">>).
 -define(R_PAREN, <<")">>).
 -define(EQUALITY, <<"=">>).
-
--define(ERROR_CANNOT_FULFILL_QOS, cannot_fulfill_qos).
 
 
 % macros used for operations on QoS bounded cache

@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for calculating QoS entry fulfillment status.
-%%% QoS is determined fulfilled when there is:
-%%%     - traverse task triggered by created this QoS entry is finished
+%%% QoS is fulfilled when:
+%%%     - traverse task triggered by creating this QoS entry is finished
 %%%     - there are no remaining transfers, that were created to fulfill this QoS
 %%%
 %%% Active transfers are stored as links where value is transfer id and key is

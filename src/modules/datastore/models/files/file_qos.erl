@@ -16,6 +16,10 @@
 %%%        each storage that should store file replica.
 %%%     2. When target_storages for file/directory differs from the target_storages
 %%%        calculated for parent directory.
+%%%
+%%% NOTE!!!
+%%% If you introduce any changes in this module, please ensure that
+%%% docs in qos.hrl are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_qos).
@@ -36,7 +40,8 @@
 
 %% higher-level functions operating on file_qos record.
 -export([get_effective/1, remove_qos_id/2,
-    add_qos/4, check_file_protected/2
+    add_qos/4, is_file_protected/2, get_qos_to_update/2,
+    get_qos_list/1, get_target_storages/1
 ]).
 
 %% datastore_model callbacks
@@ -66,40 +71,22 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file_qos document.
-%% @end
-%%--------------------------------------------------------------------
 -spec update(key(), diff()) -> {ok, key()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file_qos document. If document with specified Key does not exist,
-%% new file_qos document is created.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec create_or_update(doc(), diff()) ->
     {ok, key()} | {error, term()}.
 create_or_update(#document{key = Key} = Doc, Diff) ->
     datastore_model:update(?CTX, Key, Diff, Doc).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file_qos doc for file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes file_qos document.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
     case datastore_model:delete(?CTX, Key) of
@@ -113,11 +100,6 @@ delete(Key) ->
 %%% Higher-level functions operating on file_qos record.
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns effective file_qos for file.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_effective(file_meta:doc() | file_meta:uuid()) -> record() | undefined.
 get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
@@ -137,6 +119,7 @@ get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}) ->
         {ok, EffQos, _} -> EffQos;
         _ -> undefined % documents are not synchronized yet
     end;
+
 get_effective(FileUuid) ->
     case file_meta:get(FileUuid) of
         {ok, FileMeta} ->
@@ -145,12 +128,13 @@ get_effective(FileUuid) ->
             undefined
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes QosId from file_qos document.
+%% Removes given Qos ID from both qos_list and target_storages in file_qos doc.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_id(file_meta:uuid(), qos_entry:id()) -> ok.
+-spec remove_qos_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
 remove_qos_id(FileUuid, QosId) ->
     Diff = fun(FileQos = #file_qos{qos_list = QosList, target_storages = TS}) ->
         UpdatedQosList = lists:delete(QosId, QosList),
@@ -165,8 +149,12 @@ remove_qos_id(FileUuid, QosId) ->
         {ok, FileQos#file_qos{qos_list = UpdatedQosList, target_storages = UpdatedTS}}
     end,
 
-    {ok, _} = update(FileUuid, Diff),
-    ok.
+    case update(FileUuid, Diff) of
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -205,13 +193,27 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec check_file_protected(file_meta:uuid(), storage:id()) -> boolean().
-check_file_protected(FileUuid, StorageId) ->
+-spec is_file_protected(file_meta:uuid(), storage:id()) -> boolean().
+is_file_protected(FileUuid, StorageId) ->
     QosStorages = case file_qos:get_effective(FileUuid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS
     end,
     maps:is_key(StorageId, QosStorages).
+
+
+-spec get_qos_list(record()) -> qos_list().
+get_qos_list(FileQos) ->
+    FileQos#file_qos.qos_list.
+
+-spec get_target_storages(record()) -> target_storages().
+get_target_storages(FileQos) ->
+    FileQos#file_qos.target_storages.
+
+-spec get_qos_to_update(storage:id(), record()) -> [qos_entry:id()].
+get_qos_to_update(StorageId, EffectiveFileQos) ->
+    maps:get(StorageId, EffectiveFileQos#file_qos.target_storages, []).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -227,9 +229,10 @@ check_file_protected(FileUuid, StorageId) ->
 -spec merge_file_qos(record(), record()) -> record().
 merge_file_qos(#file_qos{qos_list = ParentQosList, target_storages = ParentStorages},
     #file_qos{qos_list = ChildQosList, target_storages = ChildStorages}) ->
-    MergedQosList = remove_duplicates_from_list(ParentQosList ++ ChildQosList),
+    MergedQosList = lists:usort(ParentQosList ++ ChildQosList),
     MergedStorages = merge_target_storages(ParentStorages, ChildStorages),
     #file_qos{qos_list = MergedQosList, target_storages = MergedStorages}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -260,10 +263,6 @@ merge_target_storages(ParentStorages, ChildStorages) ->
             end, ChildQosList, Acc)
     end, ParentStoragesWithoutCommonQos, ChildStorages).
 
--spec remove_duplicates_from_list([term()]) -> [term()].
-remove_duplicates_from_list(List) ->
-    sets:to_list(sets:from_list(List)).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -282,33 +281,21 @@ merge_storage_list_to_target_storages(QosId, StorageList, TargetStorages) ->
         TargetStoragesForFile#{StorageId => [QosId | QosEntryList]}
     end, TargetStorages, StorageList).
 
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->

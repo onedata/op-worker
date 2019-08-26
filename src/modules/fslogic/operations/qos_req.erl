@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests operating on file qos.
+%%% This module is responsible for handling requests operating on file qos.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_req).
@@ -17,6 +17,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([add_qos/4, get_qos_details/3, remove_qos/3, get_file_qos/2,
@@ -109,7 +110,7 @@ restore_qos_on_storage(FileCtx, StorageId) ->
         undefined ->
             ok;
         _ ->
-            QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
+            QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
             lists:foreach(fun(QosId) ->
                 ok = qos_traverse:fulfill_qos(?ROOT_SESS_ID, FileCtx, QosId, [StorageId], restore)
             end, QosToUpdate)
@@ -118,6 +119,7 @@ restore_qos_on_storage(FileCtx, StorageId) ->
 %%%===================================================================
 %%% Insecure functions
 %%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -149,10 +151,10 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         FileCtx, QosExpressionInRPN, ReplicasNum),
 
     case TargetStoragesList of
-        {error, ?ERROR_CANNOT_FULFILL_QOS} ->
+        ?ERROR_CANNOT_FULFILL_QOS ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            {ok, _} = qos_entry:add_impossible_qos(QosId, SpaceId);
+            ok = qos_entry:add_impossible_qos(QosId, SpaceId);
         _ ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, TargetStoragesList),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
@@ -183,8 +185,8 @@ get_file_qos_insecure(_UserCtx, FileCtx) ->
             #effective_file_qos{};
         EffQos ->
             #effective_file_qos{
-                qos_list = EffQos#file_qos.qos_list,
-                target_storages = EffQos#file_qos.target_storages
+                qos_list = file_qos:get_qos_list(EffQos),
+                target_storages = file_qos:get_target_storages(EffQos)
             }
     end,
 
@@ -203,13 +205,17 @@ get_file_qos_insecure(_UserCtx, FileCtx) ->
 -spec get_qos_details_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
-    {Expression, ReplicasNum, Status} = qos_entry:get_qos_details(QosId),
+    case qos_entry:get(QosId) of
+        {ok, #document{value = QosEntry}} ->
+            #provider_response{status = #status{code = ?OK}, provider_response = #get_qos_resp{
+                expression = qos_entry:get_expression(QosEntry),
+                replicas_num = qos_entry:get_replicas_num(QosEntry),
+                status = qos_entry:get_status(QosEntry)
+            }};
+        {error, Error} ->
+            #provider_response{status = #status{code = Error}}
+    end.
 
-    #provider_response{status = #status{code = ?OK}, provider_response = #get_qos_resp{
-        expression = Expression,
-        replicas_num = ReplicasNum,
-        status = Status
-    }}.
 
 
 %%--------------------------------------------------------------------
@@ -251,6 +257,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Calculate list of storage id, on which file should be present according to
@@ -279,10 +286,10 @@ calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_storages(session:id(), file_ctx:ctx()) -> [storage:id()].
-get_space_storages(Auth, FileCtx) ->
+get_space_storages(SessionId, FileCtx) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
     % TODO: VFS-5573 use storage qos
-    {ok, ProvidersId} = space_logic:get_provider_ids(Auth, SpaceId),
+    {ok, ProvidersId} = space_logic:get_provider_ids(SessionId, SpaceId),
     ProvidersId.

@@ -169,7 +169,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             hr_hist = #{},
             dy_hist = #{},
             mth_hist = #{},
-            index_name = IndexName,
+            view_name = IndexName,
             query_view_params = QueryViewParams,
             qos_job_pid = transfer_utils:encode_pid(QosJobPID)
         }},
@@ -238,7 +238,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 evicting_provider = EvictingProviderId,
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback,
-                index_name = IndexName,
+                view_name = IndexName,
                 query_view_params = QueryViewParams,
                 qos_job_pid = QosJobPID
             } = Transfer,

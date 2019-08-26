@@ -348,7 +348,7 @@ get_record_struct(11) ->
         {hr_hist, #{string => [integer]}},
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}},
-        {index_name, string},
+        {view_name, string},
         {query_view_params, [{term, term}]},
         {qos_job_pid, string}
     ]}.

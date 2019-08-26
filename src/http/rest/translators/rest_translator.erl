@@ -349,6 +349,10 @@ translate_error(?ERROR_TRANSFER_ALREADY_ENDED) ->
 translate_error(?ERROR_TRANSFER_NOT_ENDED) ->
     {?HTTP_400_BAD_REQUEST, <<"Specified transfer has not ended yet.">>};
 
+% Errors associated with QoS
+translate_error(?ERROR_CANNOT_FULFILL_QOS) ->
+    {?HTTP_400_BAD_REQUEST, <<"Cannot fulfill specified QoS">>};
+
 % Wildcard match
 translate_error({error, Reason}) ->
     ?error("Unexpected error: {error, ~p} in rest error translator", [Reason]),
