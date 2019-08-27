@@ -503,13 +503,13 @@ upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, C
     ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
-    LastUpdate, MinHist, HrHist, DyHist, MthHist, IndexName, QueryViewParams
+    LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
 }) ->
     {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
         Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
         ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
-        LastUpdate, MinHist, HrHist, DyHist, MthHist, IndexName, QueryViewParams,
+        LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams,
         undefined
     }}.

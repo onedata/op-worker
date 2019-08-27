@@ -150,18 +150,18 @@ get_file_distribution(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-%%    IndexName, QueryViewParams, undefined)
+%%    ViewName, QueryViewParams, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback(), transfer:index_name(),
+    od_provider:id(), transfer:callback(), transfer:view_name(),
     query_view_params()) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-    IndexName, QueryViewParams
+    ViewName, QueryViewParams
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, IndexName, QueryViewParams, undefined).
+        Callback, ViewName, QueryViewParams, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc

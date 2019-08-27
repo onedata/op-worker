@@ -401,10 +401,10 @@ transfer_record(StateAndTransferId) ->
         space_id = SpaceId,
         schedule_time = ScheduleTime,
         start_time = StartTime,
-        view_name = IndexName,
+        view_name = ViewName,
         query_view_params = QueryViewParams
     }}} = transfer:get(TransferId),
-    {DataSourceType, DataSourceIdentifier, DataSourceName} = case IndexName of
+    {DataSourceType, DataSourceIdentifier, DataSourceName} = case ViewName of
         undefined ->
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
             FileType = case lfm:stat(SessionId, {guid, FileGuid}) of
@@ -415,11 +415,11 @@ transfer_record(StateAndTransferId) ->
             end,
             {FileType, FileGuid, Path};
         _ ->
-            case view_links:get_view_id(IndexName, SpaceId) of
+            case view_links:get_view_id(ViewName, SpaceId) of
                 {ok, IndexId} ->
-                    {<<"view">>, IndexId, IndexName};
+                    {<<"view">>, IndexId, ViewName};
                 _ ->
-                    {<<"view">>, null, IndexName}
+                    {<<"view">>, null, ViewName}
             end
     end,
     QueryParams = case QueryViewParams of

@@ -742,8 +742,9 @@ remove_metadata(SessId, FileKey, Type) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_result(OK | {error, term()}) -> OK | no_return() when
-    OK :: ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}.
+    OK :: ok | boolean() | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}.
 check_result(ok) -> ok;
+check_result(Boolean) when is_boolean(Boolean)-> Boolean;
 check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;

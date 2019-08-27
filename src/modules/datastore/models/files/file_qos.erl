@@ -184,8 +184,13 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
         ),
         {ok, #file_qos{qos_list = [QosId | CurrFileQos], target_storages = UpdatedTS}}
     end,
-    {ok, _} = create_or_update(NewDoc, Diff),
-    ok.
+
+    case create_or_update(NewDoc, Diff) of
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
