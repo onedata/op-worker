@@ -57,6 +57,7 @@ all() ->
     ?write_acl,
     ?write_owner
 ]).
+-define(ALL_POSIX_PERMS, [read, write, exec]).
 
 
 -define(ALLOW_ACE(__IDENTIFIER, __FLAGS, __MASK), #access_control_entity{
@@ -125,6 +126,7 @@ run_tests(Node, #test_spec{
     RootDirPath = <<"/", Space/binary, "/", RootDir/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, RootDirPath, 8#777)),
 
+    run_posix_tests(Node, RootDirPath, Spec, Config),
     run_acl_tests(Node, RootDirPath, Spec, Config),
     ok.
 
@@ -132,6 +134,96 @@ run_tests(Node, #test_spec{
 %%%===================================================================
 %%% POSIX TESTS MECHANISM
 %%%===================================================================
+
+
+run_posix_tests(Node, RootDirPath, #test_spec{
+    owner = Owner,
+    user = User,
+    env = EnvDesc,
+    fn = Fun
+}, Config) ->
+    OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
+    UserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+
+    lists:foreach(fun({SessId, Type, DirName}) ->
+        DirPath = <<RootDirPath/binary, DirName/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, DirPath)),
+        run_posix_tests(
+            Node, SessId, DirPath, Fun, Type,
+            setup_env(Node, OwnerSessId, DirPath, EnvDesc)
+        )
+    end, [
+        {OwnerSessId, owner, <<"/owner_posix">>},
+        {UserSessId, group, <<"/group_posix">>}
+    ]).
+
+
+run_posix_tests(Node, SessId, RootPath, Fun, Type, RequiredPermsPerFile) ->
+    RequiredPosixPermsPerFile = lists:map(fun({Guid, Perms}) ->
+        {Guid, lists:usort(lists:flatmap(
+            fun
+                (?read_object) -> [read];
+                (?list_container) -> [read];
+                (?write_object) -> [write];
+                (?add_object) -> [write, exec];
+                (?append_data) -> [write];
+                (?add_subcontainer) -> [write];
+                (?read_metadata) -> [read];
+                (?write_metadata) -> [write];
+                (?execute) -> [exec];
+                (?traverse_container) -> [exec];
+                (?delete_object) -> [write, exec];
+                (?delete_subcontainer) -> [write, exec];
+                (?read_attributes) -> [];
+                (?write_attributes) -> [write];
+                (?delete) -> [owner_if_parent_sticky];
+                (?read_acl) -> [];
+                (?write_acl) -> [owner]
+            end,
+            Perms
+        ))}
+    end, RequiredPermsPerFile),
+
+    {ComplementaryPosixPermsPerFile, AllRequiredPosixPerms} = lists:foldl(
+        fun({FileGuid, FileRequiredPerms}, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
+            {
+                BasePermsPerFileAcc#{FileGuid => ?ALL_POSIX_PERMS -- FileRequiredPerms},
+                [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
+            }
+        end,
+        {#{}, []},
+        RequiredPosixPermsPerFile
+    ),
+
+    ct:pal("POSIX: ~p", [ComplementaryPosixPermsPerFile]),
+
+    try
+        run_posix_tests(
+            Node, SessId, RootPath, Fun, ComplementaryPosixPermsPerFile,
+            AllRequiredPosixPerms, Type
+        )
+    catch T:R ->
+        RequiredPermsPerFileMap = lists:foldl(fun({Guid, RequiredPerms}, Acc) ->
+            {ok, Path} = lfm_proxy:get_file_path(Node, SessId, Guid),
+            Acc#{Path => RequiredPerms}
+        end, #{}, RequiredPosixPermsPerFile),
+
+        ct:pal(
+            "POSIX TESTS FAILURE~n"
+            "   Type: ~p~n"
+            "   Root path: ~p~n"
+            "   Required Perms: ~p~n",
+            [
+                Type, RootPath,
+                RequiredPermsPerFileMap
+            ]
+        ),
+        erlang:T(R)
+    end.
+
+
+run_posix_tests(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, Type) ->
+    ok.
 
 
 %%%===================================================================
@@ -149,77 +241,25 @@ run_acl_tests(Node, RootDirPath, #test_spec{
     OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
     UserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
 
-    % TEST OWNER ALLOW ACL
-    OwnerAclAllowRootDir = <<RootDirPath/binary, "/owner_acl_allow">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, OwnerAclAllowRootDir)),
-    run_acl_tests(
-        Node, OwnerSessId, OwnerAclAllowRootDir, Fun, allow,
-        setup_env(Node, OwnerSessId, OwnerAclAllowRootDir, EnvDesc),
-        ?owner, ?no_flags_mask
-    ),
+    lists:foreach(fun({SessId, Type, DirName, AceWho, AceFlags}) ->
+        DirPath = <<RootDirPath/binary, DirName/binary>>,
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, DirPath)),
+        run_acl_tests(
+            Node, SessId, DirPath, Fun, Type,
+            setup_env(Node, OwnerSessId, DirPath, EnvDesc),
+            AceWho, AceFlags
+        )
+    end, [
+        {OwnerSessId, allow, <<"/owner_acl_allow">>, ?owner, ?no_flags_mask},
+        {UserSessId, allow, <<"/user_acl_allow">>, User, ?no_flags_mask},
+        {UserSessId, allow, <<"/user_group_acl_allow">>, UserGroup, ?identifier_group_mask},
+        {UserSessId, allow, <<"/everyone_acl_allow">>, ?everyone, ?no_flags_mask},
 
-    % TEST USER ALLOW ACL
-    UserAclAllowRootDir = <<RootDirPath/binary, "/user_acl_allow">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, UserAclAllowRootDir)),
-    run_acl_tests(
-        Node, UserSessId, UserAclAllowRootDir, Fun, allow,
-        setup_env(Node, OwnerSessId, UserAclAllowRootDir, EnvDesc),
-        User, ?no_flags_mask
-    ),
-
-    % TEST USER GROUP ALLOW ACL
-    UserGroupAclAllowRootDir = <<RootDirPath/binary, "/user_group_acl_allow">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, UserGroupAclAllowRootDir)),
-    run_acl_tests(
-        Node, UserSessId, UserGroupAclAllowRootDir, Fun, allow,
-        setup_env(Node, OwnerSessId, UserGroupAclAllowRootDir, EnvDesc),
-        UserGroup, ?identifier_group_mask
-    ),
-
-    % TEST EVERYONE ALLOW ACL
-    EveryoneAclAllowRootDir = <<RootDirPath/binary, "/everyone_acl_allow">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, EveryoneAclAllowRootDir)),
-    run_acl_tests(
-        Node, UserSessId, EveryoneAclAllowRootDir, Fun, allow,
-        setup_env(Node, OwnerSessId, EveryoneAclAllowRootDir, EnvDesc),
-        ?everyone, ?no_flags_mask
-    ),
-
-    % TEST OWNER DENY ACL
-    OwnerAclDenyRootDir = <<RootDirPath/binary, "/owner_acl_deny">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, OwnerAclDenyRootDir)),
-    run_acl_tests(
-        Node, OwnerSessId, OwnerAclDenyRootDir, Fun, deny,
-        setup_env(Node, OwnerSessId, OwnerAclDenyRootDir, EnvDesc),
-        ?owner, ?no_flags_mask
-    ),
-
-    % TEST USER DENY ACL
-    UserAclDenyRootDir = <<RootDirPath/binary, "/user_acl_deny">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, UserAclDenyRootDir)),
-    run_acl_tests(
-        Node, UserSessId, UserAclDenyRootDir, Fun, deny,
-        setup_env(Node, OwnerSessId, UserAclDenyRootDir, EnvDesc),
-        User, ?no_flags_mask
-    ),
-
-    % TEST USER GROUP DENY ACL
-    UserGroupAclDenyRootDir = <<RootDirPath/binary, "/user_group_acl_deny">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, UserGroupAclDenyRootDir)),
-    run_acl_tests(
-        Node, UserSessId, UserGroupAclDenyRootDir, Fun, deny,
-        setup_env(Node, OwnerSessId, UserGroupAclDenyRootDir, EnvDesc),
-        UserGroup, ?identifier_group_mask
-    ),
-
-    % TEST EVERYONE DENY ACL
-    EveryoneAclDenyRootDir = <<RootDirPath/binary, "/everyone_acl_deny">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, EveryoneAclDenyRootDir)),
-    run_acl_tests(
-        Node, UserSessId, EveryoneAclDenyRootDir, Fun, deny,
-        setup_env(Node, OwnerSessId, EveryoneAclDenyRootDir, EnvDesc),
-        ?everyone, ?no_flags_mask
-    ).
+        {OwnerSessId, deny, <<"/owner_acl_deny">>, ?owner, ?no_flags_mask},
+        {UserSessId, deny, <<"/user_acl_deny">>, User, ?no_flags_mask},
+        {UserSessId, deny, <<"/user_group_acl_deny">>, UserGroup, ?identifier_group_mask},
+        {UserSessId, deny, <<"/everyone_acl_deny">>, ?everyone, ?no_flags_mask}
+    ]).
 
 
 run_acl_tests(Node, SessId, RootPath, Fun, Type, RequiredPermsPerFile, AceWho, AceFlags) ->
@@ -227,7 +267,7 @@ run_acl_tests(Node, SessId, RootPath, Fun, Type, RequiredPermsPerFile, AceWho, A
         fun({FileGuid, FileRequiredPerms}, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
             {
                 BasePermsPerFileAcc#{FileGuid => complementary_perms(FileRequiredPerms)},
-                    [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
+                [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
             }
         end,
         {#{}, []},
