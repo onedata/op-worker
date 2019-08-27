@@ -22,6 +22,7 @@
 %% API
 -export([get/1, exists/1]).
 -export([from_json/1, to_json/1]).
+-export([mask_to_bitmask/1]).
 
 % Exported for tests
 -export([identifier_acl_to_json/2, bitmask_to_binary/1]).
@@ -77,6 +78,17 @@ from_json(JsonAcl) ->
 %%--------------------------------------------------------------------
 -spec to_json(acl()) -> [map()].
 to_json(Acl) -> [ace_to_map(Ace) || Ace <- Acl].
+
+
+-spec mask_to_bitmask(binary() | [binary()]) -> non_neg_integer().
+mask_to_bitmask(<<"0x", _/binary>> = Mask) ->
+    binary_to_bitmask(Mask);
+mask_to_bitmask(MaskNamesBin) when is_binary(MaskNamesBin) ->
+    mask_to_bitmask(parse_csv(MaskNamesBin));
+mask_to_bitmask(MaskNames) ->
+    lists:foldl(fun(MaskName, BitMask) ->
+        BitMask bor mask_name_to_bitmask(MaskName)
+    end, ?no_flags_mask, MaskNames).
 
 
 %%%===================================================================
@@ -161,18 +173,6 @@ flags_to_bitmask(Flags) ->
 -spec flag_to_bitmask(binary()) -> non_neg_integer().
 flag_to_bitmask(?no_flags) -> ?no_flags_mask;
 flag_to_bitmask(?identifier_group) -> ?identifier_group_mask.
-
-
-%% @private
--spec mask_to_bitmask(binary() | [binary()]) -> non_neg_integer().
-mask_to_bitmask(<<"0x", _/binary>> = Mask) ->
-    binary_to_bitmask(Mask);
-mask_to_bitmask(MaskNamesBin) when is_binary(MaskNamesBin) ->
-    mask_to_bitmask(parse_csv(MaskNamesBin));
-mask_to_bitmask(MaskNames) ->
-    lists:foldl(fun(MaskName, BitMask) ->
-        BitMask bor mask_name_to_bitmask(MaskName)
-    end, ?no_flags_mask, MaskNames).
 
 
 %% @private
