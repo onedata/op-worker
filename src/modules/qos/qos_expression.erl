@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([transform_to_rpn/1, calculate_target_storages/4]).

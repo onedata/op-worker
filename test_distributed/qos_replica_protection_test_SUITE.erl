@@ -60,37 +60,43 @@ all() -> [
     autocleaning_of_replica_not_protected_by_qos_file,
     autocleaning_of_replica_protected_by_qos_dir,
     autocleaning_of_replica_not_protected_by_qos_dir,
-%%
+
     eviction_of_replica_protected_by_qos_file,
     eviction_of_replica_not_protected_by_qos_file,
     migration_of_replica_protected_by_qos_file,
     migration_of_replica_not_protected_by_qos_file,
+    % TODO uncomment after resolving VFS-5715
 %%    migration_of_replica_protected_by_qos_on_equal_storage_file,
     eviction_of_replica_protected_by_qos_dir,
     eviction_of_replica_not_protected_by_qos_dir,
     migration_of_replica_protected_by_qos_dir,
     migration_of_replica_not_protected_by_qos_dir,
+    % TODO uncomment after resolving VFS-5715
 %%    migration_of_replica_protected_by_qos_on_equal_storage_dir,
     eviction_of_replica_protected_by_qos_dir_each_file_separately,
     eviction_of_replica_not_protected_by_qos_dir_each_file_separately,
     migration_of_replica_protected_by_qos_dir_each_file_separately,
     migration_of_replica_not_protected_by_qos_dir_each_file_separately,
+    % TODO uncomment after resolving VFS-5715
 %%    migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately,
 
     remote_eviction_of_replica_protected_by_qos_file,
     remote_eviction_of_replica_not_protected_by_qos_file,
     remote_migration_of_replica_protected_by_qos_file,
     remote_migration_of_replica_not_protected_by_qos_file,
+    % TODO uncomment after resolving VFS-5715
 %%    remote_migration_of_replica_protected_by_qos_on_equal_storage_file,
     remote_eviction_of_replica_protected_by_qos_dir,
     remote_eviction_of_replica_not_protected_by_qos_dir,
     remote_migration_of_replica_protected_by_qos_dir,
     remote_migration_of_replica_not_protected_by_qos_dir,
+    % TODO uncomment after resolving VFS-5715
 %%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir,
     remote_eviction_of_replica_protected_by_qos_dir_each_file_separately,
     remote_eviction_of_replica_not_protected_by_qos_dir_each_file_separately,
     remote_migration_of_replica_protected_by_qos_dir_each_file_separately,
     remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately
+    % TODO uncomment after resolving VFS-5715
 %%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
 ].
 

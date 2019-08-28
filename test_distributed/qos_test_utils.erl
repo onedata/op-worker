@@ -52,16 +52,16 @@ add_qos_test_base(Config, Spec) ->
             wait_for_qos_fulfilment_in_parallel(SourceProvider, SessId(SourceProvider), PathToFileQos),
 
             % check distribution after qos is fulfilled, check file_qos
-            case maps:find(files_qos, Spec) of
-                {ok, ExpectedFilesQosList} ->
-                    ?assertMatch(true, assert_file_qos(SourceProvider, SessId(SourceProvider), ExpectedFilesQosList, PathToFileQos));
-                _ ->
-                    ok
-            end,
             case maps:find(directory_structure_after, Spec) of
                 {ok, DirStructureAfter} ->
                     ?assertMatch(true, assert_distribution_in_dir_structure(SourceProvider,
                         SessId(SourceProvider), DirStructureAfter, <<"/">>, GuidsAndPaths, ?ATTEMPTS));
+                _ ->
+                    ok
+            end,
+            case maps:find(files_qos, Spec) of
+                {ok, ExpectedFilesQosList} ->
+                    ?assertMatch(true, assert_file_qos(SourceProvider, SessId(SourceProvider), ExpectedFilesQosList, PathToFileQos));
                 _ ->
                     ok
             end,
@@ -304,8 +304,7 @@ add_qos(Worker, SessId, Path, QosExpression, ReplicasNum, QosName, GuidsAndPaths
     Guid = get_guid(Path, GuidsAndPaths),
     {ok, QosId} = ?assertMatch(
         {ok, _QosId},
-        lfm_proxy:add_qos(Worker, SessId, {guid, Guid},
-            qos_expression:transform_to_rpn(QosExpression), ReplicasNum)
+        lfm_proxy:add_qos(Worker, SessId, {guid, Guid}, QosExpression, ReplicasNum)
     ),
 
     {QosName, QosId, Path}.

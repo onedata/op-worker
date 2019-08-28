@@ -30,8 +30,8 @@
 %%% tree containing ID of transfers scheduled to fulfill QoS after file or
 %%% file in directory has been changed.
 %%% QoS requirement is considered as fulfilled when:
-%%% - there is no active traverse tasks for this QoS
-%%% - status indicates that first traverse task has ended
+%%%   - all traverse tasks, triggered by creating this QoS requirement, are finished
+%%%   - there are no remaining transfers, that were created to fulfill this QoS requirement
 %%%
 %%% The file_qos item contains aggregated information about QoS defined for file
 %%% or directory. It contains list of qos_entry IDs and mapping that maps storage_id

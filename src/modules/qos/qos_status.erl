@@ -7,19 +7,20 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for calculating QoS entry fulfillment status.
-%%% QoS is determined fulfilled when there is:
-%%%     - all traverse tasks are finished
+%%% QoS is fulfilled when:
+%%%     - all traverse tasks, triggered by creating this QoS entry, are finished
 %%%     - there are no remaining transfers, that were created to fulfill this QoS
 %%%
 %%% Active transfers are stored as links where value is transfer id and key is
 %%% expressed as combined:
 %%%     * relative path to QoS entry origin file(file that QoS entry was added to)
 %%%     * storage id where file is transferred to
+%%%     * traverse task id that started this transfer
 %%%
 %%% QoS status of directory is checked by getting next status link to
 %%% given directory relative path. Because status links keys start with relative
 %%% path, if there is unfinished transfer in subtree of this directory next
-%%% status link will start with the same relative path.
+%%% status link will start with given parent directory relative path.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_status).
@@ -124,7 +125,7 @@ check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = Origi
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns next status link.
+%% Returns next status link in alphabetical order.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.

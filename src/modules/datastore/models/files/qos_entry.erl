@@ -154,7 +154,7 @@ set_status(QosId, Status) ->
 %% Adds given QosId to impossible qos tree.
 %% @end
 %%--------------------------------------------------------------------
--spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok | {error, term()}.
+-spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok.
 add_impossible_qos(QosId, Scope) ->
     {ok, _} = update(QosId, fun(QosEntry) ->
         {ok, QosEntry#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}

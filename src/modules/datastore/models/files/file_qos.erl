@@ -36,7 +36,7 @@
 
 %% higher-level functions operating on file_qos record.
 -export([get_effective/1, get_effective/2, remove_qos_id/2,
-    add_qos/4, check_file_protected/2
+    add_qos/4, is_file_protected/2
 ]).
 
 %% datastore_model callbacks
@@ -221,8 +221,8 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec check_file_protected(file_meta:uuid(), storage:id()) -> boolean().
-check_file_protected(FileUuid, StorageId) ->
+-spec is_file_protected(file_meta:uuid(), storage:id()) -> boolean().
+is_file_protected(FileUuid, StorageId) ->
     QosStorages = case file_qos:get_effective(FileUuid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS
