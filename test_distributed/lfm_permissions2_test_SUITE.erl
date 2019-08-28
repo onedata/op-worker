@@ -82,6 +82,7 @@ all() ->
     owner = <<"user1">> :: binary(),
     user = <<"user2">> :: binary(),
     user_group = <<"group2">> :: binary(),
+    user_outside_space = <<"user3">>,
     env :: map(),
     fn :: fun((UserId :: binary(), Path :: binary()) ->
         ok |
@@ -127,8 +128,7 @@ run_tests(Node, #test_spec{
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, RootDirPath, 8#777)),
 
     run_posix_tests(Node, RootDirPath, Spec, Config),
-    run_acl_tests(Node, RootDirPath, Spec, Config),
-    ok.
+    run_acl_tests(Node, RootDirPath, Spec, Config).
 
 
 %%%===================================================================
@@ -139,11 +139,13 @@ run_tests(Node, #test_spec{
 run_posix_tests(Node, RootDirPath, #test_spec{
     owner = Owner,
     user = User,
+    user_outside_space = OtherUser,
     env = EnvDesc,
     fn = Fun
 }, Config) ->
     OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
     UserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
 
     lists:foreach(fun({SessId, Type, DirName}) ->
         DirPath = <<RootDirPath/binary, DirName/binary>>,
@@ -154,34 +156,14 @@ run_posix_tests(Node, RootDirPath, #test_spec{
         )
     end, [
         {OwnerSessId, owner, <<"/owner_posix">>},
-        {UserSessId, group, <<"/group_posix">>}
+        {UserSessId, group, <<"/group_posix">>},
+        {OtherUserSessId, other, <<"/other_posix">>}
     ]).
 
 
 run_posix_tests(Node, SessId, RootPath, Fun, Type, RequiredPermsPerFile) ->
     RequiredPosixPermsPerFile = lists:map(fun({Guid, Perms}) ->
-        {Guid, lists:usort(lists:flatmap(
-            fun
-                (?read_object) -> [read];
-                (?list_container) -> [read];
-                (?write_object) -> [write];
-                (?add_object) -> [write, exec];
-                (?append_data) -> [write];
-                (?add_subcontainer) -> [write];
-                (?read_metadata) -> [read];
-                (?write_metadata) -> [write];
-                (?execute) -> [exec];
-                (?traverse_container) -> [exec];
-                (?delete_object) -> [write, exec];
-                (?delete_subcontainer) -> [write, exec];
-                (?read_attributes) -> [];
-                (?write_attributes) -> [write];
-                (?delete) -> [owner_if_parent_sticky];
-                (?read_acl) -> [];
-                (?write_acl) -> [owner]
-            end,
-            Perms
-        ))}
+        {Guid, lists:usort(lists:flatmap(fun perm_to_posix_perms/1, Perms))}
     end, RequiredPermsPerFile),
 
     {ComplementaryPosixPermsPerFile, AllRequiredPosixPerms} = lists:foldl(
@@ -194,8 +176,6 @@ run_posix_tests(Node, SessId, RootPath, Fun, Type, RequiredPermsPerFile) ->
         {#{}, []},
         RequiredPosixPermsPerFile
     ),
-
-    ct:pal("POSIX: ~p", [ComplementaryPosixPermsPerFile]),
 
     try
         run_posix_tests(
@@ -222,8 +202,63 @@ run_posix_tests(Node, SessId, RootPath, Fun, Type, RequiredPermsPerFile) ->
     end.
 
 
-run_posix_tests(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, Type) ->
-    ok.
+run_posix_tests(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, owner) ->
+    run_posix_tests_combinations(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, owner);
+
+run_posix_tests(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, group) ->
+    OperationRequiresOwner = lists:any(fun({_, Perm}) ->
+        Perm =/= read andalso Perm =/= write andalso Perm =/= exec
+    end, AllRequiredPerms),
+
+    case OperationRequiresOwner of
+        true ->
+            AllModesPerFile = maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile),
+            set_modes(Node, AllModesPerFile),
+            ?assertMatch({error, ?EACCES}, Fun(SessId, RootPath));
+        false ->
+            run_posix_tests_combinations(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, group)
+    end;
+
+% Users not belonging to space or unauthorized should be able to conduct any operation
+run_posix_tests(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, _AllRequiredPerms, other) ->
+    AllModesPerFile = maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile),
+    set_modes(Node, AllModesPerFile),
+    ?assertMatch({error, _}, Fun(SessId, RootPath)),
+    ?assertMatch({error, _}, Fun(?GUEST_SESS_ID, RootPath)).
+
+
+run_posix_tests_combinations(Node, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, Type) ->
+    AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
+        {Guid, posix_perm_to_mode(PosixPerm, Type)}
+    end, AllRequiredPerms),
+    ComplementaryModesPerFile = maps:map(fun(_, Perms) ->
+        lists:foldl(fun(Perm, Acc) -> Acc bor posix_perm_to_mode(Perm, Type) end, 0, Perms)
+    end, ComplementaryPermsPerFile),
+    [AllRequiredModesComb | EaccesModesCombs] = combinations(AllRequiredModes),
+
+    % Granting all modes without required ones should result in eacces
+    lists:foreach(fun(EaccessModeComb) ->
+        EaccesModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
+            Acc#{Guid => Mode bor maps:get(Guid, Acc)}
+        end, ComplementaryModesPerFile, EaccessModeComb),
+        set_modes(Node, EaccesModesPerFile),
+        ?assertMatch({error, ?EACCES}, Fun(SessId, RootPath))
+    end, EaccesModesCombs),
+
+    % Granting only required modes should result in success
+    RequiredModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
+        Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
+    end, #{}, AllRequiredModesComb),
+    set_modes(Node, RequiredModesPerFile),
+    ?assertNotMatch({error, _}, Fun(SessId, RootPath)).
+
+
+set_modes(Node, ModePerFile) ->
+    maps:fold(fun(Guid, Mode, _) ->
+        ?assertEqual(ok, lfm_proxy:set_perms(
+            Node, ?ROOT_SESS_ID, {guid, Guid}, Mode
+        ))
+    end, ok, ModePerFile).
 
 
 %%%===================================================================
@@ -433,6 +468,37 @@ complementary_perms(Perms) ->
         end,
         Perms
     )).
+
+
+-spec perm_to_posix_perms(Perm :: binary()) -> PosixPerms :: [atom()].
+perm_to_posix_perms(?read_object) -> [read];
+perm_to_posix_perms(?list_container) -> [read];
+perm_to_posix_perms(?write_object) -> [write];
+perm_to_posix_perms(?add_object) -> [write, exec];
+perm_to_posix_perms(?append_data) -> [write];
+perm_to_posix_perms(?add_subcontainer) -> [write];
+perm_to_posix_perms(?read_metadata) -> [read];
+perm_to_posix_perms(?write_metadata) -> [write];
+perm_to_posix_perms(?execute) -> [exec];
+perm_to_posix_perms(?traverse_container) -> [exec];
+perm_to_posix_perms(?delete_object) -> [write, exec];
+perm_to_posix_perms(?delete_subcontainer) -> [write, exec];
+perm_to_posix_perms(?read_attributes) -> [];
+perm_to_posix_perms(?write_attributes) -> [write];
+perm_to_posix_perms(?delete) -> [owner_if_parent_sticky];
+perm_to_posix_perms(?read_acl) -> [];
+perm_to_posix_perms(?write_acl) -> [owner].
+
+
+-spec posix_perm_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
+    non_neg_integer().
+posix_perm_to_mode(read, owner) -> 8#4 bsl 6;
+posix_perm_to_mode(write, owner) -> 8#2 bsl 6;
+posix_perm_to_mode(exec, owner) -> 8#1 bsl 6;
+posix_perm_to_mode(read, group) -> 8#4 bsl 3;
+posix_perm_to_mode(write, group) -> 8#2 bsl 3;
+posix_perm_to_mode(exec, group) -> 8#1 bsl 3;
+posix_perm_to_mode(_, _) -> 8#0.
 
 
 -spec combinations([term()]) -> [[term()]].

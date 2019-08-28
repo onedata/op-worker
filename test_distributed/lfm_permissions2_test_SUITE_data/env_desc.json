@@ -64,6 +64,9 @@
             },
             "user2": {
                 "default_space": "space1"
+            },
+            "user3": {
+                "default_space": "space2"
             }
         },
         "groups": {
@@ -88,6 +91,17 @@
                 "groups": [
                     "group1",
                     "group2"
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    }
+                }
+            },
+            "space2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user3"
                 ],
                 "providers": {
                     "p1": {
