@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This test suite verifies correct behaviour of posix and acl 
+%%% This test suite verifies correct behaviour of posix and acl
 %%% permissions with corresponding lfm (logical_file_manager) functions
 %%% @end
 %%%-------------------------------------------------------------------
@@ -41,7 +41,11 @@
     set_mimetype_test/1,
     get_metadata_test/1,
     set_metadata_test/1,
-    remove_metadata_test/1
+    remove_metadata_test/1,
+    get_xattr_test/1,
+    list_xattr_test/1,
+    set_xattr_test/1,
+    remove_xattr_test/1
 ]).
 
 all() ->
@@ -59,7 +63,11 @@ all() ->
         set_mimetype_test,
         get_metadata_test,
         set_metadata_test,
-        remove_metadata_test
+        remove_metadata_test,
+        get_xattr_test,
+        list_xattr_test,
+        set_xattr_test,
+        remove_xattr_test
     ]).
 
 
@@ -337,10 +345,88 @@ remove_metadata_test(Config) ->
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         env = #{
-            <<"file1">> => #{privs => [?write_attributes]}
+            <<"file1">> => #{
+                privs => [?write_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_metadata(W, OwnerSessId, {guid, Guid}, json, <<"VAL">>, [])
+                end
+            }
         },
         fn = fun(_, SessId, Path) ->
             lfm_proxy:remove_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json)
+        end
+    }, Config).
+
+
+get_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                privs => [?read_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:get_xattr(W, SessId, {path, <<Path/binary, "/file1">>}, <<"myxattr">>)
+        end
+    }, Config).
+
+
+list_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:list_xattr(W, SessId, {path, <<Path/binary, "/file1">>}, false, false)
+        end
+    }, Config).
+
+
+set_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_attributes]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:set_xattr(
+                W, SessId, {path, <<Path/binary, "/file1">>},
+                #xattr{name = <<"myxattr">>, value = <<"VAL">>}
+            )
+        end
+    }, Config).
+
+
+remove_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                privs => [?write_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:remove_xattr(W, SessId, {path, <<Path/binary, "/file1">>}, <<"myxattr">>)
         end
     }, Config).
 
