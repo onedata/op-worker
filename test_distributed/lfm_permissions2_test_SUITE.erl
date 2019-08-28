@@ -38,7 +38,10 @@
     get_cdmi_completion_status_test/1,
     set_cdmi_completion_status_test/1,
     get_mimetype_test/1,
-    set_mimetype_test/1
+    set_mimetype_test/1,
+    get_metadata_test/1,
+    set_metadata_test/1,
+    remove_metadata_test/1
 ]).
 
 all() ->
@@ -53,7 +56,10 @@ all() ->
         get_cdmi_completion_status_test,
         set_cdmi_completion_status_test,
         get_mimetype_test,
-        set_mimetype_test
+        set_mimetype_test,
+        get_metadata_test,
+        set_metadata_test,
+        remove_metadata_test
     ]).
 
 
@@ -288,6 +294,53 @@ set_mimetype_test(Config) ->
         },
         fn = fun(_, SessId, Path) ->
             lfm_proxy:set_mimetype(W, SessId, {path, <<Path/binary, "/file1">>}, <<"mimetype">>)
+        end
+    }, Config).
+
+
+get_metadata_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                privs => [?read_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_metadata(W, OwnerSessId, {guid, Guid}, json, <<"VAL">>, [])
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:get_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json, [], false)
+        end
+    }, Config).
+
+
+set_metadata_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_attributes]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:set_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json, <<"VAL">>, [])
+        end
+    }, Config).
+
+
+remove_metadata_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_attributes]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:remove_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json)
         end
     }, Config).
 
