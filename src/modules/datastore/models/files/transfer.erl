@@ -119,11 +119,11 @@ cleanup() ->
     view_name(), query_view_params(), pid() | undefined) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
-    Callback, IndexName, QueryViewParams, QosJobPID
+    Callback, ViewName, QueryViewParams, QosJobPID
 ) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
-        TargetProviderId, Callback, IndexName, QueryViewParams, QosJobPID
+        TargetProviderId, Callback, ViewName, QueryViewParams, QosJobPID
     ).
 
 %%--------------------------------------------------------------------
@@ -136,7 +136,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
     callback(), view_name(), query_view_params(), pid() | undefined) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
-    ReplicatingProviderId, Callback, IndexName, QueryViewParams, QosJobPID
+    ReplicatingProviderId, Callback, ViewName, QueryViewParams, QosJobPID
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
@@ -169,7 +169,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             hr_hist = #{},
             dy_hist = #{},
             mth_hist = #{},
-            index_name = IndexName,
+            view_name = ViewName,
             query_view_params = QueryViewParams,
             qos_job_pid = transfer_utils:encode_pid(QosJobPID)
         }},
@@ -238,7 +238,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 evicting_provider = EvictingProviderId,
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback,
-                index_name = IndexName,
+                view_name = ViewName,
                 query_view_params = QueryViewParams,
                 qos_job_pid = QosJobPID
             } = Transfer,
@@ -247,7 +247,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
-                EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
+                EvictingProviderId, ReplicatingProviderId, Callback, ViewName,
                 QueryViewParams, QosJobPID
             ),
             update(TransferId, fun(OldTransfer) ->

@@ -13,6 +13,10 @@
 %%% multiple qos_entry can be defined. New file replica is created only
 %%% when new QoS requirement is defined and current replicas do not satisfy all
 %%% QoS requirements. Otherwise there is no need to create new replica.
+%%%
+%%% NOTE!!!
+%%% If you introduce any changes in this module, please ensure that
+%%% docs in qos.hrl are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -28,7 +32,10 @@
 
 %% higher-level functions operating on qos_entry record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
-    set_status/2, get_qos_details/1, add_traverse_reqs/2, remove_traverse_req/2]).
+    set_status/2, get_expression/1, get_replicas_num/1, get_status/1, get_space_id/1]).
+
+%% Functions responsible for traverse requests.
+-export([add_traverse_reqs/2, remove_traverse_req/2]).
 
 %% Functions operating on traverses list.
 -export([add_traverse/3, remove_traverse/3, list_traverses/1]).
@@ -61,58 +68,34 @@
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates qos_entry document.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec create(doc(), od_space:id()) -> {ok, doc()} | {error, term()}.
 create(#document{value = QosEntry}, SpaceId) ->
     datastore_model:create(?CTX, #document{scope = SpaceId, value = QosEntry}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates qos_entry.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec update(key(), diff()) -> {ok, key()} | {error, term()}.
 update(Key, Diff) ->
     ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns qos.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get(key()) -> {ok, doc()} | {error, term()}.
 get(QosId) ->
     datastore_model:get(?CTX, QosId).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes qos_entry document.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete(key()) -> ok | {error, term()}.
 delete(QosId) ->
     datastore_model:delete(?CTX, QosId).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates links.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
 add_links(Scope, Key, TreeId, Links) ->
     datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes links.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
@@ -129,6 +112,7 @@ delete_links(Scope, Key, TreeId, Links) ->
 fold_links(Key, Fun, Acc, Opts) ->
     datastore_model:fold_links(?CTX, Key, all, Fun, Acc, Opts).
 
+
 %%%===================================================================
 %%% Higher-level functions operating on qos_entry record.
 %%%===================================================================
@@ -142,6 +126,18 @@ get_file_guid(QosId) ->
             Error
     end.
 
+
+-spec get_space_id(id()) -> {ok, od_space:id()} | {error, term()}.
+get_space_id(QosId) ->
+    case qos_entry:get(QosId) of
+        {ok, #document{scope = SpaceId}} ->
+            {ok, SpaceId};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+
 -spec set_status(id(), status()) -> {ok, key()} | {error, term}.
 set_status(QosId, Status) ->
     Diff = fun(QosEntry) ->
@@ -149,24 +145,27 @@ set_status(QosId, Status) ->
     end,
     update(QosId, Diff).
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds given QosId to impossible qos tree.
+%% Adds given QosId to impossible QoS tree.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok.
 add_impossible_qos(QosId, Scope) ->
-    {ok, _} = update(QosId, fun(QosEntry) ->
-        {ok, QosEntry#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}}
-    end),
-    {ok, _} = add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}),
-    ok.
+    case update(QosId, fun(QosEntry) -> {ok, QosEntry#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}} end) of
+        {ok, _} ->
+            case add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}) of
+                {ok, _} ->
+                    ok;
+                {error, Error} = Error ->
+                    Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Lists all impossible qos.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec list_impossible_qos() ->  {ok, [id()]} | {error, term()}.
 list_impossible_qos() ->
     fold_links(?IMPOSSIBLE_QOS_KEY,
@@ -174,15 +173,18 @@ list_impossible_qos() ->
         [], #{}
     ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Get information about QoS requirement from qos_entry document.
-%% @end
-%%--------------------------------------------------------------------
--spec get_qos_details(id()) -> {ok, {qos_expression:expression(), replicas_num(), status()}}.
-get_qos_details(QosId) ->
-    {ok, #document{key = QosId, value = QosEntry}} = qos_entry:get(QosId),
-    {QosEntry#qos_entry.expression, QosEntry#qos_entry.replicas_num, QosEntry#qos_entry.status}.
+
+get_expression(QosEntry) ->
+    QosEntry#qos_entry.expression.
+
+
+get_replicas_num(QosEntry) ->
+    QosEntry#qos_entry.replicas_num.
+
+
+get_status(QosEntry) ->
+    QosEntry#qos_entry.status.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -254,29 +256,16 @@ list_traverses(QosId) ->
 %%% datastore_model callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
@@ -291,4 +280,3 @@ get_record_struct(1) ->
             {target_storage, string}
         ]}]}
     ]}.
-

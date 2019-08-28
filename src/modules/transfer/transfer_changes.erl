@@ -114,8 +114,8 @@ handle(#document{
         scheduling_provider = ReplicatingProviderId
     }
 }) when (ReplicationStatus == completed orelse ReplicationStatus == skipped) andalso QosJobPID =/= undefined ->
-    case provider_auth:get_provider_id() of
-        {ok, ReplicatingProviderId} ->
+    case oneprovider:get_id() of
+        ReplicatingProviderId ->
             DecodedPid = transfer_utils:decode_pid(QosJobPID),
             DecodedPid ! {completed, TransferId},
             ok;
@@ -506,7 +506,7 @@ new_replication_or_migration(#document{
         file_uuid = FileUuid,
         space_id = SpaceId,
         callback = Callback,
-        index_name = ViewName,
+        view_name = ViewName,
         query_view_params = QueryViewParams
     }
 }) ->
@@ -538,7 +538,7 @@ new_replica_eviction(#document{
         space_id = SpaceId,
         callback = Callback,
         replicating_provider = TargetProviderId,
-        index_name = ViewName,
+        view_name = ViewName,
         query_view_params = QueryViewParams
     }
 }) ->

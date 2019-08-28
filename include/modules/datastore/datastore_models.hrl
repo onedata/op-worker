@@ -256,7 +256,7 @@
 }).
 
 % This model holds information about QoS defined for given file. Each file
-% can be related with at most one such record. The value of file_qos for
+% can be associated with at most one such record. The value of file_qos for
 % particular file should be calculated using effective value (see file_qos.erl)
 -record(file_qos, {
     % List containing QoS Ids defined for given file.
@@ -662,14 +662,14 @@
 
     % Only replication of files existing in given view will be scheduled
     % if this value is undefined, whole subtree will be iterated
-    index_name :: transfer:view_name(),
+    view_name :: transfer:view_name(),
     % query_view_params are directly passed to couchbase
     % if index_name (view_name) is undefined query_view_params are ignored
     query_view_params = [] :: transfer:query_view_params(),
 
     % PID of process that created this transfer and waits for its completion
     % to fulfill QoS
-    qos_job_pid = undefined :: binary() | undefined
+    qos_job_pid :: binary() | undefined % todo VFS-3657
 }).
 
 %% Model that tracks what files are currently transferred

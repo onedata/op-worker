@@ -23,7 +23,8 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
--export([init/1, handle/1, cleanup/0, schedule_init_qos_cache_for_space/1]).
+-export([init/1, handle/1, cleanup/0, schedule_init_qos_cache_for_space/1,
+    schedule_init_qos_cache_for_all_spaces/0]).
 -export([init_counters/0, init_report/0]).
 
 %%%===================================================================
@@ -102,7 +103,7 @@ init(_Args) ->
 
     clproto_serializer:load_msg_defs(),
 
-    schedule_init_qos_cache_for_all_spaces(),
+%%    schedule_init_qos_cache_for_all_spaces(),
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
@@ -247,8 +248,7 @@ init_report() ->
 %%--------------------------------------------------------------------
 -spec schedule_init_qos_cache_for_space(od_space:id()) -> ok.
 schedule_init_qos_cache_for_space(SpaceId) ->
-    erlang:send_after(0, fslogic_worker, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
-    ok.
+    schedule({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}, 0).
 
 %%%===================================================================
 %%% Internal functions
@@ -652,7 +652,7 @@ schedule_init_qos_cache_for_all_spaces() ->
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
-    erlang:send_after(Timeout, self(), {sync_timer, Request}),
+    erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
     ok.
 
 -spec invalidate_permissions_cache() -> ok.
@@ -721,18 +721,14 @@ restart_autocleaning_runs() ->
 init_qos_cache_for_all_spaces() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                qos_bounded_cache:init(SpaceId)
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
-            schedule_init_qos_cache_for_all_spaces();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            schedule_init_qos_cache_for_all_spaces();
+            lists:foreach(fun(SpaceId) -> qos_bounded_cache:init(SpaceId) end, SpaceIds);
         Error = {error, _} ->
-            ?error("Unable to initialize qos bounded cache due to: ~p", [Error])
+            ?error("Unable to initialize qos bounded cache due to: ~p", [Error]),
+            schedule_init_qos_cache_for_all_spaces()
     catch
         Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}]),
+            schedule_init_qos_cache_for_all_spaces()
     end.
 
 -spec init_qos_cache_for_space(od_space:id()) -> ok.
@@ -741,5 +737,6 @@ init_qos_cache_for_space(SpaceId) ->
         qos_bounded_cache:init(SpaceId)
     catch
         Error:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error, Reason}])
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error, Reason}]),
+            schedule_init_qos_cache_for_space(SpaceId)
     end.

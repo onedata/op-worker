@@ -38,7 +38,7 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
         undefined ->
             ok;
         _ ->
-            QosToUpdate = maps:get(StorageId, EffFileQos#file_qos.target_storages, []),
+            QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
             lists:foreach(fun(QosId) ->
                 ok = qos_traverse:fulfill_qos(FileCtx, QosId, [StorageId],
                     ?QOS_TRAVERSE_TASK_ID(SpaceId, QosId, restore))

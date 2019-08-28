@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -54,9 +55,9 @@ transform_to_rpn(Expression) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_target_storages(expression(), pos_integer(), [storage:id()], [#file_location{}]) ->
-    [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
+    [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
 calculate_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
-    {error, ?ERROR_CANNOT_FULFILL_QOS};
+    ?ERROR_CANNOT_FULFILL_QOS;
 calculate_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
     select(eval_rpn(Expression, SpaceStorage), ReplicasNum, FileLocations).
 
@@ -187,12 +188,12 @@ filter_storage(Key, Val, StorageSet) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec select([storage:id()], pos_integer(), [#file_location{}]) ->
-    [storage:id()] | {error, ?ERROR_CANNOT_FULFILL_QOS}.
+    [storage:id()] | ?ERROR_CANNOT_FULFILL_QOS.
 select([], _ReplicasNum, _FileLocations) ->
-    {error, ?ERROR_CANNOT_FULFILL_QOS};
+    ?ERROR_CANNOT_FULFILL_QOS;
 select(StorageList, ReplicasNum, FileLocations) ->
     StorageListWithBlocksSize = lists:map(fun (StorageId) ->
-            {get_storage_blocks_size(StorageId, FileLocations), StorageId}
+        {get_storage_blocks_size(StorageId, FileLocations), StorageId}
     end, StorageList),
 
     SortedStorageListWithBlocksSize = lists:reverse(lists:sort(StorageListWithBlocksSize)),
@@ -202,7 +203,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
         ReplicasNum ->
             StorageSublist;
         _ ->
-            {error, ?ERROR_CANNOT_FULFILL_QOS}
+            ?ERROR_CANNOT_FULFILL_QOS
     end.
 
 %%--------------------------------------------------------------------

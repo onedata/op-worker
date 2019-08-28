@@ -348,7 +348,7 @@ get_record_struct(11) ->
         {hr_hist, #{string => [integer]}},
         {dy_hist, #{string => [integer]}},
         {mth_hist, #{string => [integer]}},
-        {index_name, string},
+        {view_name, string},
         {query_view_params, [{term, term}]},
         {qos_job_pid, string}
     ]}.
@@ -503,13 +503,13 @@ upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, C
     ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
     FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
-    LastUpdate, MinHist, HrHist, DyHist, MthHist, IndexName, QueryViewParams
+    LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
 }) ->
     {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
         Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
         ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
         FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
-        LastUpdate, MinHist, HrHist, DyHist, MthHist, IndexName, QueryViewParams,
+        LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams,
         undefined
     }}.
