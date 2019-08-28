@@ -17,7 +17,7 @@
 
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5,
+-export([init/1, teardown/1, stat/3, get_child_attr/4, truncate/4, create/4, create/5,
     create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
     read/4, silent_read/4, write/4, get_file_path/3, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, ls/6, ls/7,
     read_dir_plus/5, read_dir_plus/6, set_perms/4,
@@ -85,6 +85,11 @@ teardown(Config) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
+
+-spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
+    {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
+get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
+    ?EXEC(Worker, lfm:get_child_attr(SessId, ParentGuid, ChildName)).
 
 -spec truncate(node(), session:id(), lfm:file_key() | file_meta:uuid(), non_neg_integer()) ->
     term().
