@@ -32,7 +32,13 @@
     ls_test/1,
     readdir_plus_test/1,
     get_child_attr_test/1,
-    create_file_test/1
+    create_file_test/1,
+    get_transfer_encoding_test/1,
+    set_transfer_encoding_test/1,
+    get_cdmi_completion_status_test/1,
+    set_cdmi_completion_status_test/1,
+    get_mimetype_test/1,
+    set_mimetype_test/1
 ]).
 
 all() ->
@@ -41,7 +47,13 @@ all() ->
         ls_test,
         readdir_plus_test,
         get_child_attr_test,
-        create_file_test
+        create_file_test,
+        get_transfer_encoding_test,
+        set_transfer_encoding_test,
+        get_cdmi_completion_status_test,
+        set_cdmi_completion_status_test,
+        get_mimetype_test,
+        set_mimetype_test
     ]).
 
 
@@ -157,7 +169,7 @@ get_child_attr_test(Config) ->
         env = #{
             <<"dir1">> => #{
                 privs => [?traverse_container],
-                <<"file1">> => []
+                <<"file1">> => #{}
             }
         },
         fn = fun(OwnerSessId, SessId, Path) ->
@@ -177,6 +189,105 @@ create_file_test(Config) ->
         },
         fn = fun(_, SessId, Path) ->
             lfm_proxy:create(W, SessId, <<Path/binary, "/dir1/file1">>, 8#777)
+        end
+    }, Config).
+
+
+get_transfer_encoding_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                privs => [?read_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_transfer_encoding(W, OwnerSessId, {guid, Guid}, <<"base64">>)
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:get_transfer_encoding(W, SessId, {path, <<Path/binary, "/file1">>})
+        end
+    }, Config).
+
+
+set_transfer_encoding_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_attributes]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:set_transfer_encoding(W, SessId, {path, <<Path/binary, "/file1">>}, <<"base64">>)
+        end
+    }, Config).
+
+
+get_cdmi_completion_status_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                privs => [?read_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_cdmi_completion_status(W, OwnerSessId, {guid, Guid}, <<"Completed">>)
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:get_cdmi_completion_status(W, SessId, {path, <<Path/binary, "/file1">>})
+        end
+    }, Config).
+
+
+set_cdmi_completion_status_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_attributes]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:set_cdmi_completion_status(W, SessId, {path, <<Path/binary, "/file1">>}, <<"Completed">>)
+        end
+    }, Config).
+
+
+get_mimetype_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{
+                privs => [?read_attributes],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_mimetype(W, OwnerSessId, {guid, Guid}, <<"mimetype">>)
+                end
+            }
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:get_mimetype(W, SessId, {path, <<Path/binary, "/file1">>})
+        end
+    }, Config).
+
+
+set_mimetype_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_attributes]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:set_mimetype(W, SessId, {path, <<Path/binary, "/file1">>}, <<"mimetype">>)
         end
     }, Config).
 
@@ -497,10 +608,26 @@ end_per_testcase(_Case, Config) ->
 setup_env(Node, SessId, ParentDirPath, ParentDirDesc) ->
     maps:fold(
         fun
-            (<<"file", _/binary>> = FileName, FilePerms, Acc) ->
+            (<<"file", _/binary>> = FileName, FileDesc, Acc) ->
                 FilePath = <<ParentDirPath/binary, "/", FileName/binary>>,
                 {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, 8#777)),
-                [{FileGuid, FilePerms} | Acc];
+                case maps:get(content, FileDesc, undefined) of
+                    undefined ->
+                        ok;
+                    Content ->
+                        {ok, FileHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, write),
+                        ?assertMatch({ok, _}, lfm_proxy:write(Node, FileHandle, 0, Content)),
+                        ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
+                        ?assertMatch(ok, lfm_proxy:close(Node, FileHandle))
+                end,
+                case maps:get(hook, FileDesc, undefined) of
+                    undefined -> ok;
+                    Fun -> Fun(SessId, FileGuid)
+                end,
+                case maps:get(perms, FileDesc, undefined) of
+                    undefined -> Acc;
+                    FilePerms -> [{FileGuid, FilePerms} | Acc]
+                end;
             (<<"dir", _/binary>> = DirName, DirDescWithPerms, Acc) ->
                 DirPath = <<ParentDirPath/binary, "/", DirName/binary>>,
                 {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, DirPath)),
