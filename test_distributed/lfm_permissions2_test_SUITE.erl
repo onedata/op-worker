@@ -32,13 +32,20 @@
     ls_test/1,
     readdir_plus_test/1,
     get_child_attr_test/1,
+
     create_file_test/1,
+    open_for_read_test/1,
+    open_for_write_test/1,
+    open_for_rdwr_test/1,
+    create_and_open_test/1,
+
     get_transfer_encoding_test/1,
     set_transfer_encoding_test/1,
     get_cdmi_completion_status_test/1,
     set_cdmi_completion_status_test/1,
     get_mimetype_test/1,
     set_mimetype_test/1,
+
     get_metadata_test/1,
     set_metadata_test/1,
     remove_metadata_test/1,
@@ -54,13 +61,20 @@ all() ->
         ls_test,
         readdir_plus_test,
         get_child_attr_test,
+
         create_file_test,
+        open_for_read_test,
+        open_for_write_test,
+        open_for_rdwr_test,
+        create_and_open_test,
+
         get_transfer_encoding_test,
         set_transfer_encoding_test,
         get_cdmi_completion_status_test,
         set_cdmi_completion_status_test,
         get_mimetype_test,
         set_mimetype_test,
+
         get_metadata_test,
         set_metadata_test,
         remove_metadata_test,
@@ -203,6 +217,62 @@ create_file_test(Config) ->
         },
         fn = fun(_, SessId, Path) ->
             lfm_proxy:create(W, SessId, <<Path/binary, "/dir1/file1">>, 8#777)
+        end
+    }, Config).
+
+
+open_for_read_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?read_object]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:open(W, SessId, {path, <<Path/binary, "/file1">>}, read)
+        end
+    }, Config).
+
+
+open_for_write_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?write_object]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:open(W, SessId, {path, <<Path/binary, "/file1">>}, read)
+        end
+    }, Config).
+
+
+open_for_rdwr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"file1">> => #{privs => [?read_object, ?write_object]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:open(W, SessId, {path, <<Path/binary, "/file1">>}, read)
+        end
+    }, Config).
+
+
+create_and_open_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        env = #{
+            <<"dir1">> => #{privs => [?traverse_container, ?add_object]}
+        },
+        fn = fun(_, SessId, Path) ->
+            lfm_proxy:create_and_open(W, SessId, <<Path/binary, "/dir1/file1">>, 8#777)
         end
     }, Config).
 
@@ -571,6 +641,7 @@ run_posix_tests_combinations(Node, OwnerSessId, SessId, RootPath, Fun, Complemen
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, AllRequiredModesComb),
     set_modes(Node, RequiredModesPerFile),
+%%    ct:pal("QWE: ~p", [Fun(OwnerSessId, SessId, RootPath)]),
     ?assertNotMatch({error, _}, Fun(OwnerSessId, SessId, RootPath)).
 
 
