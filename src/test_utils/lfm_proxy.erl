@@ -22,7 +22,7 @@
     read/4, silent_read/4, write/4, get_file_path/3, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, ls/6, ls/7,
     read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
-    get_acl/3, set_acl/4, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
+    get_acl/3, set_acl/4, remove_acl/3, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
@@ -345,6 +345,11 @@ get_acl(Worker, SessId, FileKey) ->
     ok | lfm:error_reply().
 set_acl(Worker, SessId, FileKey, EntityList) ->
     ?EXEC(Worker, lfm:set_acl(SessId, uuid_to_guid(Worker, FileKey), EntityList)).
+
+-spec remove_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+    ok | lfm:error_reply().
+remove_acl(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:remove_acl(SessId, uuid_to_guid(Worker, FileKey))).
 
 -spec get_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, xattr:transfer_encoding()} | lfm:error_reply().

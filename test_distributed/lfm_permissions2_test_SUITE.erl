@@ -39,6 +39,10 @@
     open_for_rdwr_test/1,
     create_and_open_test/1,
 
+    get_acl_test/1,
+    set_acl_test/1,
+    remove_acl_test/1,
+
     get_transfer_encoding_test/1,
     set_transfer_encoding_test/1,
     get_cdmi_completion_status_test/1,
@@ -67,6 +71,10 @@ all() ->
         open_for_write_test,
         open_for_rdwr_test,
         create_and_open_test,
+
+        get_acl_test,
+        set_acl_test,
+        remove_acl_test,
 
         get_transfer_encoding_test,
         set_transfer_encoding_test,
@@ -124,6 +132,20 @@ all() ->
 }).
 
 
+-record(file, {
+    name :: binary(),
+    perms = [] :: [Perms :: binary()],
+    on_create = undefined :: undefined | fun(() -> term())
+}).
+
+
+-record(dir, {
+    name :: binary(),
+    perms = [] :: [Perms :: binary()],
+    children = [] :: [#dir{} | #file{}]
+}).
+
+
 -record(test_spec, {
     space = <<"space1">> :: binary(),
     root_dir :: binary(),
@@ -131,8 +153,9 @@ all() ->
     user = <<"user2">> :: binary(),
     user_group = <<"group2">> :: binary(),
     user_outside_space = <<"user3">>,
-    env :: map(),
-    fn :: fun((UserId :: binary(), Path :: binary()) ->
+    requires_traverse_ancestors = true :: boolean(),
+    files :: map(),
+    operation :: fun((UserId :: binary(), Path :: binary()) ->
         ok |
         {ok, term()} |
         {ok, term(), term()} |
@@ -152,11 +175,12 @@ mkdir_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"dir1">> => #{privs => [?traverse_container, ?add_subcontainer]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:mkdir(W, SessId, <<Path/binary, "/dir1/dir2">>)
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?add_subcontainer]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+            lfm_proxy:mkdir(W, SessId, <<TestCaseRootDirPath/binary, "/dir1/dir2">>)
         end
     }, Config).
 
@@ -166,11 +190,14 @@ ls_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"dir1">> => #{privs => [?list_container]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:ls(W, SessId, {path, <<Path/binary, "/dir1/">>}, 0, 100)
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?list_container]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirGuid = maps:get(DirPath, ExtraData),
+            lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
         end
     }, Config).
 
@@ -180,11 +207,14 @@ readdir_plus_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"dir1">> => #{privs => [?traverse_container, ?list_container]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:read_dir_plus(W, SessId, {path, <<Path/binary, "/dir1/">>}, 0, 100)
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?list_container]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirGuid = maps:get(DirPath, ExtraData),
+            lfm_proxy:read_dir_plus(W, SessId, {guid, DirGuid}, 0, 100)
         end
     }, Config).
 
@@ -194,15 +224,15 @@ get_child_attr_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"dir1">> => #{
-                privs => [?traverse_container],
-                <<"file1">> => #{}
-            }
-        },
-        fn = fun(OwnerSessId, SessId, Path) ->
-            {ok, ParentGuid} = lfm_proxy:resolve_guid(W, OwnerSessId, <<Path/binary, "/dir1/">>),
-            lfm_proxy:get_child_attr(W, SessId, ParentGuid, <<"file1">>)
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container],
+            children = [#file{name = <<"file1">>}]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            ParentDirGuid = maps:get(ParentDirPath, ExtraData),
+            lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>)
         end
     }, Config).
 
@@ -212,11 +242,14 @@ create_file_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"dir1">> => #{privs => [?traverse_container, ?add_object]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:create(W, SessId, <<Path/binary, "/dir1/file1">>, 8#777)
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?add_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            ParentDirGuid = maps:get(ParentDirPath, ExtraData),
+            lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
         end
     }, Config).
 
@@ -226,11 +259,14 @@ open_for_read_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"file1">> => #{privs => [?read_object]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:open(W, SessId, {path, <<Path/binary, "/file1">>}, read)
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:open(W, SessId, {guid, FileGuid}, read)
         end
     }, Config).
 
@@ -240,11 +276,14 @@ open_for_write_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"file1">> => #{privs => [?write_object]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:open(W, SessId, {path, <<Path/binary, "/file1">>}, read)
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:open(W, SessId, {guid, FileGuid}, write)
         end
     }, Config).
 
@@ -254,13 +293,33 @@ open_for_rdwr_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
-            <<"file1">> => #{privs => [?read_object, ?write_object]}
-        },
-        fn = fun(_, SessId, Path) ->
-            lfm_proxy:open(W, SessId, {path, <<Path/binary, "/file1">>}, read)
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object, ?write_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr)
         end
     }, Config).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 create_and_open_test(Config) ->
@@ -268,11 +327,69 @@ create_and_open_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"dir1">> => #{privs => [?traverse_container, ?add_object]}
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:create_and_open(W, SessId, <<Path/binary, "/dir1/file1">>, 8#777)
+        end
+    }, Config).
+
+
+get_acl_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = #{
+            <<"file1">> => #{
+                privs => [?read_acl],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_acl(W, OwnerSessId, {guid, Guid}, [
+                        ?ALLOW_ACE(?everyone, ?no_flags_mask, acl:mask_to_bitmask(?ALL_PERMS))
+                    ])
+                end
+            }
+        },
+        operation = fun(_, SessId, Path) ->
+            lfm_proxy:get_acl(W, SessId, {path, <<Path/binary, "/file1">>})
+        end
+    }, Config).
+
+
+set_acl_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = #{
+            <<"file1">> => #{privs => [?write_acl]}
+        },
+        operation = fun(_, SessId, Path) ->
+            lfm_proxy:set_acl(W, SessId, {path, <<Path/binary, "/file1">>}, [
+                ?ALLOW_ACE(?everyone, ?no_flags_mask, acl:mask_to_bitmask(?ALL_PERMS))
+            ])
+        end
+    }, Config).
+
+
+remove_acl_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = #{
+            <<"file1">> => #{
+                privs => [?write_acl],
+                hook => fun(OwnerSessId, Guid) ->
+                    lfm_proxy:set_acl(W, OwnerSessId, {guid, Guid}, [
+                        ?ALLOW_ACE(?everyone, ?no_flags_mask, acl:mask_to_bitmask(?ALL_PERMS))
+                    ])
+                end
+            }
+        },
+        operation = fun(_, SessId, Path) ->
+            lfm_proxy:remove_acl(W, SessId, {path, <<Path/binary, "/file1">>})
         end
     }, Config).
 
@@ -282,7 +399,7 @@ get_transfer_encoding_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?read_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -290,7 +407,7 @@ get_transfer_encoding_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:get_transfer_encoding(W, SessId, {path, <<Path/binary, "/file1">>})
         end
     }, Config).
@@ -301,10 +418,10 @@ set_transfer_encoding_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{privs => [?write_attributes]}
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:set_transfer_encoding(W, SessId, {path, <<Path/binary, "/file1">>}, <<"base64">>)
         end
     }, Config).
@@ -315,7 +432,7 @@ get_cdmi_completion_status_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?read_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -323,7 +440,7 @@ get_cdmi_completion_status_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:get_cdmi_completion_status(W, SessId, {path, <<Path/binary, "/file1">>})
         end
     }, Config).
@@ -334,10 +451,10 @@ set_cdmi_completion_status_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{privs => [?write_attributes]}
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:set_cdmi_completion_status(W, SessId, {path, <<Path/binary, "/file1">>}, <<"Completed">>)
         end
     }, Config).
@@ -348,7 +465,7 @@ get_mimetype_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?read_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -356,7 +473,7 @@ get_mimetype_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:get_mimetype(W, SessId, {path, <<Path/binary, "/file1">>})
         end
     }, Config).
@@ -367,10 +484,10 @@ set_mimetype_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{privs => [?write_attributes]}
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:set_mimetype(W, SessId, {path, <<Path/binary, "/file1">>}, <<"mimetype">>)
         end
     }, Config).
@@ -381,7 +498,7 @@ get_metadata_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?read_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -389,7 +506,7 @@ get_metadata_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:get_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json, [], false)
         end
     }, Config).
@@ -400,10 +517,10 @@ set_metadata_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{privs => [?write_attributes]}
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:set_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json, <<"VAL">>, [])
         end
     }, Config).
@@ -414,7 +531,7 @@ remove_metadata_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?write_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -422,7 +539,7 @@ remove_metadata_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:remove_metadata(W, SessId, {path, <<Path/binary, "/file1">>}, json)
         end
     }, Config).
@@ -433,7 +550,7 @@ get_xattr_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?read_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -441,7 +558,7 @@ get_xattr_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:get_xattr(W, SessId, {path, <<Path/binary, "/file1">>}, <<"myxattr">>)
         end
     }, Config).
@@ -452,14 +569,14 @@ list_xattr_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 hook => fun(OwnerSessId, Guid) ->
                     lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:list_xattr(W, SessId, {path, <<Path/binary, "/file1">>}, false, false)
         end
     }, Config).
@@ -470,10 +587,10 @@ set_xattr_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{privs => [?write_attributes]}
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:set_xattr(
                 W, SessId, {path, <<Path/binary, "/file1">>},
                 #xattr{name = <<"myxattr">>, value = <<"VAL">>}
@@ -487,7 +604,7 @@ remove_xattr_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        env = #{
+        files = #{
             <<"file1">> => #{
                 privs => [?write_attributes],
                 hook => fun(OwnerSessId, Guid) ->
@@ -495,7 +612,7 @@ remove_xattr_test(Config) ->
                 end
             }
         },
-        fn = fun(_, SessId, Path) ->
+        operation = fun(_, SessId, Path) ->
             lfm_proxy:remove_xattr(W, SessId, {path, <<Path/binary, "/file1">>}, <<"myxattr">>)
         end
     }, Config).
@@ -528,54 +645,69 @@ run_posix_tests(Node, RootDirPath, #test_spec{
     owner = Owner,
     user = User,
     user_outside_space = OtherUser,
-    env = EnvDesc,
-    fn = Fun
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    files = Files,
+    operation = Fun
 }, Config) ->
-    OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
-    UserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
+    GroupUserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
     OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
 
-    lists:foreach(fun({SessId, Type, DirName}) ->
-        DirPath = <<RootDirPath/binary, DirName/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, DirPath)),
+    TestCaseRootDirPerms = case RequiresTraverseAncestors of
+        true -> [?traverse_container];
+        false -> []
+    end,
+    lists:foreach(fun({SessId, Type, TestCaseRootDirName}) ->
+        {PermsPerFile, ExtraData} = create_files(
+            Node, OwnerUserSessId, RootDirPath, #dir{
+                name = TestCaseRootDirName,
+                perms = TestCaseRootDirPerms,
+                children = Files
+            }
+        ),
+        PosixPermsPerFile = maps:map(fun(_, Perms) ->
+            lists:usort(lists:flatmap(fun perm_to_posix_perms/1, Perms))
+        end, PermsPerFile),
+
         run_posix_tests(
-            Node, OwnerSessId, SessId, DirPath, Fun, Type,
-            setup_env(Node, OwnerSessId, DirPath, EnvDesc)
+            Node, OwnerUserSessId, SessId,
+            <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
+            Fun, PosixPermsPerFile, ExtraData, Type
         )
     end, [
-        {OwnerSessId, owner, <<"/owner_posix">>},
-        {UserSessId, group, <<"/group_posix">>},
-        {OtherUserSessId, other, <<"/other_posix">>}
+        {OwnerUserSessId, owner, <<"owner_posix">>},
+        {GroupUserSessId, group, <<"group_posix">>},
+        {OtherUserSessId, other, <<"other_posix">>}
     ]).
 
 
-run_posix_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPerFile) ->
-    RequiredPosixPermsPerFile = lists:map(fun({Guid, Perms}) ->
-        {Guid, lists:usort(lists:flatmap(fun perm_to_posix_perms/1, Perms))}
-    end, RequiredPermsPerFile),
-
-    {ComplementaryPosixPermsPerFile, AllRequiredPosixPerms} = lists:foldl(
-        fun({FileGuid, FileRequiredPerms}, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
+run_posix_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath,
+    Fun, PosixPermsPerFile, ExtraData, Type
+) ->
+    {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = maps:fold(
+        fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
             {
                 BasePermsPerFileAcc#{FileGuid => ?ALL_POSIX_PERMS -- FileRequiredPerms},
                 [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
             }
         end,
         {#{}, []},
-        RequiredPosixPermsPerFile
+        PosixPermsPerFile
     ),
 
     try
         run_posix_tests(
-            Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPosixPermsPerFile,
-            AllRequiredPosixPerms, Type
+            Node, OwnerSessId, SessId, TestCaseRootDirPath,
+            Fun, ComplementaryPosixPermsPerFile,
+            RequiredPosixPerms, ExtraData, Type
         )
     catch T:R ->
-        RequiredPermsPerFileMap = lists:foldl(fun({Guid, RequiredPerms}, Acc) ->
+        FilePathsToRequiredPerms = maps:fold(fun(Guid, RequiredPerms, Acc) ->
             lfm_proxy:set_perms(Node, ?ROOT_SESS_ID, {guid, Guid}, 8#777),
             {ok, Path} = lfm_proxy:get_file_path(Node, OwnerSessId, Guid),
             Acc#{Path => RequiredPerms}
-        end, #{}, RequiredPosixPermsPerFile),
+        end, #{}, PosixPermsPerFile),
 
         ct:pal(
             "POSIX TESTS FAILURE~n"
@@ -584,8 +716,8 @@ run_posix_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPer
             "   Required Perms: ~p~n"
             "   Stacktrace: ~p~n",
             [
-                Type, RootPath,
-                RequiredPermsPerFileMap,
+                Type, TestCaseRootDirPath,
+                FilePathsToRequiredPerms,
                 erlang:get_stacktrace()
             ]
         ),
@@ -593,56 +725,107 @@ run_posix_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPer
     end.
 
 
-run_posix_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, owner) ->
-    run_posix_tests_combinations(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, owner);
-
-run_posix_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, group) ->
-    OperationRequiresOwner = lists:any(fun({_, Perm}) ->
-        Perm =/= read andalso Perm =/= write andalso Perm =/= exec
+run_posix_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, owner
+) ->
+    OperationRequiresOnlyOwnership = lists:all(fun({_, Perm}) ->
+        Perm == owner orelse Perm == owner_if_parent_sticky
     end, AllRequiredPerms),
 
-    case OperationRequiresOwner of
+    case OperationRequiresOnlyOwnership of
         true ->
-            AllModesPerFile = maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile),
-            set_modes(Node, AllModesPerFile),
-            ?assertMatch({error, ?EACCES}, Fun(OwnerSessId, SessId, RootPath));
+            % If operation requires only ownership then it should succeed
+            % even if all files modes are set to 0
+            set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
+            ?assertNotMatch(
+                {error, _},
+                Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            );
         false ->
-            run_posix_tests_combinations(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, group)
+            run_standard_posix_tests(
+                Node, OwnerSessId, SessId, TestCaseRootDirPath,
+                Fun, ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, owner
+            )
     end;
 
-% Users not belonging to space or unauthorized should be able to conduct any operation
-run_posix_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, _AllRequiredPerms, other) ->
-    AllModesPerFile = maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile),
-    set_modes(Node, AllModesPerFile),
-    ?assertMatch({error, _}, Fun(OwnerSessId, SessId, RootPath)),
-    ?assertMatch({error, _}, Fun(OwnerSessId, ?GUEST_SESS_ID, RootPath)).
+run_posix_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
+) ->
+    OperationRequiresOwnership = lists:any(fun({_, Perm}) ->
+        Perm == owner orelse Perm == owner_if_parent_sticky
+    end, AllRequiredPerms),
+
+    case OperationRequiresOwnership of
+        true ->
+            % If operation requires ownership then for group member it should failed
+            % even if all files modes are set to 777
+            set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
+            ?assertMatch(
+                {error, ?EACCES},
+                Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            );
+        false ->
+            run_standard_posix_tests(
+                Node, OwnerSessId, SessId, TestCaseRootDirPath,
+                Fun, ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
+            )
+    end;
+
+% Users not belonging to space or unauthorized should not be able to conduct any operation
+run_posix_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
+) ->
+    set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
+    ?assertMatch(
+        {error, _},
+        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+    ),
+    ?assertMatch(
+        {error, _},
+        Fun(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
+    ).
 
 
-run_posix_tests_combinations(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, Type) ->
+run_standard_posix_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
+) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
         {Guid, posix_perm_to_mode(PosixPerm, Type)}
     end, AllRequiredPerms),
     ComplementaryModesPerFile = maps:map(fun(_, Perms) ->
-        lists:foldl(fun(Perm, Acc) -> Acc bor posix_perm_to_mode(Perm, Type) end, 0, Perms)
+        lists:foldl(fun(Perm, Acc) ->
+            Acc bor posix_perm_to_mode(Perm, Type)
+        end, 0, Perms)
     end, ComplementaryPermsPerFile),
-    [AllRequiredModesComb | EaccesModesCombs] = combinations(AllRequiredModes),
 
-    % Granting all modes without required ones should result in eacces
+    [RequiredModesComb | EaccesModesCombs] = combinations(AllRequiredModes),
+
+    % Granting all modes but required ones should result in eacces
     lists:foreach(fun(EaccessModeComb) ->
         EaccesModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
         set_modes(Node, EaccesModesPerFile),
-        ?assertMatch({error, ?EACCES}, Fun(OwnerSessId, SessId, RootPath))
+        ?assertMatch(
+            {error, ?EACCES},
+            Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        )
     end, EaccesModesCombs),
 
     % Granting only required modes should result in success
     RequiredModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
-    end, #{}, AllRequiredModesComb),
+    end, #{}, RequiredModesComb),
     set_modes(Node, RequiredModesPerFile),
-%%    ct:pal("QWE: ~p", [Fun(OwnerSessId, SessId, RootPath)]),
-    ?assertNotMatch({error, _}, Fun(OwnerSessId, SessId, RootPath)).
+    ct:pal("QWE: ~p", [Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)]),
+    ?assertNotMatch(
+        {error, _},
+        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+    ).
 
 
 set_modes(Node, ModePerFile) ->
@@ -662,36 +845,49 @@ run_acl_tests(Node, RootDirPath, #test_spec{
     owner = Owner,
     user = User,
     user_group = UserGroup,
-    env = EnvDesc,
-    fn = Fun
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    files = Files,
+    operation = Fun
 }, Config) ->
     OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
     UserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
 
-    lists:foreach(fun({SessId, Type, DirName, AceWho, AceFlags}) ->
-        DirPath = <<RootDirPath/binary, DirName/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, DirPath)),
+    TestCaseRootDirPerms = case RequiresTraverseAncestors of
+        true -> [?traverse_container];
+        false -> []
+    end,
+    lists:foreach(fun({SessId, Type, TestCaseRootDirName, AceWho, AceFlags}) ->
+        {PermsPerFile, ExtraData} = create_files(
+            Node, OwnerSessId, RootDirPath, #dir{
+                name = TestCaseRootDirName,
+                perms = TestCaseRootDirPerms,
+                children = Files
+            }
+        ),
         run_acl_tests(
-            Node, OwnerSessId, SessId, DirPath, Fun, Type,
-            setup_env(Node, OwnerSessId, DirPath, EnvDesc),
-            AceWho, AceFlags
+            Node, OwnerSessId, SessId,
+            <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
+            Fun, PermsPerFile, ExtraData, AceWho, AceFlags, Type
         )
     end, [
-        {OwnerSessId, allow, <<"/owner_acl_allow">>, ?owner, ?no_flags_mask},
-        {UserSessId, allow, <<"/user_acl_allow">>, User, ?no_flags_mask},
-        {UserSessId, allow, <<"/user_group_acl_allow">>, UserGroup, ?identifier_group_mask},
-        {UserSessId, allow, <<"/everyone_acl_allow">>, ?everyone, ?no_flags_mask},
+        {OwnerSessId, allow, <<"owner_acl_allow">>, ?owner, ?no_flags_mask},
+        {UserSessId, allow, <<"user_acl_allow">>, User, ?no_flags_mask},
+        {UserSessId, allow, <<"user_group_acl_allow">>, UserGroup, ?identifier_group_mask},
+        {UserSessId, allow, <<"everyone_acl_allow">>, ?everyone, ?no_flags_mask},
 
-        {OwnerSessId, deny, <<"/owner_acl_deny">>, ?owner, ?no_flags_mask},
-        {UserSessId, deny, <<"/user_acl_deny">>, User, ?no_flags_mask},
-        {UserSessId, deny, <<"/user_group_acl_deny">>, UserGroup, ?identifier_group_mask},
-        {UserSessId, deny, <<"/everyone_acl_deny">>, ?everyone, ?no_flags_mask}
+        {OwnerSessId, deny, <<"owner_acl_deny">>, ?owner, ?no_flags_mask},
+        {UserSessId, deny, <<"user_acl_deny">>, User, ?no_flags_mask},
+        {UserSessId, deny, <<"user_group_acl_deny">>, UserGroup, ?identifier_group_mask},
+        {UserSessId, deny, <<"everyone_acl_deny">>, ?everyone, ?no_flags_mask}
     ]).
 
 
-run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPerFile, AceWho, AceFlags) ->
-    {ComplementaryPermsPerFile, AllRequiredPerms} = lists:foldl(
-        fun({FileGuid, FileRequiredPerms}, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
+run_acl_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath,
+    Fun, RequiredPermsPerFile, ExtraData, AceWho, AceFlags, Type
+) ->
+    {ComplementaryPermsPerFile, AllRequiredPerms} = maps:fold(
+        fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
             {
                 BasePermsPerFileAcc#{FileGuid => complementary_perms(FileRequiredPerms)},
                 [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
@@ -703,11 +899,12 @@ run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPerFi
 
     try
         run_acl_tests(
-            Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile,
-            AllRequiredPerms, AceWho, AceFlags, Type
+            Node, OwnerSessId, SessId, TestCaseRootDirPath,
+            Fun, ComplementaryPermsPerFile, AllRequiredPerms,
+            ExtraData, AceWho, AceFlags, Type
         )
     catch T:R ->
-        RequiredPermsPerFileMap = lists:foldl(fun({Guid, RequiredPerms}, Acc) ->
+        RequiredPermsPerFileMap = maps:fold(fun(Guid, RequiredPerms, Acc) ->
             lfm_proxy:set_perms(Node, ?ROOT_SESS_ID, {guid, Guid}, 8#777),
             {ok, Path} = lfm_proxy:get_file_path(Node, OwnerSessId, Guid),
             Acc#{Path => RequiredPerms}
@@ -722,7 +919,7 @@ run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPerFi
             "   Is group identifier: ~p~n"
             "   Stacktrace: ~p~n",
             [
-                Type, RootPath,
+                Type, TestCaseRootDirPath,
                 RequiredPermsPerFileMap,
                 AceWho, AceFlags == ?identifier_group_mask,
                 erlang:get_stacktrace()
@@ -732,7 +929,10 @@ run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, Type, RequiredPermsPerFi
     end.
 
 
-run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, AceWho, AceFlags, allow) ->
+run_acl_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, allow
+) ->
     [AllRequiredPermsComb | EaccesPermsCombs] = combinations(AllRequiredPerms),
 
     % Granting all perms without required ones should result in eacces
@@ -741,7 +941,10 @@ run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFil
             Acc#{Guid => [Perm | maps:get(Guid, Acc)]}
         end, ComplementaryPermsPerFile, EaccessPermComb),
         set_acls(Node, EaccesPermsPerFile, #{}, AceWho, AceFlags),
-        ?assertMatch({error, ?EACCES}, Fun(OwnerSessId, SessId, RootPath))
+        ?assertMatch(
+            {error, ?EACCES},
+            Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        )
     end, EaccesPermsCombs),
 
     % Granting only required perms should result in success
@@ -749,20 +952,32 @@ run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFil
         Acc#{Guid => [Perm | maps:get(Guid, Acc, [])]}
     end, #{}, AllRequiredPermsComb),
     set_acls(Node, RequiredPermsPerFile, #{}, AceWho, AceFlags),
-    ?assertNotMatch({error, _}, Fun(OwnerSessId, SessId, RootPath));
+    ?assertNotMatch(
+        {error, _},
+        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+    );
 
-run_acl_tests(Node, OwnerSessId, SessId, RootPath, Fun, ComplementaryPermsPerFile, AllRequiredPerms, AceWho, AceFlags, deny) ->
+run_acl_tests(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny
+) ->
     AllPermsPerFile = maps:map(fun(_, _) -> ?ALL_PERMS end, ComplementaryPermsPerFile),
 
     % Denying only required perms and granting all others should result in eacces
     lists:foreach(fun({Guid, Perm}) ->
         set_acls(Node, AllPermsPerFile, #{Guid => [Perm]}, AceWho, AceFlags),
-        ?assertMatch({error, ?EACCES}, Fun(OwnerSessId, SessId, RootPath))
+        ?assertMatch(
+            {error, ?EACCES},
+            Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        )
     end, AllRequiredPerms),
 
     % Denying all perms but required ones should result in success
     set_acls(Node, #{}, ComplementaryPermsPerFile, AceWho, AceFlags),
-    ?assertNotMatch({error, _}, Fun(OwnerSessId, SessId, RootPath)).
+    ?assertNotMatch(
+        {error, _},
+        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+    ).
 
 
 set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
@@ -813,45 +1028,49 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
--spec setup_env(node(), session:id(), file_meta:path(), DirDesc :: map()) ->
-    [{file_id:file_guid(), [Perms :: binary()]}].
-setup_env(Node, SessId, ParentDirPath, ParentDirDesc) ->
-    maps:fold(
-        fun
-            (<<"file", _/binary>> = FileName, FileDesc, Acc) ->
-                FilePath = <<ParentDirPath/binary, "/", FileName/binary>>,
-                {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, 8#777)),
-                case maps:get(content, FileDesc, undefined) of
-                    undefined ->
-                        ok;
-                    Content ->
-                        {ok, FileHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, write),
-                        ?assertMatch({ok, _}, lfm_proxy:write(Node, FileHandle, 0, Content)),
-                        ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
-                        ?assertMatch(ok, lfm_proxy:close(Node, FileHandle))
-                end,
-                case maps:get(hook, FileDesc, undefined) of
-                    undefined -> ok;
-                    Fun -> Fun(SessId, FileGuid)
-                end,
-                case maps:get(perms, FileDesc, undefined) of
-                    undefined -> Acc;
-                    FilePerms -> [{FileGuid, FilePerms} | Acc]
-                end;
-            (<<"dir", _/binary>> = DirName, DirDescWithPerms, Acc) ->
-                DirPath = <<ParentDirPath/binary, "/", DirName/binary>>,
-                {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, DirPath)),
-                DirEnv = case maps:take(privs, DirDescWithPerms) of
-                    error ->
-                        setup_env(Node, SessId, DirPath, DirDescWithPerms);
-                    {DirPerms, DirDesc} ->
-                        [{DirGuid, DirPerms} | setup_env(Node, SessId, DirPath, DirDesc)]
-                end,
-                Acc ++ DirEnv
-        end,
-        [],
-        ParentDirDesc
-    ).
+-spec create_files(node(), session:id(), file_meta:path(), #dir{} | #file{}) ->
+    {PermsPerFile :: map(), ExtraData :: map()}.
+create_files(Node, OwnerSessId, ParentDirPath, #file{
+    name = FileName,
+    perms = FilePerms,
+    on_create = HookFun
+}) ->
+    FilePath = <<ParentDirPath/binary, "/", FileName/binary>>,
+    {ok, FileGuid} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create(Node, OwnerSessId, FilePath, 8#777)
+    ),
+    PermsPerFile = case FilePerms of
+        [] -> #{};
+        _ -> #{FileGuid => FilePerms}
+    end,
+    ExtraData = case HookFun of
+        undefined ->
+            #{FilePath => FileGuid};
+        _ when is_function(HookFun, 2) ->
+            #{FilePath => HookFun(OwnerSessId, FileGuid)}
+    end,
+    {PermsPerFile, ExtraData};
+create_files(Node, OwnerSessId, ParentDirPath, #dir{
+    name = DirName,
+    perms = DirPerms,
+    children = Children
+}) ->
+    DirPath = <<ParentDirPath/binary, "/", DirName/binary>>,
+    {ok, DirGuid} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:mkdir(Node, OwnerSessId, DirPath)
+    ),
+    {PermsPerFile0, ExtraData} = lists:foldl(fun(Child, {PermsPerFileAcc, ExtraDataAcc}) ->
+        {ChildPerms, ChildExtraData} = create_files(Node, OwnerSessId, DirPath, Child),
+        {maps:merge(PermsPerFileAcc, ChildPerms), maps:merge(ExtraDataAcc, ChildExtraData)}
+    end, {#{}, #{}}, Children),
+
+    PermsPerFile1 = case DirPerms of
+        [] -> PermsPerFile0;
+        _ -> PermsPerFile0#{DirGuid => DirPerms}
+    end,
+    {PermsPerFile1, ExtraData#{DirPath => DirGuid}}.
 
 
 -spec complementary_perms(Perms :: [binary()]) -> ComplementaryPerms :: [binary()].
