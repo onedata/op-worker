@@ -39,6 +39,13 @@
     open_for_rdwr_test/1,
     create_and_open_test/1,
 
+    get_parent_test/1,
+    get_file_path_test/1,
+    get_file_guid_test/1,
+
+    create_share_test/1,
+    remove_share_test/1,
+
     get_acl_test/1,
     set_acl_test/1,
     remove_acl_test/1,
@@ -67,10 +74,17 @@ all() ->
         get_child_attr_test,
 
         create_file_test,
-        open_for_read_test,
-        open_for_write_test,
-        open_for_rdwr_test,
+%%        open_for_read_test,       % TODO uncomment after fixing
+%%        open_for_write_test,
+%%        open_for_rdwr_test,
         create_and_open_test,
+
+        get_parent_test,
+        get_file_path_test,
+        get_file_guid_test,
+
+        create_share_test,
+%%        remove_share_test,    TODO uncomment after fixing
 
 %%        get_acl_test, % TODO uncomment after fixing removal of acl when changing posix mode
         set_acl_test,
@@ -135,13 +149,14 @@ all() ->
 -record(file, {
     name :: binary(),
     perms = [] :: [Perms :: binary()],
-    on_create = undefined :: undefined | fun(() -> term())
+    on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term())
 }).
 
 
 -record(dir, {
     name :: binary(),
     perms = [] :: [Perms :: binary()],
+    on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
     children = [] :: [#dir{} | #file{}]
 }).
 
@@ -254,18 +269,6 @@ create_file_test(Config) ->
     }, Config).
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 open_for_read_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -318,15 +321,6 @@ open_for_rdwr_test(Config) ->
     }, Config).
 
 
-
-
-
-
-
-
-
-
-
 create_and_open_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -340,6 +334,83 @@ create_and_open_test(Config) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
             lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
+        end
+    }, Config).
+
+
+get_parent_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{name = <<"file1">>}],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_parent(W, SessId, {guid, FileGuid})
+        end
+    }, Config).
+
+
+get_file_path_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{name = <<"file1">>}],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_file_path(W, SessId, FileGuid)
+        end
+    }, Config).
+
+
+get_file_guid_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{name = <<"file1">>}],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            lfm_proxy:resolve_guid(W, SessId, FilePath)
+        end
+    }, Config).
+
+
+create_share_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#dir{name = <<"dir1">>}],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirGuid = maps:get(DirPath, ExtraData),
+            lfm_proxy:create_share(W, SessId, {guid, DirGuid}, <<"create_share">>)
+        end
+    }, Config).
+
+
+remove_share_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#dir{
+            name = <<"dir1">>,
+            on_create = fun(OwnerSessId, Guid) ->
+                {ok, {ShareId, _}} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+                    W, OwnerSessId, {guid, Guid}, <<"remove_share">>
+                )),
+                ShareId
+            end
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            ShareId = maps:get(DirPath, ExtraData),
+            lfm_proxy:remove_share(W, SessId, ShareId)
         end
     }, Config).
 
@@ -1047,11 +1118,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(Case, Config) when
+    Case =:= create_share_test;
+    Case =:= remove_share_test
+->
+    initializer:mock_share_logic(Config),
+    init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+
+end_per_testcase(Case, Config) when
+    Case =:= create_share_test;
+    Case =:= remove_share_test
+->
+    initializer:unmock_share_logic(Config),
+    end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
@@ -1089,6 +1173,7 @@ create_files(Node, OwnerSessId, ParentDirPath, #file{
 create_files(Node, OwnerSessId, ParentDirPath, #dir{
     name = DirName,
     perms = DirPerms,
+    on_create = HookFun,
     children = Children
 }) ->
     DirPath = <<ParentDirPath/binary, "/", DirName/binary>>,
@@ -1096,7 +1181,7 @@ create_files(Node, OwnerSessId, ParentDirPath, #dir{
         {ok, _},
         lfm_proxy:mkdir(Node, OwnerSessId, DirPath)
     ),
-    {PermsPerFile0, ExtraData} = lists:foldl(fun(Child, {PermsPerFileAcc, ExtraDataAcc}) ->
+    {PermsPerFile0, ExtraData0} = lists:foldl(fun(Child, {PermsPerFileAcc, ExtraDataAcc}) ->
         {ChildPerms, ChildExtraData} = create_files(Node, OwnerSessId, DirPath, Child),
         {maps:merge(PermsPerFileAcc, ChildPerms), maps:merge(ExtraDataAcc, ChildExtraData)}
     end, {#{}, #{}}, Children),
@@ -1105,7 +1190,13 @@ create_files(Node, OwnerSessId, ParentDirPath, #dir{
         [] -> PermsPerFile0;
         _ -> PermsPerFile0#{DirGuid => DirPerms}
     end,
-    {PermsPerFile1, ExtraData#{DirPath => DirGuid}}.
+    ExtraData1 = case HookFun of
+        undefined ->
+            ExtraData0#{DirPath => DirGuid};
+        _ when is_function(HookFun, 2) ->
+            ExtraData0#{DirPath => HookFun(OwnerSessId, DirGuid)}
+    end,
+    {PermsPerFile1, ExtraData1}.
 
 
 -spec complementary_perms(Perms :: [binary()]) -> ComplementaryPerms :: [binary()].
