@@ -272,7 +272,7 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
         target_provider_id => ExecutorID,
         batch_size => 1,
         traverse_info => self(),
-        #{addititional_data => TestMap}
+        addititional_data => TestMap
     },
     {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
