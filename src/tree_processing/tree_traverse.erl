@@ -45,7 +45,7 @@
     task_id => traverse:id(),
     callback_module => traverse:callback_module(),
     group_id => traverse:group(),
-    addititional_data => traverse:addititional_data(),
+    additional_data => traverse:additional_data(),
     % Options used to create jobs
     execute_slave_on_dir => execute_slave_on_dir(),
     batch_size => batch_size(),
@@ -103,9 +103,9 @@ run(Pool, #document{} = Doc, Opts) ->
         undefined -> RunOpts2;
         Group -> RunOpts2#{group_id => Group}
     end,
-    RunOpts4 = case maps:get(addititional_data, Opts, undefined) of
+    RunOpts4 = case maps:get(additional_data, Opts, undefined) of
         undefined -> RunOpts3;
-        AdditionalData -> RunOpts3#{addititional_data => AdditionalData}
+        AdditionalData -> RunOpts3#{additional_data => AdditionalData}
     end,
 
     ok = traverse:run(Pool, TaskID, #tree_traverse{
