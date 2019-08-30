@@ -72,13 +72,12 @@
         __FunctionCall
     catch
         throw:__Err ->
-            __ErrorResp = rest_translator:error_response(__Err),
-            {stop, send_error_response(__ErrorResp, __Req), __CdmiReq};
+            {stop, send_error_response(__Err, __Req), __CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            {stop, cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
+            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
     end
 ).
 
@@ -110,14 +109,12 @@ init(Req, ReqTypeResolutionMethod) ->
         {cowboy_rest, Req, CdmiReq}
     catch
         throw:Err ->
-            ErrorResp = rest_translator:error_response(Err),
-            {ok, send_error_response(ErrorResp, Req), undefined};
+            {ok, send_error_response(Err, Req), undefined};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {ok, NewReq, undefined}
+            {ok, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
     end.
 
 
@@ -148,10 +145,9 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     ReqVer = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     try {get_supported_version(ReqVer), parse_qs(cowboy_req:qs(Req)), Type} of
         {undefined, _, {capabilities, _}} ->
-            ErrorResp = rest_translator:error_response(
-                ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])
-            ),
-            {stop, send_error_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(
+                ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), Req
+            ), CdmiReq};
         {Version, Options, _} ->
             {false, Req, CdmiReq#cdmi_req{
                 version = Version,
@@ -159,14 +155,12 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
             }}
     catch
         throw:Err ->
-            ErrorResp = rest_translator:error_response(Err),
-            {stop, send_error_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(Err, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {stop, NewReq, CdmiReq}
+            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
     end.
 
 
@@ -189,22 +183,20 @@ is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
         {ok, ?NOBODY} ->
-            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), CdmiReq};
+            {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
         {error, not_found} ->
-            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), CdmiReq};
+            {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
         {error, Reason} ->
             ?debug("Authentication error in ~p due to: ~p", [?MODULE, Reason]),
             {{false, <<"authentication_error">>}, Req, CdmiReq}
     catch
         throw:Err ->
-            ErrorResp = rest_translator:error_response(Err),
-            {stop, send_error_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(Err, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {stop, NewReq, CdmiReq}
+            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
     end;
 is_authorized(Req, CdmiReq) ->
     {true, Req, CdmiReq}.
@@ -239,8 +231,7 @@ resource_exists(Req, #cdmi_req{
         {error, ?ENOENT} ->
             {false, Req, CdmiReq};
         {error, Errno} ->
-            ErrorResp = rest_translator:error_response(?ERROR_POSIX(Errno)),
-            {stop, send_error_response(ErrorResp, Req), CdmiReq}
+            {stop, send_error_response(?ERROR_POSIX(Errno), Req), CdmiReq}
     end.
 
 
@@ -322,10 +313,7 @@ content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
 -spec error_no_version(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_no_version(Req, CdmiReq) ->
-    ErrorResp = rest_translator:error_response(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)
-    ),
-    {stop, send_error_response(ErrorResp, Req), CdmiReq}.
+    {stop, send_error_response(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -337,10 +325,7 @@ error_no_version(Req, CdmiReq) ->
 -spec error_wrong_path(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_wrong_path(Req, CdmiReq) ->
-    ErrorResp = rest_translator:error_response(
-        ?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)
-    ),
-    {stop, send_error_response(ErrorResp, Req), CdmiReq}.
+    {stop, send_error_response(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -638,8 +623,9 @@ redirect_to(Req, CdmiReq, Path) ->
 
 
 %% @private
--spec send_error_response(#rest_resp{}, cowboy_req:req()) -> cowboy_req:req().
-send_error_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
+-spec send_error_response({error, term()}, cowboy_req:req()) -> cowboy_req:req().
+send_error_response({error, _} = Error, Req) ->
+    #rest_resp{code = Code, headers = Headers, body = Body} = rest_translator:error_response(Error),
     cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
 
 
