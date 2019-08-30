@@ -44,10 +44,8 @@
 -export([create_or_update/2, delete/1]).
 
 %% higher-level functions operating on file_qos record.
--export([
-    get_effective/1, get_effective/2,
-    remove_qos_id/2, add_qos/4,
-    is_replica_protected/2, get_qos_to_update/2,
+-export([get_effective/1, get_effective/2, remove_qos_id/2,
+    add_qos/4, is_replica_protected/2, get_qos_to_update/2,
     get_qos_list/1, get_target_storages/1
 ]).
 
@@ -68,9 +66,7 @@
 -export_type([qos_list/0, target_storages/0]).
 
 -define(CTX, #{
-    model => ?MODULE,
-    sync_enabled => true,
-    mutator => oneprovider:get_id_or_undefined()
+    model => ?MODULE
 }).
 
 
@@ -114,12 +110,12 @@ get_effective(FileUuidOrDoc) ->
 %% @doc
 %% Returns effective file_qos for file. If effective value cannot be calculated
 %% because of file_meta documents not being synchronized yet registers
-%% DelayedHook for this file to be run when document is finally synchronized.
+%% ErrorCallback for this file to be run when document is finally synchronized.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective(file_meta:doc() | file_meta:uuid(), delayed_hooks:hook() | undefined) ->
+-spec get_effective(file_meta:doc() | file_meta:uuid(), effective_value:error_callback()) ->
     record() | undefined.
-get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}, DelayedHook) ->
+get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}, ErrorCallback) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
         case {file_qos:get(Uuid), ParentEffQos} of
             {{error, not_found}, _} ->
@@ -133,19 +129,19 @@ get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}, Delay
     end,
 
     CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], [], DelayedHook) of
+    case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], [], ErrorCallback) of
         {ok, EffQos, _} -> EffQos;
         _ -> undefined % documents are not synchronized yet
     end;
 
-get_effective(FileUuid, DelayedHook) ->
+get_effective(FileUuid, ErrorCallback) ->
     case file_meta:get(FileUuid) of
         {ok, FileMeta} ->
-            get_effective(FileMeta);
+            get_effective(FileMeta, ErrorCallback);
         _ ->
-            case DelayedHook of
+            case ErrorCallback of
                 undefined -> ok;
-                _ -> delayed_hooks:add_hook(FileUuid, DelayedHook)
+                _ -> ErrorCallback(FileUuid)
             end,
             undefined
     end.

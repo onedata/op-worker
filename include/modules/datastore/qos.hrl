@@ -77,16 +77,6 @@
 -define(QOS_BOUNDED_CACHE_GROUP, <<"qos_bonded_cache_group">>).
 
 
-% QoS status
--define(QOS_NOT_FULFILLED, in_progress).
--define(QOS_TRAVERSES_STARTED_STATUS, traverses_started).
--define(QOS_IMPOSSIBLE_STATUS, impossible).
-
-
-% SpaceId, QosId and task type are needed when executing qos_traverse:task_finished/1
--define(QOS_TRAVERSE_TASK_ID(SpaceId, QosId, Type), <<(datastore_utils:gen_key())/binary, "#", SpaceId/binary, "#",
-    QosId/binary, "#", (atom_to_binary(Type, utf8))/binary>>).
-
 -define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
 
 -endif.

@@ -187,7 +187,7 @@
 -record(get_qos_resp, {
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Number of required file replicas.
-    status = ?QOS_NOT_FULFILLED :: qos_entry:status()
+    is_possible :: boolean()
 }).
 
 -record(effective_file_qos, {

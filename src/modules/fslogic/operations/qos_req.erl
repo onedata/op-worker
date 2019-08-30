@@ -112,14 +112,8 @@ check_fulfillment(UserCtx, FileCtx, QosId) ->
 -spec add_qos_insecure(user_ctx:ctx(), file_ctx:ctx(), binary(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
 add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
     try
-        {ok, QosExpressionInRPN} = qos_expression:transform_to_rpn(QosExpression),
-        {ok, #document{key = QosId}} = qos_entry:create(
-            QosExpressionInRPN, ReplicasNum, FileUuid, SpaceId
-        ),
+        QosExpressionInRPN = qos_expression:transform_to_rpn(QosExpression),
 
         % TODO: VFS-5567 for now target storage for dir is selected here and
         % does not change in qos traverse task. Have to figure out how to
@@ -128,26 +122,13 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         CalculatedStorages = calculate_target_storages(user_ctx:get_session_id(UserCtx),
             FileCtx, QosExpressionInRPN, ReplicasNum),
 
-        case CalculatedStorages of
+        QosId = case CalculatedStorages of
             {ok, TargetStoragesList} ->
-                SpaceId = file_ctx:get_space_id_const(FileCtx),
-                TraverseReqs = lists:filtermap(fun(Storage) ->
-                    TaskId = ?QOS_TRAVERSE_TASK_ID(SpaceId, QosId, traverse),
-                    case qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, TaskId) of
-                        true -> false;
-                        false -> {true, #qos_traverse_req{
-                            task_id = TaskId,
-                            file_uuid = file_ctx:get_uuid_const(FileCtx),
-                            target_storage = Storage
-                        }}
-                    end
-                end, TargetStoragesList),
-                ok = qos_entry:add_traverse_reqs(QosId, TraverseReqs);
-            {error, cannot_fulfill_qos} ->
-                ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
-                ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-                ok = qos_entry:add_impossible_qos(QosId, SpaceId)
+                add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList);
+            ?ERROR_CANNOT_FULFILL_QOS ->
+                add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum)
         end,
+
         #provider_response{
             status = #status{code = ?OK},
             provider_response = #qos_id{id = QosId}
@@ -201,7 +182,7 @@ get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
             #provider_response{status = #status{code = ?OK}, provider_response = #get_qos_resp{
                 expression = qos_entry:get_expression(QosEntry),
                 replicas_num = qos_entry:get_replicas_num(QosEntry),
-                status = qos_entry:get_status(QosEntry)
+                is_possible = qos_entry:is_possible(QosEntry)
             }};
         {error, Error} ->
             #provider_response{status = #status{code = Error}}
@@ -256,6 +237,57 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates new QoS document with appropriate traverse requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), [storage:id()]) ->
+    qos_entry:id().
+add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    QosId = datastore_utils:gen_key(),
+
+    TraverseReqs = lists:filtermap(fun(Storage) ->
+        TaskId = datastore_utils:gen_key(),
+        FileGuid = file_ctx:get_guid_const(FileCtx),
+        case qos_hooks:maybe_start_traverse(FileCtx, QosId, FileGuid, Storage, TaskId) of
+            true -> false;
+            false -> {true, #qos_traverse_req{
+                task_id = TaskId,
+                start_file_uuid = FileUuid,
+                qos_origin_file_guid = FileGuid,
+                target_storage = Storage
+            }}
+        end
+    end, TargetStoragesList),
+
+    {ok, _} = qos_entry:create(SpaceId, QosId, FileUuid, QosExpressionInRPN,
+        ReplicasNum, true, TraverseReqs),
+    QosId.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates new qos_entry document and adds it to impossible QoS list.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num()) ->
+    qos_entry:id().
+add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    QosId = datastore_utils:gen_key(),
+
+    {ok, _} = qos_entry:create(SpaceId, QosId, FileUuid, QosExpressionInRPN, ReplicasNum, false),
+    ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = qos_entry:add_impossible_qos(QosId, SpaceId),
+    QosId.
 
 %%--------------------------------------------------------------------
 %% @doc

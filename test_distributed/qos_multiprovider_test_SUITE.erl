@@ -19,8 +19,7 @@
 -export([
     qos_restoration_file_test/1,
     qos_restoration_dir_test/1,
-    qos_status_test/1,
-    qos_multi_traverse_test/1
+    qos_status_test/1
 ]).
 
 all() -> [
@@ -45,26 +44,6 @@ all() -> [
         {Name, ?TEST_DATA, Distribution}
     ]}
 ).
--define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
--define(nested_dir_structure(Name, Distribution),
-    {?SPACE_ID, [
-        {Name, [
-            {?filename(Name, 1), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution},
-                {?filename(Name, 3), ?TEST_DATA, Distribution},
-                {?filename(Name, 4), ?TEST_DATA, Distribution}
-            ]},
-            {?filename(Name, 2), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution},
-                {?filename(Name, 3), ?TEST_DATA, Distribution},
-                {?filename(Name, 4), ?TEST_DATA, Distribution}
-            ]}
-        ]}
-    ]}
-).
-
 
 %%%===================================================================
 %%% API
@@ -136,39 +115,6 @@ qos_status_test(Config) ->
     end, maps:get(files, GuidsAndPaths)).
 
 
-qos_multi_traverse_test(Config) ->
-    [Worker2, Worker1] = Workers = ?config(op_worker_nodes, Config),
-
-    Filename = generator:gen_name(),
-    DirStructure = ?simple_dir_structure(Filename, [?GET_DOMAIN_BIN(Worker1)]),
-    DirStructureAfter = ?simple_dir_structure(Filename, [?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(Worker2)]),
-
-    QosSpec = #{
-        source_provider => Worker1,
-        directory_structure_before => DirStructure,
-        assertion_workers => Workers,
-        qos => [
-            #{
-                name => ?Q1,
-                path => ?FILE_PATH(Filename),
-                expression => <<"country=PL|country=PT">>,
-                replicas_num => 2
-            }
-        ],
-        directory_structure_after => DirStructureAfter,
-        files_qos => [
-            #{
-                paths => [?FILE_PATH(Filename)],
-                qos_list => [?Q1],
-                target_providers => #{
-                    ?GET_DOMAIN_BIN(Worker1) => [?Q1],
-                    ?GET_DOMAIN_BIN(Worker2) => [?Q1]
-                }
-            }
-        ]
-    },
-    {_GuidsAndPaths, _} = qos_test_utils:add_qos_test_base(Config, QosSpec).
-
 %%%===================================================================
 %%% Tests base
 %%%===================================================================
@@ -221,6 +167,8 @@ init_per_suite(Config) ->
         application:start(ssl),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        Workers = ?config(op_worker_nodes, NewConfig3),
+        rpc:multicall(Workers, fslogic_worker, schedule_init_qos_cache_for_all_spaces, []),
         NewConfig3
     end,
     [
@@ -268,6 +216,26 @@ end_per_suite(Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
+-define(nested_dir_structure(Name, Distribution),
+    {?SPACE_ID, [
+        {Name, [
+            {?filename(Name, 1), [
+                {?filename(Name, 1), ?TEST_DATA, Distribution},
+                {?filename(Name, 2), ?TEST_DATA, Distribution},
+                {?filename(Name, 3), ?TEST_DATA, Distribution},
+                {?filename(Name, 4), ?TEST_DATA, Distribution}
+            ]},
+            {?filename(Name, 2), [
+                {?filename(Name, 1), ?TEST_DATA, Distribution},
+                {?filename(Name, 2), ?TEST_DATA, Distribution},
+                {?filename(Name, 3), ?TEST_DATA, Distribution},
+                {?filename(Name, 4), ?TEST_DATA, Distribution}
+            ]}
+        ]}
+    ]}
+).
 
 create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
     Workers = [Worker2, Worker1 | _] = ?config(op_worker_nodes, Config),

@@ -28,7 +28,6 @@
 
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([add_status_link/5, delete_status_link/5, check_fulfilment/2, get_relative_path/2]).
@@ -87,7 +86,7 @@ check_fulfilment(QosId, FileGuid) ->
 %%    Result: dir2/dir3/file
 %% @end
 %%--------------------------------------------------------------------
--spec get_relative_path([binary()] | file_meta:uuid(), fslogic_worker:guid()) -> path().
+-spec get_relative_path([binary()] | file_meta:uuid(), fslogic_worker:file_guid()) -> path().
 get_relative_path(AncestorPathTokens, ChildGuid) when is_list(AncestorPathTokens) ->
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(ChildGuid)),
     filename:join(lists:sublist(FilePathTokens, length(AncestorPathTokens), length(FilePathTokens)));
@@ -102,10 +101,9 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 -spec check_fulfilment_internal(qos_entry:id(), od_space:id(), file_meta:uuid(), qos_entry:record()) ->
     boolean().
 check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = OriginUuid} = QosEntry) ->
-    case QosEntry#qos_entry.status of
-        ?QOS_IMPOSSIBLE_STATUS -> false;
-        ?QOS_NOT_FULFILLED -> false;
-        ?QOS_TRAVERSES_STARTED_STATUS ->
+    case QosEntry#qos_entry.is_possible of
+        false -> false;
+        true ->
             % are all traverses finished?
             case qos_entry:list_traverses(QosId) ++ QosEntry#qos_entry.traverse_reqs == [] of
                 true ->

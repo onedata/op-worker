@@ -285,7 +285,7 @@ wait_for_qos_fulfilment_in_parallel(Worker, SessId, QosPathToId) ->
         "    Expression:          ~p~n",
             [QosName, QosRecord#qos_entry.expression]
         ),
-        ?assertEqual(true, rpc:call(Worker, lfm_qos, check_qos_fulfilled, [SessId, QosId]), ?ATTEMPTS*5)
+        ?assertEqual(true, rpc:call(Worker, lfm_qos, check_qos_fulfilled, [SessId, QosId]), ?ATTEMPTS)
     end, QosPathToId).
 
 add_qos_in_parallel(Worker, SessId, QosToAddList, GuidsAndPaths) ->

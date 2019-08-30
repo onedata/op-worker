@@ -51,7 +51,8 @@
     batch_size => batch_size(),
     traverse_info => traverse_info(),
     % Provider which should execute task
-    target_provider_id => oneprovider:id()
+    target_provider_id => oneprovider:id(),
+    additional_data => traverse:additional_data()
 }.
 
 -export_type([master_job/0, slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).

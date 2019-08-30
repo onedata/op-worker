@@ -70,7 +70,7 @@ get_qos_details(SessId, QosId) ->
                         file_uuid = file_id:guid_to_uuid(FileGuid),
                         expression = Resp#get_qos_resp.expression,
                         replicas_num = Resp#get_qos_resp.replicas_num,
-                        status = Resp#get_qos_resp.status
+                        is_possible = Resp#get_qos_resp.is_possible
                     }}
                 end);
         {error, _} = Error ->

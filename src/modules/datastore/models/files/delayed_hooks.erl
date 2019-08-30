@@ -16,7 +16,6 @@
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
 -export([execute_hooks/1, delete/1, add_hook/2]).
@@ -25,7 +24,7 @@
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 
--type hook() :: #hook{}.
+-type hook() :: fun((datastore:doc()) -> ok).
 
 -export_type([hook/0]).
 
@@ -44,26 +43,25 @@
 %%--------------------------------------------------------------------
 -spec add_hook(file_meta:uuid(), hook()) -> {ok, file_meta:uuid()} | {error, term()}.
 add_hook(FileUuid, Hook) ->
-    datastore_model:update(?CTX, FileUuid, fun(#delayed_hooks{hooks = Hooks}) ->
-        {ok, [Hook | Hooks]}
-    end, #delayed_hooks{hooks = [Hook]}).
+    datastore_model:update(?CTX, FileUuid, fun(#delayed_hooks{hooks = Hooks} = DelayedHooks) ->
+        {ok, DelayedHooks#delayed_hooks{hooks = [term_to_binary(Hook) | Hooks]}}
+    end, #delayed_hooks{hooks = [term_to_binary(Hook)]}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Executes all hooks registered for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_hooks(file_meta:uuid()) -> ok.
-execute_hooks(Key) ->
+-spec execute_hooks(datastore:doc()) -> ok.
+execute_hooks(#document{key = Key} = Doc) ->
     Hooks = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #delayed_hooks{hooks = H}}} -> H;
         _ -> []
     end,
-    lists:foreach(fun(#hook{
-        module = Module,
-        function = Fun,
-        args = Args}
-    ) -> erlang:apply(Module, Fun, Args) end, Hooks).
+    lists:foreach(fun(EncodedHook) ->
+        Hook = binary_to_term(EncodedHook),
+        ok = Hook(Doc)
+    end, Hooks).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -109,10 +107,6 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {hooks, [{record, [
-            {module, atom},
-            {function, atom},
-            {args, [string]}
-        ]}]}
+        {hooks, [binary]}
     ]}.
 

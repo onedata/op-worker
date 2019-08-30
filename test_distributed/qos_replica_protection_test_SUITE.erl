@@ -749,6 +749,8 @@ init_per_suite(Config) ->
         application:start(ssl),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        Workers = ?config(op_worker_nodes, NewConfig),
+        rpc:multicall(Workers, fslogic_worker, schedule_init_qos_cache_for_all_spaces, []),
         NewConfig3
     end,
     [

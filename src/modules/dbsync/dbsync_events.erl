@@ -66,7 +66,7 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    ok = delayed_hooks:execute_hooks(FileUuid),
+    ok = delayed_hooks:execute_hooks(FileDoc),
     ok = delayed_hooks:delete(FileUuid);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
@@ -76,7 +76,7 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    ok = delayed_hooks:execute_hooks(FileUuid),
+    ok = delayed_hooks:execute_hooks(FileDoc),
     ok = delayed_hooks:delete(FileUuid);
 change_replicated_internal(SpaceId, #document{
     deleted = false,
@@ -120,20 +120,11 @@ change_replicated_internal(_SpaceId, #document{value = #traverse_task{}} = Task)
 change_replicated_internal(_SpaceId, #document{key = JobID, value = #tree_traverse_job{}} = Doc) ->
     {ok, Job, PoolName, TaskID} = tree_traverse:get_job(Doc),
     traverse:on_job_change(Job, JobID, PoolName, TaskID, oneprovider:get_id_or_undefined());
-change_replicated_internal(SpaceId, #document{
+change_replicated_internal(SpaceId, QosEntry = #document{
     key = QosId,
-    value = #file_qos{}
-}) ->
-    ?debug("change_replicated_internal: file_qos ~p", [QosId]),
-    qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
-change_replicated_internal(SpaceId, #document{
-    key = QosId,
-    value = #qos_entry{traverse_reqs = TR}
+    value = #qos_entry{}
 }) ->
     ?debug("change_replicated_internal: qos_entry ~p", [QosId]),
-    lists:foreach(fun(#qos_traverse_req{task_id = TaskId, file_uuid = FileUuid, target_storage = TS}) ->
-        FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
-        qos_hooks:maybe_start_traverse(FileCtx, QosId, TS, TaskId)
-    end, TR);
+    qos_hooks:handle_qos_entry_change(SpaceId, QosEntry);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

@@ -26,12 +26,12 @@
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
 
-assert_qos_entry_document(Worker, QosId, FileUuid, Expression, ReplicasNum, Status) ->
+assert_qos_entry_document(Worker, QosId, FileUuid, Expression, ReplicasNum, Possible) ->
     ExpectedQosEntry = #qos_entry{
         file_uuid = FileUuid,
         expression = Expression,
         replicas_num = ReplicasNum,
-        status = Status
+        is_possible = Possible
     },
     {ok, #document{value = QosEntry}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosId])),
     ?assertMatch(ExpectedQosEntry, QosEntry).

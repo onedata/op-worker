@@ -399,7 +399,7 @@ add_key_val_qos_that_cannot_be_fulfilled_test_spec() ->
                 qos_expression => <<"country=IT">>,
                 replicas_num => 1,
                 qos_expression_in_rpn => [<<"country=IT">>],
-                qos_status => ?QOS_IMPOSSIBLE_STATUS
+                is_possible => false
             }
         ],
         qos_list => [?QOS1],
@@ -423,7 +423,7 @@ add_qos_that_cannot_be_fulfilled_test_spec() ->
                 qos_expression => <<"country=PL|country=PT-type=disk">>,
                 replicas_num => 1,
                 qos_expression_in_rpn => [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"-">>],
-                qos_status => ?QOS_IMPOSSIBLE_STATUS
+                is_possible => false
             }
         ],
         qos_list => [?QOS1],
@@ -615,7 +615,7 @@ add_multi_qos_where_one_cannot_be_satisfied_test_spec() ->
                 qos_expression => <<"country=IT">>,
                 replicas_num => 1,
                 qos_expression_in_rpn => [<<"country=IT">>],
-                qos_status => ?QOS_IMPOSSIBLE_STATUS
+                is_possible => false
             }
         ],
         qos_list => [?QOS1, ?QOS2],
@@ -888,12 +888,14 @@ mock_start_traverse(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, qos_hooks, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_hooks, maybe_start_traverse,
-        fun(FileCtx, QosId, Storage, TaskId) ->
+        fun(FileCtx, QosId, OriginFileGuid, Storage, TaskId) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
-            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            {ok, _} = qos_traverse:fulfill_qos(FileCtx, QosId, [Storage], TaskId),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, [Storage], traverse, TaskId),
+            ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
+            ok = qos_entry:remove_traverse_req(QosId, TaskId),
             true
         end).
 
@@ -925,21 +927,21 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSES_STARTED_STATUS),
+        IsPossible = maps:get(is_possible, QosCfg, true),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
             lfm_proxy:add_qos(Worker, SessId, {guid, FileGuid}, QosExpression, ReplicasNum)
         ),
 
-        case QosStatus == ?QOS_IMPOSSIBLE_STATUS of
+        case IsPossible == false of
             true -> ok;
             false -> wait_for_qos_fulfillment(Worker, SessId, QosId)
         end,
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, FileUuid, QosExpressionRPN, ReplicasNum, QosStatus
+            Worker, QosId, FileUuid, QosExpressionRPN, ReplicasNum, IsPossible
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -978,21 +980,21 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSES_STARTED_STATUS),
+        IsPossible = maps:get(is_possible, QosCfg, true),
 
         {ok, QosId} = ?assertMatch(
             {ok, _QosId},
             lfm_proxy:add_qos(Worker, SessId, {guid, DirGuid}, QosExpression, ReplicasNum)
         ),
 
-          case QosStatus == ?QOS_IMPOSSIBLE_STATUS of
+          case IsPossible == false of
             true -> ok;
             false -> wait_for_qos_fulfillment(Worker, SessId, QosId)
         end,
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, QosStatus
+            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, IsPossible
         ),
 
         QosNameIdMapping#{QosName => QosId}
@@ -1031,7 +1033,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
             replicas_num := ReplicasNum,
             qos_expression_in_rpn := QosExpressionRPN
         } = QosCfg,
-        QosStatus = maps:get(qos_status, QosCfg, ?QOS_TRAVERSES_STARTED_STATUS),
+        IsPossible = maps:get(is_possible, QosCfg, true),
 
         DirGuid = qos_tests_utils:get_guid(Worker, SessId, DirPath),
         DirUuid = file_id:guid_to_uuid(DirGuid),
@@ -1040,14 +1042,14 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
             lfm_proxy:add_qos(Worker, SessId, {guid, DirGuid}, QosExpression, ReplicasNum)
         ),
 
-        case QosStatus == ?QOS_IMPOSSIBLE_STATUS of
+        case IsPossible == false of
             true -> ok;
             false -> wait_for_qos_fulfillment(Worker, SessId, QosId)
         end,
 
         % check qos_entry document
         qos_tests_utils:assert_qos_entry_document(
-            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, ?QOS_TRAVERSES_STARTED_STATUS
+            Worker, QosId, DirUuid, QosExpressionRPN, ReplicasNum, IsPossible
         ),
 
         QosNameIdMapping#{QosName => QosId}

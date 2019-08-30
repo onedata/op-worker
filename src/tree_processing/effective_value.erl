@@ -32,6 +32,9 @@
                                             % space directory (see get_or_calculate/7).
 -type args() :: list().
 -type in_critical_section() :: boolean() | parent. % parent = use section starting from parent directory
+-type error_callback() :: undefined | fun((file_meta:uuid()) -> ok).
+
+-export_type([error_callback/0]).
 
 -define(CRITICAL_SECTION(Cache, Key), {effective_value_insert, Cache, Key}).
 
@@ -76,26 +79,26 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo,
-%% Args, DelayedHook, bounded_cache:get_timestamp())
+%% Args, ErrorCallback, bounded_cache:get_timestamp())
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), delayed_hooks:hook() | undefined) ->
+    initial_calculation_info(), args(), error_callback() | undefined) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
-get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook) ->
+get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args, ErrorCallback) ->
     get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args,
-        DelayedHook, bounded_cache:get_timestamp()).
+        ErrorCallback, bounded_cache:get_timestamp()).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp, false).
+%% @equiv get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, ErrorCallback, Timestamp, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), delayed_hooks:hook() | undefined, bounded_cache:timestamp()) ->
+    initial_calculation_info(), args(), error_callback() | undefined, bounded_cache:timestamp()) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
-get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp) ->
-    get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp, false).
+get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, ErrorCallback, Timestamp) ->
+    get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, ErrorCallback, Timestamp, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,26 +110,25 @@ get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args, De
 %% file/directory file_meta document while ParentValue and CalculationInfo are results of calling this function on 
 %% parent. Function is called recursively starting from space document. ParentValue and CalculationInfo are set to
 %% undefined and InitialCalculationInfo for space document (it has no parent).
-%% When during calculation ParentDoc is not found (i.e. it is not DBSynced yet) DelayedHook is registered for this
-%% file (see delayed_hooks).
+%% When during calculation ParentDoc is not found (i.e. it is not DBSynced yet) ErrorCallback is executed.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
-    initial_calculation_info(), args(), delayed_hooks:hook() | undefined, bounded_cache:timestamp(),
+    initial_calculation_info(), args(), error_callback() | undefined, bounded_cache:timestamp(),
     in_critical_section()) -> {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo,
-    Args, DelayedHook, Timestamp, true) ->
+    Args, ErrorCallback, Timestamp, true) ->
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
             {ok, Value, InitialCalculationInfo};
         {error, not_found} ->
             critical_section:run(?CRITICAL_SECTION(Cache, Key), fun() ->
                 get_or_calculate(Cache, Doc, CalculateCallback, InitialCalculationInfo, Args,
-                    DelayedHook, Timestamp, parent)
+                    ErrorCallback, Timestamp, parent)
             end)
     end;
 get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCalculationInfo,
-    Args, DelayedHook, Timestamp, InCriticalSection) ->
+    Args, ErrorCallback, Timestamp, InCriticalSection) ->
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
             {ok, Value, InitialCalculationInfo};
@@ -141,14 +143,14 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                                 _ -> InCriticalSection
                             end,
                             {ok, ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
-                                CalculateCallback, InitialCalculationInfo, Args, DelayedHook, Timestamp,
+                                CalculateCallback, InitialCalculationInfo, Args, ErrorCallback, Timestamp,
                                 InCriticalSection2),
                             bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
                                 [Doc, ParentValue, CalculationInfo | Args], Timestamp);
                         _ ->
-                            case DelayedHook of
+                            case ErrorCallback of
                                 undefined -> ok;
-                                _ -> delayed_hooks:add_hook(ParentUuid, DelayedHook)
+                                _ -> ErrorCallback(ParentUuid)
                             end,
                             {ok, undefined, InitialCalculationInfo}
                     end;

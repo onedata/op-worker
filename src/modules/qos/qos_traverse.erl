@@ -8,6 +8,8 @@
 %%% @doc
 %%% This module contains functions responsible for traversing tree and
 %%% performing actions related to QoS management.
+%%% Traverse is started for each storage that given QoS requires files
+%%% to be. Traverse is run on provider, that given storage belongs to.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_traverse).
@@ -20,12 +22,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([fulfill_qos/4, init_pool/0]).
+-export([fulfill_qos/5, fulfill_qos/6, init_pool/0]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2,
-    task_started/1, task_finished/1,
-    get_job/1, get_sync_info/1, update_job_progress/5]).
+    task_finished/1, get_job/1, get_sync_info/1, update_job_progress/5]).
 
 % For test purpose
 -export([synchronize_file/6]).
@@ -36,6 +37,8 @@
     target_storages = undefined :: [storage:id()] | undefined
 }).
 
+-type task_type() :: traverse | restore.
+
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
 
@@ -43,16 +46,20 @@
 %%% API
 %%%===================================================================
 
+
+-spec fulfill_qos(file_ctx:ctx(), qos_entry:id(), file_id:file_guid(), [storage:id()], task_type()) -> ok.
+fulfill_qos(FileCtx, QosId, QosOriginFileGuid, TargetStorages, TaskType) ->
+    fulfill_qos(FileCtx, QosId, QosOriginFileGuid, TargetStorages, TaskType, datastore_utils:gen_key()).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates traverse task to fulfill qos.
 %% @end
 %%--------------------------------------------------------------------
--spec fulfill_qos(file_ctx:ctx(), qos_entry:id(), [storage:id()] | undefined, traverse:id()) -> ok.
-fulfill_qos(FileCtx, QosId, TargetStorages, TaskId) ->
-    {ok, #document{value = QosItem, scope = SpaceId}} = qos_entry:get(QosId),
-    QosOriginFileUuid = QosItem#qos_entry.file_uuid,
-    QosOriginFileGuid = file_id:pack_guid(QosOriginFileUuid, SpaceId),
+-spec fulfill_qos(file_ctx:ctx(), qos_entry:id(), file_id:file_guid(), [storage:id()], task_type(),
+    traverse:id()) -> ok.
+fulfill_qos(FileCtx, QosId, QosOriginFileGuid, TargetStorages, TaskType, TaskId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
     Options = #{
         task_id => TaskId,
@@ -61,6 +68,11 @@ fulfill_qos(FileCtx, QosId, TargetStorages, TaskId) ->
             qos_id = QosId,
             file_path_tokens = FilePathTokens,
             target_storages = TargetStorages
+        },
+        additional_data => #{
+            <<"space_id">> => SpaceId,
+            <<"qos_id">> => QosId,
+            <<"task_type">> => atom_to_binary(TaskType, utf8)
         }
     },
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
@@ -93,19 +105,13 @@ get_job(DocOrID) ->
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
--spec task_started(traverse:id()) -> ok.
-task_started(TaskId) ->
-    [_, SpaceId, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
-    case binary_to_atom(TaskType, utf8) of
-        traverse ->
-            ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
-            ok = qos_entry:remove_traverse_req(QosId, TaskId);
-        restore -> ok
-    end.
-
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
-    [_, SpaceId, QosId, TaskType] = binary:split(TaskId, <<"#">>, [global]),
+    {ok, #{
+        <<"space_id">> := SpaceId,
+        <<"qos_id">> := QosId,
+        <<"task_type">> := TaskType
+    }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case binary_to_atom(TaskType, utf8) of
         traverse -> ok = qos_entry:remove_traverse(SpaceId, QosId, TaskId);
         restore -> ok

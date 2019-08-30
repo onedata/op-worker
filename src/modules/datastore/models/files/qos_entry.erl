@@ -42,14 +42,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
--export([get/1, delete/1, create/4, update/2, add_links/4, delete_links/4, fold_links/4]).
+-export([get/1, delete/1, create/6, create/7, update/2, add_links/4, delete_links/4, fold_links/4]).
 
 %% higher-level functions operating on qos_entry record.
 -export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
-    set_status/2, get_expression/1, get_replicas_num/1, get_status/1, get_space_id/1]).
+    get_expression/1, get_replicas_num/1, is_possible/1, get_space_id/1]).
 
 %% Functions responsible for traverse requests.
--export([add_traverse_reqs/2, remove_traverse_req/2]).
+-export([remove_traverse_req/2]).
 
 %% Functions operating on traverses list.
 -export([add_traverse/3, remove_traverse/3, list_traverses/1]).
@@ -58,17 +58,15 @@
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 
--type id() :: binary().
--type key() :: datastore:key().
+-type id() :: datastore_doc:key().
 -type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type status() :: ?QOS_NOT_FULFILLED | ?QOS_TRAVERSES_STARTED_STATUS | ?QOS_IMPOSSIBLE_STATUS.
 -type replicas_num() :: pos_integer().
 -type traverse_req() :: #qos_traverse_req{}.
 -type one_or_many(Type) :: Type | [Type].
 
--export_type([id/0, record/0, status/0, replicas_num/0]).
+-export_type([id/0, doc/0, record/0, replicas_num/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -83,41 +81,49 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec create(qos_expression:expression(), replicas_num(), file_meta:uuid(), od_space:id()) ->
-    {ok, doc()} | {error, term()}.
-create(QosExpression, ReplicasNum, FileUuid, SpaceId) ->
-    QosEntry = #qos_entry{
-        expression = QosExpression,
-        replicas_num = ReplicasNum,
-        file_uuid = FileUuid,
-        status = ?QOS_NOT_FULFILLED
-    },
-    datastore_model:create(?CTX, #document{scope = SpaceId, value = QosEntry}).
+-spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
+    replicas_num(), boolean()) -> {ok, doc()} | {error, term()}.
+create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible) ->
+    create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, []).
 
 
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
+-spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
+    replicas_num(), boolean(), [traverse_req()]) -> {ok, doc()} | {error, term()}.
+create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
+    datastore_model:create(?CTX, #document{key = QosId, scope = SpaceId,
+        value = #qos_entry{
+            file_uuid = FileUuid,
+            expression = Expression,
+            replicas_num = ReplicasNum,
+            is_possible = Possible,
+            traverse_reqs = TraverseReqs
+        }
+    }).
+
+
+-spec update(id(), diff()) -> {ok, id()} | {error, term()}.
 update(Key, Diff) ->
     ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 
--spec get(key()) -> {ok, doc()} | {error, term()}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(QosId) ->
     datastore_model:get(?CTX, QosId).
 
 
--spec delete(key()) -> ok | {error, term()}.
+-spec delete(id()) -> ok | {error, term()}.
 delete(QosId) ->
     datastore_model:delete(?CTX, QosId).
 
 
--spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec add_links(datastore_doc:scope(), datastore:id(), datastore:tree_id(),
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
 add_links(Scope, Key, TreeId, Links) ->
     datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
--spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec delete_links(datastore_doc:scope(), datastore:id(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
 delete_links(Scope, Key, TreeId, Links) ->
@@ -128,7 +134,7 @@ delete_links(Scope, Key, TreeId, Links) ->
 %% Calls Fun(Link, Acc) for each link.
 %% @end
 %%--------------------------------------------------------------------
--spec fold_links(key(), datastore:fold_fun(datastore:link()), datastore:fold_acc(), datastore:fold_opts()) ->
+-spec fold_links(id(), datastore:fold_fun(datastore:link()), datastore:fold_acc(), datastore:fold_opts()) ->
     {ok, datastore:fold_acc()} | {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold_links(Key, Fun, Acc, Opts) ->
     datastore_model:fold_links(?CTX, Key, all, Fun, Acc, Opts).
@@ -158,31 +164,12 @@ get_space_id(QosId) ->
     end.
 
 
-
--spec set_status(id(), status()) -> {ok, key()} | {error, term}.
-set_status(QosId, Status) ->
-    Diff = fun(QosEntry) ->
-        {ok, QosEntry#qos_entry{status = Status}}
-    end,
-    update(QosId, Diff).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds given QosId to impossible QoS tree.
-%% @end
-%%--------------------------------------------------------------------
 -spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok.
 add_impossible_qos(QosId, Scope) ->
-    case update(QosId, fun(QosEntry) -> {ok, QosEntry#qos_entry{status = ?QOS_IMPOSSIBLE_STATUS}} end) of
+    case add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}) of
         {ok, _} ->
-            case add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}) of
-                {ok, _} ->
-                    ok;
-                {error, Error} = Error ->
-                    Error
-            end;
-        {error, _} = Error ->
+            ok;
+        {error, Error} = Error ->
             Error
     end.
 
@@ -195,35 +182,21 @@ list_impossible_qos() ->
     ).
 
 
+-spec get_expression(record()) -> qos_expression:expression().
 get_expression(QosEntry) ->
     QosEntry#qos_entry.expression.
 
 
+-spec get_replicas_num(record()) -> replicas_num().
 get_replicas_num(QosEntry) ->
     QosEntry#qos_entry.replicas_num.
 
 
-get_status(QosEntry) ->
-    QosEntry#qos_entry.status.
+-spec is_possible(record()) -> boolean().
+is_possible(QosEntry) ->
+    QosEntry#qos_entry.is_possible.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds traverse requests for given QoS. Sets status to traverses_started.
-%% @end
-%%--------------------------------------------------------------------
--spec add_traverse_reqs(id(), [traverse_req()]) ->  ok.
-add_traverse_reqs(QosId, TraverseReqs) ->
-    {ok, _} = update(QosId, fun(QosEntry) ->
-        {ok, QosEntry#qos_entry{traverse_reqs = TraverseReqs, status = ?QOS_TRAVERSES_STARTED_STATUS}}
-    end),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes given traverse from requests list.
-%% @end
-%%--------------------------------------------------------------------
 -spec remove_traverse_req(id(), traverse:id()) ->  ok.
 remove_traverse_req(QosId, TaskId) ->
     {ok, _} = update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
@@ -294,10 +267,11 @@ get_record_struct(1) ->
         {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},
-        {status, atom},
+        {is_possible, boolean},
         {traverse_req, [{record, [
             {task_id, string},
-            {file_uuid, string},
+            {start_file_uuid, string},
+            {qos_origin_file_guid, string},
             {target_storage, string}
         ]}]}
     ]}.
