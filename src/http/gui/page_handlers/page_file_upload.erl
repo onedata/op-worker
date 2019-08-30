@@ -69,14 +69,11 @@ handle(<<"POST">>, InitialReq) ->
                     cowboy_req:reply(?HTTP_403_FORBIDDEN, ?CONN_CLOSE_HEADERS, Req);
                 throw:Error ->
                     ErrorResp = rest_translator:error_response(Error),
-                    RespBody = case ErrorResp#rest_resp.body of
-                        {binary, Bin} -> Bin;
-                        Map -> json_utils:encode(Map)
-                    end,
                     cowboy_req:reply(
                         ErrorResp#rest_resp.code,
                         maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
-                        RespBody, Req
+                        json_utils:encode(ErrorResp#rest_resp.body),
+                        Req
                     );
                 Type:Message ->
                     UserId = op_gui_session:get_user_id(),

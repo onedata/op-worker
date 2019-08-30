@@ -17,6 +17,7 @@
 
 -include("op_logic.hrl").
 -include("http/rest.hrl").
+-include("graph_sync/provider_graph_sync.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -61,16 +62,21 @@ response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
 %%--------------------------------------------------------------------
 -spec error_response({error, term()}) -> #rest_resp{}.
 error_response({error, Type}) ->
+    IdAndDetails = gs_protocol_errors:error_to_json(?BASIC_PROTOCOL, {error, Type}),
     case translate_error({error, Type}) of
         Code when is_integer(Code) ->
-            #rest_resp{code = Code};
+            #rest_resp{code = Code, body = #{<<"error">> => IdAndDetails}};
         {Code, {MessageFormat, FormatArgs}} ->
             MessageBinary = str_utils:format_bin(
                 str_utils:to_list(MessageFormat), FormatArgs
             ),
-            #rest_resp{code = Code, body = #{<<"error">> => MessageBinary}};
+            #rest_resp{code = Code, body = #{<<"error">> => IdAndDetails#{
+                <<"description">> => MessageBinary
+            }}};
         {Code, MessageBinary} ->
-            #rest_resp{code = Code, body = #{<<"error">> =>  MessageBinary}}
+            #rest_resp{code = Code, body = #{<<"error">> => IdAndDetails#{
+                <<"description">> => MessageBinary
+            }}}
     end.
 
 
@@ -113,7 +119,7 @@ translate_error(?ERROR_NOT_SUPPORTED) ->
     };
 
 translate_error(?ERROR_ALREADY_EXISTS) ->
-    {?HTTP_404_NOT_FOUND,
+    {?HTTP_400_BAD_REQUEST,
         <<"Given resource already exists">>
     };
 
@@ -150,7 +156,7 @@ translate_error(?ERROR_TOKEN_INVALID) ->
     };
 translate_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)) ->
     {?HTTP_401_UNAUTHORIZED,
-        <<"Provided access token is not valid - unverified caveat: '", Caveat/binary, "'">>
+        {<<"Provided access token is not valid - ~ts">>, [caveats:unverified_description(Caveat)]}
     };
 translate_error(?ERROR_TOKEN_SUBJECT_INVALID) ->
     {?HTTP_401_UNAUTHORIZED,

@@ -73,7 +73,7 @@
     catch
         throw:__Err ->
             __ErrorResp = rest_translator:error_response(__Err),
-            {stop, send_response(__ErrorResp, __Req), __CdmiReq};
+            {stop, send_error_response(__ErrorResp, __Req), __CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
@@ -111,7 +111,7 @@ init(Req, ReqTypeResolutionMethod) ->
     catch
         throw:Err ->
             ErrorResp = rest_translator:error_response(Err),
-            {ok, send_response(ErrorResp, Req), undefined};
+            {ok, send_error_response(ErrorResp, Req), undefined};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
@@ -151,7 +151,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
             ErrorResp = rest_translator:error_response(
                 ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])
             ),
-            {stop, send_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(ErrorResp, Req), CdmiReq};
         {Version, Options, _} ->
             {false, Req, CdmiReq#cdmi_req{
                 version = Version,
@@ -160,7 +160,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     catch
         throw:Err ->
             ErrorResp = rest_translator:error_response(Err),
-            {stop, send_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(ErrorResp, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
@@ -198,7 +198,7 @@ is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
     catch
         throw:Err ->
             ErrorResp = rest_translator:error_response(Err),
-            {stop, send_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(ErrorResp, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
@@ -240,7 +240,7 @@ resource_exists(Req, #cdmi_req{
             {false, Req, CdmiReq};
         {error, Errno} ->
             ErrorResp = rest_translator:error_response(?ERROR_POSIX(Errno)),
-            {stop, send_response(ErrorResp, Req), CdmiReq}
+            {stop, send_error_response(ErrorResp, Req), CdmiReq}
     end.
 
 
@@ -325,7 +325,7 @@ error_no_version(Req, CdmiReq) ->
     ErrorResp = rest_translator:error_response(
         ?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)
     ),
-    {stop, send_response(ErrorResp, Req), CdmiReq}.
+    {stop, send_error_response(ErrorResp, Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -340,7 +340,7 @@ error_wrong_path(Req, CdmiReq) ->
     ErrorResp = rest_translator:error_response(
         ?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)
     ),
-    {stop, send_response(ErrorResp, Req), CdmiReq}.
+    {stop, send_error_response(ErrorResp, Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -638,13 +638,9 @@ redirect_to(Req, CdmiReq, Path) ->
 
 
 %% @private
--spec send_response(#rest_resp{}, cowboy_req:req()) -> cowboy_req:req().
-send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
-    RespBody = case Body of
-        {binary, Bin} -> Bin;
-        Map -> json_utils:encode(Map)
-    end,
-    cowboy_req:reply(Code, Headers, RespBody, Req).
+-spec send_error_response(#rest_resp{}, cowboy_req:req()) -> cowboy_req:req().
+send_error_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
+    cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
 
 
 %%--------------------------------------------------------------------

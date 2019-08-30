@@ -19,6 +19,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/api_errors.hrl").
@@ -807,9 +808,9 @@ user_logic_mock_setup(Workers, Users) ->
         }}}
     end,
 
-    UsersByAuth = lists:flatmap(
+    UsersByToken = lists:flatmap(
         fun({UserId, #user_config{token = Token}}) -> [
-            {#token_auth{token = Token}, UserId}
+            {Token, UserId}
         ]
         end, Users),
 
@@ -842,12 +843,10 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, user_logic, get_by_auth, fun(Auth) ->
-        case proplists:get_value(Auth, UsersByAuth, undefined) of
-            undefined ->
-                {error, not_found};
-            UserId ->
-                UserConfigToUserDoc(proplists:get_value(UserId, Users))
+    test_utils:mock_expect(Workers, user_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
+        case proplists:get_value(UserToken, UsersByToken, undefined) of
+            undefined -> {error, not_found};
+            UserId -> {ok, ?USER(UserId)}
         end
     end),
 

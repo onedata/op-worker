@@ -22,8 +22,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 
--export([get_by_auth/1]).
+-export([preauthorize/1]).
 -export([get/2, get_protected_data/2, get_shared_data/3]).
 -export([exists/2]).
 -export([get_full_name/2, get_full_name/3]).
@@ -39,18 +40,33 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves user by given authorization. No UserId is needed as it can be
-%% deduced from auth.
+%% Pre-authorizes a user - asks Onezone to verify given token, and upon success,
+%% returns the auth object, including user's identity and caveats that were
+%% inscribed in the token.
 %% @end
 %%--------------------------------------------------------------------
--spec get_by_auth(Auth :: session:auth()) ->
-    {ok, od_user:doc()} | gs_protocol:error().
-get_by_auth(Auth) ->
-    gs_client_worker:request(Auth, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_user, id = ?SELF, aspect = instance, scope = private},
-        subscribe = true
-    }).
+-spec preauthorize(#token_auth{}) -> {ok, aai:auth()} | gs_protocol:error().
+preauthorize(#token_auth{token = Token, peer_ip = PeerIp}) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_user, id = undefined, aspect = preauthorize, scope = public},
+        data = #{
+            <<"token">> => Token,
+            <<"peerIp">> => case PeerIp of
+                undefined -> null;
+                _ -> element(2, {ok, _} = ip_utils:to_binary(PeerIp))
+            end
+        }
+    }),
+    case Result of
+        {error, _} = Error ->
+            Error;
+        {ok, #{<<"subject">> := Subject, <<"caveats">> := Caveats}} ->
+            {ok, #auth{
+                subject = aai:deserialize_subject(Subject),
+                caveats = [caveats:deserialize(C) || C <- Caveats]
+            }}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -162,11 +178,11 @@ get_full_name(Client, UserId, AuthHint) ->
 -spec fetch_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
     {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | gs_protocol:error().
 fetch_idp_access_token(Client, UserId, IdP) ->
-    Res = gs_client_worker:request(Client, #gs_req_graph{
+    Result = gs_client_worker:request(Client, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}
     }),
-    case Res of
+    case Result of
         {ok, #{<<"token">> := Token, <<"ttl">> := Ttl}} ->
             {ok, {Token, Ttl}};
         {error, Reason} ->
