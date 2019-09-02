@@ -808,11 +808,9 @@ user_logic_mock_setup(Workers, Users) ->
         }}}
     end,
 
-    UsersByToken = lists:flatmap(
-        fun({UserId, #user_config{token = Token}}) -> [
-            {Token, UserId}
-        ]
-        end, Users),
+    UsersByToken = lists:map(fun({UserId, #user_config{token = Token}}) ->
+        {Token, UserId}
+    end, Users),
 
     GetUserFun = fun
         (_, _, ?ROOT_USER_ID) ->

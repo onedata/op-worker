@@ -63,7 +63,7 @@ preauthorize(#token_auth{token = Token, peer_ip = PeerIp}) ->
             Error;
         {ok, #{<<"subject">> := Subject, <<"caveats">> := Caveats}} ->
             {ok, #auth{
-                subject = aai:deserialize_subject(Subject),
+                subject = aai:json_to_subject(Subject),
                 caveats = [caveats:deserialize(C) || C <- Caveats]
             }}
     end.
