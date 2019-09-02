@@ -272,7 +272,7 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
         target_provider_id => ExecutorID,
         batch_size => 1,
         traverse_info => self(),
-        addititional_data => TestMap
+        additional_data => TestMap
     },
     {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
@@ -303,7 +303,7 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
 
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{description = Description, enqueued = false,
-            canceled = false, status = finished, addititional_data = TestMap}}},
+            canceled = false, status = finished, additional_data = TestMap}}},
             rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
