@@ -67,7 +67,10 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(doc()) -> {ok, id()} | {error, term()}.
 create(#document{value = #storage{}} = Doc) ->
-    case ?extract_key(datastore_model:create(?CTX, Doc)) of
+    LabelSize = consistent_hashing:get_label_gen_size(),
+    GenPart = datastore_utils:gen_short_key(LabelSize),
+    Key = <<"mmmmmm_", GenPart/binary>>,
+    case ?extract_key(datastore_model:create(?CTX#{generated_key => true}, Doc#document{key = Key})) of
         {ok, StorageId} ->
             rtransfer_put_storage(Doc#document{key = StorageId}),
             {ok, StorageId};

@@ -892,6 +892,7 @@ get_local_file_location_doc(FileCtx) ->
 get_local_file_location_doc(FileCtx, IncludeBlocks) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
+
     case fslogic_location_cache:get_location(LocalLocationId, FileUuid,
         IncludeBlocks) of
         {ok, Location} ->

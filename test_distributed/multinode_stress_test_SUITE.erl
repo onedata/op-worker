@@ -68,7 +68,7 @@ single_dir_creation_test_base(Config) ->
 %%    [FirstWorker | _] = ?config(op_worker_nodes, Config),
 %%    Workers = [rpc:call(FirstWorker, consistent_hashing, get_node, [<<>>])],
     [FirstWorker | _] = Workers = ?config(op_worker_nodes, Config),
-    User = <<"user1">>,
+    User = <<"mmmmmm_user1">>,
 
     [FirstSessId | _] = SessIds =
         lists:map(fun(Worker) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end, Workers),
@@ -78,17 +78,23 @@ single_dir_creation_test_base(Config) ->
     WorkersWithSessions = create_workers_list(Workers, SessIds, [], 0, ProcNum),
 
     % Generate test setup
-    Dir = <<"/", SpaceName/binary, "/test_dir">>,
     CheckAns = case RepeatNum of
         1 ->
-            lfm_proxy:mkdir(FirstWorker, FirstSessId, Dir, 8#755);
+            Dir = <<"/", SpaceName/binary, "/test_dir">>,
+            case lfm_proxy:mkdir(FirstWorker, FirstSessId, Dir, 8#755) of
+                {ok, Uuid} = Ans ->
+                    put(test_dir_uuid, Uuid),
+                    Ans;
+                Other ->
+                    Other
+            end;
         _ ->
-            {ok, ok}
+            {ok, get(test_dir_uuid)}
     end,
     NameExtBin = integer_to_binary(RepeatNum),
 
     case CheckAns of
-        {ok, _} ->
+        {ok, DirUuid} ->
             Master = self(),
             StartTime = os:timestamp(),
 
@@ -97,7 +103,7 @@ single_dir_creation_test_base(Config) ->
                     try
                         {SaveOk, SaveError} =
                             rpc:call(Worker, ?MODULE, create_single_call,
-                                [SessId, Dir, 1 + Num*FilesNum, FilesNum, NameExtBin]),
+                                [SessId, DirUuid, 1 + Num*FilesNum, FilesNum, NameExtBin]),
                         case SaveError of
                             0 -> Master ! {slave_ans, SaveOk};
                             _ -> Master ! {slave_ans_error, SaveOk, SaveError}
@@ -173,11 +179,11 @@ end_per_testcase(Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-create_single_call(SessId, Dir, StartNum, FilesNum, NameExtBin) ->
+create_single_call(SessId, DirUuid, StartNum, FilesNum, NameExtBin) ->
     lists:foldl(fun(N, {OkNum, ErrorNum}) ->
         N2 = integer_to_binary(N),
-        File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
-        case lfm:create(SessId, File) of
+        File = <<NameExtBin/binary, "_", N2/binary>>,
+        case lfm:create(SessId, DirUuid, File, undefined) of
             {ok, _} ->
                 {OkNum+1, ErrorNum};
             ErrorAns ->

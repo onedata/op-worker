@@ -108,6 +108,15 @@ save(Doc) ->
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX, Doc));
+%%save(#document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc, GeneratedKey) ->
+%%    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc));
+%%save(#document{value = #file_meta{parent_uuid = ParentUuid}} = Doc, _) ->
+save(#document{value = #file_meta{parent_uuid = ParentUuid}} = Doc, true) ->
+    LabelSize = consistent_hashing:get_label_gen_size(),
+    LabelPart = binary:part(ParentUuid, 0, LabelSize),
+    GenPart = datastore_utils:gen_short_key(LabelSize),
+    Key = <<LabelPart/binary, GenPart/binary>>,
+    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc#document{key = Key}));
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -522,6 +531,7 @@ get_locations_by_uuid(FileUuid) ->
             {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
                 {ok, []};
             {ok, #document{scope = SpaceId}} ->
+                % TODO - jak ugryzc pobieranie dokumentu space'a w tylu miejscach?
                 {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId),
                 Locations = lists:map(fun(ProviderId) ->
                     file_location:id(FileUuid, ProviderId)

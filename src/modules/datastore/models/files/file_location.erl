@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % API
 -export([local_id/1, id/2, save_and_bump_version/2,
@@ -61,7 +62,8 @@ local_id(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(FileUuid, ProviderId) ->
-    datastore_utils:gen_key(ProviderId, FileUuid).
+    <<FileUuid/binary, ProviderId/binary>>.
+%%    datastore_utils:gen_key(ProviderId, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc

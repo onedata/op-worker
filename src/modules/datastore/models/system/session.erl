@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Session management model.
+% TODO - powinna byc na kazdym node (i dane uzytkownia tez) - przynajnmniej ta czesc sluzaca kazdemu requestowi
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session).

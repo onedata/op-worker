@@ -61,19 +61,19 @@ execute(AccessDefinitions, Args = [#sfm_handle{
     file_uuid = FileUuid,
     share_id = ShareId
 } | _], Function) ->
-    UserCtx = user_ctx:new(SessionId),
-    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
-    DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
-    {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
-    NewArgs = set_root_context_if_file_has_acl(Args),
-    apply(Function, NewArgs);
+%%    UserCtx = user_ctx:new(SessionId),
+%%    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
+%%    DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
+%%    {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
+%%    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
+%%    NewArgs = set_root_context_if_file_has_acl(Args),
+    apply(Function, Args);
 execute(AccessDefinitions, Args = [UserCtx, DefaultFileCtx | OtherArgs], Function) ->
-    {ExpandedAccessDefinitions, DefaultFileCtx2} =
-        expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
-    NewArgs = [UserCtx, DefaultFileCtx2 | OtherArgs],
-    apply(Function, NewArgs).
+%%    {ExpandedAccessDefinitions, DefaultFileCtx2} =
+%%        expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
+%%    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
+%%    NewArgs = [UserCtx, DefaultFileCtx2 | OtherArgs],
+    apply(Function, Args).
 
 %%%===================================================================
 %%% Internal functions

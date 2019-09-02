@@ -36,9 +36,9 @@
     disc_driver => undefined
 }).
 
--define(LUMA_USER_ROOT_PREFIX, <<"luma_user_">>).
--define(REV_LUMA_USER_ROOT_PREFIX, <<"rev_luma_user_">>).
--define(REV_LUMA_GROUP_ROOT_PREFIX, <<"rev_luma_group_">>).
+-define(LUMA_USER_ROOT_PREFIX, <<"mmmmmm_luma_user_">>).
+-define(REV_LUMA_USER_ROOT_PREFIX, <<"mmmmmm_rev_luma_user_">>).
+-define(REV_LUMA_GROUP_ROOT_PREFIX, <<"mmmmmm_rev_luma_group_">>).
 -define(ROOTS, [
     ?LUMA_USER_ROOT_PREFIX,
     ?REV_LUMA_USER_ROOT_PREFIX,
