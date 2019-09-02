@@ -106,7 +106,8 @@ update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
     end,
     ReplaceAttributeFunction = fun
         ({?ACL_XATTR_NAME, Value}) ->
-            ACL = try acl:from_json(Value)
+            ACL = try
+                acl:from_cdmi(Value)
             catch _:Error ->
                 ?warning_stacktrace("Acl conversion error ~p", [Error]),
                 throw(?ERROR_BAD_DATA(<<"acl">>))
@@ -351,7 +352,7 @@ fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileKey, Attrs) ->
 fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileKey, _Attrs) ->
     case lfm:get_acl(SessionId, FileKey) of
         {ok, Acl} ->
-            Metadata#{?ACL_XATTR_NAME => acl:to_json(Acl)};
+            Metadata#{?ACL_XATTR_NAME => acl:to_cdmi(Acl)};
         {error, ?ENOATTR} ->
             Metadata;
         {error, Errno} ->

@@ -432,24 +432,27 @@ metadata(Config) ->
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     FileName2 = filename:join([binary_to_list(SpaceName), "acl_test_file.txt"]),
-    Ace1 = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?read_mask)
-    },
-    Ace2 = #{
-        <<"acetype">> => acl:bitmask_to_binary(?deny_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?read_mask bor ?execute_mask)
-    },
-    Ace3 = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?write_mask)
-    },
+    Ace1 = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_mask
+    }),
+    Ace2 = ace:to_cdmi(#access_control_entity{
+        acetype = ?deny_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_mask bor ?execute_mask
+    }),
+    Ace3 = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_mask
+    }),
     Ace3Full = #{
         <<"acetype">> => ?allow,
         <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
@@ -480,18 +483,20 @@ metadata(Config) ->
     %%------------------------------
 
     %%-- create forbidden by acl ---
-    Ace4 = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?execute_mask)
-    },
-    Ace5 = #{
-        <<"acetype">> => acl:bitmask_to_binary(?deny_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?write_mask)
-    },
+    Ace4 = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?execute_mask
+    }),
+    Ace5 = ace:to_cdmi(#access_control_entity{
+        acetype = ?deny_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_mask
+    }),
     RequestBody18 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace4, Ace5]}},
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
@@ -1482,48 +1487,53 @@ acl(Config) ->
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
-    Read = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?read_mask)
-    },
+    Read = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_mask
+    }),
     ReadFull = #{
         <<"acetype">> => ?allow,
         <<"identifier">> => Identifier1,
         <<"aceflags">> => ?no_flags,
         <<"acemask">> => ?read
     },
-    Write = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?write_mask)
-    },
+    Write = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_mask
+    }),
     ReadWriteVerbose = #{
         <<"acetype">> => ?allow,
         <<"identifier">> => Identifier1,
         <<"aceflags">> => ?no_flags,
         <<"acemask">> => <<(?read)/binary, ", ", (?write)/binary>>
     },
-    Execute = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?execute_mask)
-    },
-    WriteAcl = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?write_acl_mask)
-    },
-    Delete = #{
-        <<"acetype">> => acl:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl:bitmask_to_binary(?delete_mask)
-    },
+    Execute = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?execute_mask
+    }),
+    WriteAcl = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_acl_mask
+    }),
+    Delete = ace:to_cdmi(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?delete_mask
+    }),
 
     MetadataAclReadFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadFull, WriteAcl]}}),
     MetadataAclReadExecute = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Read, Execute, WriteAcl]}}),

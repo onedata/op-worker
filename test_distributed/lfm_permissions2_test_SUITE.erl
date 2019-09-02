@@ -445,7 +445,7 @@ set_acl_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
             lfm_proxy:set_acl(W, SessId, {guid, FileGuid}, [
-                ?ALLOW_ACE(?group, ?no_flags_mask, acl:mask_to_bitmask(?ALL_PERMS))
+                ?ALLOW_ACE(?group, ?no_flags_mask, perms_to_bitmask(?ALL_PERMS))
             ])
         end
     }, Config).
@@ -1090,7 +1090,7 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
     maps:fold(fun(Guid, Perms, _) ->
         ?assertEqual(ok, lfm_proxy:set_acl(
             Node, ?ROOT_SESS_ID, {guid, Guid},
-            [?ALLOW_ACE(AceWho, AceFlags, acl:mask_to_bitmask(Perms))])
+            [?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(Perms))])
         )
     end, ok, maps:without(maps:keys(DeniedPermsPerFile), AllowedPermsPerFile)),
 
@@ -1098,8 +1098,8 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
         ?assertEqual(ok, lfm_proxy:set_acl(
             Node, ?ROOT_SESS_ID, {guid, Guid},
             [
-                ?DENY_ACE(AceWho, AceFlags, acl:mask_to_bitmask(Perms)),
-                ?ALLOW_ACE(AceWho, AceFlags, acl:mask_to_bitmask(?ALL_PERMS))
+                ?DENY_ACE(AceWho, AceFlags, perms_to_bitmask(Perms)),
+                ?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(?ALL_PERMS))
             ]
         ))
     end, ok, DeniedPermsPerFile).
@@ -1224,6 +1224,40 @@ complementary_perms(Perms) ->
         end,
         Perms
     )).
+
+
+%% @private
+-spec perms_to_bitmask([binary()]) -> non_neg_integer().
+perms_to_bitmask(Permissions) ->
+    lists:foldl(fun(Perm, BitMask) ->
+        BitMask bor perm_to_bitmask(Perm)
+    end, ?no_flags_mask, Permissions).
+
+
+%% @private
+-spec perm_to_bitmask(binary()) -> non_neg_integer().
+perm_to_bitmask(?all_perms) -> ?all_perms_mask;
+perm_to_bitmask(?rw) -> ?rw_mask;
+perm_to_bitmask(?read) -> ?read_mask;
+perm_to_bitmask(?write) -> ?write_mask;
+perm_to_bitmask(?read_object) -> ?read_object_mask;
+perm_to_bitmask(?list_container) -> ?list_container_mask;
+perm_to_bitmask(?write_object) -> ?write_object_mask;
+perm_to_bitmask(?add_object) -> ?add_object_mask;
+perm_to_bitmask(?append_data) -> ?append_data_mask;
+perm_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
+perm_to_bitmask(?read_metadata) -> ?read_metadata_mask;
+perm_to_bitmask(?write_metadata) -> ?write_metadata_mask;
+perm_to_bitmask(?execute) -> ?execute_mask;
+perm_to_bitmask(?traverse_container) -> ?traverse_container_mask;
+perm_to_bitmask(?delete_object) -> ?delete_object_mask;
+perm_to_bitmask(?delete_subcontainer) -> ?delete_subcontainer_mask;
+perm_to_bitmask(?read_attributes) -> ?read_attributes_mask;
+perm_to_bitmask(?write_attributes) -> ?write_attributes_mask;
+perm_to_bitmask(?delete) -> ?delete_mask;
+perm_to_bitmask(?read_acl) -> ?read_acl_mask;
+perm_to_bitmask(?write_acl) -> ?write_acl_mask;
+perm_to_bitmask(?write_owner) -> ?write_owner_mask.
 
 
 -spec perm_to_posix_perms(Perm :: binary()) -> PosixPerms :: [atom()].
