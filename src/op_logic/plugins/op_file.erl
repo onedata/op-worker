@@ -95,7 +95,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"name">> => {binary, non_empty},
         <<"type">> => {binary, [<<"file">>, <<"dir">>]},
         <<"parent">> => {binary, fun(Parent) ->
-            try gs_protocol:string_to_gri(Parent) of
+            try gri:deserialize(Parent) of
                 #gri{type = op_file, id = ParentGuid, aspect = instance} ->
                     {true, ParentGuid};
                 _ ->

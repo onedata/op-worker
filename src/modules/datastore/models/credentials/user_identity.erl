@@ -15,12 +15,12 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([get/1, fetch/1, get_or_fetch/1, delete/1, get_user_id/1,
-    get_or_fetch_user_id/1]).
+-export([get_or_fetch/1, delete/1, get_or_fetch_user_id/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -42,12 +42,47 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns user's identity.
+%% Gets user's identity from cache, or fetches it from onezone
+%% and stores in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get(credentials()) -> {ok, doc()} | {error, term()}.
-get(Credentials) ->
-    datastore_model:get(?CTX, term_to_binary(to_auth(Credentials))).
+-spec get_or_fetch(credentials()) -> {ok, doc()} | {error, term()}.
+get_or_fetch(Credentials) ->
+    Auth = to_auth(Credentials),
+    case datastore_model:get(?CTX, id(Auth)) of
+        {ok, Doc} -> {ok, Doc};
+        {error, not_found} -> fetch(Auth);
+        {error, Reason} -> {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets user's is based on token auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch_user_id(credentials()) -> {ok, od_user:id()} | {error, term()}.
+get_or_fetch_user_id(Credentials) ->
+    case get_or_fetch(Credentials) of
+        {ok, #document{value = #user_identity{user_id = UserId}}} ->
+            {ok, UserId};
+        Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes user's identity from cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(credentials()) -> ok | {error, term()}.
+delete(Credentials) ->
+    datastore_model:delete(?CTX, id(to_auth(Credentials))).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,16 +93,19 @@ get(Credentials) ->
 fetch(Credentials) ->
     Auth = to_auth(Credentials),
     try
-        case user_logic:get_by_auth(Auth) of
-            {ok, #document{key = UserId}} ->
+        case user_logic:preauthorize(Auth) of
+            {ok, #auth{subject = ?SUB(user, UserId), caveats = _Caveats}} ->
+                %% @TODO VFS-5719 use the caveats in op_logic and user_ctx
                 case provider_logic:has_eff_user(UserId) of
                     false ->
                         ?ERROR_FORBIDDEN;
                     true ->
                         NewDoc = #document{
-                            key = term_to_binary(Auth),
+                            key = id(Auth),
                             value = #user_identity{user_id = UserId}
                         },
+                        %% @TODO VFS-5719 the auth should be cached no longer
+                        %% than token's TTL
                         case datastore_model:create(?CTX, NewDoc) of
                             {ok, _} -> ok;
                             {error, already_exists} -> ok
@@ -83,52 +121,6 @@ fetch(Credentials) ->
             {error, Reason}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets user's identity from cache, or fetches it from onezone
-%% and stores in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(credentials()) -> {ok, doc()} | {error, term()}.
-get_or_fetch(Credentials) ->
-    Auth = to_auth(Credentials),
-    case datastore_model:get(?CTX, term_to_binary(Auth)) of
-        {ok, Doc} -> {ok, Doc};
-        {error, not_found} -> fetch(Auth);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes user's identity from cache.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(credentials()) -> ok | {error, term()}.
-delete(Credentials) ->
-    datastore_model:delete(?CTX, term_to_binary(to_auth(Credentials))).
-
-
--spec get_user_id(credentials()) -> {ok, od_user:id()} | {error, term()}.
-get_user_id(Credentials) ->
-    case user_identity:get(Credentials) of
-        {ok, #document{value = #user_identity{user_id = UserId}}} ->
-            {ok, UserId};
-        Error ->
-            Error
-    end.
-
--spec get_or_fetch_user_id(credentials()) -> {ok, od_user:id()} | {error, term()}.
-get_or_fetch_user_id(Credentials) ->
-    case get_or_fetch(Credentials) of
-        {ok, #document{value = #user_identity{user_id = UserId}}} ->
-            {ok, UserId};
-        Error ->
-            Error
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 -spec to_auth(credentials()) -> #token_auth{}.
 to_auth(Auth = #token_auth{}) ->
@@ -136,6 +128,10 @@ to_auth(Auth = #token_auth{}) ->
 to_auth(Token) when is_binary(Token) ->
     #token_auth{token = Token}.
 
+
+-spec id(#token_auth{}) -> binary().
+id(#token_auth{token = Token}) ->
+    Token.
 
 %%%===================================================================
 %%% datastore_model callbacks
