@@ -137,7 +137,7 @@ handle(healthcheck) ->
     ok;
 handle(?INVALIDATE_PERMISSIONS_CACHE) ->
     ?debug("Invalidating permissions cache"),
-    invalidate_permissions_cache(),
+%%    invalidate_permissions_cache(),
     schedule_invalidate_permissions_cache();
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
