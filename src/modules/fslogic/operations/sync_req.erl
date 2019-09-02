@@ -147,21 +147,6 @@ get_file_distribution(_UserCtx, FileCtx) ->
         }
     }.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-%%    ViewName, QueryViewParams, undefined)
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback(), transfer:view_name(),
-    query_view_params()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-    ViewName, QueryViewParams
-) ->
-    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
-    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, ViewName, QueryViewParams, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -172,13 +157,13 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     od_provider:id(), transfer:callback(), transfer:view_name(),
-    query_view_params(), pid() | undefined) -> provider_response().
+    query_view_params()) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
-    ViewName, QueryViewParams, QosJobPID
+    ViewName, QueryViewParams
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, ViewName, QueryViewParams, QosJobPID).
+        Callback, ViewName, QueryViewParams).
 
 %%%===================================================================
 %%% Internal functions
@@ -193,14 +178,14 @@ schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), od_provider:id(), transfer:callback(),
-    transfer:view_name(), query_view_params(), pid() | undefined) -> provider_response().
+    transfer:view_name(), query_view_params()) -> provider_response().
 schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
-    ViewName, QueryViewParams, QosJobPID
+    ViewName, QueryViewParams
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, ViewName, QueryViewParams, QosJobPID),
+        TargetProviderId, Callback, ViewName, QueryViewParams),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{

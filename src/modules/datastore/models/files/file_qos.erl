@@ -5,17 +5,22 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model that holds information about qos defined for given file.
-%%% It contains two fields:
+%%% @doc The file_qos item contains aggregated information about QoS defined
+%%% for file or directory. It contains:
 %%%     - qos_list - holds IDs of all qos_entries defined for this file,
-%%%     - target_storages - holds mapping storage_id to list of all qos_entry IDs that
-%%%       requires file replica on this storage.
-%%% file_qos is updated in two cases:
-%%%     1. When new qos is defined for file or directory. In this case,
-%%%        qos_entry ID is added to qos_list and to target storage mapping for
-%%%        each storage that should store file replica.
-%%%     2. When target_storages for file/directory differs from the target_storages
-%%%        calculated for parent directory.
+%%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
+%%%       When new QoS is added for file or directory, storages on which replicas
+%%%       should be stored are calculated using QoS expression. Then this mapping
+%%%       is appropriately updated with the calculated storages.
+%%% Each file or directory can be associated with at most one such document.
+%%% It is created/updated when new qos_entry document is created for file or
+%%% directory. In this case target storages are chosen according to QoS expression
+%%% and number of required replicas defined in qos_entry document.
+%%% Then file_qos document is updated - qos_entry ID is added to QoS list and
+%%% target storages mapping.
+%%% According to this getting full information about QoS defined for file or
+%%% directory requires calculating effective file_qos as file_qos document
+%%% is not created for each file separately.
 %%%
 %%% NOTE!!!
 %%% If you introduce any changes in this module, please ensure that
@@ -39,8 +44,8 @@
 -export([create_or_update/2, delete/1]).
 
 %% higher-level functions operating on file_qos record.
--export([get_effective/2, remove_qos_id/2,
-    add_qos/4, is_file_protected/2, get_qos_to_update/2,
+-export([get_effective/1, remove_qos_id/2,
+    add_qos/4, is_replica_protected/2, get_qos_to_update/2,
     get_qos_list/1, get_target_storages/1
 ]).
 
@@ -213,8 +218,8 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec is_file_protected(file_meta:uuid(), storage:id()) -> boolean().
-is_file_protected(FileUuid, StorageId) ->
+-spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
+is_replica_protected(FileUuid, StorageId) ->
     QosStorages = case file_qos:get_effective(FileUuid) of
         undefined -> #{};
         #file_qos{target_storages = TS} -> TS

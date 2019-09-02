@@ -105,24 +105,6 @@ handle(Doc = #document{
 ->
     handle_finished_migration(Doc);
 
-% TODO: VFS-5572 use transfer callback when available
-handle(#document{
-    key = TransferId,
-    value = #transfer{
-        replication_status = ReplicationStatus,
-        qos_job_pid = QosJobPID,
-        scheduling_provider = ReplicatingProviderId
-    }
-}) when (ReplicationStatus == completed orelse ReplicationStatus == skipped) andalso QosJobPID =/= undefined ->
-    case oneprovider:get_id() of
-        ReplicatingProviderId ->
-            DecodedPid = transfer_utils:decode_pid(QosJobPID),
-            DecodedPid ! {completed, TransferId},
-            ok;
-        _ ->
-            ok
-    end;
-
 handle(_Doc) ->
     ok.
 

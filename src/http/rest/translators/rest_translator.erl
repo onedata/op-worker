@@ -350,8 +350,8 @@ translate_error(?ERROR_TRANSFER_NOT_ENDED) ->
     {?HTTP_400_BAD_REQUEST, <<"Specified transfer has not ended yet.">>};
 
 % Errors associated with QoS
-translate_error(?ERROR_CANNOT_FULFILL_QOS) ->
-    {?HTTP_400_BAD_REQUEST, <<"Cannot fulfill specified QoS">>};
+translate_error(?ERROR_INVALID_QOS_EXPRESSION) ->
+    {?HTTP_400_BAD_REQUEST, <<"Invalid QoS expression">>};
 
 % Wildcard match
 translate_error({error, Reason}) ->

@@ -56,8 +56,9 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_QOS_CACHE, init_qos_cache).
+-define(INIT_QOS_CACHE_GROUP, init_qos_cache_group).
 -define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
+-define(INIT_QOS_CACHE_FOR_ALL_SPACES, init_qos_cache_for_all_spaces).
 -define(CHECK_QOS_CACHE, bounded_cache_timer).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
@@ -103,7 +104,6 @@ init(_Args) ->
 
     clproto_serializer:load_msg_defs(),
 
-%%    schedule_init_qos_cache_for_all_spaces(),
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
@@ -164,14 +164,14 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
             ok
     end,
     schedule_periodical_spaces_autocleaning_check();
-handle(?INIT_QOS_CACHE) ->
+handle(?INIT_QOS_CACHE_FOR_ALL_SPACES) ->
     ?debug("Initializing qos bounded cache for all spaces"),
     init_qos_cache_for_all_spaces();
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
     init_qos_cache_for_space(SpaceId);
 handle({?CHECK_QOS_CACHE, Msg = #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
-    ?debug("Checking QoS bounded cache"),
+    ?debug("Cleaning QoS bounded cache if needed"),
     bounded_cache:check_cache_size(Msg);
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
@@ -479,10 +479,10 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    view_name = ViewName, query_view_params = QueryViewParams, qos_job_pid = QosJobPID
+    view_name = ViewName, query_view_params = QueryViewParams
 }, FileCtx) ->
     sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, ViewName, QueryViewParams, QosJobPID
+        Callback, ViewName, QueryViewParams
     );
 handle_provider_request(UserCtx, #schedule_replica_invalidation{
     source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
@@ -648,7 +648,7 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 -spec schedule_init_qos_cache_for_all_spaces() -> ok.
 schedule_init_qos_cache_for_all_spaces() ->
-    schedule(?INIT_QOS_CACHE, 0).
+    schedule(?INIT_QOS_CACHE_FOR_ALL_SPACES, 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
@@ -723,20 +723,20 @@ init_qos_cache_for_all_spaces() ->
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) -> qos_bounded_cache:init(SpaceId) end, SpaceIds);
         Error = {error, _} ->
-            ?error("Unable to initialize qos bounded cache due to: ~p", [Error]),
-            schedule_init_qos_cache_for_all_spaces()
+            ?critical("Unable to initialize qos bounded cache due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}]),
-            schedule_init_qos_cache_for_all_spaces()
+            ?critical_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.
 
 -spec init_qos_cache_for_space(od_space:id()) -> ok.
 init_qos_cache_for_space(SpaceId) ->
-    try
-        qos_bounded_cache:init(SpaceId)
+    try qos_bounded_cache:init(SpaceId) of
+        ok ->
+            ok;
+        Error = {error, _} ->
+            ?critical("Unable to initialize qos bounded cache due to: ~p", [{Error}])
     catch
-        Error:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error, Reason}]),
-            schedule_init_qos_cache_for_space(SpaceId)
+        Error2:Reason ->
+            ?critical_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.

@@ -48,8 +48,8 @@
 %% Functions operating on directories or files
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
-    schedule_file_replication/4, schedule_file_replication/5,
-    schedule_replica_eviction/4, schedule_replication_by_view/6, schedule_replica_eviction_by_view/6]).
+    schedule_file_replication/4, schedule_replica_eviction/4,
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
     silent_read/3, truncate/3, release/1, get_file_distribution/2,
@@ -279,26 +279,15 @@ unlink(SessId, FileEntry, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined)
+%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, Callback)
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
     TargetProviderId :: oneprovider:id(), transfer:callback()) ->
     {ok, transfer:id()} | error_reply().
 schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
-    schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, undefined)
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
-    TargetProviderId :: oneprovider:id(), transfer:callback(), pid() | undefined) ->
-    {ok, transfer:id()} | error_reply().
-schedule_file_replication(SessId, FileKey, TargetProviderId, Callback, QosJobPID) ->
     ?run(fun() -> lfm_files:schedule_file_replication(
-        SessId, FileKey, TargetProviderId, Callback, QosJobPID
+        SessId, FileKey, TargetProviderId, Callback
     ) end).
 
 %%--------------------------------------------------------------------

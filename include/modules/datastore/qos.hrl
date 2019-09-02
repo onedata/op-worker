@@ -14,6 +14,7 @@
 %%% including QoS expression, number of required replicas, fulfillment status
 %%% and UUID of file or directory for which requirement has been added.
 %%% Such document is created when user adds QoS requirement for file or directory.
+%%% Requirement added for directory is inherited by whole directory structure.
 %%% Each QoS requirement is evaluated separately. It means that it is not
 %%% possible to define inconsistent requirements. For example if one requirement
 %%% says that file should be present on storage in Poland and other requirement
@@ -29,22 +30,22 @@
 %%% different qos_entry documents. Each transfer scheduled to fulfill QoS
 %%% is added to links tree.
 %%% QoS requirement is considered as fulfilled when:
-%%%   - all traverse tasks, triggered by creating this QoS requirement, are finished
-%%%   - there are no remaining transfers, that were created to fulfill this QoS requirement
+%%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
+%%%     - there are no remaining transfers, that were created to fulfill this QoS requirement
 %%%
-%%% The file_qos item contains aggregated information about QoS defined for file
-%%% or directory. It contains list of qos_entry IDs and mapping that maps storage_id
-%%% to list of qos_entry IDs that requires file replica on this storage. Each file
-%%% or directory can be associated with at most one such document. It is created/updated
-%%% in one of following cases:
-%%% - new qos_entry document is created for file or directory. In this case
-%%%   target storages are chosen according to QoS expression and number of
-%%%   required replicas defined in qos_entry document. Then file_qos document is
-%%%   updated - qos_entry ID is added to QoS list and target storages mapping,
-%%% - target storages for file or directory differs from the one chosen for
-%%%   parent directory. In this case file_qos document is updated using
-%%%   qos_entry ID and all chosen target storages (not only the ones that
-%%%   differs from parent)
+%%% The file_qos item contains aggregated information about QoS defined
+%%% for file or directory. It contains:
+%%%     - qos_list - holds IDs of all qos_entries defined for this file,
+%%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
+%%%       When new QoS is added for file or directory, storages on which replicas
+%%%       should be stored are calculated using QoS expression. Then this mapping
+%%%       is appropriately updated with the calculated storages.
+%%% Each file or directory can be associated with at most one such document.
+%%% It is created/updated when new qos_entry document is created for file or
+%%% directory. In this case target storages are chosen according to QoS expression
+%%% and number of required replicas defined in qos_entry document.
+%%% Then file_qos document is updated - qos_entry ID is added to QoS list and
+%%% target storages mapping.
 %%% According to this getting full information about QoS defined for file or
 %%% directory requires calculating effective file_qos as file_qos document
 %%% is not created for each file separately.
@@ -73,12 +74,14 @@
 
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId), binary_to_atom(SpaceId, utf8)).
--define(QOS_BOUNDED_CACHE_GROUP, <<"qos_cache_group">>).
+-define(QOS_BOUNDED_CACHE_GROUP, <<"qos_bonded_cache_group">>).
+
 
 % QoS status
 -define(QOS_NOT_FULFILLED, in_progress).
 -define(QOS_TRAVERSES_STARTED_STATUS, traverses_started).
 -define(QOS_IMPOSSIBLE_STATUS, impossible).
+
 
 % SpaceId, QosId and task type are needed when executing qos_traverse:task_finished/1
 -define(QOS_TRAVERSE_TASK_ID(SpaceId, QosId, Type), <<(datastore_utils:gen_key())/binary, "#", SpaceId/binary, "#",

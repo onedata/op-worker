@@ -14,6 +14,7 @@
 -author("Michal Cwiertnia").
 
 -include("global_definitions.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -27,7 +28,7 @@
     get_job/1, get_sync_info/1, update_job_progress/5]).
 
 % For test purpose
--export([schedule_transfers/4]).
+-export([synchronize_file/6]).
 
 -record(add_qos_traverse_args, {
     qos_id :: qos_entry:id(),
@@ -73,8 +74,8 @@ fulfill_qos(FileCtx, QosId, TargetStorages, TaskId) ->
 -spec init_pool() -> ok.
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = application:get_env(?APP_NAME, qos_taverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, qos_taverse_slave_jobs_limit, 20),
+    MasterJobsLimit = application:get_env(?APP_NAME, qos_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = application:get_env(?APP_NAME, qos_traverse_slave_jobs_limit, 20),
     ParallelismLimit = application:get_env(?APP_NAME, qos_traverse_parallelism_limit, 20),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
@@ -131,22 +132,14 @@ do_master_job(Job, TaskId) ->
 do_slave_job({#document{key = FileUuid, scope = SpaceId},
     #add_qos_traverse_args{target_storages = TargetStorages} = TraverseArgs}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
     RelativePath = qos_status:get_relative_path(TraverseArgs#add_qos_traverse_args.file_path_tokens, FileGuid),
     QosId = TraverseArgs#add_qos_traverse_args.qos_id,
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     % TODO: add space check and optionally choose other storage
 
-    OnTransferScheduledFun = fun(TransferId, StorageId) ->
-        ok = qos_status:add_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId, TransferId)
-    end,
-    OnTransferFinishedFun = fun
-        (undefined) -> ok;
-        (StorageId) -> ok = qos_status:delete_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId)
-    end,
-
     % call using ?MODULE macro for mocking in tests
-    TransfersStorageProplist =
-        ?MODULE:schedule_transfers(?ROOT_SESS_ID, FileGuid, TargetStorages, OnTransferScheduledFun),
-    wait_for_transfers_completion(TransfersStorageProplist, OnTransferFinishedFun).
+    ?MODULE:synchronize_file(UserCtx, FileCtx, QosId, RelativePath, TargetStorages, TaskId).
 
 
 %%%===================================================================
@@ -155,29 +148,24 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates replication of file to all storages specified in given list.
+%% Synchronizes file to all storages specified in given list.
 %% Adds appropriate status link.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_transfers(session:id(), fslogic_worker:file_guid(), [storage:id()],  OnTransferScheduledFun) ->
-    [{transfer:id(), storage:id()}] when  OnTransferScheduledFun :: fun((transfer:id(), storage:id()) -> ok).
-schedule_transfers(SessId, FileGuid, TargetStorages, OnTransferScheduledFun) ->
-    lists:map(fun(StorageId) ->
-        % TODO: VFS-5573 use storage qos
-        {ok, TransferId} = lfm:schedule_file_replication(
-            SessId, {guid, FileGuid}, StorageId, undefined, self()),
-        OnTransferScheduledFun(TransferId, StorageId),
-        {TransferId, StorageId}
+-spec synchronize_file(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), qos_status:path(), [storage:id()], traverse:id()) ->
+    [{transfer:id(), storage:id()}].
+synchronize_file(UserCtx, FileCtx, QosId, RelativePath, TargetStorages, TaskId) ->
+    lists:foreach(fun(StorageId) ->
+        {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
+        SpaceId = file_ctx:get_space_id_const(FileCtx2),
+        FileBlock = #file_block{offset = 0, size = Size},
+        ok = qos_status:add_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId),
+        case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, TaskId, 1) of
+            {ok, _} ->
+                ok;
+            {error, Reason} ->
+                % TODO: VFS-5737 handle failures properly
+                ?error("Error during file synchronization: ~p", [Reason])
+        end,
+        ok = qos_status:delete_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId)
     end, TargetStorages).
-
-
-% TODO: implement properly when transfer callback will be available
-wait_for_transfers_completion([] , _) ->
-    ok;
-wait_for_transfers_completion(TransfersPropList, OnTransferFinishedFun) ->
-    receive
-        {completed, TransferId} ->
-            OnTransferFinishedFun(proplists:get_value(TransferId, TransfersPropList)),
-            wait_for_transfers_completion(proplists:delete(TransferId, TransfersPropList),
-                OnTransferFinishedFun)
-    end.

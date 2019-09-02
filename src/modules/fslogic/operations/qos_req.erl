@@ -114,48 +114,50 @@ check_fulfillment(UserCtx, FileCtx, QosId) ->
 add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    QosExpressionInRPN = qos_expression:transform_to_rpn(QosExpression),
 
-    % create qos_entry document
-    QosEntryToCreate = #document{value = #qos_entry{
-        expression = QosExpressionInRPN,
-        replicas_num = ReplicasNum,
-        file_uuid = FileUuid,
-        status = ?QOS_NOT_FULFILLED
-    }},
-    {ok, #document{key = QosId}} = qos_entry:create(QosEntryToCreate, SpaceId),
+    try
+        {ok, QosExpressionInRPN} = qos_expression:transform_to_rpn(QosExpression),
+        {ok, #document{key = QosId}} = qos_entry:create(
+            QosExpressionInRPN, ReplicasNum, FileUuid, SpaceId
+        ),
 
-    % TODO: VFS-5567 for now target storage for dir is selected here and
-    % does not change in qos traverse task. Have to figure out how to
-    % choose different storages for subdirs and/or file if multiple storage
-    % fulfilling qos are available.
-    TargetStoragesList = calculate_target_storages(user_ctx:get_session_id(UserCtx),
-        FileCtx, QosExpressionInRPN, ReplicasNum),
+        % TODO: VFS-5567 for now target storage for dir is selected here and
+        % does not change in qos traverse task. Have to figure out how to
+        % choose different storages for subdirs and/or file if multiple storage
+        % fulfilling qos are available.
+        CalculatedStorages = calculate_target_storages(user_ctx:get_session_id(UserCtx),
+            FileCtx, QosExpressionInRPN, ReplicasNum),
 
-    case TargetStoragesList of
-        ?ERROR_CANNOT_FULFILL_QOS ->
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_entry:add_impossible_qos(QosId, SpaceId);
-        _ ->
-            TraverseReqs = lists:filtermap(fun(Storage) ->
-                TaskId = ?QOS_TRAVERSE_TASK_ID(SpaceId, QosId, traverse),
-                case qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, TaskId) of
-                    true -> false;
-                    false -> {true, #qos_traverse_req{
-                        task_id = TaskId,
-                        file_uuid = FileUuid,
-                        target_storage = Storage
-                    }}
-                end
-            end, TargetStoragesList),
-            qos_entry:add_traverse_reqs(QosId, TraverseReqs)
-    end,
-
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #qos_id{id = QosId}
-    }.
+        case CalculatedStorages of
+            {ok, TargetStoragesList} ->
+                SpaceId = file_ctx:get_space_id_const(FileCtx),
+                TraverseReqs = lists:filtermap(fun(Storage) ->
+                    TaskId = ?QOS_TRAVERSE_TASK_ID(SpaceId, QosId, traverse),
+                    case qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, TaskId) of
+                        true -> false;
+                        false -> {true, #qos_traverse_req{
+                            task_id = TaskId,
+                            file_uuid = file_ctx:get_uuid_const(FileCtx),
+                            target_storage = Storage
+                        }}
+                    end
+                end, TargetStoragesList),
+                ok = qos_entry:add_traverse_reqs(QosId, TraverseReqs);
+            {error, cannot_fulfill_qos} ->
+                ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+                ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+                ok = qos_entry:add_impossible_qos(QosId, SpaceId)
+        end,
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #qos_id{id = QosId}
+        }
+    catch
+        _:{badmatch, {error, Reason}} ->
+            #provider_response{status = #status{code = Reason}};
+        Error ->
+            #provider_response{status = #status{code = Error}}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -206,7 +208,6 @@ get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
     end.
 
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -218,13 +219,22 @@ get_qos_details_insecure(_UserCtx, _FileCtx, QosId) ->
     fslogic_worker:provider_response().
 remove_qos_insecure(_UserCtx, FileCtx, QosId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
     % TODO: VFS-5567 For now QoS is added only for file or dir
     % for which QoS has been added, so starting traverse is not needed.
-    ok = file_qos:remove_qos_id(FileUuid, QosId),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = qos_entry:delete(QosId),
-    #provider_response{status = #status{code = ?OK}}.
+    try
+        ok = file_qos:remove_qos_id(FileUuid, QosId),
+        SpaceId = file_ctx:get_space_id_const(FileCtx),
+        ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+        ok = qos_entry:delete(QosId),
+        #provider_response{status = #status{code = ?OK}}
+    catch
+        _:{badmatch, {error, Reason}} ->
+            #provider_response{status = #status{code = Reason}};
+        Error ->
+            #provider_response{status = #status{code = Error}}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -254,7 +264,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_target_storages(session:id(), file_ctx:ctx(),
-    qos_expression:expression(), pos_integer()) -> [storage:id()] | {error, term()}.
+    qos_expression:expression(), pos_integer()) -> {ok, [storage:id()]} | {error, term()}.
 calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     FileKey = {guid, FileGuid},

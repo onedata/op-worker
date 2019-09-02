@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions responsible for qos bounded cache management.
-%%% Qos bounded cache is used for calculating effective qos for
+%%% This module contains functions responsible for QoS bounded cache management.
+%%% Qos bounded cache is used for calculating effective QoS for
 %%% files and directories.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -26,18 +26,25 @@
 ]).
 
 
+-define(DEFAULT_CHECK_FREQUENCY, 300000). % 5 min
+-define(DEFAULT_CACHE_SIZE, 15000).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 -spec init_group() -> ok | {error, term()}.
 init_group() ->
-    CheckFrequency = application:get_env(?APP_NAME, qos_bounded_cache_check_frequency, 30000), % 5 min
-    Size = application:get_env(?APP_NAME, qos_bounded_cache_size, 100),
+    CheckFrequency = application:get_env(
+        ?APP_NAME, qos_bounded_cache_check_frequency, ?DEFAULT_CHECK_FREQUENCY
+    ),
+    Size = application:get_env(?APP_NAME, qos_bounded_cache_size, ?DEFAULT_CACHE_SIZE),
 
     bounded_cache:init_group(?QOS_BOUNDED_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
-        size => Size
+        size => Size,
+        worker => true
     }).
 
 
@@ -59,8 +66,8 @@ ensure_exists_on_all_nodes(SpaceId) ->
     case length(BadNodes) > 0 of
         true ->
             ?error(
-                "Cannot ensure QoS bounded cache exists on non existing nodes."
-                "Node list: ~p ~n", [BadNodes]
+                "Error when ensuring QoS bounded cache on following nodes,
+                as they are not exists: ~p ~n", [BadNodes]
             );
         false ->
             ok
@@ -69,8 +76,12 @@ ensure_exists_on_all_nodes(SpaceId) ->
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
-            ?error("Failed to ensure QoS bounded cache exists. Error: ~p~n", [Error])
+            ?critical(
+                "Failed to ensure QoS bounded cache exists for space: ~p.
+                Error: ~p~n", [SpaceId, Error]
+            )
     end, Res).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,8 +92,8 @@ ensure_exists_on_all_nodes(SpaceId) ->
 -spec ensure_exists(od_space:id()) -> ok.
 ensure_exists(SpaceId) ->
     CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    CacheTable = ets:info(CacheTableName),
-    case CacheTable of
+    CacheTableInfo = ets:info(CacheTableName),
+    case CacheTableInfo of
         undefined ->
             fslogic_worker:schedule_init_qos_cache_for_space(SpaceId);
         _ ->
@@ -103,8 +114,8 @@ invalidate_on_all_nodes(SpaceId) ->
     case length(BadNodes) > 0 of
         true ->
             ?error(
-                "Cannot invalidate QoS bounded cache on non existing nodes."
-                "Node list: ~p ~n", [BadNodes]
+                "Error when invalidating QoS bounded cache on following nodes,
+                as they are not exists: ~p ~n", [BadNodes]
             );
         false ->
             ok
@@ -113,5 +124,8 @@ invalidate_on_all_nodes(SpaceId) ->
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
-            ?error("Failed to invalidate QoS bounded cache. Error: ~p~n", [Error])
+            ?error(
+                "Failed to invalidate QoS bounded cache for space: ~p.
+                Error: ~p~n", [SpaceId, Error]
+            )
     end, Res).

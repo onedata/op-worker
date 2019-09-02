@@ -665,11 +665,7 @@
     view_name :: transfer:view_name(),
     % query_view_params are directly passed to couchbase
     % if index_name (view_name) is undefined query_view_params are ignored
-    query_view_params = [] :: transfer:query_view_params(),
-
-    % PID of process that created this transfer and waits for its completion
-    % to fulfill QoS
-    qos_job_pid :: binary() | undefined % todo VFS-3657
+    query_view_params = [] :: transfer:query_view_params()
 }).
 
 %% Model that tracks what files are currently transferred

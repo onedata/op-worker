@@ -13,52 +13,84 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-parse_to_rpn_test_() ->
+
+parse_to_rpn_test() ->
     % test empty
-    ?_assertEqual([], qos_expression:transform_to_rpn(<<"">>)),
+    ?assertEqual({ok, []}, qos_expression:transform_to_rpn(<<"">>)),
 
     % test simple equality
-    ?_assertEqual([<<"country=PL">>], qos_expression:transform_to_rpn(<<"country=PL">>)),
+    ?assertEqual({ok, [<<"country=PL">>]}, qos_expression:transform_to_rpn(<<"country=PL">>)),
 
     % test operators precedence
-    OperatorPairs = [{Op1, Op2} || Op1 <- ?OPERATORS, Op2 <- ?OPERATORS],
+    Operators = [<<"|">>, <<"&">>, <<"-">>],
+    OperatorPairs = [{Op1, Op2} || Op1 <- Operators, Op2 <- Operators],
     lists:foreach(
         fun({Op1, Op2}) ->
-            ?_assertEqual(
-                [<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2],
+            ?assertEqual(
+                {ok, [<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2]},
                 qos_expression:transform_to_rpn(<<"country=PL", Op1/binary,
                     "type=disk", Op2/binary, "country=FR">>)
             )
         end, OperatorPairs),
 
     % test parens
-    Expr1 = <<"country=PL", ?INTERSECTION/binary, "type=disk", ?UNION/binary, "country=FR">>,
-    ?_assertEqual(
-        [<<"country=PL">>, <<"type=disk">>, ?INTERSECTION, <<"country=FR">>, ?UNION],
+    Expr1 = <<"country=PL&type=disk|country=FR">>,
+    ?assertEqual(
+        {ok, [<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>]},
         qos_expression:transform_to_rpn(Expr1)
     ),
 
-    Expr2 = <<?L_PAREN/binary, "country=PL", ?INTERSECTION/binary, "type=disk",
-        ?R_PAREN/binary, ?UNION/binary, "country=FR">>,
-    ?_assertEqual(
-        [<<"country=PL">>, <<"type=disk">>, ?INTERSECTION, <<"country=FR">>, ?UNION],
+    Expr2 = <<"(country=PL&type=disk)|country=FR">>,
+    ?assertEqual(
+        {ok, [<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>]},
         qos_expression:transform_to_rpn(Expr2)
     ),
 
-    Expr3 = <<"country=PL", ?INTERSECTION/binary, ?L_PAREN/binary, "type=disk",
-        ?UNION/binary, "country=FR", ?R_PAREN/binary>>,
-    ?_assertEqual(
-        [<<"country=PL">>, <<"type=disk">>, <<"country=FR">>, ?UNION, ?INTERSECTION],
+    Expr3 = <<"country=PL&(type=disk|country=FR)">>,
+    ?assertEqual(
+        {ok, [<<"country=PL">>, <<"type=disk">>, <<"country=FR">>, <<"|">>, <<"&">>]},
         qos_expression:transform_to_rpn(Expr3)
     ),
 
-    Expr4 = <<?L_PAREN/binary, "country=PL", ?INTERSECTION/binary, "type=tape", ?R_PAREN/binary,
-        ?UNION/binary, ?L_PAREN/binary, "type=disk", ?INTERSECTION/binary, "country=FR", ?R_PAREN/binary>>,
-    ?_assertEqual(
-        [<<"country=PL">>, <<"type=tape">>, ?INTERSECTION,
-         <<"type=disk">>, <<"country=FR">>, ?INTERSECTION, ?UNION],
+    Expr4 = <<"(country=PL&type=tape)|(type=disk&country=FR)">>,
+    ?assertEqual(
+        {ok, [<<"country=PL">>, <<"type=tape">>, <<"&">>,
+         <<"type=disk">>, <<"country=FR">>, <<"&">>, <<"|">>]},
         qos_expression:transform_to_rpn(Expr4)
+    ),
+
+    % test invalid
+    Expr5 = <<"country">>,
+    ?assertMatch(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:transform_to_rpn(Expr5)
+    ),
+
+    Expr6 = <<"country|type">>,
+    ?assertMatch(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:transform_to_rpn(Expr6)
+    ),
+
+%% TODO: VFS-5569 improve handling invalid QoS expressions
+%%    Expr7 = <<"(country=PL">>,
+%%    ?assertMatch(
+%%        ?ERROR_INVALID_QOS_EXPRESSION,
+%%        qos_expression:transform_to_rpn(Expr7)
+%%    ),
+
+    Expr8 = <<"type=disk)">>,
+    ?assertMatch(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:transform_to_rpn(Expr8)
+    ),
+
+    Expr9 = <<")(country=PL">>,
+    ?assertMatch(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:transform_to_rpn(Expr9)
     ).
 

@@ -140,7 +140,7 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
     _QosEntry
 ) ->
-    SpaceId = ?check(qos_entry:get_space_id(QosId)),
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
@@ -168,7 +168,7 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}}, 
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
-    SpaceId = ?check(qos_entry:get_space_id(QosId)),
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}, _) ->
@@ -194,6 +194,8 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req)
     case lfm:add_qos(SessionId, {guid, FileGuid}, QosExpression, ReplicasNum) of
         {ok, QosId} ->
             {ok, value, QosId};
+        ?ERROR_INVALID_QOS_EXPRESSION ->
+            ?ERROR_INVALID_QOS_EXPRESSION;
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.

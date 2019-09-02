@@ -26,7 +26,7 @@
 %% API
 -export([
     init/0, cleanup/0,
-    start/9, get/1, update/2, update_and_run/3, delete/1,
+    start/8, get/1, update/2, update_and_run/3, delete/1,
     cancel/1, rerun_ended/2
 ]).
 
@@ -116,14 +116,14 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     undefined | od_provider:id(), undefined | od_provider:id(), binary(),
-    view_name(), query_view_params(), pid() | undefined) ->
+    view_name(), query_view_params()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
-    Callback, ViewName, QueryViewParams, QosJobPID
+    Callback, ViewName, QueryViewParams
 ) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
-        TargetProviderId, Callback, ViewName, QueryViewParams, QosJobPID
+        TargetProviderId, Callback, ViewName, QueryViewParams
     ).
 
 %%--------------------------------------------------------------------
@@ -133,10 +133,10 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
 %%--------------------------------------------------------------------
 -spec start_for_user(od_user:id(), fslogic_worker:file_guid(),
     file_meta:path(), undefined | od_provider:id(), undefined | od_provider:id(),
-    callback(), view_name(), query_view_params(), pid() | undefined) ->
+    callback(), view_name(), query_view_params()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
-    ReplicatingProviderId, Callback, ViewName, QueryViewParams, QosJobPID
+    ReplicatingProviderId, Callback, ViewName, QueryViewParams
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
@@ -170,8 +170,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             dy_hist = #{},
             mth_hist = #{},
             view_name = ViewName,
-            query_view_params = QueryViewParams,
-            qos_job_pid = transfer_utils:encode_pid(QosJobPID)
+            query_view_params = QueryViewParams
         }},
 
     {ok, Doc = #document{key = TransferId}} = create(ToCreate),
@@ -239,8 +238,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback,
                 view_name = ViewName,
-                query_view_params = QueryViewParams,
-                qos_job_pid = QosJobPID
+                query_view_params = QueryViewParams
             } = Transfer,
 
             NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
@@ -248,7 +246,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
                 EvictingProviderId, ReplicatingProviderId, Callback, ViewName,
-                QueryViewParams, QosJobPID
+                QueryViewParams
             ),
             update(TransferId, fun(OldTransfer) ->
                 {ok, OldTransfer#transfer{rerun_id = NewTransferId}}

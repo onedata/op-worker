@@ -31,7 +31,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_status_link/6, delete_status_link/5, check_fulfilment/2, get_relative_path/2]).
+-export([add_status_link/5, delete_status_link/5, check_fulfilment/2, get_relative_path/2]).
 
 -type path() :: binary().
 
@@ -50,9 +50,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec add_status_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
-    storage:id(), transfer:id()) ->  ok | {error, term()}.
-add_status_link(QosId, Scope, RelativePath, TaskId, StorageId, TransferId) ->
-    Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId), TransferId},
+    storage:id()) ->  ok | {error, term()}.
+add_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
+    Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId), TaskId},
     {ok, _} = qos_entry:add_links(Scope, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(), Link),
     ok.
 
