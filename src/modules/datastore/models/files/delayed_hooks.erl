@@ -109,7 +109,7 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {hook, [{record, [
+        {hooks, [{record, [
             {module, atom},
             {function, atom},
             {args, [string]}

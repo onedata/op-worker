@@ -107,9 +107,7 @@ transform_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
             transform_to_rpn_internal(Expression, Stack, RPNExpression ++ [Operand]);
         _ ->
             throw(?ERROR_INVALID_QOS_EXPRESSION)
-    end;
-transform_to_rpn_internal([], _Stack, _RPNExpression) ->
-    throw(?ERROR_INVALID_QOS_EXPRESSION).
+    end.
 
 
 %%--------------------------------------------------------------------

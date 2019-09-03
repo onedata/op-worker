@@ -160,7 +160,7 @@ synchronize_file(UserCtx, FileCtx, QosId, RelativePath, TargetStorages, TaskId) 
         SpaceId = file_ctx:get_space_id_const(FileCtx2),
         FileBlock = #file_block{offset = 0, size = Size},
         ok = qos_status:add_status_link(QosId, SpaceId, RelativePath, TaskId, StorageId),
-        case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, TaskId, 1) of
+        case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, undefined, 1) of
             {ok, _} ->
                 ok;
             {error, Reason} ->

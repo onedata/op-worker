@@ -44,8 +44,10 @@
 -export([create_or_update/2, delete/1]).
 
 %% higher-level functions operating on file_qos record.
--export([get_effective/1, remove_qos_id/2,
-    add_qos/4, is_replica_protected/2, get_qos_to_update/2,
+-export([
+    get_effective/1, get_effective/2,
+    remove_qos_id/2, add_qos/4,
+    is_replica_protected/2, get_qos_to_update/2,
     get_qos_list/1, get_target_storages/1
 ]).
 

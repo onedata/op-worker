@@ -153,7 +153,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
 authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
     _QosEntry
 ) ->
-    SpaceId = ?check(qos_entry:get_space_id(QosId)),
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:is_eff_space_member(Auth, SpaceId).
 
 
@@ -176,7 +176,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
-    SpaceId = ?check(qos_entry:get_space_id(QosId)),
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
     op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
