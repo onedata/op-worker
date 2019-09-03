@@ -434,7 +434,7 @@ remove_metadata(Worker, SessId, FileKey, Type) ->
     ?EXEC(Worker, lfm:remove_metadata(SessId, FileKey, Type)).
 
 -spec check_perms(node(), session:id(), lfm:file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | {error, term()}.
+    ok | {error, term()}.
 check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
 

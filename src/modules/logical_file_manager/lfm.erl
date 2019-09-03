@@ -485,7 +485,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | error_reply().
+    ok | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 

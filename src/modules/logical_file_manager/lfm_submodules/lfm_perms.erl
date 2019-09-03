@@ -47,18 +47,9 @@ set_perms(SessId, FileKey, NewPerms) ->
     {ok, boolean()} | lfm:error_reply().
 check_perms(SessId, FileKey, Flag) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
-    case remote_utils:call_fslogic(SessId, provider_request, Guid,
-        #check_perms{flag = Flag}, fun(_) -> ok end)
-    of
-        ok ->
-            {ok, true};
-        {error, ?EACCES} ->
-            {ok, false};
-        {error, ?EPERM} ->
-            {ok, false};
-        Error ->
-            Error
-    end.
+    remote_utils:call_fslogic(SessId, provider_request, Guid,
+        #check_perms{flag = Flag}, fun(_) -> ok end
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc

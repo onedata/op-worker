@@ -48,6 +48,10 @@
     get_file_attr_test/1,
     get_file_distribution_test/1,
 
+    check_read_perms_test/1,
+    check_write_perms_test/1,
+    check_rdwr_perms_test/1,
+
     create_share_test/1,
     remove_share_test/1,
 
@@ -92,6 +96,10 @@ all() ->
         get_file_guid_test,
         get_file_attr_test,
         get_file_distribution_test,
+
+        check_read_perms_test,
+        check_write_perms_test,
+        check_rdwr_perms_test,
 
         create_share_test,
 %%        remove_share_test,    TODO uncomment after fixing
@@ -483,6 +491,57 @@ get_file_distribution_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
             lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid})
+        end
+    }, Config).
+
+
+check_read_perms_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, {guid, FileGuid}, read)
+        end
+    }, Config).
+
+
+check_write_perms_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, {guid, FileGuid}, write)
+        end
+    }, Config).
+
+
+check_rdwr_perms_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object, ?write_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, {guid, FileGuid}, rdwr)
         end
     }, Config).
 
