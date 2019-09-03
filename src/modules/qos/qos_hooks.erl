@@ -59,7 +59,7 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
             QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
             lists:foreach(fun(QosId) ->
                 {ok, OriginGuid} = qos_entry:get_file_guid(QosId),
-                ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginGuid, [StorageId], restore)
+                ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginGuid, StorageId, restore)
             end, QosToUpdate)
     end.
 
@@ -81,9 +81,14 @@ maybe_start_traverse(FileCtx, QosId, OriginFileGuid, Storage, TaskId) ->
         Storage ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, [Storage], traverse, TaskId),
+            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, Storage, traverse, TaskId),
             ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
-            ok = qos_entry:remove_traverse_req(QosId, TaskId),
+            case qos_entry:remove_traverse_req(QosId, TaskId) of
+                {ok, _} -> ok;
+                % request is from the same provider and qos_entry is not yet created
+                {error, not_found} -> ok;
+                {error, _} = Error -> throw(Error)
+            end,
             true;
         _ ->
             false

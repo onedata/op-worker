@@ -840,8 +840,10 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    Workers = ?config(op_worker_nodes, ConfigWithSessionInfo),
+    rpc:multicall(Workers, fslogic_worker, schedule_init_qos_cache_for_all_spaces, []),
     mock_providers_qos(Config),
-    mock_schedule_transfers(Config),
+    mock_synchronize_file(Config),
     mock_space_storages(Config, maps:keys(?TEST_PROVIDERS_QOS)),
     mock_start_traverse(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -866,12 +868,12 @@ mock_providers_qos(Config) ->
         end).
 
 
-mock_schedule_transfers(Config) ->
+mock_synchronize_file(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, qos_traverse, [passthrough]),
-    ok = test_utils:mock_expect(Workers, qos_traverse, schedule_transfers,
-        fun(_, _, _, _) ->
-            []
+    ok = test_utils:mock_expect(Workers, qos_traverse, synchronize_file,
+        fun(_, _, _) ->
+            ok
         end).
 
 
@@ -893,9 +895,14 @@ mock_start_traverse(Config) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, [Storage], traverse, TaskId),
+            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, Storage, traverse, TaskId),
             ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
-            ok = qos_entry:remove_traverse_req(QosId, TaskId),
+            case qos_entry:remove_traverse_req(QosId, TaskId) of
+                {ok, _} -> ok;
+                % request is from the same provider and qos_entry is not yet created
+                {error, not_found} -> ok;
+                {error, _} = Error -> throw(Error)
+            end,
             true
         end).
 
@@ -948,11 +955,8 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
     end, #{}, Qos),
 
     ExpectedQosListId = map_qos_names_to_ids(ExpectedQosList, QosNameIdMapping),
-    ExpectedTargetStoragesId = maps:map(fun(_, QosNamesList) ->
-        map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
-    end, ExpectedTargetStorages),
 
-    qos_tests_utils:assert_file_qos_document(Worker, FileUuid, ExpectedQosListId, ExpectedTargetStoragesId).
+    qos_tests_utils:assert_qos_list(Worker, FileUuid, ExpectedQosListId).
 
 
 add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
@@ -1001,11 +1005,8 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
     end, #{}, Qos),
 
     ExpectedQosListId = map_qos_names_to_ids(ExpectedQosList, QosNameIdMapping),
-    ExpectedTargetStoragesId = maps:map(fun(_, QosNamesList) ->
-        map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
-    end, ExpectedTargetStorages),
 
-    qos_tests_utils:assert_file_qos_document(Worker, DirUuid, ExpectedQosListId, ExpectedTargetStoragesId),
+    qos_tests_utils:assert_qos_list(Worker, DirUuid, ExpectedQosListId),
     
     % check that for file document file_qos has not been created
     ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileGuid])).

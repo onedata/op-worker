@@ -113,7 +113,7 @@ check_fulfillment(UserCtx, FileCtx, QosId) ->
     fslogic_worker:provider_response().
 add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
     try
-        QosExpressionInRPN = qos_expression:transform_to_rpn(QosExpression),
+        {ok, QosExpressionInRPN} = qos_expression:transform_to_rpn(QosExpression),
 
         % TODO: VFS-5567 for now target storage for dir is selected here and
         % does not change in qos traverse task. Have to figure out how to
@@ -125,7 +125,7 @@ add_qos_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
         QosId = case CalculatedStorages of
             {ok, TargetStoragesList} ->
                 add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList);
-            ?ERROR_CANNOT_FULFILL_QOS ->
+            {error, _} ->
                 add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum)
         end,
 

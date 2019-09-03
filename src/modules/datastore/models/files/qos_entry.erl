@@ -197,14 +197,13 @@ is_possible(QosEntry) ->
     QosEntry#qos_entry.is_possible.
 
 
--spec remove_traverse_req(id(), traverse:id()) ->  ok.
+-spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
 remove_traverse_req(QosId, TaskId) ->
-    {ok, _} = update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
+    update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
             traverse_reqs = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
         }}
-    end),
-    ok.
+    end).
 
 %%%===================================================================
 %%% Functions operating on traverses list.

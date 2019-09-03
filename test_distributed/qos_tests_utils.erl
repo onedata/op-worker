@@ -19,8 +19,7 @@
 
 %% API
 -export([create_dir_structure/4, create_file/4, assert_qos_entry_document/6,
-    assert_file_qos_document/4, create_directory/3, assert_effective_qos/4,
-    get_guid/3]).
+    assert_qos_list/3, create_directory/3, assert_effective_qos/4, get_guid/3]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
@@ -37,16 +36,11 @@ assert_qos_entry_document(Worker, QosId, FileUuid, Expression, ReplicasNum, Poss
     ?assertMatch(ExpectedQosEntry, QosEntry).
 
 
-assert_file_qos_document(Worker, FileUuid, QosList, TargetStorages) ->
-    ExpectedFileQos = #file_qos{
-        qos_list = QosList,
-        target_storages = TargetStorages
-    },
-    ExpectedFileQosSorted = sort_file_qos(ExpectedFileQos),
+assert_qos_list(Worker, FileUuid, ExpectedQosList) ->
 
-    {ok, #document{value = FileQos}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileUuid])),
-    FileQosSorted = sort_file_qos(FileQos),
-    ?assertMatch(ExpectedFileQosSorted, FileQosSorted).
+    {ok, #document{value = #file_qos{qos_list = ActualQosList}}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileUuid])),
+    ExpectedQosListSorted = lists:sort(ExpectedQosList),
+    ?assertMatch(ExpectedQosListSorted, ActualQosList).
 
 
 assert_effective_qos(Worker, FileUuid, QosList, TargetStorages) ->
