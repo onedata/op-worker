@@ -96,7 +96,7 @@ storage_safe_remove(StorageId) ->
     storage:safe_remove(StorageId).
 
 
--spec storage_supports_any_space(StorageId :: storage:id()) -> boolean().
+-spec storage_supports_any_space(storage:id()) -> boolean().
 storage_supports_any_space(StorageId) ->
     storage:supports_any_space(StorageId).
 
@@ -143,13 +143,13 @@ storage_set_insecure(StorageId, HelperName, Insecure) ->
     storage:set_insecure(StorageId, HelperName, Insecure).
 
 
--spec storage_set_readonly(StorageId :: storage:id(), Readonly :: boolean()) ->
+-spec storage_set_readonly(storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
 storage_set_readonly(StorageId, Readonly) ->
     storage:set_readonly(StorageId, Readonly).
 
 
--spec storage_set_luma_config(storage:id(), LumaConfig :: luma_config:config() | undefined) ->
+-spec storage_set_luma_config(storage:id(), luma_config:config() | undefined) ->
     ok | {error, term()}.
 storage_set_luma_config(StorageId, LumaConfig) ->
     storage:set_luma_config(StorageId, LumaConfig).
@@ -161,7 +161,7 @@ storage_update_luma_config(StorageId, Changes) ->
     storage:update_luma_config(StorageId, Changes).
 
 
--spec storage_update_name(StorageId :: storage:id(), NewName :: storage:name()) ->
+-spec storage_update_name(storage:id(), NewName :: storage:name()) ->
     ok.
 storage_update_name(StorageId, NewName) ->
     storage:update_name(StorageId, NewName).
