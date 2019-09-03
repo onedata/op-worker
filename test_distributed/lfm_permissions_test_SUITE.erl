@@ -32,6 +32,7 @@
     ls_test/1,
     readdir_plus_test/1,
     get_child_attr_test/1,
+    mv_dir_test/1,
     rm_dir_test/1,
 
     create_file_test/1,
@@ -40,6 +41,7 @@
     open_for_rdwr_test/1,
     create_and_open_test/1,
     truncate_test/1,
+    mv_file_test/1,
     rm_file_test/1,
 
     get_parent_test/1,
@@ -85,6 +87,7 @@ all() ->
         ls_test,
         readdir_plus_test,
         get_child_attr_test,
+        mv_dir_test,
         rm_dir_test,
 
         create_file_test,
@@ -93,6 +96,7 @@ all() ->
 %%        open_for_rdwr_test,
         create_and_open_test,
         truncate_test,
+        mv_file_test,
         rm_file_test,
 
         get_parent_test,
@@ -281,6 +285,37 @@ get_child_attr_test(Config) ->
     }, Config).
 
 
+mv_dir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_subcontainer],
+                children = [
+                    #dir{
+                        name = <<"dir11">>,
+                        perms = [?delete]
+                    }
+                ]
+            },
+            #dir{
+                name = <<"dir2">>,
+                perms = [?traverse_container, ?add_subcontainer]
+            }
+        ],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
+            SrcDirGuid = maps:get(SrcDirPath, ExtraData),
+            DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
+            DstDirGuid = maps:get(DstDirPath, ExtraData),
+            lfm_proxy:mv(W, SessId, {guid, SrcDirGuid}, {guid, DstDirGuid}, <<"dir21">>)
+        end
+    }, Config).
+
+
 rm_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -405,6 +440,37 @@ truncate_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
             lfm_proxy:truncate(W, SessId, {guid, FileGuid}, 0)
+        end
+    }, Config).
+
+
+mv_file_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_object],
+                children = [
+                    #file{
+                        name = <<"file11">>,
+                        perms = [?delete]
+                    }
+                ]
+            },
+            #dir{
+                name = <<"dir2">>,
+                perms = [?traverse_container, ?add_object]
+            }
+        ],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
+            SrcFileGuid = maps:get(SrcFilePath, ExtraData),
+            DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
+            DstDirGuid = maps:get(DstDirPath, ExtraData),
+            lfm_proxy:mv(W, SessId, {guid, SrcFileGuid}, {guid, DstDirGuid}, <<"file21">>)
         end
     }, Config).
 
@@ -627,7 +693,7 @@ remove_share_test(Config) ->
             name = <<"dir1">>,
             on_create = fun(OwnerSessId, Guid) ->
                 {ok, {ShareId, _}} = ?assertMatch({ok, _}, lfm_proxy:create_share(
-                    W, OwnerSessId, {guid, Guid}, <<"remove_share">>
+                    W, OwnerSessId, {guid, Guid}, <<"share_to_remove">>
                 )),
                 ShareId
             end
@@ -1315,8 +1381,10 @@ run_acl_tests(
     catch T:R ->
         RequiredPermsPerFileMap = maps:fold(fun(Guid, RequiredPerms, Acc) ->
             lfm_proxy:set_perms(Node, ?ROOT_SESS_ID, {guid, Guid}, 8#777),
-            {ok, Path} = lfm_proxy:get_file_path(Node, OwnerSessId, Guid),
-            Acc#{Path => RequiredPerms}
+            case lfm_proxy:get_file_path(Node, OwnerSessId, Guid) of
+                {ok, Path} -> Acc#{Path => RequiredPerms};
+                _ -> Acc#{Guid => RequiredPerms}
+            end
         end, #{}, RequiredPermsPerFile),
 
         ct:pal(
@@ -1349,6 +1417,7 @@ run_acl_tests(
         EaccesPermsPerFile = lists:foldl(fun({Guid, Perm}, Acc) ->
             Acc#{Guid => [Perm | maps:get(Guid, Acc)]}
         end, ComplementaryPermsPerFile, EaccessPermComb),
+%%        ct:pal("QWE: ~p", [EaccesPermsPerFile]),
         set_acls(Node, EaccesPermsPerFile, #{}, AceWho, AceFlags),
         ?assertMatch(
             {error, ?EACCES},
