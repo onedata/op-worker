@@ -32,12 +32,15 @@
     ls_test/1,
     readdir_plus_test/1,
     get_child_attr_test/1,
+    rm_dir_test/1,
 
     create_file_test/1,
     open_for_read_test/1,
     open_for_write_test/1,
     open_for_rdwr_test/1,
     create_and_open_test/1,
+    truncate_test/1,
+    rm_file_test/1,
 
     get_parent_test/1,
     get_file_path_test/1,
@@ -74,12 +77,15 @@ all() ->
         ls_test,
         readdir_plus_test,
         get_child_attr_test,
+        rm_dir_test,
 
         create_file_test,
 %%        open_for_read_test,       % TODO uncomment after fixing
 %%        open_for_write_test,
 %%        open_for_rdwr_test,
         create_and_open_test,
+        truncate_test,
+        rm_file_test,
 
         get_parent_test,
         get_file_path_test,
@@ -256,6 +262,31 @@ get_child_attr_test(Config) ->
     }, Config).
 
 
+rm_dir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_subcontainer],
+                children = [
+                    #dir{
+                        name = <<"dir2">>,
+                        perms = [?delete, ?list_container]
+                    }
+                ]
+            }
+        ],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
+            DirGuid = maps:get(DirPath, ExtraData),
+            lfm_proxy:unlink(W, SessId, {guid, DirGuid})
+        end
+    }, Config).
+
+
 create_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -338,6 +369,48 @@ create_and_open_test(Config) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
             lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
+        end
+    }, Config).
+
+
+truncate_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_object]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:truncate(W, SessId, {guid, FileGuid}, 0)
+        end
+    }, Config).
+
+
+rm_file_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_object],
+                children = [
+                    #file{
+                        name = <<"file1">>,
+                        perms = [?delete]
+                    }
+                ]
+            }
+        ],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:unlink(W, SessId, {guid, FileGuid})
         end
     }, Config).
 
@@ -845,8 +918,10 @@ run_posix_tests(
     catch T:R ->
         FilePathsToRequiredPerms = maps:fold(fun(Guid, RequiredPerms, Acc) ->
             lfm_proxy:set_perms(Node, ?ROOT_SESS_ID, {guid, Guid}, 8#777),
-            {ok, Path} = lfm_proxy:get_file_path(Node, OwnerSessId, Guid),
-            Acc#{Path => RequiredPerms}
+            case lfm_proxy:get_file_path(Node, OwnerSessId, Guid) of
+                {ok, Path} -> Acc#{Path => RequiredPerms};
+                _ -> Acc#{Guid => RequiredPerms}
+            end
         end, #{}, PosixPermsPerFile),
 
         ct:pal(
@@ -895,7 +970,7 @@ run_posix_tests(
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
 ) ->
     OperationRequiresOwnership = lists:any(fun({_, Perm}) ->
-        Perm == owner orelse Perm == owner_if_parent_sticky
+        Perm == owner
     end, AllRequiredPerms),
 
     case OperationRequiresOwnership of
@@ -908,9 +983,12 @@ run_posix_tests(
                 Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
             );
         false ->
+            RequiredNormalPosixPerms = lists:filter(fun({_, Perm}) ->
+                Perm == read orelse Perm == write orelse Perm == exec
+            end, AllRequiredPerms),
             run_standard_posix_tests(
                 Node, OwnerSessId, SessId, TestCaseRootDirPath,
-                Fun, ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
+                Fun, ComplementaryPermsPerFile, RequiredNormalPosixPerms, ExtraData, group
             )
     end;
 
