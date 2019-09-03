@@ -16,7 +16,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
-%% API
+-export([apply/2]).
 -export([
     storage_new/4, storage_create/1, storage_safe_remove/1,
     storage_supports_any_space/1, storage_list_ids/0, storage_get_helpers/1,
@@ -51,7 +51,30 @@
 
 
 %%%===================================================================
-%%% API functions
+%%% API entrypoint
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Wraps function invocation to wrap 'throw' exceptions in badrpc tuple
+%% as if they were 'error' exceptions.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply(Function :: atom(), Args :: [term()]) ->
+    Result :: term() | {badrpc, {'EXIT', {Reason, Stacktrace}}} when
+    Reason :: term(), Stacktrace :: list().
+apply(Function, Args) ->
+    try
+        erlang:apply(?MODULE, Function, Args)
+    catch
+        throw:Error ->
+            Stacktrace = erlang:get_stacktrace(),
+            {badrpc, {'EXIT', {Error, Stacktrace}}}
+    end.
+
+
+%%%===================================================================
+%%% Exposed functions
 %%%===================================================================
 
 -spec storage_new(storage:name(), [storage:helper()], boolean(),
