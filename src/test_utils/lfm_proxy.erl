@@ -19,7 +19,7 @@
 %% API
 -export([init/1, teardown/1, stat/3, get_child_attr/4, truncate/4, create/4, create/5,
     create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
-    read/4, silent_read/4, write/4, get_file_path/3, get_parent/3, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, ls/6, ls/7,
+    read/4, silent_read/4, write/4, get_file_path/3, get_parent/3, mkdir/3, mkdir/4, mkdir/5, mv/4, mv/5, ls/5, ls/6, ls/7,
     read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
     get_acl/3, set_acl/4, remove_acl/3, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
@@ -298,6 +298,11 @@ read_dir_plus(Worker, SessId, FileKey, Offset, Limit, Token) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mv(Worker, SessId, FileKeyFrom, PathTo) ->
     ?EXEC(Worker, lfm:mv(SessId, FileKeyFrom, PathTo)).
+
+-spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
+    ?EXEC(Worker, lfm:mv(SessId, FileKey, TargetParentKey, TargetName)).
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
     ok | lfm:error_reply().

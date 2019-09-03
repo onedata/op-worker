@@ -42,6 +42,8 @@
     get_parent_test/1,
     get_file_path_test/1,
     get_file_guid_test/1,
+    get_file_attr_test/1,
+    get_file_distribution_test/1,
 
     create_share_test/1,
     remove_share_test/1,
@@ -82,6 +84,8 @@ all() ->
         get_parent_test,
         get_file_path_test,
         get_file_guid_test,
+        get_file_attr_test,
+        get_file_distribution_test,
 
         create_share_test,
 %%        remove_share_test,    TODO uncomment after fixing
@@ -375,6 +379,37 @@ get_file_guid_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             lfm_proxy:resolve_guid(W, SessId, FilePath)
+        end
+    }, Config).
+
+
+get_file_attr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{name = <<"file1">>}],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:stat(W, SessId, {guid, FileGuid})
+        end
+    }, Config).
+
+
+get_file_distribution_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata]
+        }],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid})
         end
     }, Config).
 
@@ -885,10 +920,12 @@ run_posix_tests(
     ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
 ) ->
     set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
+%%    ct:pal("1"),
     ?assertMatch(
         {error, _},
         Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     ),
+%%    ct:pal("2"),
     ?assertMatch(
         {error, _},
         Fun(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
@@ -915,6 +952,7 @@ run_standard_posix_tests(
         EaccesModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
+%%        ct:pal("QWE: ~p", [maps:map(fun(_, V) -> integer_to_binary((V rem 8#1000), 8) end, EaccesModesPerFile)]),
         set_modes(Node, EaccesModesPerFile),
         ?assertMatch(
             {error, ?EACCES},
@@ -1159,17 +1197,13 @@ create_files(Node, OwnerSessId, ParentDirPath, #file{
         {ok, _},
         lfm_proxy:create(Node, OwnerSessId, FilePath, 8#777)
     ),
-    PermsPerFile = case FilePerms of
-        [] -> #{};
-        _ -> #{FileGuid => FilePerms}
-    end,
     ExtraData = case HookFun of
         undefined ->
             #{FilePath => FileGuid};
         _ when is_function(HookFun, 2) ->
             #{FilePath => HookFun(OwnerSessId, FileGuid)}
     end,
-    {PermsPerFile, ExtraData};
+    {#{FileGuid => FilePerms}, ExtraData};
 create_files(Node, OwnerSessId, ParentDirPath, #dir{
     name = DirName,
     perms = DirPerms,
@@ -1186,17 +1220,13 @@ create_files(Node, OwnerSessId, ParentDirPath, #dir{
         {maps:merge(PermsPerFileAcc, ChildPerms), maps:merge(ExtraDataAcc, ChildExtraData)}
     end, {#{}, #{}}, Children),
 
-    PermsPerFile1 = case DirPerms of
-        [] -> PermsPerFile0;
-        _ -> PermsPerFile0#{DirGuid => DirPerms}
-    end,
     ExtraData1 = case HookFun of
         undefined ->
             ExtraData0#{DirPath => DirGuid};
         _ when is_function(HookFun, 2) ->
             ExtraData0#{DirPath => HookFun(OwnerSessId, DirGuid)}
     end,
-    {PermsPerFile1, ExtraData1}.
+    {PermsPerFile0#{DirGuid => DirPerms}, ExtraData1}.
 
 
 -spec complementary_perms(Perms :: [binary()]) -> ComplementaryPerms :: [binary()].
