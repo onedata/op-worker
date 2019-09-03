@@ -246,7 +246,14 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         (#session{identity = ValidIden} = ExistingSess) ->
             case Iden of
                 ValidIden ->
-                    {ok, ExistingSess};
+                    %% @TODO VFS-5718 - always overwrite the token, which is not
+                    %% ideal but better than reusing the older token, which
+                    %% could have expired.
+                    %% User's REST session CANNOT be a singleton per user, as it
+                    %% is done now, because every user can have different tokens
+                    %% and IPs from he is requesting, and currently they are all
+                    %% mapped to the last token that was utilized.
+                    {ok, ExistingSess#session{auth = Auth}};
                 _ ->
                     {error, {invalid_identity, Iden}}
             end

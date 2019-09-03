@@ -765,12 +765,11 @@ use_supported_cdmi_version(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
     % when
-    {ok, Code, _ResponseHeaders, Response} =
+    {ok, Code, _ResponseHeaders, _Response} =
         do_request(Workers, "/random", get, RequestHeaders),
 
     % then
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
+    ?assertEqual(Code, ?HTTP_404_NOT_FOUND).
 
 use_unsupported_cdmi_version(Config) ->
     % given
@@ -1699,10 +1698,9 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
-    {ok, Code6, _Headers6, Response6} =
+    {ok, Code6, _Headers6, _Response6} =
         do_request(WorkerP2, SpaceName ++ "/nonexistent_file", get, RequestHeaders6),
-    ExpRestError6 = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ?assertMatch(ExpRestError6, {Code6, json_utils:decode(Response6)}),
+    ?assertEqual(Code6, ?HTTP_404_NOT_FOUND),
     %%------------------------------
 
     %%--- listing non-existing dir -----
@@ -1711,10 +1709,9 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-    {ok, Code7, _Headers7, Response7} =
+    {ok, Code7, _Headers7, _Response7} =
         do_request(WorkerP2, SpaceName ++ "/nonexisting_dir/", get, RequestHeaders7),
-    ExpRestError7 = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ?assertMatch(ExpRestError7, {Code7, json_utils:decode(Response7)}),
+    ?assertEqual(Code7, ?HTTP_404_NOT_FOUND),
     %%------------------------------
 
     %%--- open binary file without permission -----

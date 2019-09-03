@@ -136,7 +136,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.0.7">>},0},
  {<<"onedata_documentation">>,
   {raw,{git,"ssh://git@git.onedata.org:7999/vfs/onedata-documentation.git",
-            {ref,"cab3544225cb582014cbfe497135877c84d624dd"}}},
+            {ref,"5711f0483adbadf2c06bf93d96b128f3c64933ba"}}},
   0},
  {<<"parse_trans">>,
   {git,"git://github.com/uwiger/parse_trans.git",

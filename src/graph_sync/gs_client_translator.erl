@@ -31,7 +31,7 @@
 %% CREATE operations do not require translation.
 %% @end
 %%--------------------------------------------------------------------
--spec translate(gs_protocol:gri(), Result :: gs_protocol:data()) ->
+-spec translate(gri:gri(), Result :: gs_protocol:data()) ->
     datastore:doc().
 translate(#gri{type = od_provider, aspect = current_time}, #{<<"timeMillis">> := TimeMillis}) ->
     TimeMillis;

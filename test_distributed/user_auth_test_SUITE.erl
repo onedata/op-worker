@@ -16,6 +16,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -52,7 +53,7 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, user_identity, get, [#token_auth{
+        rpc:call(Worker1, user_identity, get_or_fetch, [#token_auth{
             token = ?TOKEN
         }])
     ),
@@ -174,10 +175,9 @@ unmock_space_logic(Config) ->
 mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_logic, []),
-    test_utils:mock_expect(Workers, user_logic, get_by_auth,
-        fun(#token_auth{token = ?TOKEN}) ->
-            {ok, #document{key = ?USER_ID, value = #od_user{full_name = ?USER_FULL_NAME}}}
-        end).
+    test_utils:mock_expect(Workers, user_logic, preauthorize, fun(#token_auth{token = ?TOKEN}) ->
+        {ok, ?USER(?USER_ID)}
+    end).
 
 unmock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),

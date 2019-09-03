@@ -240,11 +240,7 @@ stream_space_changes(Req, State) ->
                 headers = Headers,
                 body = Body
             } = rest_translator:error_response(Error),
-            RespBody = case Body of
-                {binary, Bin} -> Bin;
-                _ -> json_utils:encode(Body)
-            end,
-            NewReq = cowboy_req:reply(Code, Headers, RespBody, Req),
+            NewReq = cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req),
             {stop, NewReq, State};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [

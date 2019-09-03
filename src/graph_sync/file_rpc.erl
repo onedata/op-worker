@@ -98,7 +98,7 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
     case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
         {ok, Children, _, _} ->
             {ok, lists:map(fun({ChildGuid, _ChildName}) ->
-                gs_protocol:gri_to_string(#gri{
+                gri:serialize(#gri{
                     type = op_file,
                     id = ChildGuid,
                     aspect = instance,
@@ -184,7 +184,7 @@ move(?USER(_UserId, SessionId) = Auth, Data) ->
 
     case lfm:mv(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
         {ok, NewGuid} ->
-            {ok, #{<<"id">> => gs_protocol:gri_to_string(#gri{
+            {ok, #{<<"id">> => gri:serialize(#gri{
                 type = op_file,
                 id = NewGuid,
                 aspect = instance,
@@ -214,7 +214,7 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
 
     case lfm:cp(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
         {ok, NewGuid} ->
-            {ok, #{<<"id">> => gs_protocol:gri_to_string(#gri{
+            {ok, #{<<"id">> => gri:serialize(#gri{
                 type = op_file,
                 id = NewGuid,
                 aspect = instance,
