@@ -32,12 +32,37 @@
 ]).
 
 
+-define(ALL_FLAGS_BITMASK, (
+    ?no_flags_mask bor
+    ?identifier_group_mask
+)).
+-define(ALL_PERMS_BITMASK, (
+    ?read_object_mask bor
+    ?list_container_mask bor
+    ?write_object_mask bor
+    ?add_object_mask bor
+    ?append_data_mask bor
+    ?add_subcontainer_mask bor
+    ?read_metadata_mask bor
+    ?write_metadata_mask bor
+    ?execute_mask bor
+    ?traverse_container_mask bor
+    ?delete_object_mask bor
+    ?delete_subcontainer_mask bor
+    ?read_attributes_mask bor
+    ?write_attributes_mask bor
+    ?delete_mask bor
+    ?read_acl_mask bor
+    ?write_acl_mask bor
+    ?write_owner_mask
+)).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
-%% @private
 -spec is_applicable(od_user:doc(), file_ctx:ctx(), ace()) ->
     {boolean(), file_ctx:ctx()}.
 is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
@@ -72,6 +97,14 @@ is_applicable(_, FileCtx, _) ->
     {false, FileCtx}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given ace permits specified operations.
+%% In case of allow ace returns operations which have yet to be permitted or
+%% denied by other ace or 'ok' if all are permitted by this one.
+%% In case of deny ace throws ?EACCES if even one operation is forbidden.
+%% @end
+%%--------------------------------------------------------------------
 -spec check_permission(bitmask(), ace()) -> ok | bitmask() | no_return().
 check_permission(Operations, #access_control_entity{
     acetype = ?allow_mask,
@@ -99,10 +132,10 @@ from_json(#{
     <<"aceMask">> := AceMaskBitmask
 }) ->
     #access_control_entity{
-        acetype = AceTypeBitmask,
-        aceflags = AceFlagsBitmask,
+        acetype = verify_acetype_bitmask(AceTypeBitmask),
+        aceflags = verify_aceflags_bitmask(AceFlagsBitmask),
         identifier = Identifier,
-        acemask = AceMaskBitmask
+        acemask = verify_acemask_bitmask(AceMaskBitmask)
     }.
 
 
@@ -167,16 +200,24 @@ to_cdmi(#access_control_entity{
 %% @private
 -spec cdmi_acetype_to_bitmask(binary()) -> bitmask().
 cdmi_acetype_to_bitmask(<<"0x", _/binary>> = AceType) ->
-    binary_to_bitmask(AceType);
+    verify_acetype_bitmask(binary_to_bitmask(AceType));
 cdmi_acetype_to_bitmask(?allow) -> ?allow_mask;
 cdmi_acetype_to_bitmask(?deny) -> ?deny_mask;
 cdmi_acetype_to_bitmask(?audit) -> ?audit_mask.
 
 
 %% @private
+-spec verify_acetype_bitmask(bitmask()) -> bitmask() | no_return().
+verify_acetype_bitmask(?allow_mask) -> ?allow_mask;
+verify_acetype_bitmask(?deny_mask) -> ?deny_mask;
+verify_acetype_bitmask(?audit_mask) -> ?audit_mask;
+verify_acetype_bitmask(_) -> throw({error, ?EINVAL}).
+
+
+%% @private
 -spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> bitmask().
 cdmi_aceflags_to_bitmask(<<"0x", _/binary>> = AceFlags) ->
-    binary_to_bitmask(AceFlags);
+    verify_aceflags_bitmask(binary_to_bitmask(AceFlags));
 cdmi_aceflags_to_bitmask(AceFlagsBin) when is_binary(AceFlagsBin) ->
     cdmi_aceflags_to_bitmask(parse_csv(AceFlagsBin));
 cdmi_aceflags_to_bitmask(AceFlagsList) ->
@@ -190,15 +231,33 @@ cdmi_aceflags_to_bitmask(AceFlagsList) ->
     ).
 
 
+%% @private
+-spec verify_aceflags_bitmask(bitmask()) -> bitmask() | no_return().
+verify_aceflags_bitmask(AceFlagsBitmask) ->
+    case AceFlagsBitmask band ?ALL_FLAGS_BITMASK of
+        AceFlagsBitmask -> AceFlagsBitmask;
+        _ -> throw({error, ?EINVAL})
+    end.
+
+
 -spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> bitmask().
 cdmi_acemask_to_bitmask(<<"0x", _/binary>> = AceMask) ->
-    binary_to_bitmask(AceMask);
+    verify_acemask_bitmask(binary_to_bitmask(AceMask));
 cdmi_acemask_to_bitmask(PermsBin) when is_binary(PermsBin) ->
     cdmi_acemask_to_bitmask(parse_csv(PermsBin));
 cdmi_acemask_to_bitmask(PermsList) ->
     lists:foldl(fun(Perm, Bitmask) ->
         Bitmask bor permission_to_bitmask(Perm)
     end, 0, PermsList).
+
+
+%% @private
+-spec verify_acemask_bitmask(bitmask()) -> bitmask() | no_return().
+verify_acemask_bitmask(AceMaskBitmask) ->
+    case AceMaskBitmask band ?ALL_PERMS_BITMASK of
+        AceMaskBitmask -> AceMaskBitmask;
+        _ -> throw({error, ?EINVAL})
+    end.
 
 
 %% @private
