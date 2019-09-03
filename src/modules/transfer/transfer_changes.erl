@@ -488,7 +488,7 @@ new_replication_or_migration(#document{
         file_uuid = FileUuid,
         space_id = SpaceId,
         callback = Callback,
-        view_name = ViewName,
+        index_name = ViewName,
         query_view_params = QueryViewParams
     }
 }) ->
@@ -520,7 +520,7 @@ new_replica_eviction(#document{
         space_id = SpaceId,
         callback = Callback,
         replicating_provider = TargetProviderId,
-        view_name = ViewName,
+        index_name = ViewName,
         query_view_params = QueryViewParams
     }
 }) ->

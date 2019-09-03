@@ -139,7 +139,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
     % TODO: add space check and optionally choose other storage
 
     % call using ?MODULE macro for mocking in tests
-    ?MODULE:synchronize_file(UserCtx, FileCtx, QosId, RelativePath, TargetStorages, TaskId).
+    ok = ?MODULE:synchronize_file(UserCtx, FileCtx, QosId, RelativePath, TargetStorages, TaskId).
 
 
 %%%===================================================================
@@ -152,8 +152,8 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
 %% Adds appropriate status link.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_file(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), qos_status:path(), [storage:id()], traverse:id()) ->
-    [{transfer:id(), storage:id()}].
+-spec synchronize_file(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), qos_status:path(),
+    [storage:id()], traverse:id()) -> ok.
 synchronize_file(UserCtx, FileCtx, QosId, RelativePath, TargetStorages, TaskId) ->
     lists:foreach(fun(StorageId) ->
         {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),

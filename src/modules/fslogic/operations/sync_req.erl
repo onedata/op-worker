@@ -39,8 +39,7 @@
 ]).
 
 -export([
-    schedule_file_replication/6,
-    schedule_file_replication/7
+    schedule_file_replication/6
 ]).
 
 %%%===================================================================
@@ -146,7 +145,6 @@ get_file_distribution(_UserCtx, FileCtx) ->
             provider_file_distributions = ProviderDistributions
         }
     }.
-
 
 %%--------------------------------------------------------------------
 %% @doc

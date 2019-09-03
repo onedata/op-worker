@@ -68,11 +68,7 @@
     block :: undefined | #file_block{},
     callback :: transfer:callback(),
     view_name :: transfer:view_name(),
-    query_view_params :: transfer:query_view_params(),
-
-    % pid of process that scheduled this replication to fulfill QoS
-    % and waits for message that transfer has been completed
-    qos_job_pid :: undefined | pid()
+    query_view_params :: transfer:query_view_params()
 }).
 
 -record(schedule_replica_invalidation, {

@@ -116,14 +116,13 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     undefined | od_provider:id(), undefined | od_provider:id(), binary(),
-    view_name(), query_view_params()) ->
-    {ok, id()} | ignore | {error, Reason :: term()}.
+    view_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
-    Callback, ViewName, QueryViewParams
+    Callback, IndexName, QueryViewParams
 ) ->
     {ok, UserId} = session:get_user_id(SessionId),
     start_for_user(UserId, FileGuid, FilePath, SourceProviderId,
-        TargetProviderId, Callback, ViewName, QueryViewParams
+        TargetProviderId, Callback, IndexName, QueryViewParams
     ).
 
 %%--------------------------------------------------------------------
@@ -136,7 +135,7 @@ start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
     callback(), view_name(), query_view_params()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
-    ReplicatingProviderId, Callback, ViewName, QueryViewParams
+    ReplicatingProviderId, Callback, IndexName, QueryViewParams
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
         undefined -> skipped;
@@ -169,7 +168,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
             hr_hist = #{},
             dy_hist = #{},
             mth_hist = #{},
-            view_name = ViewName,
+            index_name = IndexName,
             query_view_params = QueryViewParams
         }},
 
@@ -237,7 +236,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 evicting_provider = EvictingProviderId,
                 replicating_provider = ReplicatingProviderId,
                 callback = Callback,
-                view_name = ViewName,
+                index_name = IndexName,
                 query_view_params = QueryViewParams
             } = Transfer,
 
@@ -245,7 +244,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
-                EvictingProviderId, ReplicatingProviderId, Callback, ViewName,
+                EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
                 QueryViewParams
             ),
             update(TransferId, fun(OldTransfer) ->
@@ -851,7 +850,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    11.
+    10.
 
 %%--------------------------------------------------------------------
 %% @doc

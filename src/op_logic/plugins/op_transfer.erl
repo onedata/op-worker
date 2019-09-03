@@ -122,7 +122,7 @@ authorize(#op_req{auth = ?NOBODY}, _) ->
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
-    ViewPrivileges = case Transfer#transfer.view_name of
+    ViewPrivileges = case Transfer#transfer.index_name of
         undefined -> [];
         _ -> [?SPACE_QUERY_VIEWS]
     end,

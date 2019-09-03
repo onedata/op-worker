@@ -64,8 +64,7 @@ schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
-        SourceProviderId, MigrationProviderId, undefined, ViewName, QueryViewParams,
-        undefined),
+        SourceProviderId, MigrationProviderId, undefined, ViewName, QueryViewParams),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #scheduled_transfer{

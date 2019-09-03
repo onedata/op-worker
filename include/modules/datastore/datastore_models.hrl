@@ -662,7 +662,7 @@
 
     % Only replication of files existing in given view will be scheduled
     % if this value is undefined, whole subtree will be iterated
-    view_name :: transfer:view_name(),
+    index_name :: transfer:view_name(),
     % query_view_params are directly passed to couchbase
     % if index_name (view_name) is undefined query_view_params are ignored
     query_view_params = [] :: transfer:query_view_params()
