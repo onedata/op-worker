@@ -91,9 +91,9 @@ all() ->
         rm_dir_test,
 
         create_file_test,
-%%        open_for_read_test,       % TODO uncomment after fixing
-%%        open_for_write_test,
-%%        open_for_rdwr_test,
+        open_for_read_test,
+        open_for_write_test,
+        open_for_rdwr_test,
         create_and_open_test,
         truncate_test,
         mv_file_test,
@@ -363,10 +363,15 @@ open_for_read_test(Config) ->
 
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-%%        requires_traverse_ancestors = false,
         files = [#file{
             name = <<"file1">>,
-            perms = [?read_object]
+            perms = [?read_object],
+            on_create = fun(OwnerSessId, Guid) ->
+                % write to file to force its creation on storage. Otherwise it
+                % may be not possible during tests without necessary perms.
+                fill_file_with_dummy_data(W, OwnerSessId, Guid),
+                Guid
+            end
         }],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -383,7 +388,13 @@ open_for_write_test(Config) ->
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
-            perms = [?write_object]
+            perms = [?write_object],
+            on_create = fun(OwnerSessId, Guid) ->
+                % write to file to force its creation on storage. Otherwise it
+                % may be not possible during tests without necessary perms.
+                fill_file_with_dummy_data(W, OwnerSessId, Guid),
+                Guid
+            end
         }],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -400,7 +411,13 @@ open_for_rdwr_test(Config) ->
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
-            perms = [?read_object, ?write_object]
+            perms = [?read_object, ?write_object],
+            on_create = fun(OwnerSessId, Guid) ->
+                % write to file to force its creation on storage. Otherwise it
+                % may be not possible during tests without necessary perms.
+                fill_file_with_dummy_data(W, OwnerSessId, Guid),
+                Guid
+            end
         }],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1669,3 +1686,14 @@ for(1, F) ->
 for(N, F) ->
     F(),
     for(N - 1, F).
+
+
+-spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid()) -> ok.
+fill_file_with_dummy_data(Node, SessId, Guid) ->
+    {ok, FileHandle} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:open(Node, SessId, {guid, Guid}, write)
+    ),
+    ?assertMatch({ok, 4}, lfm_proxy:write(Node, FileHandle, 0, <<"DATA">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
+    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
