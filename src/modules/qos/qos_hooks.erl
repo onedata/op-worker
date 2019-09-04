@@ -33,6 +33,7 @@ handle_qos_entry_change(SpaceId, #document{
     }
 }) ->
     file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+    qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     lists:foreach(fun(#qos_traverse_req{task_id = TaskId, start_file_uuid = StartFileUuid,
         qos_origin_file_guid = QosOriginFileGuid, target_storage = TS}) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
