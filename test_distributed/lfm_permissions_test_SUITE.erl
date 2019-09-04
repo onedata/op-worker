@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -200,8 +201,10 @@ all() ->
     owner = <<"user1">> :: binary(),
     user = <<"user2">> :: binary(),
     user_group = <<"group2">> :: binary(),
-    user_outside_space = <<"user3">>,
+    user_outside_space = <<"user3">> :: binary(),
     requires_traverse_ancestors = true :: boolean(),
+    posix_requires_space_privs = [] :: owner | [atom()],
+    acl_requires_space_privs = [] :: owner | [atom()],
     files :: map(),
     operation :: fun((UserId :: binary(), Path :: binary()) ->
         ok |
@@ -227,6 +230,8 @@ mkdir_test(Config) ->
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_subcontainer]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             lfm_proxy:mkdir(W, SessId, <<TestCaseRootDirPath/binary, "/dir1/dir2">>)
         end
@@ -242,6 +247,8 @@ ls_test(Config) ->
             name = <<"dir1">>,
             perms = [?list_container]
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -259,6 +266,8 @@ readdir_plus_test(Config) ->
             name = <<"dir1">>,
             perms = [?traverse_container, ?list_container]
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -306,6 +315,8 @@ mv_dir_test(Config) ->
                 perms = [?traverse_container, ?add_subcontainer]
             }
         ],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
             SrcDirGuid = maps:get(SrcDirPath, ExtraData),
@@ -333,6 +344,8 @@ rm_dir_test(Config) ->
                 ]
             }
         ],
+        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -350,6 +363,8 @@ create_file_test(Config) ->
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
@@ -373,6 +388,8 @@ open_for_read_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -396,6 +413,8 @@ open_for_write_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -419,6 +438,8 @@ open_for_rdwr_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -436,6 +457,8 @@ create_and_open_test(Config) ->
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
@@ -453,6 +476,8 @@ truncate_test(Config) ->
             name = <<"file1">>,
             perms = [?write_object]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -482,6 +507,8 @@ mv_file_test(Config) ->
                 perms = [?traverse_container, ?add_object]
             }
         ],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
             SrcFileGuid = maps:get(SrcFilePath, ExtraData),
@@ -509,6 +536,8 @@ rm_file_test(Config) ->
                 ]
             }
         ],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -581,27 +610,12 @@ get_file_distribution_test(Config) ->
             name = <<"file1">>,
             perms = [?read_metadata]
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
             lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid})
-        end
-    }, Config).
-
-
-check_read_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    run_tests(W, #test_spec{
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        files = [#file{
-            name = <<"file1">>,
-            perms = [?read_object]
-        }],
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(W, SessId, {guid, FileGuid}, read)
         end
     }, Config).
 
@@ -653,6 +667,25 @@ set_perms_test(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:set_perms(W, OtherUserSessId, {guid, FileGuid}, 8#000)).
 
 
+check_read_perms_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    run_tests(W, #test_spec{
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, {guid, FileGuid}, read)
+        end
+    }, Config).
+
+
 check_write_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -662,6 +695,8 @@ check_write_perms_test(Config) ->
             name = <<"file1">>,
             perms = [?write_object]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -679,6 +714,8 @@ check_rdwr_perms_test(Config) ->
             name = <<"file1">>,
             perms = [?read_object, ?write_object]
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -693,6 +730,8 @@ create_share_test(Config) ->
     run_tests(W, #test_spec{
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{name = <<"dir1">>}],
+        posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -715,6 +754,8 @@ remove_share_test(Config) ->
                 ShareId
             end
         }],
+        posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
@@ -749,6 +790,8 @@ set_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
+        posix_requires_space_privs = owner,
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -768,6 +811,8 @@ remove_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
+        posix_requires_space_privs = owner,
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -806,6 +851,8 @@ set_transfer_encoding_test(Config) ->
             name = <<"file1">>,
             perms = [?write_attributes]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -844,6 +891,8 @@ set_cdmi_completion_status_test(Config) ->
             name = <<"file1">>,
             perms = [?write_attributes]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -882,6 +931,8 @@ set_mimetype_test(Config) ->
             name = <<"file1">>,
             perms = [?write_attributes]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -903,6 +954,8 @@ get_metadata_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -920,6 +973,8 @@ set_metadata_test(Config) ->
             name = <<"file1">>,
             perms = [?write_metadata]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -941,6 +996,8 @@ remove_metadata_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -962,6 +1019,8 @@ get_xattr_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -999,6 +1058,8 @@ set_xattr_test(Config) ->
             name = <<"file1">>,
             perms = [?write_metadata]
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1023,6 +1084,8 @@ remove_xattr_test(Config) ->
                 Guid
             end
         }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1115,8 +1178,168 @@ run_tests(Node, #test_spec{
     RootDirPath = <<"/", Space/binary, "/", RootDir/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, RootDirPath, 8#777)),
 
+    run_space_priv_tests(Node, RootDirPath, Spec, Config),
     run_posix_tests(Node, RootDirPath, Spec, Config),
     run_acl_tests(Node, RootDirPath, Spec, Config).
+
+
+%%%===================================================================
+%%% POSIX TESTS MECHANISM
+%%%===================================================================
+
+
+run_space_priv_tests(Node, RootDirPath, #test_spec{
+    space = SpaceId,
+    owner = Owner,
+    user = User,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    posix_requires_space_privs = PosixSpacePrivs,
+    acl_requires_space_privs = AclSpacePrivs,
+    files = Files,
+    operation = Fun
+}, Config) ->
+    OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
+
+    TestCaseRootDirPerms = case RequiresTraverseAncestors of
+        true -> [?traverse_container];
+        false -> []
+    end,
+    lists:foreach(fun({RequiredPriv, Type, TestCaseRootDirName}) ->
+        {PermsPerFile, ExtraData} = create_files(
+            Node, OwnerUserSessId, RootDirPath, #dir{
+                name = TestCaseRootDirName,
+                perms = TestCaseRootDirPerms,
+                children = Files
+            }
+        ),
+        run_space_priv_test(
+            Node, SpaceId, Owner, User, PermsPerFile, Type, Fun,
+            <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
+            ExtraData, RequiredPriv, Config
+        )
+    end, [
+        {PosixSpacePrivs, posix, <<"space_priv_posix">>},
+        {AclSpacePrivs, acl, <<"space_priv_acl">>}
+    ]).
+
+
+run_space_priv_test(
+    Node, SpaceId, Owner, SpaceUser, PermsPerFile, posix,
+    Operation, TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
+) ->
+    AllPosixPermsGranted = maps:map(fun(_, _) -> 8#777 end, PermsPerFile),
+    set_modes(Node, AllPosixPermsGranted),
+
+    run_space_priv_test(
+        Node, SpaceId, Owner, SpaceUser, posix, Operation,
+        TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
+    );
+
+run_space_priv_test(
+    Node, SpaceId, Owner, SpaceUser, PermsPerFile, acl,
+    Operation, TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
+) ->
+    AllAclPermsGranted = maps:map(fun(_, _) -> ?ALL_PERMS end, PermsPerFile),
+    set_acls(Node, AllAclPermsGranted, #{}, ?everyone, ?no_flags_mask),
+
+    run_space_priv_test(
+        Node, SpaceId, Owner, SpaceUser, acl, Operation,
+        TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
+    ).
+
+
+run_space_priv_test(
+    Node, SpaceId, Owner, SpaceUser, TestType, Operation,
+    TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
+) ->
+    try
+        check_space_priv_requirement(
+            Node, SpaceId, Owner, SpaceUser,
+            Operation, TestCaseRootDirPath, ExtraData,
+            RequiredPrivs, Config
+        )
+    catch T:R ->
+        ct:pal(
+            "SPACE PRIV TEST FAILURE~n"
+            "   Type: ~p~n"
+            "   User: ~p~n"
+            "   Root path: ~p~n"
+            "   Required space priv: ~p~n"
+            "   Stacktrace: ~p~n",
+            [
+                TestType, SpaceUser,
+                TestCaseRootDirPath,
+                RequiredPrivs,
+                erlang:get_stacktrace()
+            ]
+        ),
+        erlang:T(R)
+    after
+        initializer:testmaster_mock_space_user_privileges(
+            [Node], SpaceId, Owner, privileges:space_privileges()
+        ),
+        initializer:testmaster_mock_space_user_privileges(
+            [Node], SpaceId, SpaceUser, privileges:space_privileges()
+        )
+    end.
+
+
+check_space_priv_requirement(
+    Node, SpaceId, OwnerId, _, Operation,
+    RootDirPath, ExtraData, owner, Config
+) ->
+    OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
+
+    % invalidate permission cache as it is not done due to initializer mocks
+    rpc:call(Node, permissions_cache, invalidate, []),
+    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, OwnerId, []),
+
+    ?assertNotMatch(
+        {error, _},
+        Operation(OwnerSessId, OwnerSessId, RootDirPath, ExtraData)
+    );
+check_space_priv_requirement(
+    Node, SpaceId, OwnerId, UserId, Operation,
+    RootDirPath, ExtraData, [], Config
+) ->
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
+    OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
+
+    % invalidate permission cache as it is not done due to initializer mocks
+    rpc:call(Node, permissions_cache, invalidate, []),
+
+    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, []),
+    ?assertNotMatch(
+        {error, _},
+        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+    );
+check_space_priv_requirement(
+    Node, SpaceId, OwnerId, UserId, Operation,
+    RootDirPath, ExtraData, RequiredPrivs, Config
+) ->
+    AllSpacePrivs = privileges:space_privileges(),
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
+    OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
+
+    % If operation requires space priv it should fail without it and succeed with it
+    initializer:testmaster_mock_space_user_privileges(
+        [Node], SpaceId, UserId, AllSpacePrivs -- RequiredPrivs
+    ),
+    ?assertMatch(
+        {error, ?EACCES},
+        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+    ),
+
+    % invalidate permission cache as it is not done due to initializer mocks
+    rpc:call(Node, permissions_cache, invalidate, []),
+
+    initializer:testmaster_mock_space_user_privileges(
+        [Node], SpaceId, UserId, RequiredPrivs
+    ),
+    ?assertNotMatch(
+        {error, _},
+        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+    ).
 
 
 %%%===================================================================
@@ -1268,12 +1491,10 @@ run_posix_tests(
     ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
 ) ->
     set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
-%%    ct:pal("1"),
     ?assertMatch(
         {error, _},
         Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     ),
-%%    ct:pal("2"),
     ?assertMatch(
         {error, _},
         Fun(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
@@ -1300,7 +1521,6 @@ run_standard_posix_tests(
         EaccesModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
-%%        ct:pal("QWE: ~p", [maps:map(fun(_, V) -> integer_to_binary((V rem 8#1000), 8) end, EaccesModesPerFile)]),
         set_modes(Node, EaccesModesPerFile),
         ?assertMatch(
             {error, ?EACCES},
@@ -1313,7 +1533,6 @@ run_standard_posix_tests(
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, RequiredModesComb),
     set_modes(Node, RequiredModesPerFile),
-%%    ct:pal("QWE: ~p", [Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)]),
     ?assertNotMatch(
         {error, _},
         Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
@@ -1434,7 +1653,6 @@ run_acl_tests(
         EaccesPermsPerFile = lists:foldl(fun({Guid, Perm}, Acc) ->
             Acc#{Guid => [Perm | maps:get(Guid, Acc)]}
         end, ComplementaryPermsPerFile, EaccessPermComb),
-%%        ct:pal("QWE: ~p", [EaccesPermsPerFile]),
         set_acls(Node, EaccesPermsPerFile, #{}, AceWho, AceFlags),
         ?assertMatch(
             {error, ?EACCES},
@@ -1500,11 +1718,16 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        NewConfig1 = [{space_storage_mock, false} | NewConfig],
+        NewConfig2 = initializer:setup_storage(NewConfig1),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
 end_per_suite(Config) ->
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
 
 init_per_testcase(Case, Config) when
@@ -1515,8 +1738,7 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    lfm_proxy:init(Config).
 
 
 end_per_testcase(Case, Config) when
@@ -1527,8 +1749,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    lfm_proxy:teardown(Config).
 
 
 %%%===================================================================
