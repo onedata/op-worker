@@ -24,11 +24,9 @@
 %% API
 -export([
     is_applicable/3,
-    check_permission/2
-]).
--export([
-    from_json/1, to_json/1,
-    from_cdmi/1, to_cdmi/1
+    check_permission/2,
+
+    from_json/2, to_json/2
 ]).
 
 
@@ -63,6 +61,12 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether given ace for specified file can be used to verify
+%% permissions of specified user.
+%% @end
+%%--------------------------------------------------------------------
 -spec is_applicable(od_user:doc(), file_ctx:ctx(), ace()) ->
     {boolean(), file_ctx:ctx()}.
 is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
@@ -124,47 +128,26 @@ check_permission(Operations, #access_control_entity{
     end.
 
 
--spec from_json(map()) -> ace().
+-spec from_json(Data :: map(), Format :: gui | cdmi) -> ace().
 from_json(#{
     <<"aceType">> := AceTypeBitmask,
     <<"identifier">> := Identifier,
     <<"aceFlags">> := AceFlagsBitmask,
     <<"aceMask">> := AceMaskBitmask
-}) ->
+}, gui) ->
     #access_control_entity{
         acetype = verify_acetype_bitmask(AceTypeBitmask),
         aceflags = verify_aceflags_bitmask(AceFlagsBitmask),
         identifier = Identifier,
         acemask = verify_acemask_bitmask(AceMaskBitmask)
-    }.
+    };
 
-
--spec to_json(ace()) -> map().
-to_json(#access_control_entity{
-    acetype = Type,
-    aceflags = Flags,
-    identifier = Identifier,
-    acemask = AccessMask
-}) ->
-    #{
-        <<"aceType">> => case Type of
-            ?allow_mask -> ?allow;
-            ?deny_mask -> ?deny;
-            ?audit_mask -> ?audit
-        end,
-        <<"identifier">> => Identifier,
-        <<"aceFlags">> => Flags,
-        <<"aceMask">> => AccessMask
-    }.
-
-
--spec from_cdmi(map()) -> ace().
-from_cdmi(#{
+from_json(#{
     <<"acetype">> := AceType,
     <<"identifier">> := Identifier0,
     <<"aceflags">> := AceFlags,
     <<"acemask">> := AceMask
-}) ->
+}, cdmi) ->
     {Identifier, Name} = decode_cdmi_identifier(Identifier0),
 
     #access_control_entity{
@@ -176,14 +159,31 @@ from_cdmi(#{
     }.
 
 
--spec to_cdmi(ace()) -> map().
-to_cdmi(#access_control_entity{
+-spec to_json(ace(), Format :: gui | cdmi) -> map().
+to_json(#access_control_entity{
+    acetype = Type,
+    aceflags = Flags,
+    identifier = Identifier,
+    acemask = AccessMask
+}, gui) ->
+    #{
+        <<"aceType">> => case Type of
+            ?allow_mask -> ?allow;
+            ?deny_mask -> ?deny;
+            ?audit_mask -> ?audit
+        end,
+        <<"identifier">> => Identifier,
+        <<"aceFlags">> => Flags,
+        <<"aceMask">> => AccessMask
+    };
+
+to_json(#access_control_entity{
     acetype = Type,
     aceflags = Flags,
     identifier = Identifier,
     name = Name,
     acemask = Mask
-}) ->
+}, cdmi) ->
     #{
         <<"acetype">> => bitmask_to_binary(Type),
         <<"identifier">> => encode_cdmi_identifier(Identifier, Name),

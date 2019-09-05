@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -10,7 +10,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(acl).
--author("Tomasz Lichon").
+-author("Bartosz Walkowicz").
 
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -23,18 +23,16 @@
 %% API
 -export([
     get/1, exists/1,
-    assert_permitted/4
-]).
--export([
-    from_cdmi/1, to_cdmi/1,
-    from_json/1, to_json/1
+    assert_permitted/4,
+
+    from_json/2, to_json/2
 ]).
 
 -define(convert(__Conversion),
     try
         __Conversion
     catch __T:__R  ->
-        ?error_stacktrace("Failed to convert acl due to: ~p:~p", [__T, __R]),
+        ?debug_stacktrace("Failed to convert acl due to: ~p:~p", [__T, __R]),
         throw({error, ?EINVAL})
     end
 ).
@@ -49,7 +47,7 @@ get(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case custom_metadata:get_xattr_metadata(FileUuid, ?ACL_KEY, false) of
         {ok, Val} ->
-            from_cdmi(Val);
+            from_json(Val, cdmi);
         {error, not_found} ->
             undefined
     end.
@@ -81,21 +79,11 @@ assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
     end.
 
 
--spec from_cdmi([map()]) -> acl() | no_return().
-from_cdmi(CdmiAcl) ->
-    ?convert([ace:from_cdmi(CdmiAce) || CdmiAce <- CdmiAcl]).
+-spec from_json([map()], Format :: gui | cdmi) -> acl() | no_return().
+from_json(JsonAcl, Format) ->
+    ?convert([ace:from_json(JsonAce, Format) || JsonAce <- JsonAcl]).
 
 
--spec to_cdmi(acl()) -> [map()] | no_return().
-to_cdmi(Acl) ->
-    ?convert([ace:to_cdmi(Ace) || Ace <- Acl]).
-
-
--spec from_json([map()]) -> acl() | no_return().
-from_json(JsonAcl) ->
-    ?convert([ace:from_json(JsonAce) || JsonAce <- JsonAcl]).
-
-
--spec to_json(acl()) -> [map()] | no_return().
-to_json(Acl) ->
-    ?convert([ace:to_json(Ace) || Ace <- Acl]).
+-spec to_json(acl(), Format :: gui | cdmi) -> [map()] | no_return().
+to_json(Acl, Format) ->
+    ?convert([ace:to_json(Ace, Format) || Ace <- Acl]).

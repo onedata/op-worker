@@ -42,7 +42,7 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                 status = #status{code = ?OK},
                 fuse_response = #xattr{
                     name = ?ACL_KEY,
-                    value = acl:to_cdmi(Acl)
+                    value = acl:to_json(Acl, cdmi)
                 }
             };
         Other ->
@@ -142,7 +142,7 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
     fslogic_worker:fuse_response().
 set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}, Create, Replace) ->
     provider_to_fuse_response(
-        acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl:from_cdmi(Acl)}, Create, Replace)
+        acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl:from_json(Acl, cdmi)}, Create, Replace)
     );
 set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}, Create, Replace) ->
     provider_to_fuse_response(

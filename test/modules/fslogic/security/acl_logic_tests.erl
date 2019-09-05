@@ -42,7 +42,7 @@ bitmask_acl_conversion_test() ->
     },
 
     % when
-    Acl = acl:from_cdmi([ace:to_cdmi(Ace1), ace:to_cdmi(Ace2)]),
+    Acl = acl:from_json([ace:to_json(Ace1, cdmi), ace:to_json(Ace2, cdmi)], cdmi),
 
     % then
     ?assertEqual(Acl, [Ace1, Ace2]).
@@ -55,7 +55,7 @@ binary_acl_conversion_test() ->
     GroupName = <<"GroupName">>,
 
     % when
-    Acl = acl:from_cdmi(
+    Acl = acl:from_json(
         [
             #{
                 <<"acetype">> => <<"ALLOW">>,
@@ -69,7 +69,8 @@ binary_acl_conversion_test() ->
                 <<"aceflags">> => <<"IDENTIFIER_GROUP">>,
                 <<"acemask">> => <<"WRITE_ALL">>
             }
-        ]
+        ],
+        cdmi
     ),
 
     % then

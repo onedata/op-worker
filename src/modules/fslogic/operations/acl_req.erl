@@ -77,7 +77,7 @@ get_acl_insecure(_UserCtx, FileCtx) ->
         {ok, Val} ->
             % ACLs are kept in database without names, as they might change.
             % Resolve the names here.
-            Acl = acl_names:add(acl:from_cdmi(Val)),
+            Acl = acl_names:add(acl:from_json(Val, cdmi)),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #acl{
@@ -99,7 +99,7 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
-    AclJson = acl:to_cdmi(acl_names:strip(Val)),
+    AclJson = acl:to_json(acl_names:strip(Val), cdmi),
     case xattr:set(FileCtx, ?ACL_KEY, AclJson, Create, Replace) of
         {ok, _} ->
             ok = permissions_cache:invalidate(),
