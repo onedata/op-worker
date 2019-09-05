@@ -199,7 +199,8 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
                     throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
                 end
             end
-        }
+        },
+        <<"activePermissionsType">> => {binary, [<<"acl">>, <<"posix">>]}
     }
 };
 
@@ -483,11 +484,19 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
-    case maps:get(<<"posixPermissions">>, Data, undefined) of
-        undefined ->
+    ActivePermsType = maps:get(<<"activePermissionsType">>, Data, undefined),
+    PosixPerms = maps:get(<<"posixPermissions">>, Data, undefined),
+    case {ActivePermsType, PosixPerms} of
+        {undefined, undefined} ->
             ok;
-        PosixPerms ->
-            ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms))
+        {<<"acl">>, undefined} ->
+            ok;
+        {<<"posix">>, undefined} ->
+            ?check(lfm:remove_acl(Auth#auth.session_id, {guid, Guid}));
+        {Type, _} when Type == undefined orelse Type == <<"posix">> ->
+            ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms));
+        {_, _} ->
+            ?ERROR_MALFORMED_DATA
     end;
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
     Acl = maps:get(<<"list">>, Data),

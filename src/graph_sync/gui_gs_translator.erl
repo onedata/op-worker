@@ -234,8 +234,8 @@ translate_user(GRI = #gri{aspect = instance, scope = private}, #od_user{
         })
     };
 translate_user(#gri{aspect = instance, scope = shared}, #{
-    <<"fullName">> = FullName,
-    <<"username">> = Username
+    <<"fullName">> := FullName,
+    <<"username">> := Username
 }) ->
     #{
         <<"fullName">> => FullName,
