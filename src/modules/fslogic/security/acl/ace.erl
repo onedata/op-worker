@@ -130,13 +130,17 @@ check_permission(Operations, #access_control_entity{
 
 -spec from_json(Data :: map(), Format :: gui | cdmi) -> ace().
 from_json(#{
-    <<"aceType">> := AceTypeBitmask,
+    <<"aceType">> := AceType,
     <<"identifier">> := Identifier,
     <<"aceFlags">> := AceFlagsBitmask,
     <<"aceMask">> := AceMaskBitmask
 }, gui) ->
     #access_control_entity{
-        acetype = verify_acetype_bitmask(AceTypeBitmask),
+        acetype = case AceType of
+            ?allow -> ?allow_mask;
+            ?deny -> ?deny_mask;
+            ?audit -> ?audit_mask
+        end,
         aceflags = verify_aceflags_bitmask(AceFlagsBitmask),
         identifier = Identifier,
         acemask = verify_acemask_bitmask(AceMaskBitmask)

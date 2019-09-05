@@ -209,7 +209,7 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = acl}}) -> #{
             fun(JsonAcl) ->
                 try
                     {true, acl:from_json(JsonAcl, gui)}
-                catch throw:Errno ->
+                catch throw:{error, Errno} ->
                     throw(?ERROR_POSIX(Errno))
                 end
             end

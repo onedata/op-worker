@@ -156,7 +156,7 @@ translate_file(#gri{aspect = acl, scope = private}, Acl) ->
         #{
             <<"list">> => acl:to_json(Acl, gui)
         }
-    catch throw:Errno ->
+    catch throw:{error, Errno} ->
         throw(?ERROR_POSIX(Errno))
     end.
 
@@ -203,7 +203,7 @@ translate_space(#gri{aspect = eff_users, scope = private}, Users) ->
                 aspect = instance,
                 scope = shared
             })
-        end, Users)
+        end, maps:keys(Users))
     };
 translate_space(#gri{aspect = eff_groups, scope = private}, Groups) ->
     #{
@@ -214,7 +214,7 @@ translate_space(#gri{aspect = eff_groups, scope = private}, Groups) ->
                 aspect = instance,
                 scope = shared
             })
-        end, Groups)
+        end, maps:keys(Groups))
     }.
 
 
@@ -233,9 +233,9 @@ translate_user(GRI = #gri{aspect = instance, scope = private}, #od_user{
             scope = private
         })
     };
-translate_user(#gri{aspect = instance, scope = shared}, #od_user{
-    full_name = FullName,
-    username = Username
+translate_user(#gri{aspect = instance, scope = shared}, #{
+    <<"fullName">> = FullName,
+    <<"username">> = Username
 }) ->
     #{
         <<"fullName">> => FullName,
