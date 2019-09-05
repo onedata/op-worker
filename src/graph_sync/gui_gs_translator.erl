@@ -97,6 +97,7 @@ translate_resource(ProtocolVersion, GRI, Data) ->
 translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
     name = Name,
     type = TypeAttr,
+    mode = Mode,
     size = SizeAttr,
     mtime = ModificationTime
 }) ->
@@ -125,10 +126,29 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
             <<"name">> => Name,
             <<"index">> => Name,
             <<"type">> => Type,
+            <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
+            <<"activePermissionsType">> => case acl:exists(Guid) of
+                true -> <<"acl">>;
+                false -> <<"posix">>
+            end,
+            <<"acl">> => gs_protocol:gri_to_string(#gri{
+                type = op_file,
+                id = Guid,
+                aspect = acl,
+                scope = private
+            }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
             <<"parent">> => Parent
         }
+    end;
+translate_file(#gri{aspect = acl, scope = private}, Acl) ->
+    try
+        #{
+            <<"list">> => acl:to_json(Acl, gui)
+        }
+    catch throw:Errno ->
+        throw(?ERROR_POSIX(Errno))
     end.
 
 
