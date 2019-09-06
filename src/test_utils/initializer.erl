@@ -824,6 +824,21 @@ user_logic_mock_setup(Workers, Users) ->
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
             end;
+        (_, #token_auth{token = Token}, UserId) ->
+            case proplists:get_value(Token, UsersByToken, undefined) of
+                undefined ->
+                    {error, not_found};
+                UserId ->
+                    case proplists:get_value(UserId, Users) of
+                        undefined ->
+                            {error, not_found};
+                        UserConfig2 ->
+                            UserConfigToUserDoc(UserConfig2)
+                    end;
+                _ ->
+                    {error, forbidden}
+
+            end;
         (_, SessionId, UserId) ->
             {ok, #document{value = #session{
                 identity = #user_identity{user_id = SessionUserId}
