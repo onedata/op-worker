@@ -181,32 +181,85 @@ all() ->
 
 
 -record(file, {
+    % name of file
     name :: binary(),
+    % permissions needed to perform #test_spec.operation
     perms = [] :: [Perms :: binary()],
-    on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term())
+    % function called during environment setup. Term returned will be stored in `ExtraData`
+    % and can be used during test (described in `operation` of #test_spec{}).
+    on_create = undefined :: undefined | fun((OwnerSessId :: session:id(), file_id:file_guid()) -> term())
 }).
 
 
 -record(dir, {
+    % name of directory
     name :: binary(),
+    % permissions needed to perform #test_spec.operation
     perms = [] :: [Perms :: binary()],
+    % function called during environment setup. Term returned will be stored in `ExtraData`
+    % and can be used during test (described in `operation` of #test_spec{}).
     on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
+    % children of directory if needed
     children = [] :: [#dir{} | #file{}]
 }).
 
 
 -record(test_spec, {
-    space = <<"space1">> :: binary(),
+    % Id of space within which test will be carried
+    space_id = <<"space1">> :: binary(),
+
+    % Name of root dir for test
     root_dir :: binary(),
-    owner = <<"user1">> :: binary(),
-    user = <<"user2">> :: binary(),
-    user_group = <<"group2">> :: binary(),
-    user_outside_space = <<"user3">> :: binary(),
+
+    % Id of user belonging to space specified in `space_id` in context
+    % of which all files required for tests will be created. It will be
+    % used to test `user` posix bits and `OWNER@` special acl identifier
+    owner_user = <<"user1">> :: binary(),
+
+    % Id of user belonging to space specified in `space_id` which aren't
+    % the same as `owner_user`. It will be used to test `group` posix bits
+    % and acl for his Id.
+    space_user = <<"user2">> :: binary(),
+
+    % Id of group to which belongs `space_user` and which itself belong to
+    % `space_id`. It will be used to test acl group identifier.
+    space_user_group = <<"group2">> :: binary(),
+
+    % Id of user not belonging to space specified in `space_id`. It will be
+    % used to test `other` posix bits and `EVERYONE@` special acl identifier.
+    other_user = <<"user3">> :: binary(),
+
+    % Tells whether `operation` needs `traverse_ancestors` permission. If so
+    % `traverse_container` perm will be added to test root dir as needed perm
+    % to perform `operation` (since traverse_ancestors means that one can
+    % traverse dirs up to file in question).
     requires_traverse_ancestors = true :: boolean(),
-    posix_requires_space_privs = [] :: owner | [atom()],
-    acl_requires_space_privs = [] :: owner | [atom()],
-    files :: map(),
-    operation :: fun((UserId :: binary(), Path :: binary()) ->
+
+    % Tells which space privileges are needed to perform `operation`
+    % in case of posix access mode
+    posix_requires_space_privs = [] :: owner | [privileges:space_privilege()],
+
+    % Tells which space privileges are needed to perform `operation`
+    % in case of acl access mode
+    acl_requires_space_privs = [] :: owner | [privileges:space_privilege()],
+
+    % Description of environment (files and permissions on them) needed to
+    % perform `operation`.
+    files :: [#dir{} | #file{}],
+
+    % Operation being tested. It will be called for various combinations of
+    % either posix or acl permissions. It is expected to fail for combinations
+    % not having all perms specified in `files` and succeed for combination
+    % consisting of only them.
+    % It takes following arguments:
+    % - OwnerSessId - session id of user which creates files for this test,
+    % - SessId - session id of user which should perform operation,
+    % - TestCaseRootDirPath - absolute path to root dir of testcase,
+    % - ExtraData - mapping of file path (for every file specified in `files`) to
+    %               term returned from `on_create` #dir{} or #file{} fun.
+    %               If mentioned fun is left undefined then by default GUID will
+    %               be used.
+    operation :: fun((OwnerSessId :: binary(), SessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
         ok |
         {ok, term()} |
         {ok, term(), term()} |
@@ -1170,12 +1223,14 @@ expired_session_test(Config) ->
 
 
 run_tests(Node, #test_spec{
-    space = Space,
-    owner = Owner,
+    space_id = SpaceId,
+    owner_user = Owner,
     root_dir = RootDir
 } = Spec, Config) ->
     OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
-    RootDirPath = <<"/", Space/binary, "/", RootDir/binary>>,
+
+    {ok, SpaceName} = rpc:call(Node, space_logic, get_name, [?ROOT_SESS_ID, SpaceId]),
+    RootDirPath = <<"/", SpaceName/binary, "/", RootDir/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, RootDirPath, 8#777)),
 
     run_space_priv_tests(Node, RootDirPath, Spec, Config),
@@ -1188,10 +1243,18 @@ run_tests(Node, #test_spec{
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tests space permissions needed to perform #test_spec.operation.
+%% It will setup environment, add full posix or acl permissions and
+%% assert that without space priv operation cannot be performed and
+%% with it it succeeds.
+%% @end
+%%--------------------------------------------------------------------
 run_space_priv_tests(Node, RootDirPath, #test_spec{
-    space = SpaceId,
-    owner = Owner,
-    user = User,
+    space_id = SpaceId,
+    owner_user = Owner,
+    space_user = User,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     posix_requires_space_privs = PosixSpacePrivs,
     acl_requires_space_privs = AclSpacePrivs,
@@ -1347,13 +1410,22 @@ check_space_priv_requirement(
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tests posix permissions needed to perform #test_spec.operation.
+%% For each bits group (`owner`, `group`, `other`) it will setup
+%% environment and test combination of posix perms. It will assert
+%% that combinations not having all required perms fails and that
+%% combination consisting of only required perms succeeds.
+%% @end
+%%--------------------------------------------------------------------
 run_posix_tests(Node, RootDirPath, #test_spec{
-    owner = Owner,
-    user = User,
-    user_outside_space = OtherUser,
+    owner_user = Owner,
+    space_user = User,
+    other_user = OtherUser,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     files = Files,
-    operation = Fun
+    operation = Operation
 }, Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
     GroupUserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
@@ -1378,7 +1450,7 @@ run_posix_tests(Node, RootDirPath, #test_spec{
         run_posix_tests(
             Node, OwnerUserSessId, SessId,
             <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
-            Fun, PosixPermsPerFile, ExtraData, Type
+            Operation, PosixPermsPerFile, ExtraData, Type
         )
     end, [
         {OwnerUserSessId, owner, <<"owner_posix">>},
@@ -1389,7 +1461,7 @@ run_posix_tests(Node, RootDirPath, #test_spec{
 
 run_posix_tests(
     Node, OwnerSessId, SessId, TestCaseRootDirPath,
-    Fun, PosixPermsPerFile, ExtraData, Type
+    Operation, PosixPermsPerFile, ExtraData, Type
 ) ->
     {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = maps:fold(
         fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
@@ -1405,7 +1477,7 @@ run_posix_tests(
     try
         run_posix_tests(
             Node, OwnerSessId, SessId, TestCaseRootDirPath,
-            Fun, ComplementaryPosixPermsPerFile,
+            Operation, ComplementaryPosixPermsPerFile,
             RequiredPosixPerms, ExtraData, Type
         )
     catch T:R ->
@@ -1434,7 +1506,7 @@ run_posix_tests(
 
 
 run_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, owner
 ) ->
     RequiredPermsWithoutOwnership = lists:filter(fun({_, Perm}) ->
@@ -1448,18 +1520,18 @@ run_posix_tests(
             set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
             ?assertNotMatch(
                 {error, _},
-                Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+                Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
             );
         _ ->
             run_standard_posix_tests(
                 Node, OwnerSessId, SessId, TestCaseRootDirPath,
-                Fun, ComplementaryPermsPerFile, RequiredPermsWithoutOwnership,
+                Operation, ComplementaryPermsPerFile, RequiredPermsWithoutOwnership,
                 ExtraData, owner
             )
     end;
 
 run_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
 ) ->
     OperationRequiresOwnership = lists:any(fun({_, Perm}) ->
@@ -1473,7 +1545,7 @@ run_posix_tests(
             set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
             ?assertMatch(
                 {error, ?EACCES},
-                Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+                Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
             );
         false ->
             RequiredNormalPosixPerms = lists:filter(fun({_, Perm}) ->
@@ -1481,28 +1553,28 @@ run_posix_tests(
             end, AllRequiredPerms),
             run_standard_posix_tests(
                 Node, OwnerSessId, SessId, TestCaseRootDirPath,
-                Fun, ComplementaryPermsPerFile, RequiredNormalPosixPerms, ExtraData, group
+                Operation, ComplementaryPermsPerFile, RequiredNormalPosixPerms, ExtraData, group
             )
     end;
 
 % Users not belonging to space or unauthorized should not be able to conduct any operation
 run_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
 ) ->
     set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
     ?assertMatch(
         {error, _},
-        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     ),
     ?assertMatch(
         {error, _},
-        Fun(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
     ).
 
 
 run_standard_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
 ) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
@@ -1524,7 +1596,7 @@ run_standard_posix_tests(
         set_modes(Node, EaccesModesPerFile),
         ?assertMatch(
             {error, ?EACCES},
-            Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
         )
     end, EaccesModesCombs),
 
@@ -1535,7 +1607,7 @@ run_standard_posix_tests(
     set_modes(Node, RequiredModesPerFile),
     ?assertNotMatch(
         {error, _},
-        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     ).
 
 
@@ -1552,16 +1624,25 @@ set_modes(Node, ModePerFile) ->
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tests acl permissions needed to perform #test_spec.operation.
+%% For each type (`allow`, `deny`) and identifier (`OWNER@`, user_id,
+%% group_id, `EVERYONE@`) it will setup environment and test combination
+%% of acl perms. It will assert that combinations not having all required
+%% perms fails and that combination consisting of only required perms succeeds.
+%% @end
+%%--------------------------------------------------------------------
 run_acl_tests(Node, RootDirPath, #test_spec{
-    owner = Owner,
-    user = User,
-    user_group = UserGroup,
+    owner_user = OwnerUser,
+    space_user = SpaceUser,
+    space_user_group = SpaceUserGroup,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     files = Files,
-    operation = Fun
+    operation = Operation
 }, Config) ->
-    OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
-    UserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    OwnerSessId = ?config({session_id, {OwnerUser, ?GET_DOMAIN(Node)}}, Config),
+    UserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
 
     TestCaseRootDirPerms = case RequiresTraverseAncestors of
         true -> [?traverse_container];
@@ -1578,24 +1659,24 @@ run_acl_tests(Node, RootDirPath, #test_spec{
         run_acl_tests(
             Node, OwnerSessId, SessId,
             <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
-            Fun, PermsPerFile, ExtraData, AceWho, AceFlags, Type
+            Operation, PermsPerFile, ExtraData, AceWho, AceFlags, Type
         )
     end, [
         {OwnerSessId, allow, <<"owner_acl_allow">>, ?owner, ?no_flags_mask},
-        {UserSessId, allow, <<"user_acl_allow">>, User, ?no_flags_mask},
-        {UserSessId, allow, <<"user_group_acl_allow">>, UserGroup, ?identifier_group_mask},
+        {UserSessId, allow, <<"user_acl_allow">>, SpaceUser, ?no_flags_mask},
+        {UserSessId, allow, <<"user_group_acl_allow">>, SpaceUserGroup, ?identifier_group_mask},
         {UserSessId, allow, <<"everyone_acl_allow">>, ?everyone, ?no_flags_mask},
 
         {OwnerSessId, deny, <<"owner_acl_deny">>, ?owner, ?no_flags_mask},
-        {UserSessId, deny, <<"user_acl_deny">>, User, ?no_flags_mask},
-        {UserSessId, deny, <<"user_group_acl_deny">>, UserGroup, ?identifier_group_mask},
+        {UserSessId, deny, <<"user_acl_deny">>, SpaceUser, ?no_flags_mask},
+        {UserSessId, deny, <<"user_group_acl_deny">>, SpaceUserGroup, ?identifier_group_mask},
         {UserSessId, deny, <<"everyone_acl_deny">>, ?everyone, ?no_flags_mask}
     ]).
 
 
 run_acl_tests(
     Node, OwnerSessId, SessId, TestCaseRootDirPath,
-    Fun, RequiredPermsPerFile, ExtraData, AceWho, AceFlags, Type
+    Operation, RequiredPermsPerFile, ExtraData, AceWho, AceFlags, Type
 ) ->
     {ComplementaryPermsPerFile, AllRequiredPerms} = maps:fold(
         fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
@@ -1611,7 +1692,7 @@ run_acl_tests(
     try
         run_acl_tests(
             Node, OwnerSessId, SessId, TestCaseRootDirPath,
-            Fun, ComplementaryPermsPerFile, AllRequiredPerms,
+            Operation, ComplementaryPermsPerFile, AllRequiredPerms,
             ExtraData, AceWho, AceFlags, Type
         )
     catch T:R ->
@@ -1643,7 +1724,7 @@ run_acl_tests(
 
 
 run_acl_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, allow
 ) ->
     [AllRequiredPermsComb | EaccesPermsCombs] = combinations(AllRequiredPerms),
@@ -1656,7 +1737,7 @@ run_acl_tests(
         set_acls(Node, EaccesPermsPerFile, #{}, AceWho, AceFlags),
         ?assertMatch(
             {error, ?EACCES},
-            Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
         )
     end, EaccesPermsCombs),
 
@@ -1667,11 +1748,11 @@ run_acl_tests(
     set_acls(Node, RequiredPermsPerFile, #{}, AceWho, AceFlags),
     ?assertNotMatch(
         {error, _},
-        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     );
 
 run_acl_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Fun,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny
 ) ->
     AllPermsPerFile = maps:map(fun(_, _) -> ?ALL_PERMS end, ComplementaryPermsPerFile),
@@ -1681,7 +1762,7 @@ run_acl_tests(
         set_acls(Node, AllPermsPerFile, #{Guid => [Perm]}, AceWho, AceFlags),
         ?assertMatch(
             {error, ?EACCES},
-            Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
         )
     end, AllRequiredPerms),
 
@@ -1689,7 +1770,7 @@ run_acl_tests(
     set_acls(Node, #{}, ComplementaryPermsPerFile, AceWho, AceFlags),
     ?assertNotMatch(
         {error, _},
-        Fun(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     ).
 
 

@@ -6,7 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for access control entity management.
+%%% This module provides utility functions for access control entry
+%%% (#access_control_entity{}), or ace in short, management. The
+%%% overall structure of ace is described in cdmi 1.1.1 spec book 16.1.
+%%% As for implemented subset of flags and masks they listed in
+%%% "ctool/include/posix/acl.hrl".
 %%% @end
 %%%--------------------------------------------------------------------
 -module(ace).

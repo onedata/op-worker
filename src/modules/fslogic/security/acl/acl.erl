@@ -28,14 +28,6 @@
     from_json/2, to_json/2
 ]).
 
--define(convert(__Conversion),
-    try
-        __Conversion
-    catch __T:__R  ->
-        ?debug_stacktrace("Failed to convert acl due to: ~p:~p", [__T, __R]),
-        throw({error, ?EINVAL})
-    end
-).
 
 %%%===================================================================
 %%% API
@@ -84,9 +76,23 @@ assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
 
 -spec from_json([map()], Format :: gui | cdmi) -> acl() | no_return().
 from_json(JsonAcl, Format) ->
-    ?convert([ace:from_json(JsonAce, Format) || JsonAce <- JsonAcl]).
+    try
+        [ace:from_json(JsonAce, Format) || JsonAce <- JsonAcl]
+    catch Type:Reason ->
+        ?debug_stacktrace("Failed to translate json(~p) to acl due to: ~p:~p", [
+            Format, Type, Reason
+        ]),
+        throw({error, ?EINVAL})
+    end.
 
 
 -spec to_json(acl(), Format :: gui | cdmi) -> [map()] | no_return().
 to_json(Acl, Format) ->
-    ?convert([ace:to_json(Ace, Format) || Ace <- Acl]).
+    try
+        [ace:to_json(Ace, Format) || Ace <- Acl]
+    catch Type:Reason ->
+        ?debug_stacktrace("Failed to convert acl to json(~p) due to: ~p:~p", [
+            Format, Type, Reason
+        ]),
+        throw({error, ?EINVAL})
+    end.
