@@ -23,6 +23,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -78,6 +79,10 @@ operation_supported(get, attrs, private) -> true;
 operation_supported(get, xattrs, private) -> true;
 operation_supported(get, json_metadata, private) -> true;
 operation_supported(get, rdf_metadata, private) -> true;
+operation_supported(get, acl, private) -> true;
+
+operation_supported(update, instance, private) -> true;
+operation_supported(update, acl, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -181,6 +186,38 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = json_metadata}}) -> #{
 data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
     undefined;
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = acl}}) ->
+    undefined;
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
+    optional => #{
+        <<"posixPermissions">> => {binary,
+            fun(Mode) ->
+                try
+                    {true, binary_to_integer(Mode, 8)}
+                catch _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
+                end
+            end
+        },
+        <<"activePermissionsType">> => {binary, [<<"acl">>, <<"posix">>]}
+    }
+};
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = acl}}) -> #{
+    required => #{
+        <<"list">> => {any,
+            fun(JsonAcl) ->
+                try
+                    {true, acl:from_json(JsonAcl, gui)}
+                catch throw:{error, Errno} ->
+                    throw(?ERROR_POSIX(Errno))
+                end
+            end
+        }
+    }
+};
+
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
 
@@ -238,9 +275,17 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata
+    As =:= rdf_metadata;
+    As =:= acl
 ->
     has_access_to_file(Req#op_req.auth, Guid);
+
+authorize(#op_req{operation = update, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= acl
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
 
 authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -271,9 +316,17 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata
+    As =:= rdf_metadata;
+    As =:= acl
 ->
     assert_file_managed_locally(Req#op_req.auth, Guid);
+
+validate(#op_req{operation = update, gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= instance;
+    As =:= acl
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -411,7 +464,17 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     ?check(lfm:get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false)).
+    ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false));
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
+    case lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}) of
+        {ok, _} = Ans ->
+            Ans;
+        {error, ?ENODATA} ->
+            {ok, []};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -420,8 +483,24 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
+    ActivePermsType = maps:get(<<"activePermissionsType">>, Data, undefined),
+    PosixPerms = maps:get(<<"posixPermissions">>, Data, undefined),
+    case {ActivePermsType, PosixPerms} of
+        {undefined, undefined} ->
+            ok;
+        {<<"acl">>, undefined} ->
+            ok;
+        {<<"posix">>, undefined} ->
+            ?check(lfm:remove_acl(Auth#auth.session_id, {guid, Guid}));
+        {Type, _} when Type == undefined orelse Type == <<"posix">> ->
+            ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms));
+        {_, _} ->
+            ?ERROR_MALFORMED_DATA
+    end;
+update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
+    Acl = maps:get(<<"list">>, Data),
+    ?check(lfm:set_acl(Auth#auth.session_id, {guid, Guid}, Acl)).
 
 
 %%--------------------------------------------------------------------

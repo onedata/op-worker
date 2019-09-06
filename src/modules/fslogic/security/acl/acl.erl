@@ -53,7 +53,10 @@ get(FileCtx) ->
     end.
 
 
--spec exists(file_ctx:ctx()) -> boolean().
+-spec exists(file_id:file_guid() | file_ctx:ctx()) -> boolean().
+exists(FileGuid) when is_binary(FileGuid) ->
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    custom_metadata:exists_xattr_metadata(FileUuid, ?ACL_XATTR_NAME);
 exists(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:exists_xattr_metadata(FileUuid, ?ACL_XATTR_NAME).
