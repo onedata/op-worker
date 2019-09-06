@@ -157,7 +157,7 @@ get_file_qos_insecure(_UserCtx, FileCtx) ->
             #effective_file_qos{};
         EffQos ->
             #effective_file_qos{
-                qos_list = file_qos:get_qos_list(EffQos),
+                qos_entries = file_qos:get_qos_entries(EffQos),
                 target_storages = file_qos:get_target_storages(EffQos)
             }
     end,

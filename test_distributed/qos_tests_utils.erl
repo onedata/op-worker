@@ -36,16 +36,16 @@ assert_qos_entry_document(Worker, QosId, FileUuid, Expression, ReplicasNum, Poss
     ?assertMatch(ExpectedQosEntry, QosEntry).
 
 
-assert_qos_list(Worker, FileUuid, ExpectedQosList) ->
+assert_qos_list(Worker, FileUuid, ExpectedQosEntries) ->
 
-    {ok, #document{value = #file_qos{qos_list = ActualQosList}}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileUuid])),
-    ExpectedQosListSorted = lists:sort(ExpectedQosList),
-    ?assertMatch(ExpectedQosListSorted, ActualQosList).
+    {ok, #document{value = #file_qos{qos_entries = ActualQosEntries}}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileUuid])),
+    ExpectedQosEntriesSorted = lists:sort(ExpectedQosEntries),
+    ?assertMatch(ExpectedQosEntriesSorted, ActualQosEntries).
 
 
-assert_effective_qos(Worker, FileUuid, QosList, TargetStorages) ->
+assert_effective_qos(Worker, FileUuid, QosEntries, TargetStorages) ->
     ExpectedFileQos = #file_qos{
-        qos_list = QosList,
+        qos_entries = QosEntries,
         target_storages = TargetStorages
     },
     ExpectedFileQosSorted = sort_file_qos(ExpectedFileQos),
@@ -57,9 +57,9 @@ assert_effective_qos(Worker, FileUuid, QosList, TargetStorages) ->
 
 sort_file_qos(FileQos) ->
     FileQos#file_qos{
-        qos_list = lists:sort(FileQos#file_qos.qos_list),
-        target_storages = maps:map(fun(_, QosListForStorage) ->
-            lists:sort(QosListForStorage)
+        qos_entries = lists:sort(FileQos#file_qos.qos_entries),
+        target_storages = maps:map(fun(_, QosEntriesForStorage) ->
+            lists:sort(QosEntriesForStorage)
         end, FileQos#file_qos.target_storages)
     }.
 

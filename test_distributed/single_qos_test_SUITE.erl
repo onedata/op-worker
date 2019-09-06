@@ -841,7 +841,7 @@ init_per_testcase(_, Config) ->
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     Workers = ?config(op_worker_nodes, ConfigWithSessionInfo),
-    rpc:multicall(Workers, fslogic_worker, schedule_init_qos_cache_for_all_spaces, []),
+    rpc:multicall(Workers, fslogic_worker, init_qos_cache_for_all_spaces, []),
     mock_providers_qos(Config),
     mock_synchronize_file(Config),
     mock_space_storages(Config, maps:keys(?TEST_PROVIDERS_QOS)),
@@ -914,7 +914,7 @@ wait_for_qos_fulfillment(Worker, SessId, QosId) ->
 add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
     #{
         qos := Qos,
-        qos_list := ExpectedQosList,
+        qos_list := ExpectedQosEntries,
         target_storages := ExpectedTargetStorages
     } = TestSpec,
 
@@ -954,15 +954,15 @@ add_qos_for_file_and_check_qos_docs(Config, TestSpec) ->
         QosNameIdMapping#{QosName => QosId}
     end, #{}, Qos),
 
-    ExpectedQosListId = map_qos_names_to_ids(ExpectedQosList, QosNameIdMapping),
+    ExpectedQosEntriesId = map_qos_names_to_ids(ExpectedQosEntries, QosNameIdMapping),
 
-    qos_tests_utils:assert_qos_list(Worker, FileUuid, ExpectedQosListId).
+    qos_tests_utils:assert_qos_list(Worker, FileUuid, ExpectedQosEntriesId).
 
 
 add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
     #{
         qos := Qos,
-        qos_list := ExpectedQosList,
+        qos_list := ExpectedQosEntries,
         target_storages := ExpectedTargetStorages
     } = TestSpec,
 
@@ -1004,9 +1004,9 @@ add_qos_for_dir_and_check_qos_docs(Config, TestSpec) ->
         QosNameIdMapping#{QosName => QosId}
     end, #{}, Qos),
 
-    ExpectedQosListId = map_qos_names_to_ids(ExpectedQosList, QosNameIdMapping),
+    ExpectedQosEntriesId = map_qos_names_to_ids(ExpectedQosEntries, QosNameIdMapping),
 
-    qos_tests_utils:assert_qos_list(Worker, DirUuid, ExpectedQosListId),
+    qos_tests_utils:assert_qos_list(Worker, DirUuid, ExpectedQosEntriesId),
     
     % check that for file document file_qos has not been created
     ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileGuid])).
@@ -1016,7 +1016,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
     #{
         dir_structure := DirStructure,
         qos := Qos,
-        effective_qos := ExpectedEffQosList
+        effective_qos := ExpectedEffQosEntries
     } = TestSpec,
 
     [Worker] = ?config(op_worker_nodes, Config),
@@ -1059,22 +1059,22 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
     % check effective QoS according to test specification
     lists:foreach(fun(ExpectedEffQos) ->
         #{
-            qos_list := ExpectedQosList,
+            qos_list := ExpectedQosEntries,
             target_storages := ExpectedTargetStorages,
             file_path := FilePath
         } = ExpectedEffQos,
 
-        ExpectedQosListId = map_qos_names_to_ids(ExpectedQosList, QosNameIdMapping),
+        ExpectedQosEntriesId = map_qos_names_to_ids(ExpectedQosEntries, QosNameIdMapping),
         ExpectedTargetStoragesId = maps:map(fun(_, QosNamesList) ->
             map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
         end, ExpectedTargetStorages),
         FileGuid = qos_tests_utils:get_guid(Worker, SessId, FilePath),
         FileUuid = file_id:guid_to_uuid(FileGuid),
-        qos_tests_utils:assert_effective_qos(Worker, FileUuid, ExpectedQosListId, ExpectedTargetStoragesId),
+        qos_tests_utils:assert_effective_qos(Worker, FileUuid, ExpectedQosEntriesId, ExpectedTargetStoragesId),
 
         % check that for file document file_qos has not been created
         ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileUuid]))
-    end, ExpectedEffQosList).
+    end, ExpectedEffQosEntries).
 
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->

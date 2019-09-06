@@ -41,17 +41,25 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% functions operating on record using datastore model API
--export([get/1, delete/1, create/6, create/7, update/2, add_links/4, delete_links/4, fold_links/4]).
+%% functions operating on document using datastore model API
+-export([
+    get/1, delete/1, create/6, create/7, update/2,
+    add_links/4, delete_links/4, fold_links/4
+]).
 
-%% higher-level functions operating on qos_entry record.
--export([add_impossible_qos/2, list_impossible_qos/0, get_file_guid/1,
-    get_expression/1, get_replicas_num/1, is_possible/1, get_space_id/1]).
+%% higher-level functions operating on qos_entry document
+-export([
+    add_impossible_qos/2, list_impossible_qos/0,
+    is_possible/1, get_space_id/1
+]).
 
-%% Functions responsible for traverse requests.
+%% functions operating on qos_entry record
+-export([get_file_guid/1, get_expression/1, get_replicas_num/1]).
+
+%% functions responsible for traverse requests.
 -export([remove_traverse_req/2]).
 
-%% Functions operating on traverses list.
+%% functions operating on traverses list.
 -export([add_traverse/3, remove_traverse/3, list_traverses/1]).
 
 %% datastore_model callbacks
@@ -76,9 +84,11 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
+-define(QOS_TRAVERSE_LIST(QosId), <<"qos_traverses", QosId/binary>>).
+
 
 %%%===================================================================
-%%% Functions operating on record using datastore_model API
+%%% Functions operating on document using datastore_model API
 %%%===================================================================
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
@@ -129,6 +139,7 @@ add_links(Scope, Key, TreeId, Links) ->
 delete_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Calls Fun(Link, Acc) for each link.
@@ -141,7 +152,7 @@ fold_links(Key, Fun, Acc, Opts) ->
 
 
 %%%===================================================================
-%%% Higher-level functions operating on qos_entry record.
+%%% Higher-level functions operating on qos_entry document.
 %%%===================================================================
 
 -spec get_file_guid(id()) -> {ok, file_id:file_guid()} | {error, term()}.
@@ -182,6 +193,19 @@ list_impossible_qos() ->
     ).
 
 
+-spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
+remove_traverse_req(QosId, TaskId) ->
+    update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
+        {ok, QosEntry#qos_entry{
+            traverse_reqs = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
+        }}
+    end).
+
+
+%%%===================================================================
+%%% Functions operating on qos_entry record.
+%%%===================================================================
+
 -spec get_expression(record()) -> qos_expression:expression().
 get_expression(QosEntry) ->
     QosEntry#qos_entry.expression.
@@ -197,19 +221,9 @@ is_possible(QosEntry) ->
     QosEntry#qos_entry.is_possible.
 
 
--spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
-remove_traverse_req(QosId, TaskId) ->
-    update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
-        {ok, QosEntry#qos_entry{
-            traverse_reqs = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
-        }}
-    end).
-
 %%%===================================================================
 %%% Functions operating on traverses list.
 %%%===================================================================
-
--define(QOS_TRAVERSE_LIST(QosId), <<"qos_traverses", QosId/binary>>).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -222,6 +236,7 @@ add_traverse(SpaceId, QosId, TraverseId) ->
     {ok, _} = add_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), Link),
     ok.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Remove given TraverseId from traverses list of given QosId.
@@ -230,6 +245,7 @@ add_traverse(SpaceId, QosId, TraverseId) ->
 -spec remove_traverse(od_space:id(), id(), traverse:id()) ->  ok.
 remove_traverse(SpaceId, QosId, TraverseId) ->
     ok = delete_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), TraverseId).
+
 
 %%--------------------------------------------------------------------
 %% @doc

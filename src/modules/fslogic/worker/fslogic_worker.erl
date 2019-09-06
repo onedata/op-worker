@@ -23,8 +23,8 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
--export([init/1, handle/1, cleanup/0, schedule_init_qos_cache_for_space/1,
-    schedule_init_qos_cache_for_all_spaces/0]).
+-export([init/1, handle/1, cleanup/0, init_qos_cache_for_space/1,
+    init_qos_cache_for_all_spaces/0]).
 -export([init_counters/0, init_report/0]).
 
 %%%===================================================================
@@ -166,10 +166,10 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
     schedule_periodical_spaces_autocleaning_check();
 handle(?INIT_QOS_CACHE_FOR_ALL_SPACES) ->
     ?debug("Initializing qos bounded cache for all spaces"),
-    init_qos_cache_for_all_spaces();
+    init_qos_cache_for_all_spaces_internal();
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
-    init_qos_cache_for_space(SpaceId);
+    init_qos_cache_for_space_internal(SpaceId);
 handle({?CHECK_QOS_CACHE, Msg = #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
     ?debug("Cleaning QoS bounded cache if needed"),
     bounded_cache:check_cache_size(Msg);
@@ -246,9 +246,16 @@ init_report() ->
 %% Schedule initialization of QoS bounded cache for given space.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_init_qos_cache_for_space(od_space:id()) -> ok.
-schedule_init_qos_cache_for_space(SpaceId) ->
+-spec init_qos_cache_for_space(od_space:id()) -> ok.
+init_qos_cache_for_space(SpaceId) ->
     schedule({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}, 0).
+
+
+-spec init_qos_cache_for_all_spaces() -> ok.
+init_qos_cache_for_all_spaces() ->
+    % TODO: VFS-5744 potential race condition:
+    % user may perform operations associated with QoS before cache initialization
+    schedule(?INIT_QOS_CACHE_FOR_ALL_SPACES, 0).
 
 %%%===================================================================
 %%% Internal functions
@@ -646,10 +653,6 @@ schedule_restart_autocleaning_runs() ->
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL).
 
--spec schedule_init_qos_cache_for_all_spaces() -> ok.
-schedule_init_qos_cache_for_all_spaces() ->
-    schedule(?INIT_QOS_CACHE_FOR_ALL_SPACES, 0).
-
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
     erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
@@ -717,8 +720,8 @@ restart_autocleaning_runs() ->
             ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
     end.
 
--spec init_qos_cache_for_all_spaces() -> ok.
-init_qos_cache_for_all_spaces() ->
+-spec init_qos_cache_for_all_spaces_internal() -> ok.
+init_qos_cache_for_all_spaces_internal() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) -> qos_bounded_cache:init(SpaceId) end, SpaceIds);
@@ -729,8 +732,8 @@ init_qos_cache_for_all_spaces() ->
             ?critical_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.
 
--spec init_qos_cache_for_space(od_space:id()) -> ok.
-init_qos_cache_for_space(SpaceId) ->
+-spec init_qos_cache_for_space_internal(od_space:id()) -> ok.
+init_qos_cache_for_space_internal(SpaceId) ->
     try qos_bounded_cache:init(SpaceId) of
         ok ->
             ok;

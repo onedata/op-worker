@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc The file_qos item contains aggregated information about QoS defined
 %%% for file or directory. It contains:
-%%%     - qos_list - holds IDs of all qos_entries defined for this file,
+%%%     - qos_entries - holds IDs of all qos_entries defined for this file,
 %%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
 %%%       should be stored are calculated using QoS expression. Then this mapping
@@ -16,8 +16,8 @@
 %%% It is created/updated when new qos_entry document is created for file or
 %%% directory. In this case target storages are chosen according to QoS expression
 %%% and number of required replicas defined in qos_entry document.
-%%% Then file_qos document is updated - qos_entry ID is added to QoS list and
-%%% target storages mapping.
+%%% Then file_qos document is updated - qos_entry ID is added to QoS entries list
+%%% and target storages mapping.
 %%% According to this getting full information about QoS defined for file or
 %%% directory requires calculating effective file_qos as file_qos document
 %%% is not created for each file separately.
@@ -46,7 +46,7 @@
 %% higher-level functions operating on file_qos record.
 -export([get_effective/1, get_effective/2, remove_qos_id/2,
     add_qos/4, is_replica_protected/2, get_qos_to_update/2,
-    get_qos_list/1, get_target_storages/1
+    get_qos_entries/1, get_target_storages/1
 ]).
 
 %% datastore_model callbacks
@@ -60,10 +60,9 @@
 -type record() :: #file_qos{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type qos_list() :: [qos_entry:id()].
--type target_storages() :: #{storage:id() => qos_list()}.
+-type target_storages() :: #{storage:id() => [qos_entry:id()]}.
 
--export_type([qos_list/0, target_storages/0]).
+-export_type([target_storages/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -149,22 +148,22 @@ get_effective(FileUuid, ErrorCallback) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes given Qos ID from both qos_list and target_storages in file_qos doc.
+%% Removes given Qos ID from both qos_entries and target_storages in file_qos doc.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
 remove_qos_id(FileUuid, QosId) ->
-    Diff = fun(FileQos = #file_qos{qos_list = QosList, target_storages = TS}) ->
-        UpdatedQosList = lists:delete(QosId, QosList),
-        UpdatedTS = maps:fold(fun(StorageId, QosList, UpdatedTSPartial) ->
-            case lists:delete(QosId, QosList) of
+    Diff = fun(FileQos = #file_qos{qos_entries = QosEntries, target_storages = TS}) ->
+        UpdatedQosEntries = lists:delete(QosId, QosEntries),
+        UpdatedTS = maps:fold(fun(StorageId, QosEntries, UpdatedTSPartial) ->
+            case lists:delete(QosId, QosEntries) of
                 [] ->
                     UpdatedTSPartial;
                 List ->
                     UpdatedTSPartial#{StorageId => List}
             end
         end, #{}, TS),
-        {ok, FileQos#file_qos{qos_list = UpdatedQosList, target_storages = UpdatedTS}}
+        {ok, FileQos#file_qos{qos_entries = UpdatedQosEntries, target_storages = UpdatedTS}}
     end,
 
     case update(FileUuid, Diff) of
@@ -191,16 +190,16 @@ add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
         key = FileUuid,
         scope = SpaceId,
         value = #file_qos{
-            qos_list = [QosId],
+            qos_entries = [QosId],
             target_storages = NewTargetStorages
         }
     },
 
-    Diff = fun(#file_qos{qos_list = CurrFileQos, target_storages = CurrTS}) ->
+    Diff = fun(#file_qos{qos_entries = CurrQosEntries, target_storages = CurrTS}) ->
         UpdatedTS = merge_storage_list_to_target_storages(
             QosId, TargetStoragesList, CurrTS
         ),
-        {ok, #file_qos{qos_list = lists:usort([QosId | CurrFileQos]), target_storages = UpdatedTS}}
+        {ok, #file_qos{qos_entries = lists:usort([QosId | CurrQosEntries]), target_storages = UpdatedTS}}
     end,
 
     case create_or_update(NewDoc, Diff) of
@@ -225,9 +224,9 @@ is_replica_protected(FileUuid, StorageId) ->
     maps:is_key(StorageId, QosStorages).
 
 
--spec get_qos_list(record()) -> qos_list().
-get_qos_list(FileQos) ->
-    FileQos#file_qos.qos_list.
+-spec get_qos_entries(record()) -> [qos_entry:id()].
+get_qos_entries(FileQos) ->
+    FileQos#file_qos.qos_entries.
 
 -spec get_target_storages(record()) -> target_storages().
 get_target_storages(FileQos) ->
@@ -250,11 +249,11 @@ get_qos_to_update(StorageId, EffectiveFileQos) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec merge_file_qos(record(), record()) -> record().
-merge_file_qos(#file_qos{qos_list = ParentQosList, target_storages = ParentStorages},
-    #file_qos{qos_list = ChildQosList, target_storages = ChildStorages}) ->
-    MergedQosList = lists:usort(ParentQosList ++ ChildQosList),
+merge_file_qos(#file_qos{qos_entries = ParentQosEntries, target_storages = ParentStorages},
+    #file_qos{qos_entries = ChildQosEntries, target_storages = ChildStorages}) ->
+    MergedQosEntries = lists:usort(ParentQosEntries ++ ChildQosEntries),
     MergedStorages = merge_target_storages(ParentStorages, ChildStorages),
-    #file_qos{qos_list = MergedQosList, target_storages = MergedStorages}.
+    #file_qos{qos_entries = MergedQosEntries, target_storages = MergedStorages}.
 
 
 %%--------------------------------------------------------------------
@@ -271,19 +270,19 @@ merge_target_storages(ParentStorages, ChildStorages) when map_size(ChildStorages
 merge_target_storages(ParentStorages, ChildStorages) ->
     ChildQosEntrySet = sets:from_list(lists:flatten(maps:values(ChildStorages))),
 
-    ParentStoragesWithoutCommonQos = maps:fold(fun(StorageId, QosList, Acc) ->
-        NewQosList = sets:to_list(sets:subtract(sets:from_list(QosList), ChildQosEntrySet)),
-        case NewQosList of
+    ParentStoragesWithoutCommonQos = maps:fold(fun(StorageId, QosEntries, Acc) ->
+        NewQosEntries = sets:to_list(sets:subtract(sets:from_list(QosEntries), ChildQosEntrySet)),
+        case NewQosEntries of
             [] -> Acc;
-            _ -> Acc#{StorageId => NewQosList}
+            _ -> Acc#{StorageId => NewQosEntries}
         end
     end, #{}, ParentStorages),
 
-    maps:fold(fun(StorageId, ChildQosList, Acc) ->
+    maps:fold(fun(StorageId, ChildQosEntries, Acc) ->
         maps:update_with(StorageId,
-            fun(ExistingQosList) ->
-                ExistingQosList ++ ChildQosList
-            end, ChildQosList, Acc)
+            fun(ExistingQosEntries) ->
+                ExistingQosEntries ++ ChildQosEntries
+            end, ChildQosEntries, Acc)
     end, ParentStoragesWithoutCommonQos, ChildStorages).
 
 
@@ -323,6 +322,6 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {file_qos, [string]},
+        {qos_entries, [string]},
         {target_storages, #{string => [string]}}
     ]}.

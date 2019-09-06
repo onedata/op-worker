@@ -64,15 +64,15 @@ qos_status_test(Config) ->
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, nested, Filename),
     {GuidsAndPaths, QosDesc} = qos_test_utils:add_qos_test_base(Config, QosSpec#{perform_checks => false}),
-    QosList = [QosId || {_, QosId, _} <- QosDesc],
+    QosEntries = [QosId || {_, QosId, _} <- QosDesc],
 
     % this is needed so only traverse transfers will start
     mock_qos_restore(Config),
 
     lists:foreach(fun({Guid, Path}) ->
         lists:foreach(fun(Worker) ->
-            ?assertEqual(false, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
-            ?assertEqual(false, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
+            ?assertEqual(false, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {guid, Guid}), ?ATTEMPTS),
+            ?assertEqual(false, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {path, Path}), ?ATTEMPTS)
         end, Workers)
     end, maps:get(files, GuidsAndPaths)),
 
@@ -80,8 +80,8 @@ qos_status_test(Config) ->
 
     lists:foreach(fun({Guid, Path}) ->
         lists:foreach(fun(Worker) ->
-            ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
-            ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
+            ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {guid, Guid}), ?ATTEMPTS),
+            ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {path, Path}), ?ATTEMPTS)
         end, Workers)
     end, maps:get(files, GuidsAndPaths)),
 
@@ -101,15 +101,15 @@ qos_status_test(Config) ->
         lists:foreach(fun(Worker) ->
             lists:foreach(fun({G, P}) ->
                 ct:print("Checking ~p: ~n\tfile: ~p~n\tis_ancestor: ~p", [Worker, P, IsAncestor(P, FilePath)]),
-                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
-                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}), ?ATTEMPTS)
+                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {guid, G}), ?ATTEMPTS),
+                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {path, P}), ?ATTEMPTS)
             end, FilesAndDirs)
         end, Workers),
         finish_transfers([FileGuid]),
         lists:foreach(fun(Worker) ->
             lists:foreach(fun({G, P}) ->
-                ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
-                ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}), ?ATTEMPTS)
+                ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {guid, G}), ?ATTEMPTS),
+                ?assertEqual(true, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosEntries, {path, P}), ?ATTEMPTS)
             end, FilesAndDirs)
         end, Workers)
     end, maps:get(files, GuidsAndPaths)).
@@ -168,7 +168,7 @@ init_per_suite(Config) ->
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
         Workers = ?config(op_worker_nodes, NewConfig3),
-        rpc:multicall(Workers, fslogic_worker, schedule_init_qos_cache_for_all_spaces, []),
+        rpc:multicall(Workers, fslogic_worker, init_qos_cache_for_all_spaces, []),
         NewConfig3
     end,
     [

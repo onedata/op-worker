@@ -60,8 +60,8 @@ add_qos_test_base(Config, Spec) ->
                     ok
             end,
             case maps:find(files_qos, Spec) of
-                {ok, ExpectedFilesQosList} ->
-                    ?assertMatch(true, assert_file_qos(SourceProvider, SessId(SourceProvider), ExpectedFilesQosList, PathToFileQos));
+                {ok, ExpectedFilesQosEntries} ->
+                    ?assertMatch(true, assert_file_qos(SourceProvider, SessId(SourceProvider), ExpectedFilesQosEntries, PathToFileQos));
                 _ ->
                     ok
             end,
@@ -193,35 +193,35 @@ fill_in_expected_distribution(ExpectedDistribution, FileContent) ->
         end
     end, ExpectedDistribution).
 
-assert_file_qos(Worker, SessId, ExpectedFileQosList, QosDescList) ->
+assert_file_qos(Worker, SessId, ExpectedFileQosEntries, QosDescList) ->
     lists:all(fun(ExpectedFileQos) ->
         #{
             paths := PathsList,
-            qos_list := ExpectedQosListWithNames,
+            qos_list := ExpectedQosEntriesWithNames,
             target_providers := ExpectedTargetProvidersWithNames
         } = ExpectedFileQos,
 
         lists:foldl(fun(Path, Matched) ->
             % get actual file qos
-            {ok, {QosList, TargetStorages}} = lfm_proxy:get_file_qos(Worker, SessId, {path, Path}),
+            {ok, {QosEntries, TargetStorages}} = lfm_proxy:get_file_qos(Worker, SessId, {path, Path}),
 
             % in test spec we pass qos name, now we have to change it to qos id
-            ExpectedQosList = lists:map(fun(QosName) ->
+            ExpectedQosEntries = lists:map(fun(QosName) ->
                 QosDesc = lists:keyfind(QosName, 1, QosDescList),
                 element(2, QosDesc)
-            end, ExpectedQosListWithNames),
+            end, ExpectedQosEntriesWithNames),
 
             % sort both expected and actual qos_list and check if they match
-            ExpectedQosListSorted = lists:sort(ExpectedQosList),
-            FileQosSorted = lists:sort(QosList),
-            QosListMatched = ExpectedQosListSorted == FileQosSorted,
-            case QosListMatched of
+            ExpectedQosEntriesSorted = lists:sort(ExpectedQosEntries),
+            FileQosSorted = lists:sort(QosEntries),
+            QosEntriesMatched = ExpectedQosEntriesSorted == FileQosSorted,
+            case QosEntriesMatched of
                 true ->
                     ok;
                 false ->
                     ct:pal("Wrong qos_list for: ~p~n"
                     "    Expected: ~p~n"
-                    "    Got: ~p~n", [Path, ExpectedQosList, FileQosSorted])
+                    "    Got: ~p~n", [Path, ExpectedQosEntries, FileQosSorted])
             end,
 
             % again in test spec we have qos names, need to change them to qos ids
@@ -250,14 +250,14 @@ assert_file_qos(Worker, SessId, ExpectedFileQosList, QosDescList) ->
                     "    Got: ~p~n", [Path, ExpectedTargetProvidersSorted,
                         TargetProvidersSorted])
             end,
-            case QosListMatched andalso TargetProvidersMatched of
+            case QosEntriesMatched andalso TargetProvidersMatched of
                 true ->
                     Matched;
                 false ->
                     false
             end
         end, true, PathsList)
-    end, ExpectedFileQosList).
+    end, ExpectedFileQosEntries).
 
 assert_qos_invalidated(Worker, SessId, QosToCheckList, QosDescList, GuidsAndPaths) ->
     lists:foldl(fun(InvalidatedQosMap, InvalidatedQosPartial) ->
@@ -267,7 +267,7 @@ assert_qos_invalidated(Worker, SessId, QosToCheckList, QosDescList, GuidsAndPath
         } = InvalidatedQosMap,
 
         FileGuid = get_guid(Path, GuidsAndPaths),
-        {ok, #file_qos{qos_list = FileQos}} = ?assertMatch(
+        {ok, #file_qos{qos_entries = FileQos}} = ?assertMatch(
             {ok, {_,_}}, lfm_proxy:get_file_qos(Worker, SessId, {guid, FileGuid})
         ),
 

@@ -35,7 +35,7 @@
 %%%
 %%% The file_qos item contains aggregated information about QoS defined
 %%% for file or directory. It contains:
-%%%     - qos_list - holds IDs of all qos_entries defined for this file,
+%%%     - qos_entries - holds IDs of all qos_entries defined for this file,
 %%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
 %%%       should be stored are calculated using QoS expression. Then this mapping
@@ -44,8 +44,8 @@
 %%% It is created/updated when new qos_entry document is created for file or
 %%% directory. In this case target storages are chosen according to QoS expression
 %%% and number of required replicas defined in qos_entry document.
-%%% Then file_qos document is updated - qos_entry ID is added to QoS list and
-%%% target storages mapping.
+%%% Then file_qos document is updated - qos_entry ID is added to QoS entries list
+%%% and target storages mapping.
 %%% According to this getting full information about QoS defined for file or
 %%% directory requires calculating effective file_qos as file_qos document
 %%% is not created for each file separately.

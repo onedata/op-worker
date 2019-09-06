@@ -260,7 +260,7 @@
 % particular file should be calculated using effective value (see file_qos.erl)
 -record(file_qos, {
     % List containing QoS Ids defined for given file.
-    qos_list = [] :: file_qos:qos_list(),
+    qos_entries = [] :: [qos_entry:id()],
     % Mapping storage ID -> List containing QoS Ids that requires file replica
     % on this storage
     target_storages = #{} :: file_qos:target_storages()

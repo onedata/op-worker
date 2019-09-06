@@ -191,7 +191,7 @@
 }).
 
 -record(effective_file_qos, {
-    qos_list = [] :: file_qos:qos_list(),
+    qos_entries = [] :: [qos_entry:id()],
     target_storages = #{} :: file_qos:target_storages()
 }).
 
