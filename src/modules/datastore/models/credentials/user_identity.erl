@@ -100,6 +100,8 @@ fetch(Credentials) ->
                     false ->
                         ?ERROR_FORBIDDEN;
                     true ->
+                        % Fetch the user doc to trigger user setup (od_user:run_after/3)
+                        {ok, _} = user_logic:get(Auth, UserId),
                         NewDoc = #document{
                             key = id(Auth),
                             value = #user_identity{user_id = UserId}
