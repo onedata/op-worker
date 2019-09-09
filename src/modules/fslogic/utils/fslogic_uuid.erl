@@ -24,8 +24,8 @@
     space_dir_uuid_to_spaceid_no_error/1, spaceid_to_space_dir_guid/1
 ]).
 
--define(USER_ROOT_PREFIX, "mmmmmm_userRoot_").
--define(SPACE_ROOT_PREFIX, "mmmmmm_space_").
+-define(USER_ROOT_PREFIX, "userRoot_").
+-define(SPACE_ROOT_PREFIX, "space_").
 
 %%%===================================================================
 %%% API

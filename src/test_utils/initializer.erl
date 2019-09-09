@@ -238,7 +238,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     token = Token, groups = Groups, name = UserName}} | R], Config) ->
 
     Name = fun(Text, User) ->
-        list_to_binary("mmmmmm_" ++ Text ++ "_" ++ binary_to_list(User)) end,
+        list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
 
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     Iden = #user_identity{user_id = UserId},

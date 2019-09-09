@@ -39,7 +39,7 @@
 get_routing_key(#event{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}) ->
-    {ok, <<"mmmmmm_file_attr_changed.", (FileAttr#file_attr.guid)/binary>>};
+    {ok, <<"file_attr_changed.", (FileAttr#file_attr.guid)/binary>>};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}) ->
     FileGuid = file_id:pack_guid(
         FileLocation#file_location.uuid,

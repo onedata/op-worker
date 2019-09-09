@@ -30,14 +30,14 @@
 %% root user definitions
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
--define(ROOT_USER_ID, <<"mmmmmm_0">>).
--define(ROOT_SESS_ID, <<"mmmmmm_0">>).
+-define(ROOT_USER_ID, <<"0">>).
+-define(ROOT_SESS_ID, <<"0">>).
 -define(ROOT_AUTH, root_auth).
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
 -define(GUEST_IDENTITY, #user_identity{user_id = ?GUEST_USER_ID}).
-
+% TODO - czy guid musi sie dla routowania zaczynac od uuid?
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
 %% Mode for automatically created parent directory while creating file/directory.

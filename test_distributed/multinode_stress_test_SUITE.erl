@@ -66,9 +66,10 @@ single_dir_creation_test_base(Config) ->
     ProcNum = ?config(proc_num, Config),
 
 %%    [FirstWorker | _] = ?config(op_worker_nodes, Config),
-%%    Workers = [rpc:call(FirstWorker, consistent_hashing, get_node, [<<>>])],
+%%    Workers = [rpc:call(FirstWorker, consistent_hashing, get_node, [<<"mmmmmm">>])],
+%%    Workers = ?config(op_worker_nodes, Config) -- [rpc:call(FirstWorker, consistent_hashing, get_node, [<<>>])],
     [FirstWorker | _] = Workers = ?config(op_worker_nodes, Config),
-    User = <<"mmmmmm_user1">>,
+    User = <<"user1">>,
 
     [FirstSessId | _] = SessIds =
         lists:map(fun(Worker) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end, Workers),

@@ -33,12 +33,13 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    disc_driver => undefined
+    disc_driver => undefined,
+    memory_copies => all
 }).
 
--define(LUMA_USER_ROOT_PREFIX, <<"mmmmmm_luma_user_">>).
--define(REV_LUMA_USER_ROOT_PREFIX, <<"mmmmmm_rev_luma_user_">>).
--define(REV_LUMA_GROUP_ROOT_PREFIX, <<"mmmmmm_rev_luma_group_">>).
+-define(LUMA_USER_ROOT_PREFIX, <<"uma_user_">>).
+-define(REV_LUMA_USER_ROOT_PREFIX, <<"rev_luma_user_">>).
+-define(REV_LUMA_GROUP_ROOT_PREFIX, <<"rev_luma_group_">>).
 -define(ROOTS, [
     ?LUMA_USER_ROOT_PREFIX,
     ?REV_LUMA_USER_ROOT_PREFIX,
