@@ -59,7 +59,7 @@ add_hook(FileUuid, Identifier, #hook{args = Args} = Hook) ->
 execute_hooks(#document{key = Key}) ->
     Hooks = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #delayed_hooks{hooks = H}}} -> H;
-        _ -> []
+        _ -> #{}
     end,
     lists:foreach(fun(#hook{module = Module, function = Function, args = Args}) ->
         try
@@ -114,10 +114,10 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {hooks, #{binary => [{record, [
+        {hooks, #{binary => {record, [
             {module, atom},
             {function, atom},
             {args, binary}
-        ]}]}}
+        ]}}}
     ]}.
 

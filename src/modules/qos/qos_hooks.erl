@@ -21,7 +21,7 @@
     handle_qos_entry_change/2,
     maybe_update_file_on_storage/2,
     maybe_update_file_on_storage/3,
-    maybe_start_traverse/5
+    maybe_start_traverse/4
 ]).
 
 %%--------------------------------------------------------------------
@@ -43,11 +43,10 @@ handle_qos_entry_change(SpaceId, #document{
 }) ->
     file_qos:add_qos(FileUuid, SpaceId, QosId, []),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    lists:foreach(fun(#qos_traverse_req{task_id = TaskId, start_file_uuid = StartFileUuid,
-        qos_origin_file_guid = QosOriginFileGuid, target_storage = TS}) ->
+    maps:fold(fun(TaskId, #qos_traverse_req{start_file_uuid = StartFileUuid, target_storage = TS}, _) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
-        maybe_start_traverse(FileCtx, QosId, QosOriginFileGuid, TS, TaskId)
-    end, TR).
+        ok = maybe_start_traverse(FileCtx, QosId, TS, TaskId)
+    end, ok, TR).
 
 
 %%--------------------------------------------------------------------
@@ -72,8 +71,7 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
         _ ->
             QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
             lists:foreach(fun(QosId) ->
-                {ok, OriginGuid} = qos_entry:get_file_guid(QosId),
-                ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginGuid, StorageId, restore)
+                ok = qos_traverse:restore_qos(FileCtx, QosId, StorageId)
             end, QosToUpdate)
     end.
 
@@ -86,12 +84,10 @@ maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
 %% @doc
 %% Executed only by provider to which given storage belongs to.
 %% Starts QoS traverse and updates file_qos accordingly.
-%% Returns true if traverse was started.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), file_meta:uuid(), storage:id(), traverse:id()) ->
-    boolean().
-maybe_start_traverse(FileCtx, QosId, OriginFileGuid, Storage, TaskId) ->
+-spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> boolean().
+maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     % TODO VFS-5573 use storage id instead of provider
@@ -99,15 +95,10 @@ maybe_start_traverse(FileCtx, QosId, OriginFileGuid, Storage, TaskId) ->
         Storage ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, Storage, traverse, TaskId),
-            ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
-            case qos_entry:remove_traverse_req(QosId, TaskId) of
-                {ok, _} -> ok;
-                % request is from the same provider and qos_entry is not yet created
-                {error, not_found} -> ok;
-                {error, _} = Error -> throw(Error)
-            end,
-            true;
+            % fixme check file exists
+            ok = qos_traverse:start_initial_traverse(FileCtx, QosId, Storage, TaskId),
+            {ok, _} = qos_entry:mark_traverse_started(QosId, TaskId),
+            ok;
         _ ->
-            false
+            ok
     end.

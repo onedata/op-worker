@@ -251,22 +251,19 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList) -
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     QosId = datastore_utils:gen_key(),
 
-    TraverseReqs = lists:filtermap(fun(Storage) ->
+    TraverseReqs = lists:foldl(fun(Storage, Acc) ->
         TaskId = datastore_utils:gen_key(),
-        FileGuid = file_ctx:get_guid_const(FileCtx),
-        case qos_hooks:maybe_start_traverse(FileCtx, QosId, FileGuid, Storage, TaskId) of
-            true -> false;
-            false -> {true, #qos_traverse_req{
-                task_id = TaskId,
-                start_file_uuid = FileUuid,
-                qos_origin_file_guid = FileGuid,
-                target_storage = Storage
-            }}
-        end
-    end, TargetStoragesList),
+        Acc#{TaskId => #qos_traverse_req{
+            start_file_uuid = FileUuid,
+            target_storage = Storage
+        }}
+    end, #{}, TargetStoragesList),
 
     {ok, _} = qos_entry:create(SpaceId, QosId, FileUuid, QosExpressionInRPN,
         ReplicasNum, true, TraverseReqs),
+    maps:fold(fun(TaskId, #qos_traverse_req{target_storage = Storage}, _) ->
+        ok = qos_hooks:maybe_start_traverse(FileCtx, QosId, Storage, TaskId)
+    end, ok, TraverseReqs),
     QosId.
 
 

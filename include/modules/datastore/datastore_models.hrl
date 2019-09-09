@@ -281,14 +281,12 @@
     hooks = #{} :: #{binary() => #hook{}}
 }).
 
+% fixme
 % This record is a request to remote provider to start QoS traverse.
 % Defined here as qos_entry record depends on it.
 -record(qos_traverse_req, {
-    task_id :: traverse:id(),
     % uuid of file that travers should start from
     start_file_uuid :: file_meta:uuid(),
-    % guid of file QoS was assigned to
-    qos_origin_file_guid :: file_id:file_guid(),
     target_storage :: storage:id()
 }).
 
@@ -302,7 +300,8 @@
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     is_possible = false :: boolean(),
-    traverse_reqs = [] :: [#qos_traverse_req{}]
+    traverse_reqs = #{} :: #{binary() => #qos_traverse_req{}},
+    traverses = #{} :: #{binary() => #qos_traverse_req{}}
 }).
 
 -record(file_meta, {

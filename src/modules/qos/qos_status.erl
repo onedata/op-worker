@@ -30,7 +30,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([add_status_link/5, delete_status_link/5, check_fulfilment/2, get_relative_path/2]).
+-export([add_link/5, delete_link/5, check_fulfilment/2, get_relative_path/2]).
 
 -type path() :: binary().
 
@@ -48,9 +48,9 @@
 %% Adds new status link for given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec add_status_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
+-spec add_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
     storage:id()) ->  ok | {error, term()}.
-add_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
+add_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
     Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId), TaskId},
     {ok, _} = qos_entry:add_links(Scope, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(), Link),
     ok.
@@ -60,9 +60,9 @@ add_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
 %% Deletes given status link from given qos.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_status_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
+-spec delete_link(qos_entry:id(), datastore_doc:scope(), path(), traverse:id(),
     storage:id()) -> ok | {error, term()}.
-delete_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
+delete_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
     ok = qos_entry:delete_links(Scope, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(),
         ?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId)).
 
@@ -74,8 +74,27 @@ delete_status_link(QosId, Scope, RelativePath, TaskId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosId, FileGuid) ->
-    {ok, #document{value = QosEntry, scope = SpaceId}} = qos_entry:get(QosId),
-    check_fulfilment_internal(QosId, SpaceId, FileGuid, QosEntry).
+    {ok, #document{value = #qos_entry{file_uuid = OriginUuid} = QosEntry, scope = SpaceId}} = qos_entry:get(QosId),
+    case QosEntry#qos_entry.is_possible of
+        false -> false;
+        true ->
+            % are all traverses finished?
+            % fixme better case condition
+            case maps:size(QosEntry#qos_entry.traverses) == 0 andalso maps:size(QosEntry#qos_entry.traverse_reqs) == 0 of
+                true ->
+                    OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
+                    RelativePath = get_relative_path(OriginGuid, FileGuid),
+                    case get_next_status_link(QosId, RelativePath) of
+                        {ok, empty} ->
+                            true;
+                        {ok, Path} ->
+                            not str_utils:binary_starts_with(Path, RelativePath)
+                    end;
+                false ->
+                    %TODO VFS-5642 check if subtree was already traversed
+                    false
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -97,29 +116,6 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec check_fulfilment_internal(qos_entry:id(), od_space:id(), file_meta:uuid(), qos_entry:record()) ->
-    boolean().
-check_fulfilment_internal(QosId, SpaceId, FileGuid, #qos_entry{file_uuid = OriginUuid} = QosEntry) ->
-    case QosEntry#qos_entry.is_possible of
-        false -> false;
-        true ->
-            % are all traverses finished?
-            case qos_entry:list_traverses(QosId) ++ QosEntry#qos_entry.traverse_reqs == [] of
-                true ->
-                    %TODO VFS-5642 check if subtree was already traversed
-                    OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
-                    RelativePath = get_relative_path(OriginGuid, FileGuid),
-                    case get_next_status_link(QosId, RelativePath) of
-                        {ok, empty} ->
-                            true;
-                        {ok, Path} ->
-                            not str_utils:binary_starts_with(Path, RelativePath)
-                    end;
-                false ->
-                    false
-            end
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

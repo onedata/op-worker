@@ -895,9 +895,9 @@ mock_start_traverse(Config) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginFileGuid, Storage, traverse, TaskId),
+            ok = qos_traverse:start_initial_traverse(FileCtx, QosId, OriginFileGuid, Storage, traverse, TaskId),
             ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
-            case qos_entry:remove_traverse_req(QosId, TaskId) of
+            case qos_entry:mark_traverse_started(QosId, TaskId) of
                 {ok, _} -> ok;
                 % request is from the same provider and qos_entry is not yet created
                 {error, not_found} -> ok;

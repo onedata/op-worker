@@ -57,13 +57,10 @@
 -export([get_file_guid/1, get_expression/1, get_replicas_num/1]).
 
 %% functions responsible for traverse requests.
--export([remove_traverse_req/2]).
-
-%% functions operating on traverses list.
--export([add_traverse/3, remove_traverse/3, list_traverses/1]).
+-export([mark_traverse_started/2, mark_traverse_finished/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
 
 
 -type id() :: datastore_doc:key().
@@ -193,11 +190,22 @@ list_impossible_qos() ->
     ).
 
 
--spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
-remove_traverse_req(QosId, TaskId) ->
-    update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
+% fixme name
+-spec mark_traverse_started(id(), traverse:id()) ->  {ok, id()}.
+mark_traverse_started(QosId, TaskId) ->
+    update(QosId, fun(#qos_entry{traverse_reqs = TR, traverses = Traverses} = QosEntry) ->
+        {TraverseReq, NewTR} = maps:take(TaskId, TR),
         {ok, QosEntry#qos_entry{
-            traverse_reqs = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
+            traverse_reqs = NewTR,
+            traverses = Traverses#{TaskId => TraverseReq}
+        }}
+    end).
+
+% fixme spec
+mark_traverse_finished(QosId, TaskId) ->
+    update(QosId, fun(#qos_entry{traverses = Traverses} = QosEntry) ->
+        {ok, QosEntry#qos_entry{
+            traverses = maps:remove(TaskId, Traverses)
         }}
     end).
 
@@ -222,46 +230,6 @@ is_possible(QosEntry) ->
 
 
 %%%===================================================================
-%%% Functions operating on traverses list.
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Add given TraverseId to traverses list of given QosId.
-%% @end
-%%--------------------------------------------------------------------
--spec add_traverse(od_space:id(), id(), traverse:id()) ->  ok.
-add_traverse(SpaceId, QosId, TraverseId) ->
-    Link = {TraverseId, TraverseId},
-    {ok, _} = add_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), Link),
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove given TraverseId from traverses list of given QosId.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_traverse(od_space:id(), id(), traverse:id()) ->  ok.
-remove_traverse(SpaceId, QosId, TraverseId) ->
-    ok = delete_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), TraverseId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% List traverses of given QosId.
-%% @end
-%%--------------------------------------------------------------------
--spec list_traverses(id()) ->  [traverse:id()].
-list_traverses(QosId) ->
-    {ok, Traverses} = fold_links(?QOS_TRAVERSE_LIST(QosId),
-        fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
-        [], #{}
-    ),
-    Traverses.
-
-
-%%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
@@ -283,10 +251,33 @@ get_record_struct(1) ->
         {expression, [string]},
         {replicas_num, integer},
         {is_possible, boolean},
-        {traverse_req, [{record, [
-            {task_id, string},
+        {traverse_reqs, #{binary => {record, [
             {start_file_uuid, string},
-            {qos_origin_file_guid, string},
             {target_storage, string}
-        ]}]}
+        ]}}},
+        {traverses, #{binary => {record, [
+            {start_file_uuid, string},
+            {target_storage, string}
+        ]}}}
     ]}.
+
+% fixme doc and spec
+% fixme modified qos_traverse_req
+resolve_conflict(_Ctx, #document{value = Value}, PrevDoc) ->
+    Reqs1 = PrevDoc#document.value#qos_entry.traverse_reqs,
+    Reqs2 = Value#qos_entry.traverse_reqs,
+    Traverses1 = PrevDoc#document.value#qos_entry.traverses,
+    Traverses2 = Value#qos_entry.traverses,
+    case (Reqs1 == Reqs2) and (Traverses1 == Traverses2) of
+        true ->
+            default;
+        false ->
+            NewTraverseReqsKeys = [X || X <- maps:keys(Reqs1), Y <- maps:keys(Reqs2), X==Y],
+            NewTraverseListKeys = [X || X <- maps:keys(Traverses1), Y <- maps:keys(Traverses2), X==Y],
+            {true, PrevDoc#document{
+                value = Value#qos_entry{
+                    traverse_reqs = maps:with(NewTraverseReqsKeys, Reqs1),
+                    traverses = maps:with(NewTraverseListKeys, Traverses1)
+            }
+        }}
+    end.
