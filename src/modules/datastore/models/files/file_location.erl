@@ -14,7 +14,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 
 % API
 -export([local_id/1, id/2, save_and_bump_version/2,

@@ -37,7 +37,7 @@
     memory_copies => all
 }).
 
--define(LUMA_USER_ROOT_PREFIX, <<"uma_user_">>).
+-define(LUMA_USER_ROOT_PREFIX, <<"luma_user_">>).
 -define(REV_LUMA_USER_ROOT_PREFIX, <<"rev_luma_user_">>).
 -define(REV_LUMA_GROUP_ROOT_PREFIX, <<"rev_luma_group_">>).
 -define(ROOTS, [
