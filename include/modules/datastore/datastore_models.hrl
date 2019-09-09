@@ -266,12 +266,19 @@
     target_storages = #{} :: file_qos:target_storages()
 }).
 
+% fixme
+-record(hook, {
+    module :: module(),
+    function :: atom(),
+    % list of arbitrary args encoded using term_to_binary/1
+    args :: binary()
+}).
 
 % This model can be related with file and holds information
 % about hooks for given file. All hooks will be executed for
 % change of given file's file_meta document.
 -record(delayed_hooks, {
-    hooks = [] :: [binary()]
+    hooks = #{} :: #{binary() => #hook{}}
 }).
 
 % This record is a request to remote provider to start QoS traverse.

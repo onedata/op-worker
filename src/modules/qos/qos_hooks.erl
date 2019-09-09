@@ -17,7 +17,12 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([handle_qos_entry_change/2, maybe_update_file_on_storage/2, maybe_start_traverse/5]).
+-export([
+    handle_qos_entry_change/2,
+    maybe_update_file_on_storage/2,
+    maybe_update_file_on_storage/3,
+    maybe_start_traverse/5
+]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -25,6 +30,10 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
+handle_qos_entry_change(_SpaceId, #document{
+    deleted = true
+}) ->
+    ok;
 handle_qos_entry_change(SpaceId, #document{
     key = QosId,
     value = #qos_entry{
@@ -50,9 +59,13 @@ handle_qos_entry_change(SpaceId, #document{
 -spec maybe_update_file_on_storage(file_ctx:ctx(), storage:id()) -> ok.
 maybe_update_file_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    DelayedHook = fun(_AncestorFileDoc) -> maybe_update_file_on_storage(FileCtx, StorageId) end,
+    DelayedHook = #hook{
+        module = ?MODULE,
+        function = maybe_update_file_on_storage,
+        args = [file_ctx:get_space_id_const(FileCtx), file_ctx:get_uuid_const(FileCtx), StorageId]
+    },
     EffFileQos = file_qos:get_effective(FileUuid,
-        fun(ParentUuid) -> delayed_hooks:add_hook(ParentUuid, DelayedHook) end),
+        fun(ParentUuid) -> delayed_hooks:add_hook(ParentUuid, <<"check_qos">>, DelayedHook) end),
     case EffFileQos of
         undefined ->
             ok;
@@ -63,6 +76,10 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
                 ok = qos_traverse:fulfill_qos(FileCtx, QosId, OriginGuid, StorageId, restore)
             end, QosToUpdate)
     end.
+
+maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    maybe_update_file_on_storage(file_ctx:new_by_guid(FileGuid), StorageId).
 
 
 %%--------------------------------------------------------------------
@@ -94,4 +111,3 @@ maybe_start_traverse(FileCtx, QosId, OriginFileGuid, Storage, TaskId) ->
         _ ->
             false
     end.
-

@@ -42,10 +42,10 @@
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 -spec fulfill_qos(file_ctx:ctx(), qos_entry:id(), file_id:file_guid(), storage:id(), task_type()) -> ok.
 fulfill_qos(FileCtx, QosId, QosOriginFileGuid, TargetStorage, TaskType) ->

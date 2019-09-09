@@ -9,24 +9,26 @@
 %%% This model holds information about hooks registered for given file.
 %%% All hooks will be executed once for next change of given file's file_meta
 %%% document, then hooks list will be cleared.
-%%% Any exported function that accept binaries as arguments can be used as hook.
+%%% Any exported function can be used as a hook.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(delayed_hooks).
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
--export([execute_hooks/1, delete/1, add_hook/2]).
+-export([execute_hooks/1, delete/1, add_hook/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 
--type hook() :: fun((datastore:doc()) -> ok).
+-type hook() :: #hook{}.
+-type hook_identifier() :: binary().
 
--export_type([hook/0]).
+-export_type([hook/0, hook_identifier/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -41,11 +43,12 @@
 %% Registers new hook for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec add_hook(file_meta:uuid(), hook()) -> {ok, file_meta:uuid()} | {error, term()}.
-add_hook(FileUuid, Hook) ->
+-spec add_hook(file_meta:uuid(), hook_identifier(), hook()) -> {ok, file_meta:uuid()} | {error, term()}.
+add_hook(FileUuid, Identifier, #hook{args = Args} = Hook) ->
+    EncodedHook = Hook#hook{args = term_to_binary(Args)},
     datastore_model:update(?CTX, FileUuid, fun(#delayed_hooks{hooks = Hooks} = DelayedHooks) ->
-        {ok, DelayedHooks#delayed_hooks{hooks = [term_to_binary(Hook) | Hooks]}}
-    end, #delayed_hooks{hooks = [term_to_binary(Hook)]}).
+        {ok, DelayedHooks#delayed_hooks{hooks = Hooks#{Identifier => EncodedHook}}}
+    end, #delayed_hooks{hooks = #{Identifier => EncodedHook}}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -53,15 +56,19 @@ add_hook(FileUuid, Hook) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec execute_hooks(datastore:doc()) -> ok.
-execute_hooks(#document{key = Key} = Doc) ->
+execute_hooks(#document{key = Key}) ->
     Hooks = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #delayed_hooks{hooks = H}}} -> H;
         _ -> []
     end,
-    lists:foreach(fun(EncodedHook) ->
-        Hook = binary_to_term(EncodedHook),
-        ok = Hook(Doc)
-    end, Hooks).
+    lists:foreach(fun(#hook{module = Module, function = Function, args = Args}) ->
+        try
+            ok = erlang:apply(Module, Function, binary_to_term(Args))
+        catch Error:Type  ->
+            ?debug_stacktrace("Error during execution of delayed hook for file ~p ~p:~p", [Key, Error,Type]),
+            ok
+        end
+    end, maps:values(Hooks)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,6 +114,10 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {hooks, [binary]}
+        {hooks, #{binary => [{record, [
+            {module, atom},
+            {function, atom},
+            {args, binary}
+        ]}]}}
     ]}.
 
