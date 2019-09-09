@@ -156,17 +156,17 @@
     },
     "test_global_setup": {
         "users": {
-            "mmmmmm_user1": {
-                "default_space": "mmmmmm_space1"
+            "user1": {
+                "default_space": "space1"
             }
         },
         "groups": {
         },
         "spaces": {
-            "mmmmmm_space1": {
-                "displayed_name": "mmmmmm_space1",
+            "space1": {
+                "displayed_name": "space1",
                 "users": [
-                    "mmmmmm_user1"
+                    "user1"
                 ],
                 "groups": [
                 ],
