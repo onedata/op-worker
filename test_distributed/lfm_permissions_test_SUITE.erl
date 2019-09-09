@@ -112,7 +112,7 @@ all() ->
         check_rdwr_perms_test,
 
         create_share_test,
-%%        remove_share_test,    TODO uncomment after fixing
+        remove_share_test,
 
 %%        get_acl_test, % TODO uncomment after fixing removal of acl when changing posix mode
         set_acl_test,

@@ -63,11 +63,13 @@ assert_permitted([], _User, _Operations, _FileCtx) ->
 assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            case ace:check_permission(Operations, Ace) of
-                ok ->
+            case ace:check_against(Operations, Ace) of
+                allowed ->
                     ok;
-                LeftoverOperations ->
-                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2)
+                {inconclusive, LeftoverOperations} ->
+                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
+                denied ->
+                    throw(?EACCES)
             end;
         {false, FileCtx2} ->
             assert_permitted(Rest, User, Operations, FileCtx2)

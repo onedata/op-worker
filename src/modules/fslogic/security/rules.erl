@@ -193,22 +193,6 @@ check(?write_acl, Doc, UserCtx, ShareId, undefined, FileCtx) ->
 check(?write_owner, _Doc, _UserCtx, _ShareId, undefined, _FileCtx) ->
     throw(?EACCES);
 
-% acl is specified but the request is for shared file, check posix perms
-check(?read_object, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?read_object, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?list_container, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?list_container, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?read_metadata, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?read_metadata, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?execute, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?execute, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?traverse_container, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?traverse_container, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?read_attributes, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?read_attributes, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?read_acl, Doc, UserCtx, ShareId, _, FileCtx) when is_binary(ShareId) ->
-    check(?read_acl, Doc, UserCtx, ShareId, undefined, FileCtx);
-
 % acl is specified, check access masks
 check(?read_object, _, UserCtx, ShareId, Acl, FileCtx) ->
     acl:assert_permitted(

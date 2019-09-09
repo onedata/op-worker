@@ -28,7 +28,7 @@
 %% API
 -export([
     is_applicable/3,
-    check_permission/2,
+    check_against/2,
 
     from_json/2, to_json/2
 ]).
@@ -38,6 +38,7 @@
     ?no_flags_mask bor
     ?identifier_group_mask
 )).
+
 -define(ALL_PERMS_BITMASK, (
     ?read_object_mask bor
     ?list_container_mask bor
@@ -113,22 +114,23 @@ is_applicable(_, FileCtx, _) ->
 %% In case of deny ace throws ?EACCES if even one operation is forbidden.
 %% @end
 %%--------------------------------------------------------------------
--spec check_permission(bitmask(), ace()) -> ok | bitmask() | no_return().
-check_permission(Operations, #access_control_entity{
+-spec check_against(bitmask(), ace()) ->
+    allowed | {inconclusive, bitmask()} | denied.
+check_against(Operations, #access_control_entity{
     acetype = ?allow_mask,
     acemask = AceMask
 }) ->
     case (Operations band AceMask) of
-        Operations -> ok;
-        AllowedOperations -> Operations bxor AllowedOperations
+        Operations -> allowed;
+        AllowedOperations -> {inconclusive, Operations bxor AllowedOperations}
     end;
-check_permission(Operations, #access_control_entity{
+check_against(Operations, #access_control_entity{
     acetype = ?deny_mask,
     acemask = AceMask
 }) ->
     case (Operations band AceMask) of
-        ?no_flags_mask -> Operations;
-        _ -> throw(?EACCES)
+        ?no_flags_mask -> {inconclusive, Operations};
+        _ -> denied
     end.
 
 
