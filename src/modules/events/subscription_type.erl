@@ -37,6 +37,7 @@
 get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->
+    % TODO - zmienic konstrukcje
     {ok, <<"file_attr_changed.", FileGuid/binary>>};
 get_routing_key(#file_location_changed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_location_changed.", FileGuid/binary>>};
