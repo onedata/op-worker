@@ -470,8 +470,6 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     case lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}) of
         {ok, _} = Ans ->
             Ans;
-        {error, ?ENODATA} ->
-            {ok, []};
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
@@ -486,13 +484,26 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
     ActivePermsType = maps:get(<<"activePermissionsType">>, Data, undefined),
     PosixPerms = maps:get(<<"posixPermissions">>, Data, undefined),
+    SessionId = Auth#auth.session_id,
     case {ActivePermsType, PosixPerms} of
         {undefined, undefined} ->
             ok;
         {<<"acl">>, undefined} ->
-            ok;
+            ?check(check_permissions:execute(
+                [traverse_ancestors, ?write_acl],
+                [user_ctx:new(SessionId), file_ctx:new_by_guid(Guid)],
+                fun(_UserCtx, FileCtx) ->
+                    file_perms:set_active_perms_type(FileCtx, acl)
+                end
+            ));
         {<<"posix">>, undefined} ->
-            ?check(lfm:remove_acl(Auth#auth.session_id, {guid, Guid}));
+            ?check(check_permissions:execute(
+                [traverse_ancestors, owner],
+                [user_ctx:new(SessionId), file_ctx:new_by_guid(Guid)],
+                fun(_UserCtx, FileCtx) ->
+                    file_perms:set_active_perms_type(FileCtx, posix)
+                end
+            ));
         {Type, _} when Type == undefined orelse Type == <<"posix">> ->
             ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms));
         {_, _} ->

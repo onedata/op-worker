@@ -196,8 +196,6 @@ ensure_proper_file_name(FuseResponse, _Name) ->
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
-    % remove acl
-    xattr:delete_by_name(FileCtx, ?ACL_KEY),
     chmod_attrs_only_insecure(FileCtx, Mode),
     fslogic_times:update_ctime(FileCtx),
 
@@ -211,10 +209,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, _} = file_meta:update({uuid, FileUuid}, fun(FileMeta = #file_meta{}) ->
-        {ok, FileMeta#file_meta{mode = Mode}}
-    end),
+    ok = file_perms:set_mode(FileCtx, Mode),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 

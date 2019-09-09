@@ -112,6 +112,9 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
     end,
 
     fun(?USER(_UserId, SessId)) ->
+        FileUuid = file_id:guid_to_uuid(Guid),
+        {ok, ActivePermsType} = file_perms:get_active_perms_type(FileUuid),
+
         Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
             true ->
                 null;
@@ -136,10 +139,7 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
             <<"index">> => Name,
             <<"type">> => Type,
             <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
-            <<"activePermissionsType">> => case acl:exists(Guid) of
-                true -> <<"acl">>;
-                false -> <<"posix">>
-            end,
+            <<"activePermissionsType">> => ActivePermsType,
             <<"acl">> => gs_protocol:gri_to_string(#gri{
                 type = op_file,
                 id = Guid,

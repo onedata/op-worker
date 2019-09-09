@@ -61,6 +61,7 @@
 -type time() :: non_neg_integer().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
+-type permissions_type() :: posix | acl.
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
 -type list_opts() :: #{
     token => datastore_links_iter:token() | undefined,
@@ -74,9 +75,11 @@
     last_name => name(),
     last_tree => od_provider:id()}.
 
--export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    offset/0, size/0, mode/0, time/0, posix_permissions/0,
-    file_meta/0]).
+-export_type([
+    doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
+    offset/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    file_meta/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -232,6 +235,7 @@ get_including_deleted(?ROOT_DIR_UUID) ->
             name = ?ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
+            active_permissions_type = posix,
             owner = ?ROOT_USER_ID,
             parent_uuid = ?ROOT_DIR_UUID
         }
@@ -652,7 +656,9 @@ setup_onedata_user(UserId, EffSpaces) ->
             case create({uuid, ?ROOT_DIR_UUID},
                 #document{key = FileUuid,
                     value = #file_meta{
-                        name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                        name = UserId, type = ?DIRECTORY_TYPE,
+                        mode = 8#1755,
+                        active_permissions_type = posix,
                         owner = ?ROOT_USER_ID, is_scope = true,
                         parent_uuid = ?ROOT_DIR_UUID
                     }
@@ -715,7 +721,9 @@ make_space_exist(SpaceId) ->
         key = SpaceDirUuid,
         value = #file_meta{
             name = SpaceId, type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_SPACE_DIR_MODE, owner = ?ROOT_USER_ID, is_scope = true,
+            mode = ?DEFAULT_SPACE_DIR_MODE,
+            active_permissions_type = posix,
+            owner = ?ROOT_USER_ID, is_scope = true,
             parent_uuid = ?ROOT_DIR_UUID
         }
     },
@@ -751,6 +759,7 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
             name = FileName,
             type = FileType,
             mode = Mode,
+            active_permissions_type = posix,
             owner = Owner,
             group_owner = GroupOwner,
             parent_uuid = ParentUuid,
@@ -1009,7 +1018,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    7.
+    8.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1137,6 +1146,29 @@ get_record_struct(7) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(8) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        % acl and active_permissions_type has been added in this version
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {active_permissions_type, atom},
+        {owner, string},
+        {group_owner, string},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1179,4 +1211,12 @@ upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version
 ) ->
     {7, {?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
         Scope, ProviderId, Shares, Deleted, ParentUuid}
-    }.
+    };
+upgrade_record(7, {
+    ?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
+    Scope, ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {8, {?MODULE, Name, Type, Mode, [], posix,
+        Owner, GroupOwner, IsScope, Scope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }}.

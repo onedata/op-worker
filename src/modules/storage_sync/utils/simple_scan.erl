@@ -983,7 +983,7 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                 {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedACL} = nfs4_acl:decode_and_normalize(ACLBin, StorageFileCtx),
                 #provider_response{status = #status{code = ?OK}} =
-                    acl_req:set_acl(UserCtx, FileCtx, NormalizedACL, true, false),
+                    acl_req:set_acl(UserCtx, FileCtx, NormalizedACL),
                 ok
             catch
                 throw:?ENOTSUP ->
@@ -1015,12 +1015,12 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
             try
                 {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedNewACL} = nfs4_acl:decode_and_normalize(ACLBin, StorageFileCtx),
-                case NormalizedNewACL of
+                case #acl{value = NormalizedNewACL} of
                     ACL ->
                         not_updated;
                     _ ->
                         #provider_response{status = #status{code = ?OK}} =
-                            acl_req:set_acl(UserCtx, FileCtx, NormalizedNewACL, false, false),
+                            acl_req:set_acl(UserCtx, FileCtx, NormalizedNewACL),
                         updated
                 end
             catch

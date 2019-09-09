@@ -347,11 +347,11 @@ list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited, ShowInternal)).
 
 -spec get_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | lfm:error_reply().
+    {ok, acl:acl()} | lfm:error_reply().
 get_acl(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_acl(SessId, uuid_to_guid(Worker, FileKey))).
 
--spec set_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), [lfm_perms:access_control_entity()]) ->
+-spec set_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), acl:acl()) ->
     ok | lfm:error_reply().
 set_acl(Worker, SessId, FileKey, EntityList) ->
     ?EXEC(Worker, lfm:set_acl(SessId, uuid_to_guid(Worker, FileKey), EntityList)).

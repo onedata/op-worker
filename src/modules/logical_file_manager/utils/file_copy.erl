@@ -182,6 +182,7 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
     end, Xattrs),
     case lists:member(?ACL_KEY, Xattrs) of
         true ->
+            % TODO
             {ok, Xattr} = lfm:get_xattr(
                 SessId, {guid, SourceGuid}, ?ACL_KEY, false),
             ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr);

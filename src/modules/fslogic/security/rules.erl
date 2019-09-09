@@ -93,8 +93,13 @@ check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
 check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
     {FileDoc, SubjectCtx2} = file_ctx:get_file_doc_including_deleted(SubjectCtx),
     ShareId = file_ctx:get_share_id_const(SubjectCtx2),
-    {Acl, _} = file_ctx:get_acl(SubjectCtx2),
-    check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx).
+    case file_ctx:get_active_perms_type(SubjectCtx2) of
+        {posix, SubjectCtx3} ->
+            check(Type, FileDoc, UserCtx, ShareId, undefined, SubjectCtx3);
+        {acl, SubjectCtx3} ->
+            {Acl, _} = file_ctx:get_acl(SubjectCtx3),
+            check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx3)
+    end.
 
 
 %%%===================================================================

@@ -12,8 +12,9 @@
 -module(acl).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/metadata.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 -type acl() :: [ace:ace()].
@@ -22,9 +23,8 @@
 
 %% API
 -export([
-    get/1, exists/1,
     assert_permitted/4,
-
+    add_names/1, strip_names/1,
     from_json/2, to_json/2
 ]).
 
@@ -32,26 +32,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec get(file_ctx:ctx()) -> undefined | acl().
-get(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case custom_metadata:get_xattr_metadata(FileUuid, ?ACL_KEY, false) of
-        {ok, Val} ->
-            from_json(Val, cdmi);
-        {error, not_found} ->
-            undefined
-    end.
-
-
--spec exists(file_id:file_guid() | file_ctx:ctx()) -> boolean().
-exists(FileGuid) when is_binary(FileGuid) ->
-    FileUuid = file_id:guid_to_uuid(FileGuid),
-    custom_metadata:exists_xattr_metadata(FileUuid, ?ACL_XATTR_NAME);
-exists(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    custom_metadata:exists_xattr_metadata(FileUuid, ?ACL_XATTR_NAME).
 
 
 -spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
@@ -76,6 +56,29 @@ assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves name for given access_control_entity record based on identifier
+%% value and identifier type (user or group).
+%% @end
+%%--------------------------------------------------------------------
+-spec add_names(acl()) -> acl().
+add_names(Acl) ->
+    lists:map(
+        fun(#access_control_entity{identifier = Id, aceflags = Flags} = Ace) ->
+            Name = case ?has_flag(Flags, ?identifier_group_mask) of
+                true -> gid_to_ace_name(Id);
+                false -> uid_to_ace_name(Id)
+            end,
+            Ace#access_control_entity{name = Name}
+        end, Acl).
+
+
+-spec strip_names(acl()) -> acl().
+strip_names(Acl) ->
+    [Ace#access_control_entity{name = undefined} || Ace <- Acl].
+
+
 -spec from_json([map()], Format :: gui | cdmi) -> acl() | no_return().
 from_json(JsonAcl, Format) ->
     try
@@ -98,3 +101,29 @@ to_json(Acl, Format) ->
         ]),
         throw({error, ?EINVAL})
     end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec uid_to_ace_name(od_user:id() | binary()) ->
+    undefined | od_user:full_name().
+uid_to_ace_name(?owner) ->
+    undefined;
+uid_to_ace_name(?group) ->
+    undefined;
+uid_to_ace_name(?everyone) ->
+    undefined;
+uid_to_ace_name(UserId) ->
+    {ok, FullName} = user_logic:get_full_name(?ROOT_SESS_ID, UserId),
+    FullName.
+
+
+%% @private
+-spec gid_to_ace_name(od_group:id()) -> undefined | od_group:name().
+gid_to_ace_name(GroupId) ->
+    {ok, Name} = group_logic:get_name(?ROOT_SESS_ID, GroupId),
+    Name.

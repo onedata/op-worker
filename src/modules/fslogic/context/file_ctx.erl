@@ -43,7 +43,6 @@
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | storage:doc(),
     file_location_ids :: undefined | [file_location:id()],
-    acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
     is_import_on :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
@@ -66,7 +65,7 @@
     set_storage_path_type/2, get_storage_path_type_const/1, get_mounted_in_root/1,
     get_canonical_path_tokens/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
+    is_root_dir_const/1, file_exists_const/1, is_in_user_space_const/2]).
 -export([equals/2]).
 
 %% Functions modifying context
@@ -81,8 +80,8 @@
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_acl/1, get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
-    get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
+    get_active_perms_type/1, get_acl/1, get_raw_storage_path/1, get_child_canonical_path/2,
+    get_file_size/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
     is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
     get_storage_sync_info/1]).
 -export([is_dir/1]).
@@ -965,15 +964,31 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns file Active Permissions Type.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_active_perms_type(ctx()) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{active_permissions_type = ActivePermsType}
+}}) ->
+    {ActivePermsType, FileCtx};
+get_active_perms_type(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_active_perms_type(FileCtx2).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec get_acl(ctx()) -> {undefined | acl:acl(), ctx()}.
-get_acl(FileCtx = #file_ctx{acl = undefined}) ->
-    Acl = acl:get(FileCtx),
-    {Acl, FileCtx#file_ctx{acl = Acl}};
-get_acl(FileCtx = #file_ctx{acl = Acl}) ->
-    {Acl, FileCtx}.
+-spec get_acl(ctx()) -> {acl:acl(), ctx()}.
+get_acl(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{acl = Acl}
+}}) ->
+    {Acl, FileCtx};
+get_acl(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_acl(FileCtx2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1111,17 +1126,6 @@ is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
     fslogic_uuid:is_root_dir_uuid(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file has Access Control List defined.
-%% @end
-%%--------------------------------------------------------------------
--spec has_acl_const(ctx()) -> boolean().
-has_acl_const(FileCtx = #file_ctx{acl = undefined}) ->
-    acl:exists(FileCtx);
-has_acl_const(_) ->
-    true.
 
 %%--------------------------------------------------------------------
 %% @doc

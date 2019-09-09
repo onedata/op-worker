@@ -19,11 +19,12 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_acl/2, set_acl/5, remove_acl/2]).
+-export([get_acl/2, set_acl/3, remove_acl/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_acl_insecure/2 with permission checks
@@ -37,17 +38,19 @@ get_acl(_UserCtx, FileCtx) ->
         [_UserCtx, FileCtx],
         fun get_acl_insecure/2).
 
+
 %%--------------------------------------------------------------------
 %% @equiv set_acl_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}, Create :: boolean(),
-    Replace :: boolean()) -> fslogic_worker:provider_response().
-set_acl(_UserCtx, FileCtx, Acl, Create, Replace) ->
+-spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
+    fslogic_worker:provider_response().
+set_acl(_UserCtx, FileCtx, Acl) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx, Acl, Create, Replace],
-        fun set_acl_insecure/5).
+        [_UserCtx, FileCtx, Acl],
+        fun set_acl_insecure/3).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_acl_insecure/2 with permission checks
@@ -61,11 +64,14 @@ remove_acl(_UserCtx, FileCtx) ->
         [_UserCtx, FileCtx],
         fun remove_acl_insecure/2).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets access control list of file.
 %% @end
@@ -73,35 +79,30 @@ remove_acl(_UserCtx, FileCtx) ->
 -spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_acl_insecure(_UserCtx, FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?ACL_KEY) of
-        {ok, Val} ->
-            % ACLs are kept in database without names, as they might change.
-            % Resolve the names here.
-            Acl = acl_names:add(acl:from_json(Val, cdmi)),
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #acl{
-                    value = Acl
-                }
-            };
-        {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end.
+    {Acl, _} = file_ctx:get_acl(FileCtx),
+    % ACLs are kept in database without names, as they might change.
+    % Resolve the names here.
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #acl{
+            value = acl:add_names(Acl)
+        }
+    }.
+
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Sets access control list of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), #acl{},
-    Create :: boolean(), Replace :: boolean()) ->
+-spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
-set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
+set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
-    AclJson = acl:to_json(acl_names:strip(Val), cdmi),
-    case xattr:set(FileCtx, ?ACL_KEY, AclJson, Create, Replace) of
-        {ok, _} ->
+    case file_perms:set_acl(FileCtx, acl:strip_names(Acl)) of
+        ok ->
             ok = permissions_cache:invalidate(),
             maybe_chmod_storage_file(FileCtx, 8#000),
             fslogic_times:update_ctime(FileCtx),
@@ -110,7 +111,9 @@ set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Removes access control list of file.
 %% @end
@@ -118,7 +121,7 @@ set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
-    case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
+    case file_perms:clear_acl(FileCtx) of
         ok ->
             ok = permissions_cache:invalidate(),
             {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
@@ -134,9 +137,6 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private

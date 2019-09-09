@@ -495,7 +495,7 @@ check_perms(SessId, FileKey, PermType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | error_reply().
+    {ok, acl:acl()} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
 
@@ -505,7 +505,7 @@ get_acl(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    EntityList :: [lfm_perms:access_control_entity()]) -> ok | error_reply().
+    acl:acl()) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 
