@@ -109,7 +109,6 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     case file_meta:update_perms(FileCtx, undefined, AclWithoutNames, acl) of
         ok ->
             ok = permissions_cache:invalidate(),
-            maybe_chmod_storage_file(FileCtx, 8#000),
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
@@ -130,32 +129,8 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
     case file_meta:update_perms(FileCtx, undefined, [], posix) of
         ok ->
             ok = permissions_cache:invalidate(),
-            {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
-                file_ctx:get_file_doc(FileCtx),
-            ok = sfm_utils:chmod_storage_file(
-                user_ctx:new(?ROOT_SESS_ID),
-                FileCtx2, Mode
-            ),
-            ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
-            fslogic_times:update_ctime(FileCtx2),
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
-    end.
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tries to chmod file on storage. Succeeds if chmod succeeds or
-%% if chmod returns {error, ?EROFS} succeeds.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_chmod_storage_file(file_ctx:ctx(), file_meta:mode()) -> ok.
-maybe_chmod_storage_file(FileCtx, Mode) ->
-    case sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode) of
-        ok ->
-            ok;
-        {error, ?EROFS} ->
-            ok
     end.
