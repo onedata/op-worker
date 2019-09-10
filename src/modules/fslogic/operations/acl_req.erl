@@ -99,18 +99,26 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 -spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
 set_acl_insecure(_UserCtx, FileCtx, Acl) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
     AclWithoutNames = case Acl of
-        undefined -> undefined;
-        _ -> acl:strip_names(Acl)
+        undefined ->
+            undefined;
+        _ ->
+            case IsDir of
+                true -> acl:validate(Acl, dir);
+                false -> acl:validate(Acl, file)
+            end,
+            acl:strip_names(Acl)
     end,
 
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_meta:update_perms(FileUuid, undefined, AclWithoutNames, acl) of
         ok ->
             ok = permissions_cache:invalidate(),
-            fslogic_times:update_ctime(FileCtx),
+            fslogic_times:update_ctime(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
