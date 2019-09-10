@@ -47,11 +47,13 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                             value = acl:to_json(Acl, cdmi)
                         }
                     };
+                #provider_response{} = Resp ->
+                    provider_to_fuse_response(Resp);
                 Other ->
                     Other
             end;
         {posix, _} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
+            #fuse_response{status = #status{code = ?ENOATTR}}
     end;
 get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
     case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
@@ -66,6 +68,8 @@ get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
                     value = Mimetype
                 }
             };
+        #provider_response{} = Resp ->
+            provider_to_fuse_response(Resp);
         Other ->
             Other
     end;
@@ -82,6 +86,8 @@ get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
                     value = Encoding
                 }
             };
+        #provider_response{} = Resp ->
+            provider_to_fuse_response(Resp);
         Other ->
             Other
     end;
@@ -97,6 +103,8 @@ get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
                     name = ?CDMI_COMPLETION_STATUS_KEY,
                     value = Completion}
             };
+        #provider_response{} = Resp ->
+            provider_to_fuse_response(Resp);
         Other ->
             Other
     end;
@@ -112,6 +120,8 @@ get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
                     name = ?JSON_METADATA_KEY,
                     value = JsonTerm}
             };
+        #provider_response{} = Resp ->
+            provider_to_fuse_response(Resp);
         Other ->
             Other
     end;
@@ -127,6 +137,8 @@ get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
                     name = ?RDF_METADATA_KEY,
                     value = Rdf}
             };
+        #provider_response{} = Resp ->
+            provider_to_fuse_response(Resp);
         Other ->
             Other
     end;
