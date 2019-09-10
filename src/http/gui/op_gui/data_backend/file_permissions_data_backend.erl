@@ -203,7 +203,9 @@ file_permissions_record(SessId, FileId) ->
             op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, #file_attr{mode = PermissionsAttr}} ->
             PosixValue = integer_to_binary((PermissionsAttr rem 8#1000), 8),
-            GetAclResult = lfm:get_acl(SessId, {guid, FileId}),
+            GetAclResult = lfm:get_xattr(
+                SessId, {guid, FileId}, ?ACL_XATTR_NAME, false
+            ),
             {Type, AclValue} = case GetAclResult of
                 {error, ?ENOATTR} ->
                     {<<"posix">>, null};

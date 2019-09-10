@@ -168,8 +168,9 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
     fslogic_worker:file_guid(), file_meta:posix_permissions()) -> ok.
 copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
-    {ok, Xattrs} =
-        lfm:list_xattr(SessId, {guid, SourceGuid}, false, true),
+    {ok, Xattrs} = lfm:list_xattr(
+        SessId, {guid, SourceGuid}, false, true
+    ),
     lists:foreach(fun
         (?ACL_KEY) ->
             ok;
@@ -180,12 +181,16 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
                 SessId, {guid, SourceGuid}, XattrName, false),
             ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr)
     end, Xattrs),
+
+    % Depending on whether acl is active permissions type (if it is it
+    % will be listed with other xattrs) sets mode first and then acl or
+    % other way around.
+    {ok, Acl} = lfm:get_acl(SessId, {guid, SourceGuid}),
     case lists:member(?ACL_KEY, Xattrs) of
         true ->
-            % TODO
-            {ok, Xattr} = lfm:get_xattr(
-                SessId, {guid, SourceGuid}, ?ACL_KEY, false),
-            ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr);
+            lfm:set_perms(SessId, {guid, TargetGuid}, Mode),
+            lfm:set_acl(SessId, {guid, TargetGuid}, Acl);
         false ->
-            ok = lfm:set_perms(SessId, {guid, TargetGuid}, Mode)
+            lfm:set_acl(SessId, {guid, TargetGuid}, Acl),
+            lfm:set_perms(SessId, {guid, TargetGuid}, Mode)
     end.
