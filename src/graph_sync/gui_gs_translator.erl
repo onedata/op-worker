@@ -113,7 +113,7 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
 
     fun(?USER(_UserId, SessId)) ->
         FileUuid = file_id:guid_to_uuid(Guid),
-        {ok, ActivePermsType} = file_perms:get_active_perms_type(FileUuid),
+        {ok, ActivePermsType} = file_meta:get_active_perms_type(FileUuid),
 
         Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
             true ->

@@ -161,7 +161,7 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
 -spec set_root_context_if_file_has_acl([#sfm_handle{} | term()]) ->
     [#sfm_handle{} | term()].
 set_root_context_if_file_has_acl(Args = [Handle = #sfm_handle{file_uuid = FileUuid} | RestOfArgs]) ->
-    case file_perms:get_active_perms_type(FileUuid) of
+    case file_meta:get_active_perms_type(FileUuid) of
         {ok, acl} ->
             [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->

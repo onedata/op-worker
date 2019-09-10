@@ -133,7 +133,7 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
 %% @equiv chmod_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
+-spec chmod(user_ctx:ctx(), file_ctx:ctx(), undefined | fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod(UserCtx, FileCtx, Mode) ->
     check_permissions:execute(
@@ -192,12 +192,16 @@ ensure_proper_file_name(FuseResponse, _Name) ->
 %% Changes file permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
+-spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), undefined | fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
-chmod_insecure(UserCtx, FileCtx, Mode) ->
-    ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
-    chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx),
+chmod_insecure(UserCtx, FileCtx1, Mode1) ->
+    {Mode2, FileCtx2} = case Mode1 of
+        undefined -> file_ctx:get_mode(FileCtx1);
+        _ -> {Mode1, FileCtx1}
+    end,
+    ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx2, Mode2),
+    chmod_attrs_only_insecure(FileCtx2, Mode2),
+    fslogic_times:update_ctime(FileCtx2),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -209,7 +213,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    ok = file_perms:set_mode(FileCtx, Mode),
+    ok = file_meta:update_perms(FileCtx, Mode, undefined, posix),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 

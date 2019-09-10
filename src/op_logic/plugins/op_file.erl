@@ -484,30 +484,19 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
     ActivePermsType = maps:get(<<"activePermissionsType">>, Data, undefined),
     PosixPerms = maps:get(<<"posixPermissions">>, Data, undefined),
+
     SessionId = Auth#auth.session_id,
+    FileKey = {guid, Guid},
+
     case {ActivePermsType, PosixPerms} of
         {undefined, undefined} ->
             ok;
         {<<"acl">>, undefined} ->
-            ?check(check_permissions:execute(
-                [traverse_ancestors, ?write_acl],
-                [user_ctx:new(SessionId), file_ctx:new_by_guid(Guid)],
-                fun(_UserCtx, FileCtx) ->
-                    file_perms:set_active_perms_type(FileCtx, acl)
-                end
-            ));
-        {<<"posix">>, undefined} ->
-            ?check(check_permissions:execute(
-                [traverse_ancestors, owner],
-                [user_ctx:new(SessionId), file_ctx:new_by_guid(Guid)],
-                fun(_UserCtx, FileCtx) ->
-                    file_perms:set_active_perms_type(FileCtx, posix)
-                end
-            ));
-        {Type, _} when Type == undefined orelse Type == <<"posix">> ->
-            ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms));
-        {_, _} ->
-            ?ERROR_MALFORMED_DATA
+            ?check(lfm:set_acl(SessionId, FileKey, undefined));
+        {<<"acl">>, _} ->
+            ?ERROR_MALFORMED_DATA;
+        _ ->
+            ?check(lfm:set_perms(SessionId, FileKey, PosixPerms))
     end;
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
     Acl = maps:get(<<"list">>, Data),

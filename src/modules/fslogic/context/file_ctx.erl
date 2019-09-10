@@ -80,7 +80,7 @@
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/1, get_acl/1, get_raw_storage_path/1, get_child_canonical_path/2,
+    get_active_perms_type/1, get_acl/1, get_mode/1, get_raw_storage_path/1, get_child_canonical_path/2,
     get_file_size/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
     is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
     get_storage_sync_info/1]).
@@ -989,6 +989,20 @@ get_acl(FileCtx = #file_ctx{file_doc = #document{
 get_acl(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_acl(FileCtx2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file Posix Mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_mode(ctx()) -> {file_meta:posix_permissions(), ctx()}.
+get_mode(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{mode = Mode}
+}}) ->
+    {Mode, FileCtx};
+get_mode(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_mode(FileCtx2).
 
 %%--------------------------------------------------------------------
 %% @doc

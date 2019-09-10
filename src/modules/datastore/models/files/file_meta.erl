@@ -38,6 +38,7 @@
     list_children/2, list_children/3, list_children/4,
     list_children/5, list_children/6
 ]).
+-export([get_active_perms_type/1, update_perms/4]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -825,6 +826,42 @@ is_child_of_hidden_dir(Path) ->
     {_, ParentPath} = fslogic_path:basename_and_parent(Path),
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
+
+-spec get_active_perms_type(file_meta:uuid()) ->
+    {ok, file_meta:permissions_type()} | {error, term()}.
+get_active_perms_type(FileUuid) ->
+    case file_meta:get({uuid, FileUuid}) of
+        {ok, #document{value = #file_meta{active_permissions_type = PermsType}}} ->
+            {ok, PermsType};
+        {error, _} = Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates posix/acl permissions and active permissions type. To keep old
+%% value of any of the mentioned fields undefined should be given as
+%% new value for it.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_perms(file_ctx:ctx(), undefined | posix_permissions(),
+    undefined | acl:acl(), undefined | permissions_type()) ->
+    ok | {error, term()}.
+update_perms(FileCtx, PosixMode, Acl, ActivePermsType) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{
+        mode = OldMode,
+        acl = OldAcl,
+        active_permissions_type = OldActivePermsType
+    } = FileMeta) ->
+        {ok, FileMeta#file_meta{
+            mode = utils:ensure_defined(PosixMode, undefined, OldMode),
+            acl = utils:ensure_defined(Acl, undefined, OldAcl),
+            active_permissions_type = utils:ensure_defined(
+                ActivePermsType, undefined, OldActivePermsType
+            )
+        }}
+    end)).
 
 %%%===================================================================
 %%% Internal functions

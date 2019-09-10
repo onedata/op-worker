@@ -101,7 +101,12 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
-    case file_perms:set_acl(FileCtx, acl:strip_names(Acl)) of
+    AclWithoutNames = case Acl of
+        undefined -> undefined;
+        _ -> acl:strip_names(Acl)
+    end,
+
+    case file_meta:update_perms(FileCtx, undefined, AclWithoutNames, acl) of
         ok ->
             ok = permissions_cache:invalidate(),
             maybe_chmod_storage_file(FileCtx, 8#000),
@@ -115,13 +120,14 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes access control list of file.
+%% Clears access control list of file and changes active permissions
+%% type to posix.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
-    case file_perms:clear_acl(FileCtx) of
+    case file_meta:update_perms(FileCtx, undefined, [], posix) of
         ok ->
             ok = permissions_cache:invalidate(),
             {#document{value = #file_meta{mode = Mode}}, FileCtx2} =

@@ -156,7 +156,7 @@ encode_ace(#access_control_entity{
 %% @end
 %%-------------------------------------------------------------------
 -spec normalize(acl:acl(), acl:acl(), storage_file_ctx:ctx()) ->
-    [ace:ace()].
+    acl:acl().
 normalize([], NormalizedACL, _StorageFileCtx) ->
     lists:reverse(NormalizedACL);
 normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->

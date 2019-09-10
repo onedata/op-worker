@@ -33,13 +33,13 @@
 -spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:fuse_response().
 get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
-    case acl_req:get_acl(UserCtx, FileCtx) of
-        #provider_response{
-            status = #status{code = ?OK},
-            provider_response = #acl{value = Acl}
-        } ->
-            case file_perms:get_active_perms_type(FileCtx) of
-                {ok, acl} ->
+    case file_ctx:get_active_perms_type(FileCtx) of
+        {acl, FileCtx2} ->
+            case acl_req:get_acl(UserCtx, FileCtx2) of
+                #provider_response{
+                    status = #status{code = ?OK},
+                    provider_response = #acl{value = Acl}
+                } ->
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = #xattr{
@@ -47,11 +47,11 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                             value = acl:to_json(Acl, cdmi)
                         }
                     };
-                _ ->
-                    #provider_response{status = #status{code = ?ENOATTR}}
+                Other ->
+                    Other
             end;
-        Other ->
-            Other
+        {posix, _} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
     end;
 get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
     case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
@@ -239,12 +239,13 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
             FilteredXattrList = case ShowInternal of
                 true ->
                     % acl is kept in file_meta instead of custom_metadata
-                    % but is still treated as metadata so ?ACL_XATTR_NAME
-                    % is added to xattrs listing if active perms type for
-                    % file is acl
-                    case file_perms:get_active_perms_type(FileCtx) of
-                        {ok, acl} ->
-                            [?ACL_XATTR_NAME | XattrList];
+                    % but is still treated as metadata so ?ACL_KEY
+                    % is added to listing if active perms type for
+                    % file is acl. Otherwise, to keep backward compatibility,
+                    % it is omitted.
+                    case file_ctx:get_active_perms_type(FileCtx) of
+                        {acl, _} ->
+                            [?ACL_KEY | XattrList];
                         _ ->
                             XattrList
                     end;
