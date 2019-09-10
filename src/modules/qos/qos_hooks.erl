@@ -31,8 +31,13 @@
 %%--------------------------------------------------------------------
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
 handle_qos_entry_change(_SpaceId, #document{
-    deleted = true
+    deleted = true,
+    key = QosId,
+    value = #qos_entry{
+        file_uuid = FileUuid
+    }
 }) ->
+    ok = file_qos:remove_qos_id(FileUuid, QosId),
     ok;
 handle_qos_entry_change(SpaceId, #document{
     key = QosId,
@@ -51,6 +56,17 @@ handle_qos_entry_change(SpaceId, #document{
 
 %%--------------------------------------------------------------------
 %% @doc
+%% @equiv maybe_update_file_on_storage(file_ctx:new_by_guid(FileGuid), StorageId).
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_file_on_storage(od_space:id(), file_meta:uuid(), storage:id()) -> ok.
+maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    maybe_update_file_on_storage(file_ctx:new_by_guid(FileGuid), StorageId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Schedules file replication to given storage if it is required by QoS.
 %% Uses QoS traverse pool.
 %% @end
@@ -58,13 +74,11 @@ handle_qos_entry_change(SpaceId, #document{
 -spec maybe_update_file_on_storage(file_ctx:ctx(), storage:id()) -> ok.
 maybe_update_file_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    DelayedHook = #hook{
-        module = ?MODULE,
-        function = maybe_update_file_on_storage,
-        args = [file_ctx:get_space_id_const(FileCtx), file_ctx:get_uuid_const(FileCtx), StorageId]
-    },
     EffFileQos = file_qos:get_effective(FileUuid,
-        fun(ParentUuid) -> delayed_hooks:add_hook(ParentUuid, <<"check_qos">>, DelayedHook) end),
+        fun(ParentUuid) ->
+            delayed_hooks:add_hook(ParentUuid, <<"check_qos_", FileUuid/binary>>,
+                ?MODULE, ?FUNCTION_NAME, [file_ctx:get_space_id_const(FileCtx), FileUuid, StorageId])
+        end),
     case EffFileQos of
         undefined ->
             ok;
@@ -75,10 +89,6 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
             end, QosToUpdate)
     end.
 
-maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    maybe_update_file_on_storage(file_ctx:new_by_guid(FileGuid), StorageId).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +96,7 @@ maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
 %% Starts QoS traverse and updates file_qos accordingly.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> boolean().
+-spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
 maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -95,10 +105,18 @@ maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
         Storage ->
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            % fixme check file exists
-            ok = qos_traverse:start_initial_traverse(FileCtx, QosId, Storage, TaskId),
-            {ok, _} = qos_entry:mark_traverse_started(QosId, TaskId),
-            ok;
+            case file_ctx:get_file_doc_allow_not_existing(FileCtx) of
+                {ok, _FileDoc, FileCtx1} ->
+                    ok = qos_traverse:start_initial_traverse(FileCtx1, QosId, Storage, TaskId),
+                    {ok, _} = qos_entry:mark_traverse_started(QosId, TaskId),
+                    ok;
+                error ->
+                    % There is no need to start traverse as appropriate transfers will be started
+                    % when file is finally synced. If this is directory, then each child registered
+                    % delayed hook that will fulfill QoS after all its ancestors are synced.
+                    {ok, _} = qos_entry:remove_traverse_req(QosId, TaskId),
+                    ok
+            end;
         _ ->
             ok
     end.

@@ -19,11 +19,17 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
--export([execute_hooks/1, delete/1, add_hook/3]).
+-export([execute_hooks/1, delete/1, add_hook/5]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
+-record(hook, {
+    module :: module(),
+    function :: atom(),
+    % list of arbitrary args encoded using term_to_binary/1
+    args :: binary()
+}).
 
 -type hook() :: #hook{}.
 -type hook_identifier() :: binary().
@@ -43,12 +49,18 @@
 %% Registers new hook for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec add_hook(file_meta:uuid(), hook_identifier(), hook()) -> {ok, file_meta:uuid()} | {error, term()}.
-add_hook(FileUuid, Identifier, #hook{args = Args} = Hook) ->
-    EncodedHook = Hook#hook{args = term_to_binary(Args)},
+-spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+add_hook(FileUuid, Identifier, Module, Function, Args) ->
+    EncodedArgs = term_to_binary(Args),
+    Hook = #hook{
+        module = Module,
+        function = Function,
+        args = EncodedArgs
+    },
     datastore_model:update(?CTX, FileUuid, fun(#delayed_hooks{hooks = Hooks} = DelayedHooks) ->
-        {ok, DelayedHooks#delayed_hooks{hooks = Hooks#{Identifier => EncodedHook}}}
-    end, #delayed_hooks{hooks = #{Identifier => EncodedHook}}).
+        {ok, DelayedHooks#delayed_hooks{hooks = Hooks#{Identifier => Hook}}}
+    end, #delayed_hooks{hooks = #{Identifier => Hook}}).
 
 %%--------------------------------------------------------------------
 %% @doc

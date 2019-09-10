@@ -255,6 +255,13 @@
     last_stat :: undefined | non_neg_integer()
 }).
 
+% This model can be related with file and holds information
+% about hooks for given file. All hooks will be executed for
+% change of given file's file_meta document.
+-record(delayed_hooks, {
+    hooks = #{} :: #{binary() => delayed_hooks:hook()}
+}).
+
 % This model holds information about QoS defined for given file. Each file
 % can be associated with at most one such record. The value of file_qos for
 % particular file should be calculated using effective value (see file_qos.erl)
@@ -264,30 +271,6 @@
     % Mapping storage ID -> List containing QoS Ids that requires file replica
     % on this storage
     target_storages = #{} :: file_qos:target_storages()
-}).
-
-% fixme
--record(hook, {
-    module :: module(),
-    function :: atom(),
-    % list of arbitrary args encoded using term_to_binary/1
-    args :: binary()
-}).
-
-% This model can be related with file and holds information
-% about hooks for given file. All hooks will be executed for
-% change of given file's file_meta document.
--record(delayed_hooks, {
-    hooks = #{} :: #{binary() => #hook{}}
-}).
-
-% fixme
-% This record is a request to remote provider to start QoS traverse.
-% Defined here as qos_entry record depends on it.
--record(qos_traverse_req, {
-    % uuid of file that travers should start from
-    start_file_uuid :: file_meta:uuid(),
-    target_storage :: storage:id()
 }).
 
 % This model holds information about single QoS, that is QoS requirement
@@ -300,8 +283,10 @@
     expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     is_possible = false :: boolean(),
-    traverse_reqs = #{} :: #{binary() => #qos_traverse_req{}},
-    traverses = #{} :: #{binary() => #qos_traverse_req{}}
+    % Those are requests to remote providers to start QoS traverse.
+    traverse_reqs = #{} :: qos_entry:traverse_map(),
+    % Traverses in progress under given qos_entry
+    traverses = #{} :: qos_entry:traverse_map()
 }).
 
 -record(file_meta, {

@@ -872,7 +872,7 @@ mock_synchronize_file(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, qos_traverse, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_traverse, synchronize_file,
-        fun(_, _, _) ->
+        fun(_, _) ->
             ok
         end).
 
@@ -890,20 +890,14 @@ mock_start_traverse(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, qos_hooks, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_hooks, maybe_start_traverse,
-        fun(FileCtx, QosId, OriginFileGuid, Storage, TaskId) ->
+        fun(FileCtx, QosId, Storage, TaskId) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:start_initial_traverse(FileCtx, QosId, OriginFileGuid, Storage, traverse, TaskId),
-            ok = qos_entry:add_traverse(SpaceId, QosId, TaskId),
-            case qos_entry:mark_traverse_started(QosId, TaskId) of
-                {ok, _} -> ok;
-                % request is from the same provider and qos_entry is not yet created
-                {error, not_found} -> ok;
-                {error, _} = Error -> throw(Error)
-            end,
-            true
+            ok = qos_traverse:start_initial_traverse(FileCtx, QosId, Storage, TaskId),
+            {ok, _} = qos_entry:mark_traverse_started(QosId, TaskId),
+            ok
         end).
 
 

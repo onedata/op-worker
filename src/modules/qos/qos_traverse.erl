@@ -33,11 +33,11 @@
 
 -record(add_qos_traverse_args, {
     qos_id :: qos_entry:id(),
-    file_path_tokens = [] :: [binary()],
     target_storage = undefined :: storage:id() | undefined
 }).
 
 -type task_type() :: traverse | restore.
+-export_type([task_type/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
@@ -47,37 +47,9 @@
 %%% API
 %%%===================================================================
 
--spec restore_qos(file_ctx:ctx(), qos_entry:id(), storage:id()) -> ok.
-restore_qos(FileCtx, QosId, TargetStorage) ->
-    {ok, QosOriginFileGuid} = qos_entry:get_file_guid(QosId),
-    {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(QosOriginFileGuid)),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    TaskId = datastore_utils:gen_key(),
-    RelativePath = qos_status:get_relative_path(FilePathTokens, file_ctx:get_guid_const(FileCtx)),
-    Options = #{
-        task_id => TaskId,
-        batch_size => ?TRAVERSE_BATCH_SIZE,
-        traverse_info => #add_qos_traverse_args{
-            qos_id = QosId,
-            file_path_tokens = FilePathTokens,
-            target_storage = TargetStorage
-        },
-        % fixme create model
-        additional_data => #{
-            <<"qos_id">> => QosId,
-            <<"space_id">> => SpaceId,
-            <<"relative_path">> => RelativePath,
-            <<"target_storage">> => TargetStorage,
-            <<"task_type">> => <<"restore">>
-        }
-    },
-    ok = qos_status:add_link(QosId, SpaceId, RelativePath, TaskId, TargetStorage),
-    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
-    ok.
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates traverse task to fulfill qos.
+%% Creates initial traverse task to fulfill QoS.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_initial_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
@@ -94,6 +66,36 @@ start_initial_traverse(FileCtx, QosId, TargetStorage, TaskId) ->
             <<"task_type">> => <<"traverse">>
         }
     },
+    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates traverse task to fulfill QoS for single file, after its
+%% change was synced.
+%% @end
+%%--------------------------------------------------------------------
+-spec restore_qos(file_ctx:ctx(), qos_entry:id(), storage:id()) -> ok.
+restore_qos(FileCtx, QosId, TargetStorage) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    TaskId = datastore_utils:gen_key(),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    Options = #{
+        task_id => TaskId,
+        batch_size => ?TRAVERSE_BATCH_SIZE,
+        traverse_info => #add_qos_traverse_args{
+            qos_id = QosId,
+            target_storage = TargetStorage
+        },
+        additional_data => #{
+            <<"qos_id">> => QosId,
+            <<"space_id">> => SpaceId,
+            <<"file_uuid">> => FileUuid,
+            <<"target_storage">> => TargetStorage,
+            <<"task_type">> => <<"restore">>
+        }
+    },
+    ok = qos_status:add_link(QosId, SpaceId, FileUuid, TaskId, TargetStorage),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
 
@@ -137,10 +139,10 @@ task_finished(TaskId) ->
         <<"restore">> ->
             #{
                 <<"space_id">> := SpaceId,
-                <<"relative_path">> := RelativePath,
+                <<"file_uuid">> := FileUuid,
                 <<"target_storage">> := TargetStorage
             } = AdditionalData,
-            ok = qos_status:delete_link(QosId, SpaceId, RelativePath, TaskId, TargetStorage)
+            ok = qos_status:delete_link(QosId, SpaceId, FileUuid, TaskId, TargetStorage)
     end.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
@@ -188,6 +190,8 @@ synchronize_file(UserCtx, FileCtx) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, undefined, 1) of
         {ok, _} ->
             ok;
+        {error, cancelled} ->
+            ?debug("QoS file synchronization failed due to cancelation");
         {error, Reason} ->
             % TODO: VFS-5737 handle failures properly
             ?error("Error during file synchronization: ~p", [Reason])
