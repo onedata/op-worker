@@ -114,7 +114,7 @@ all() ->
         create_share_test,
         remove_share_test,
 
-%%        get_acl_test, % TODO uncomment after fixing removal of acl when changing posix mode
+        get_acl_test,
         set_acl_test,
         remove_acl_test,
 
