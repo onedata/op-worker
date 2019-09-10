@@ -47,10 +47,8 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                             value = acl:to_json(Acl, cdmi)
                         }
                     };
-                #provider_response{} = Resp ->
-                    provider_to_fuse_response(Resp);
-                Other ->
-                    Other
+                #provider_response{} = Other ->
+                    provider_to_fuse_response(Other)
             end;
         {posix, _} ->
             #fuse_response{status = #status{code = ?ENOATTR}}
@@ -68,10 +66,8 @@ get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
                     value = Mimetype
                 }
             };
-        #provider_response{} = Resp ->
-            provider_to_fuse_response(Resp);
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
     case cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx) of
@@ -86,10 +82,8 @@ get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
                     value = Encoding
                 }
             };
-        #provider_response{} = Resp ->
-            provider_to_fuse_response(Resp);
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
     case cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx) of
@@ -103,10 +97,8 @@ get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
                     name = ?CDMI_COMPLETION_STATUS_KEY,
                     value = Completion}
             };
-        #provider_response{} = Resp ->
-            provider_to_fuse_response(Resp);
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, json, [], Inherited) of
@@ -120,10 +112,8 @@ get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
                     name = ?JSON_METADATA_KEY,
                     value = JsonTerm}
             };
-        #provider_response{} = Resp ->
-            provider_to_fuse_response(Resp);
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, rdf, [], Inherited) of
@@ -137,10 +127,8 @@ get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
                     name = ?RDF_METADATA_KEY,
                     value = Rdf}
             };
-        #provider_response{} = Resp ->
-            provider_to_fuse_response(Resp);
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(_UserCtx, _, <<?CDMI_PREFIX_STR, _/binary>>, _) ->
     throw(?EPERM);
