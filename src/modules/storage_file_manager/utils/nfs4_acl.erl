@@ -43,9 +43,9 @@ decode_and_normalize(ACLBin, StorageFileCtx) ->
 %% Converts list of #access_control_entity records to binary form. 
 %% @end
 %%-------------------------------------------------------------------
--spec encode(#acl{}) -> binary().
-encode(#acl{value = ACEs}) ->
-    encode(ACEs, []).
+-spec encode(acl:acl()) -> binary().
+encode(Acl) ->
+    encode(Acl, []).
 
 %%%===================================================================
 %%% Internal functions
