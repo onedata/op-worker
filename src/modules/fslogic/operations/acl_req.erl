@@ -106,7 +106,8 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
         _ -> acl:strip_names(Acl)
     end,
 
-    case file_meta:update_perms(FileCtx, undefined, AclWithoutNames, acl) of
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case file_meta:update_perms(FileUuid, undefined, AclWithoutNames, acl) of
         ok ->
             ok = permissions_cache:invalidate(),
             fslogic_times:update_ctime(FileCtx),
@@ -126,7 +127,8 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
-    case file_meta:update_perms(FileCtx, undefined, [], posix) of
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case file_meta:update_perms(FileUuid, undefined, [], posix) of
         ok ->
             ok = permissions_cache:invalidate(),
             fslogic_times:update_ctime(FileCtx),

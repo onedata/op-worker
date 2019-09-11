@@ -194,10 +194,10 @@ ensure_proper_file_name(FuseResponse, _Name) ->
 %%--------------------------------------------------------------------
 -spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), undefined | fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
-chmod_insecure(UserCtx, FileCtx1, Mode1) ->
+chmod_insecure(UserCtx, FileCtx, Mode1) ->
     {Mode2, FileCtx2} = case Mode1 of
-        undefined -> file_ctx:get_mode(FileCtx1);
-        _ -> {Mode1, FileCtx1}
+        undefined -> file_ctx:get_mode(FileCtx);
+        _ -> {Mode1, FileCtx}
     end,
     ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx2, Mode2),
     chmod_attrs_only_insecure(FileCtx2, Mode2),
@@ -213,7 +213,8 @@ chmod_insecure(UserCtx, FileCtx1, Mode1) ->
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    ok = file_meta:update_perms(FileCtx, Mode, undefined, posix),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    ok = file_meta:update_perms(FileUuid, Mode, undefined, posix),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 

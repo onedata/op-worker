@@ -844,11 +844,10 @@ get_active_perms_type(FileUuid) ->
 %% new value for it.
 %% @end
 %%--------------------------------------------------------------------
--spec update_perms(file_ctx:ctx(), undefined | posix_permissions(),
+-spec update_perms(uuid(), undefined | posix_permissions(),
     undefined | acl:acl(), undefined | permissions_type()) ->
     ok | {error, term()}.
-update_perms(FileCtx, PosixMode, Acl, ActivePermsType) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+update_perms(FileUuid, PosixMode, Acl, ActivePermsType) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{
         mode = OldMode,
         acl = OldAcl,
