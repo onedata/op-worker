@@ -4,6 +4,89 @@
 CHANGELOG
 ---------
 
+### 19.02.0-rc1
+
+* VFS-5706 do not allow to create file if it exists on other provider
+* ensure time_slot_histogram shift size is non-negative
+* VFS-5678 create gui session instead of rest one for gs connection
+* VFS-5683 GUI update Renamed space indices to views
+* VFS-5678 replace app.config index vars with view ones
+* VFS-5678 replace index with view when possible
+* VFS-5631 use specific type for &#35;subscription records
+* VFS-5678 rename indices routes to views routes
+* VFS-5523 return ENOTSUP for clproto msg impossible to reroute
+* VFS-5400 Use compatibility reference json
+* VFS-5622 refactor listing children (ls) API
+* VFS-5622 return ok tuple for moveFile and copyFile gs rpc
+* VFS-5622 set parent to null for space root dir in gs translator
+* VFS-5622 add revisions to op_logic (due to gs version 3)
+* VFS-5622 add data validation and authorization for gs rpc operations
+* VFS-5622 add move and copy rpc operations to gs
+* VFS-5622 add deleting file to gs
+* VFS-5657 Adjusted deb dependency versions for bionic
+* VFS-5657 Enabled Ubuntu distribution package tag
+* VFS-5486 Use async GS client API in gs_client_worker and handle timeouts in more elegant way
+* VFS-5544 Add revision awareness to od_* records cache to fix a possible race condition caused by asynchronous updates 
+* VFS-5551 Use nobody auth override when applicable
+* VFS-5508 Allow to view provider list of a space for users without the view privilege,
+* VFS-5540 replace old cdmi container handler with new one
+* VFS-5597 Added s3 sync helper params
+* VFS-5540 remove obsolete cdmi_objectid_handler
+* VFS-5540 remove obsolete pre_handler
+* VFS-5540 add cdmi_capabilities which shows available cdmi operations
+* VFS-5540 add generic cdmi_handler
+* VFS-4698 Implemented onepanel rest proxy.
+* VFS-4547 add new swagger generated indices routes
+* VFS-4547 rename occurrences of `indexes` to `indices`
+* VFS-4547 rm transfer scheduling validation from lfm
+* VFS-4547 add new privilege checks to transfer and db_index backends
+* VFS-5107 Fix inability to change webdav credentials type to none
+* VFS-5107 Remove webdav credentials when type is none
+* VFS-4547 check user space privileges in REST operations
+* VFS-5454 implement op_logic framework
+* VFS-5454 omit validation for user root dir in op_file operations
+* VFS-5454 always use provider id in ERROR_SPACE_NOT_SUPPORTED_BY
+* VFS-5454 rename logical_file_manager to lfm
+* VFS-5454 add missing http codes macros
+* VFS-5454 use ?ROOT_SESS_ID when checking user space privs
+* VFS-5454 silence no_connections error in dbsync_communicator
+* VFS-5454 add location header to rest POST responses
+* VFS-5394 Restart rtransfer on all nodes after helper change
+* VFS-5394 Report errors when refreshing helper params
+* VFS-5394 Restart rtransfer after storage params change
+* VFS-5394 Create module handling helpers reload
+* VFS-5394 Refresh helper params after storage modification
+* VFS-5394 Add ability to list handles for a session
+* VFS-5394 Call event emition upon helper modification
+* VFS-5545 Fix storage verification
+* VFS-5454 accept REST req with no content-type and no body
+* VFS-5107 Extract helper functions for storage args preparation
+* VFS-5454 differentiate rest_errors from api_errors
+* VFS-5454 update rest routes
+* VFS-5454 add generic rest_handler
+* VFS-5454 add routes generated from swagger definitions
+* VFS-5454 replace lfm_files with logical_file_manager calls
+* VFS-5107 Ensure empty credentials for credentialsType:=none
+* VFS-5107 Disallow insecure mode for glusterfs and nulldevice
+* VFS-5107 Luma: convert only integers to binaries
+* VFS-5107 Convert LUMA response to binaries before validating
+* VFS-5107 Add missing webdav arguments to list of allowed fields
+* VFS-5107 Fix helper creation badmatch
+* VFS-5107 Validate admin ctx and args on helper update
+* VFS-5107 Never expect integers in helper user/group ctx
+* VFS-5107 Make webctx adminId special case of ctx transform
+* VFS-5107 Reuse validation between helper args and ctx
+* VFS-5107 Fix helper ctx validation
+* VFS-5392 Add file listing via id
+* VFS-5392 Add tree traverse and effective values
+* VFS-5107 Implement storage modification
+
+
+### 18.02.3
+
+* VFS-5706 do not allow to create file if it exists on other provider
+
+
 ### 18.02.2
 
 * VFS-5391 Reduced size of monitoring and throttling log files

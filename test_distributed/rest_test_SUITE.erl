@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -91,8 +92,8 @@ custom_error_when_handler_throws_error(Config) ->
     {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "spaces"),
 
     % then
-    ?assertEqual(400, Status),
-    ?assertEqual(<<"{\"error\":\"Bad value: provided \\\"dummy\\\" must be a valid JSON\"}">>, Body).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_JSON(<<"dummy">>)),
+    ?assertMatch(ExpRestError, {Status, json_utils:decode(Body)}).
 
 
 %%%===================================================================
@@ -240,8 +241,11 @@ mock_user_logic(Config) ->
     end,
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, user_logic, get_by_auth, fun(Auth) ->
-        GetUserFun(Auth, ?USER_ID)
+    test_utils:mock_expect(Workers, user_logic, preauthorize, fun(Auth) ->
+        case GetUserFun(Auth, ?USER_ID) of
+            {ok, #document{key = UserId}} -> {ok, ?USER(UserId)};
+            {error, _} = Error -> Error
+        end
     end),
     test_utils:mock_expect(Workers, user_logic, exists,
         fun(Auth, UserId) ->
