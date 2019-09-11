@@ -23,12 +23,10 @@
 %%% replica can fulfill multiple different QoS requirements. For example if
 %%% there is storage of type disk in Poland, then replica on such storage can
 %%% fulfill requirements that demands replica on storage in Poland and requirements
-%%% that demands replica on storage of type disk. System will create new file
-%%% replica only if currently existing replicas don't fulfill QoS requirements.
+%%% that demands replica on storage of type disk.
 %%% Multiple qos_entry documents can be created for the same file or directory.
 %%% Adding two identical QoS requirements for the same file results in two
-%%% different qos_entry documents. Each transfer scheduled to fulfill QoS
-%%% is added to links tree.
+%%% different qos_entry documents.
 %%% QoS requirement is considered as fulfilled when:
 %%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
 %%%     - there are no remaining transfers, that were created to fulfill this QoS requirement
@@ -78,5 +76,12 @@
 
 
 -define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
+
+% Request to remote providers to start QoS traverse.
+-record(qos_traverse_req, {
+    % uuid of file that travers should start from
+    start_file_uuid :: file_meta:uuid(),
+    target_storage :: storage:id()
+}).
 
 -endif.

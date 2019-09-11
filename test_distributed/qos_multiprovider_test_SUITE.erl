@@ -296,7 +296,7 @@ mock_schedule_transfers(Config) ->
     test_utils:mock_new(Workers, qos_traverse, [passthrough]),
     TestPid = self(),
     ok = test_utils:mock_expect(Workers, qos_traverse, synchronize_file,
-        fun(_,FileCtx,_) ->
+        fun(_,FileCtx) ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
             receive {completed, FileGuid} -> ok end

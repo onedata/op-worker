@@ -18,12 +18,10 @@
 %%% replica can fulfill multiple different QoS requirements. For example if
 %%% there is storage of type disk in Poland, then replica on such storage can
 %%% fulfill requirements that demands replica on storage in Poland and requirements
-%%% that demands replica on storage of type disk. System will create new file
-%%% replica only if currently existing replicas don't fulfill QoS requirements.
+%%% that demands replica on storage of type disk.
 %%% Multiple qos_entry documents can be created for the same file or directory.
 %%% Adding two identical QoS requirements for the same file results in two
-%%% different qos_entry documents. Each transfer scheduled to fulfill QoS
-%%% is added to links tree.
+%%% different qos_entry documents.
 %%% QoS requirement is considered as fulfilled when:
 %%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
 %%%     - there are no remaining transfers, that were created to fulfill this QoS requirement
@@ -56,14 +54,11 @@
 %% functions operating on qos_entry record
 -export([get_file_guid/1, get_expression/1, get_replicas_num/1]).
 
-%% functions responsible for traverse requests.
--export([remove_traverse_req/2]).
-
-%% functions operating on traverses list.
--export([add_traverse/3, remove_traverse/3, list_traverses/1]).
+%% functions responsible for traverses under given QoS entry.
+-export([remove_traverse_req/2, mark_traverse_started/2, mark_traverse_finished/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
 
 
 -type id() :: datastore_doc:key().
@@ -71,10 +66,10 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
--type traverse_req() :: #qos_traverse_req{}.
+-type traverse_map() :: #{traverse:id() => #qos_traverse_req{}}.
 -type one_or_many(Type) :: Type | [Type].
 
--export_type([id/0, doc/0, record/0, replicas_num/0]).
+-export_type([id/0, doc/0, record/0, replicas_num/0, traverse_map/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -94,11 +89,11 @@
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
     replicas_num(), boolean()) -> {ok, doc()} | {error, term()}.
 create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible) ->
-    create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, []).
+    create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, #{}).
 
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
-    replicas_num(), boolean(), [traverse_req()]) -> {ok, doc()} | {error, term()}.
+    replicas_num(), boolean(), traverse_map()) -> {ok, doc()} | {error, term()}.
 create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
     datastore_model:create(?CTX, #document{key = QosId, scope = SpaceId,
         value = #qos_entry{
@@ -126,25 +121,20 @@ delete(QosId) ->
     datastore_model:delete(?CTX, QosId).
 
 
--spec add_links(datastore_doc:scope(), datastore:id(), datastore:tree_id(),
+-spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
 add_links(Scope, Key, TreeId, Links) ->
     datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
--spec delete_links(datastore_doc:scope(), datastore:id(), datastore:tree_id(),
+-spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
 delete_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Calls Fun(Link, Acc) for each link.
-%% @end
-%%--------------------------------------------------------------------
 -spec fold_links(id(), datastore:fold_fun(datastore:link()), datastore:fold_acc(), datastore:fold_opts()) ->
     {ok, datastore:fold_acc()} | {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold_links(Key, Fun, Acc, Opts) ->
@@ -193,11 +183,47 @@ list_impossible_qos() ->
     ).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks given traverse as finished by removing it from traverses map.
+%% @end
+%%--------------------------------------------------------------------
 -spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
-remove_traverse_req(QosId, TaskId) ->
+remove_traverse_req(QosId, TraverseId) ->
     update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
-            traverse_reqs = [X || X <- TR, X#qos_traverse_req.task_id =/= TaskId]
+            traverses = maps:remove(TraverseId, TR)
+        }}
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks given traverse as started by moving it from traverse requests
+%% map to traverses map.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_traverse_started(id(), traverse:id()) ->  {ok, id()}.
+mark_traverse_started(QosId, TraverseId) ->
+    update(QosId, fun(#qos_entry{traverse_reqs = TR, traverses = Traverses} = QosEntry) ->
+        {TraverseReq, NewTR} = maps:take(TraverseId, TR),
+        {ok, QosEntry#qos_entry{
+            traverse_reqs = NewTR,
+            traverses = Traverses#{TraverseId => TraverseReq}
+        }}
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks given traverse as finished by removing it from traverses map.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_traverse_finished(id(), traverse:id()) ->  {ok, id()}.
+mark_traverse_finished(QosId, TraverseId) ->
+    update(QosId, fun(#qos_entry{traverses = Traverses} = QosEntry) ->
+        {ok, QosEntry#qos_entry{
+            traverses = maps:remove(TraverseId, Traverses)
         }}
     end).
 
@@ -222,46 +248,6 @@ is_possible(QosEntry) ->
 
 
 %%%===================================================================
-%%% Functions operating on traverses list.
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Add given TraverseId to traverses list of given QosId.
-%% @end
-%%--------------------------------------------------------------------
--spec add_traverse(od_space:id(), id(), traverse:id()) ->  ok.
-add_traverse(SpaceId, QosId, TraverseId) ->
-    Link = {TraverseId, TraverseId},
-    {ok, _} = add_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), Link),
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove given TraverseId from traverses list of given QosId.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_traverse(od_space:id(), id(), traverse:id()) ->  ok.
-remove_traverse(SpaceId, QosId, TraverseId) ->
-    ok = delete_links(SpaceId, ?QOS_TRAVERSE_LIST(QosId), oneprovider:get_id(), TraverseId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% List traverses of given QosId.
-%% @end
-%%--------------------------------------------------------------------
--spec list_traverses(id()) ->  [traverse:id()].
-list_traverses(QosId) ->
-    {ok, Traverses} = fold_links(?QOS_TRAVERSE_LIST(QosId),
-        fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
-        [], #{}
-    ),
-    Traverses.
-
-
-%%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
@@ -283,10 +269,74 @@ get_record_struct(1) ->
         {expression, [string]},
         {replicas_num, integer},
         {is_possible, boolean},
-        {traverse_req, [{record, [
-            {task_id, string},
+        {traverse_reqs, #{binary => {record, [
             {start_file_uuid, string},
-            {qos_origin_file_guid, string},
             {target_storage, string}
-        ]}]}
+        ]}}},
+        {traverses, #{binary => {record, [
+            {start_file_uuid, string},
+            {target_storage, string}
+        ]}}}
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This conflict resolution promotes changes done by provider
+%% responsible for given traverse (target storage is one of its storages).
+%% This means that only remote changes of remote providers traverses and
+%% local changes of current provider traverses are taken into account.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, PrevDoc) ->
+    LocalReqs = PrevDoc#document.value#qos_entry.traverse_reqs,
+    RemoteReqs = RemoteValue#qos_entry.traverse_reqs,
+    LocalTraverses = PrevDoc#document.value#qos_entry.traverses,
+    RemoteTraverses = RemoteValue#qos_entry.traverses,
+    case (LocalReqs == RemoteReqs) and (LocalTraverses == RemoteTraverses) of
+        true ->
+            default;
+        false ->
+            {true, RemoteDoc#document{
+                value = RemoteValue#qos_entry{
+                    traverse_reqs = calculate_new_traverses(LocalReqs, RemoteReqs),
+                    traverses = calculate_new_traverses(LocalTraverses, RemoteTraverses)
+            }
+        }}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Calculates new traverses based on local and remote value.
+%% Only remote changes of remote providers traverses and
+%% local changes of current provider traverses are taken into account.
+%% @end
+%%--------------------------------------------------------------------
+-spec calculate_new_traverses(traverse_map(), traverse_map()) -> traverse_map().
+calculate_new_traverses(LocalValue, RemoteValue) ->
+    {LocalTraverses, _} = split_traverses(LocalValue),
+    {_, RemoteTraverses} = split_traverses(RemoteValue),
+    maps:merge(
+        maps:with(LocalTraverses, LocalValue),
+        maps:with(RemoteTraverses, RemoteValue)
+    ).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Splits given traverses to those of current provider and those of remote providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec split_traverses(traverse_map()) -> {[traverse:id()], [traverse:id()]}.
+split_traverses(Traverses) ->
+    ProviderId = oneprovider:get_id(),
+    maps:fold(fun(TaskId, QosTraverse, {LocalTraverses, RemoteTraverses}) ->
+        % TODO VFS-5573 use storage id instead of provider
+        case QosTraverse#qos_traverse_req.target_storage == ProviderId of
+            true -> {[TaskId | LocalTraverses], RemoteTraverses};
+            false -> {LocalTraverses, [TaskId | RemoteTraverses]}
+        end
+    end, {[], []}, Traverses).
