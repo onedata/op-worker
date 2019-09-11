@@ -982,8 +982,10 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
             try
                 {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedACL} = nfs4_acl:decode_and_normalize(ACLBin, StorageFileCtx),
+
+                {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedACL, FileCtx),
                 #provider_response{status = #status{code = ?OK}} =
-                    acl_req:set_acl(UserCtx, FileCtx, NormalizedACL),
+                    acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
                 ok
             catch
                 throw:?ENOTSUP ->
@@ -1015,12 +1017,14 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
             try
                 {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedNewACL} = nfs4_acl:decode_and_normalize(ACLBin, StorageFileCtx),
-                case #acl{value = NormalizedNewACL} of
+                {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedNewACL, FileCtx),
+
+                case #acl{value = SanitizedAcl} of
                     ACL ->
                         not_updated;
                     _ ->
                         #provider_response{status = #status{code = ?OK}} =
-                            acl_req:set_acl(UserCtx, FileCtx, NormalizedNewACL),
+                            acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
                         updated
                 end
             catch
@@ -1032,6 +1036,39 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
                     ok
             end
     end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters given acl leaving only `allow` and `deny` aces. Also disables
+%% unknown/unsupported flags (aceflags) and operations (acemask).
+%% @end
+%%-------------------------------------------------------------------
+-spec sanitize_acl(acl:acl(), file_ctx:ctx()) -> {acl:acl(), file_ctx:ctx()}.
+sanitize_acl(Acl, FileCtx) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    AllPerms = case IsDir of
+        true -> ?all_container_perms_mask;
+        false -> ?all_object_perms_mask
+    end,
+
+    SanitizedAcl = lists:filtermap(fun(#access_control_entity{
+        acetype = Type,
+        aceflags = Flags,
+        acemask = Mask
+    } = Ace) ->
+        case lists:member(Type, [?allow_mask, ?deny_mask]) of
+            true ->
+                {true, Ace#access_control_entity{
+                    aceflags = Flags band ?identifier_group_mask,
+                    acemask = Mask band AllPerms
+                }};
+            false ->
+                false
+        end
+    end, Acl),
+
+    {SanitizedAcl, FileCtx2}.
 
 -spec is_suffixed(file_meta:name()) -> {true, file_meta:uuid(), file_meta:name()} | false.
 is_suffixed(FileName) ->
