@@ -249,8 +249,8 @@ all() ->
 
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations
-    % not having all perms specified in `files` and succeed for combination
-    % consisting of only them.
+    % not having all perms specified in `files` and space privileges and
+    % succeed for combination consisting of only them.
     % It takes following arguments:
     % - OwnerSessId - session id of user which creates files for this test,
     % - SessId - session id of user which should perform operation,

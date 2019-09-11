@@ -44,7 +44,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), lfm:file_key(), fslogic_worker:open_flag()) ->
-    {ok, boolean()} | lfm:error_reply().
+    ok | lfm:error_reply().
 check_perms(SessId, FileKey, Flag) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
