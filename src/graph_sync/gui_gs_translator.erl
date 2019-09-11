@@ -127,7 +127,7 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
 
         #{
             <<"name">> => Name,
-            <<"owner">> => gs_protocol:gri_to_string(#gri{
+            <<"owner">> => gri:serialize(#gri{
                 type = op_user,
                 id = Owner,
                 aspect = instance,
@@ -140,7 +140,7 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
                 true -> <<"acl">>;
                 false -> <<"posix">>
             end,
-            <<"acl">> => gs_protocol:gri_to_string(#gri{
+            <<"acl">> => gri:serialize(#gri{
                 type = op_file,
                 id = Guid,
                 aspect = acl,
@@ -180,13 +180,13 @@ translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, Space) -
 
     #{
         <<"name">> => Space#od_space.name,
-        <<"effUserList">> => gs_protocol:gri_to_string(#gri{
+        <<"effUserList">> => gri:serialize(#gri{
             type = op_space,
             id = SpaceId,
             aspect = eff_users,
             scope = private
         }),
-        <<"effGroupList">> => gs_protocol:gri_to_string(#gri{
+        <<"effGroupList">> => gri:serialize(#gri{
             type = op_space,
             id = SpaceId,
             aspect = eff_groups,
@@ -197,7 +197,7 @@ translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, Space) -
 translate_space(#gri{aspect = eff_users, scope = private}, Users) ->
     #{
         <<"list">> => lists:map(fun(UserId) ->
-            gs_protocol:gri_to_string(#gri{
+            gri:serialize(#gri{
                 type = op_user,
                 id = UserId,
                 aspect = instance,
@@ -208,7 +208,7 @@ translate_space(#gri{aspect = eff_users, scope = private}, Users) ->
 translate_space(#gri{aspect = eff_groups, scope = private}, Groups) ->
     #{
         <<"list">> => lists:map(fun(GroupId) ->
-            gs_protocol:gri_to_string(#gri{
+            gri:serialize(#gri{
                 type = op_group,
                 id = GroupId,
                 aspect = instance,
@@ -255,7 +255,7 @@ translate_user(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
 
 
 %% @private
--spec translate_group(gs_protocol:gri(), Data :: term()) ->
+-spec translate_group(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_group(#gri{aspect = instance, scope = shared}, GroupInfo) ->
     GroupInfo.
