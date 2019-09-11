@@ -188,9 +188,13 @@ validate(#access_control_entity{
     aceflags = Flags,
     acemask = Mask
 }, FileType) ->
-    validate_acetype(Type),
-    validate_aceflags(Flags),
-    validate_acemask(Mask, FileType).
+    try
+        validate_acetype(Type),
+        validate_aceflags(Flags),
+        validate_acemask(Mask, FileType)
+    catch _:_ ->
+        throw({error, ?EINVAL})
+    end.
 
 
 %%%===================================================================
@@ -255,8 +259,8 @@ permission_to_bitmask(?read_metadata) -> ?read_metadata_mask;
 permission_to_bitmask(?write_metadata) -> ?write_metadata_mask;
 permission_to_bitmask(?traverse_container) -> ?traverse_container_mask;
 permission_to_bitmask(?delete) -> ?delete_mask;
-permission_to_bitmask(?delete_object) -> ?delete_object_mask;
-permission_to_bitmask(?delete_subcontainer) -> ?delete_subcontainer_mask;
+permission_to_bitmask(?delete_object) -> ?delete_child_mask;
+permission_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
 permission_to_bitmask(?read_attributes) -> ?read_attributes_mask;
 permission_to_bitmask(?write_attributes) -> ?write_attributes_mask;
 permission_to_bitmask(?read_acl) -> ?read_acl_mask;
@@ -283,8 +287,7 @@ decode_cdmi_identifier(CdmiIdentifier) ->
 %% @private
 -spec validate_acetype(bitmask()) -> ok | no_return().
 validate_acetype(?allow_mask) -> ok;
-validate_acetype(?deny_mask) -> ok;
-validate_acetype(_) -> throw({error, ?EINVAL}).
+validate_acetype(?deny_mask) -> ok.
 
 
 %% @private
@@ -295,8 +298,8 @@ validate_aceflags(_) -> throw({error, ?EINVAL}).
 
 %% @private
 -spec validate_acemask(bitmask(), file | dir) -> ok | no_return().
-validate_acemask(Mask, file) when ?has_flag(Mask, ?all_perms_mask) -> ok;
-validate_acemask(Mask, dir) when ?has_flag(Mask, ?all_perms_mask)  -> ok;
+validate_acemask(Mask, file) when ?has_flag(Mask, ?all_object_perms_mask) -> ok;
+validate_acemask(Mask, dir) when ?has_flag(Mask, ?all_container_perms_mask)  -> ok;
 validate_acemask(_, _) -> throw({error, ?EINVAL}).
 
 
