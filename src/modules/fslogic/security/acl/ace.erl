@@ -108,10 +108,14 @@ is_applicable(_, FileCtx, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if given ace permits specified operations.
-%% In case of allow ace returns operations which have yet to be permitted or
-%% denied by other ace or 'ok' if all are permitted by this one.
-%% In case of deny ace throws ?EACCES if even one operation is forbidden.
+%% Checks if given ace permits or denies (depending on ace type) specified
+%% operations.
+%% In case of 'allow' ace it returns `allowed` when all operations are
+%% explicitly permitted or `{inconclusive, OperationsToBeAllowed}` for
+%% operations which can't be authoritatively allowed by this ace.
+%% In case of 'deny' ace it returns `denied` if even one operation is
+%% forbidden or `{inconclusive, Operations}` if none of operations can
+%% be authoritatively denied.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_against(bitmask(), ace()) ->

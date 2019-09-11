@@ -51,12 +51,12 @@
 -type diff() :: datastore_doc:diff(storage_sync_monitoring()).
 -type timestamp() :: non_neg_integer().
 
--type window() :: day | hours | minute.
+-type window() :: day | hour | minute.
 -type plot_counter_type() :: imported_files | updated_files | deleted_files | queue_length.
 -type error() :: {error, term()}.
 
 
--export_type([storage_sync_monitoring/0, doc/0]).
+-export_type([storage_sync_monitoring/0, doc/0, window/0, plot_counter_type/0]).
 
 
 -define(HISTOGRAM_LENGTH,

@@ -61,7 +61,7 @@ is_authorized(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate(#token_auth{} | cowboy_req:req(), rest | gui) ->
-    aai:auth() | {error, term()}.
+    {ok, aai:auth()} | {error, term()}.
 authenticate(#token_auth{} = Credentials, Type) ->
     case user_identity:get_or_fetch(Credentials) of
         {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
@@ -86,5 +86,6 @@ authenticate(Req, Type) ->
         undefined ->
             {ok, ?NOBODY};
         AccessToken ->
-            authenticate(#token_auth{token = AccessToken}, Type)
+            {PeerIp, _} = cowboy_req:peer(Req),
+            authenticate(#token_auth{token = AccessToken, peer_ip = PeerIp}, Type)
     end.

@@ -27,7 +27,6 @@
 -include_lib("ctool/include/onedata.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2]).
--export([get_as_map/0]).
 -export([to_string/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
@@ -125,30 +124,6 @@ to_string(ProviderId) ->
     case provider_logic:get_name(ProviderId) of
         {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
         _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current provider's data in a map.
-%% Useful for RPC calls from onepanel where od_provider record is not defined.
-%% @end
-%%--------------------------------------------------------------------
--spec get_as_map() -> {ok, map()} | gs_protocol:error().
-get_as_map() ->
-    case ?MODULE:get() of
-        {ok, #document{key = Id, value = Record}} ->
-            {ok, #{
-                id => Id,
-                name => Record#od_provider.name,
-                admin_email => Record#od_provider.admin_email,
-                subdomain_delegation => Record#od_provider.subdomain_delegation,
-                domain => Record#od_provider.domain,
-                subdomain => Record#od_provider.subdomain,
-                longitude => Record#od_provider.longitude,
-                latitude => Record#od_provider.latitude
-            }};
-        Error -> Error
     end.
 
 
