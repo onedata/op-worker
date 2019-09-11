@@ -107,16 +107,22 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX, Doc));
+    Ctx = ?CTX,
+    ?extract_key(datastore_model:save(Ctx#{memory_copies => all}, Doc));
 %%save(#document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc, GeneratedKey) ->
 %%    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc));
-%%save(#document{value = #file_meta{parent_uuid = ParentUuid}} = Doc, _) ->
 save(#document{value = #file_meta{parent_uuid = ParentUuid}} = Doc, true) ->
     LabelSize = consistent_hashing:get_label_gen_size(),
     LabelPart = binary:part(ParentUuid, 0, LabelSize),
-    GenPart = datastore_utils:gen_short_key(LabelSize),
-    Key = <<LabelPart/binary, GenPart/binary>>,
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc#document{key = Key}));
+    case LabelPart of
+        <<"space_">> ->
+            % TODO - wylosowac ale na tym samym node!
+            ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc));
+        _ ->
+            GenPart = datastore_utils:gen_short_key(LabelSize),
+            Key = <<LabelPart/binary, GenPart/binary>>,
+            ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc#document{key = Key}))
+    end;
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -134,6 +140,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 }}) ->
     ?run(begin
         true = is_valid_filename(FileName),
+%%        ?info("hhhhh ~p", [ParentUuid]),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc),
         SpaceDirUuid = case IsScope of

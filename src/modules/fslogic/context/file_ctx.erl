@@ -1196,6 +1196,7 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %%--------------------------------------------------------------------
 -spec generate_canonical_path(ctx()) -> [file_meta:name()].
 generate_canonical_path(FileCtx) ->
+    % TODO - strasznie kopie po wydajnosci na wielu node'ach
     case is_root_dir_const(FileCtx) of
         true ->
             [<<"/">>];
