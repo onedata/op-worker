@@ -46,12 +46,12 @@ add_qos(SessId, FileKey, Expression, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_qos(session:id(), lfm:file_key()) ->
-    {ok, {file_qos:qos_list(), file_qos:target_storages()}} | lfm:error_reply().
+    {ok, {[qos_entry:id()], file_qos:target_storages()}} | lfm:error_reply().
 get_file_qos(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_effective_file_qos{},
-        fun(#effective_file_qos{qos_list = QosList, target_storages = TargetStorages}) ->
-            {ok, {QosList, TargetStorages}}
+        fun(#effective_file_qos{qos_entries = QosEntries, target_storages = TargetStorages}) ->
+            {ok, {QosEntries, TargetStorages}}
         end).
 
 %%--------------------------------------------------------------------
@@ -99,8 +99,8 @@ remove_qos(SessId, QosId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()]) -> boolean().
-check_qos_fulfilled(SessId, QosList) ->
-    check_qos_fulfilled(SessId, QosList, undefined).
+check_qos_fulfilled(SessId, QosEntries) ->
+    check_qos_fulfilled(SessId, QosEntries, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -109,8 +109,8 @@ check_qos_fulfilled(SessId, QosList) ->
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
     lfm:file_key() | undefined) -> boolean() | lfm:error_reply().
-check_qos_fulfilled(SessId, QosList, FileKey) when is_list(QosList) ->
-    lists:all(fun(QosId) -> true == check_qos_fulfilled(SessId, QosId, FileKey) end, QosList);
+check_qos_fulfilled(SessId, QosEntries, FileKey) when is_list(QosEntries) ->
+    lists:all(fun(QosId) -> true == check_qos_fulfilled(SessId, QosId, FileKey) end, QosEntries);
 check_qos_fulfilled(SessId, QosId, undefined) ->
     case qos_entry:get_file_guid(QosId) of
         {error, _} = Error ->

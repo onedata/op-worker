@@ -95,7 +95,7 @@ ensure_exists(SpaceId) ->
     CacheTableInfo = ets:info(CacheTableName),
     case CacheTableInfo of
         undefined ->
-            fslogic_worker:schedule_init_qos_cache_for_space(SpaceId);
+            fslogic_worker:init_qos_cache_for_space(SpaceId);
         _ ->
             ok
     end.
