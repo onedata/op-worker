@@ -255,7 +255,7 @@
     last_stat :: undefined | non_neg_integer()
 }).
 
-% This model can be related with file and holds information
+% This model can be associated with file and holds information
 % about hooks for given file. All hooks will be executed for
 % change of given file's file_meta document.
 -record(delayed_hooks, {

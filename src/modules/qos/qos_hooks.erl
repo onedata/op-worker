@@ -75,8 +75,8 @@ maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
 maybe_update_file_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     EffFileQos = file_qos:get_effective(FileUuid,
-        fun(ParentUuid) ->
-            delayed_hooks:add_hook(ParentUuid, <<"check_qos_", FileUuid/binary>>,
+        fun(MissingUuid, _Args) ->
+            delayed_hooks:add_hook(MissingUuid, <<"check_qos_", FileUuid/binary>>,
                 ?MODULE, ?FUNCTION_NAME, [file_ctx:get_space_id_const(FileCtx), FileUuid, StorageId])
         end),
     case EffFileQos of

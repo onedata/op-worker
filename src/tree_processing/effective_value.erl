@@ -32,7 +32,7 @@
                                             % space directory (see get_or_calculate/7).
 -type args() :: list().
 -type in_critical_section() :: boolean() | parent. % parent = use section starting from parent directory
--type error_callback() :: undefined | fun((file_meta:uuid()) -> ok).
+-type error_callback() :: undefined | fun((file_meta:uuid(), args()) -> ok).
 
 -export_type([error_callback/0]).
 
@@ -142,17 +142,20 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                                 parent -> true;
                                 _ -> InCriticalSection
                             end,
-                            {ok, ParentValue, CalculationInfo} = get_or_calculate(Cache, ParentDoc,
-                                CalculateCallback, InitialCalculationInfo, Args, ErrorCallback, Timestamp,
-                                InCriticalSection2),
-                            bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
-                                [Doc, ParentValue, CalculationInfo | Args], Timestamp);
+                                case get_or_calculate(Cache, ParentDoc, CalculateCallback, InitialCalculationInfo,
+                                    Args, ErrorCallback, Timestamp, InCriticalSection2) of
+                                    {ok, ParentValue, CalculationInfo} ->
+                                        bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
+                                            [Doc, ParentValue, CalculationInfo | Args], Timestamp);
+                                    {error, _} = Error ->
+                                        Error
+                                end;
                         _ ->
                             case ErrorCallback of
                                 undefined -> ok;
-                                _ -> ErrorCallback(ParentUuid)
+                                _ -> ErrorCallback(ParentUuid, Args)
                             end,
-                            {ok, undefined, InitialCalculationInfo}
+                            {error, parent_doc_missing}
                     end;
                 _ -> % space
                     bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
