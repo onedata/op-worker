@@ -9,8 +9,7 @@
 %%% This module provides utility functions for access control entry
 %%% (#access_control_entity{}), or ace in short, management. The
 %%% overall structure of ace is described in cdmi 1.1.1 spec book 16.1.
-%%% As for implemented subset of flags and masks they listed in
-%%% "ctool/include/posix/acl.hrl".
+%%% As for implemented subset of flags and masks they listed in acl.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(ace).
@@ -34,10 +33,8 @@
     validate/2
 ]).
 
--define(ALL_FLAGS_BITMASK, (
-    ?no_flags_mask bor
-    ?identifier_group_mask
-)).
+-define(ALL_FLAGS_BITMASK, (?no_flags_mask bor ?identifier_group_mask)).
+
 
 %%%===================================================================
 %%% API
@@ -188,12 +185,16 @@ validate(#access_control_entity{
     aceflags = Flags,
     acemask = Mask
 }, FileType) ->
-    try
-        validate_acetype(Type),
-        validate_aceflags(Flags),
-        validate_acemask(Mask, FileType)
-    catch _:_ ->
-        throw({error, ?EINVAL})
+    ValidType = lists:member(Type, [?allow_mask, ?deny_mask]),
+    ValidFlags = ?has_flag(?ALL_FLAGS_BITMASK, Flags),
+    ValidMask = case FileType of
+        file -> ?has_flag(?all_object_perms_mask, Mask);
+        dir -> ?has_flag(?all_container_perms_mask, Mask)
+    end,
+
+    case ValidType andalso ValidFlags andalso ValidMask of
+        true -> ok;
+        false -> throw({error, ?EINVAL})
     end.
 
 
@@ -282,25 +283,6 @@ decode_cdmi_identifier(CdmiIdentifier) ->
         [Name, Id] -> {Id, Name};
         [Id] -> {Id, undefined}
     end.
-
-
-%% @private
--spec validate_acetype(bitmask()) -> ok | no_return().
-validate_acetype(?allow_mask) -> ok;
-validate_acetype(?deny_mask) -> ok.
-
-
-%% @private
--spec validate_aceflags(bitmask()) -> ok | no_return().
-validate_aceflags(Flags) when ?has_flag(Flags, ?ALL_FLAGS_BITMASK) -> ok;
-validate_aceflags(_) -> throw({error, ?EINVAL}).
-
-
-%% @private
--spec validate_acemask(bitmask(), file | dir) -> ok | no_return().
-validate_acemask(Mask, file) when ?has_flag(Mask, ?all_object_perms_mask) -> ok;
-validate_acemask(Mask, dir) when ?has_flag(Mask, ?all_container_perms_mask)  -> ok;
-validate_acemask(_, _) -> throw({error, ?EINVAL}).
 
 
 %% @private
