@@ -12,6 +12,7 @@
 -author("Michal Stanisz").
 
 -include("transfers_test_mechanism.hrl").
+-include("qos_tests_utils.hrl").
 
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
@@ -100,6 +101,7 @@ all() -> [
 %%    remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately
 ].
 
+-define(PROVIDER_ID(Worker), initializer:domain_to_provider_id(?GET_DOMAIN(Worker))).
 -define(SPACE_ID, <<"space1">>).
 -define(FILE_PATH(FileName), filename:join(["/", ?SPACE_ID, FileName])).
 
@@ -142,7 +144,7 @@ all() -> [
 %%%===================================================================
 
 eviction_of_replica_protected_by_qos_file(Config) ->
-    [WorkerP1, _WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -152,7 +154,7 @@ eviction_of_replica_protected_by_qos_file(Config) ->
 
 
 eviction_of_replica_not_protected_by_qos_file(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -162,7 +164,7 @@ eviction_of_replica_not_protected_by_qos_file(Config) ->
 
 
 migration_of_replica_protected_by_qos_file(Config) ->
-    [WorkerP1, _WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -175,7 +177,7 @@ migration_of_replica_protected_by_qos_file(Config) ->
 
 
 migration_of_replica_not_protected_by_qos_file(Config) ->
-    [_WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -188,7 +190,7 @@ migration_of_replica_not_protected_by_qos_file(Config) ->
 
 
 migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -206,7 +208,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
 
 
 eviction_of_replica_protected_by_qos_dir(Config) ->
-    [WorkerP1, _WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -217,7 +219,7 @@ eviction_of_replica_protected_by_qos_dir(Config) ->
 
 
 eviction_of_replica_not_protected_by_qos_dir(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -228,7 +230,7 @@ eviction_of_replica_not_protected_by_qos_dir(Config) ->
 
 
 migration_of_replica_protected_by_qos_dir(Config) ->
-    [WorkerP1, _WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -242,7 +244,7 @@ migration_of_replica_protected_by_qos_dir(Config) ->
 
 
 migration_of_replica_not_protected_by_qos_dir(Config) ->
-    [_WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -256,7 +258,7 @@ migration_of_replica_not_protected_by_qos_dir(Config) ->
 
 
 migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -275,7 +277,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
 
 
 eviction_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
-    [WorkerP1, _WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -286,7 +288,7 @@ eviction_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 eviction_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -297,7 +299,7 @@ eviction_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
-    [WorkerP1, _WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -311,7 +313,7 @@ migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
-    [_WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -325,7 +327,7 @@ migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -344,7 +346,7 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(
 
 
 remote_eviction_of_replica_protected_by_qos_file(Config) ->
-    [WorkerP1, _WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -355,7 +357,7 @@ remote_eviction_of_replica_protected_by_qos_file(Config) ->
 
 
 remote_eviction_of_replica_not_protected_by_qos_file(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -366,7 +368,7 @@ remote_eviction_of_replica_not_protected_by_qos_file(Config) ->
 
 
 remote_migration_of_replica_protected_by_qos_file(Config) ->
-    [WorkerP1, _WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -380,7 +382,7 @@ remote_migration_of_replica_protected_by_qos_file(Config) ->
 
 
 remote_migration_of_replica_not_protected_by_qos_file(Config) ->
-    [_WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -394,7 +396,7 @@ remote_migration_of_replica_not_protected_by_qos_file(Config) ->
 
 
 remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -413,7 +415,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
 
 
 remote_eviction_of_replica_protected_by_qos_dir(Config) ->
-    [WorkerP1, _WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -425,7 +427,7 @@ remote_eviction_of_replica_protected_by_qos_dir(Config) ->
 
 
 remote_eviction_of_replica_not_protected_by_qos_dir(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -437,7 +439,7 @@ remote_eviction_of_replica_not_protected_by_qos_dir(Config) ->
 
 
 remote_migration_of_replica_protected_by_qos_dir(Config) ->
-    [WorkerP1, _WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -452,7 +454,7 @@ remote_migration_of_replica_protected_by_qos_dir(Config) ->
 
 
 remote_migration_of_replica_not_protected_by_qos_dir(Config) ->
-    [_WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -467,7 +469,7 @@ remote_migration_of_replica_not_protected_by_qos_dir(Config) ->
 
 
 remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -487,7 +489,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
 
 
 remote_eviction_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
-    [WorkerP1, _WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -499,7 +501,7 @@ remote_eviction_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 remote_eviction_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
-    [_WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -511,7 +513,7 @@ remote_eviction_of_replica_not_protected_by_qos_dir_each_file_separately(Config)
 
 
 remote_migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
-    [WorkerP1, _WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -526,7 +528,7 @@ remote_migration_of_replica_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
-    [_WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP2,
@@ -541,7 +543,7 @@ remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config
 
 
 remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -561,7 +563,7 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_sepa
 
 
 autocleaning_of_replica_protected_by_qos_file(Config) ->
-    [WorkerP1 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_node = WorkerP1,
@@ -573,7 +575,7 @@ autocleaning_of_replica_protected_by_qos_file(Config) ->
 
 
 autocleaning_of_replica_not_protected_by_qos_file(Config) ->
-    [_WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_node = WorkerP2,
@@ -585,7 +587,7 @@ autocleaning_of_replica_not_protected_by_qos_file(Config) ->
 
 
 autocleaning_of_replica_protected_by_qos_dir(Config) ->
-    [WorkerP1 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_node = WorkerP1,
@@ -597,7 +599,7 @@ autocleaning_of_replica_protected_by_qos_dir(Config) ->
 
 
 autocleaning_of_replica_not_protected_by_qos_dir(Config) ->
-    [_WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_autocleaning_protection_test_base(Config, #test_spec_autocleaning{
         run_node = WorkerP2,
@@ -624,17 +626,17 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         function = Function,
         new_storages_mock = NewStoragesMock
     } = TestSpec,
-    _Workers = [WorkerP1, WorkerP2, WorkerP3] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, WorkerP3] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
-    {GuidsAndPaths, _} = qos_test_utils:add_qos_test_base(Config, QosSpec),
+    {GuidsAndPaths, _} = multi_provider_qos_test_SUITE:fulfill_qos_test_base(Config, QosSpec),
 
     case NewStoragesMock of
         undefined ->
             ok;
         _ ->
-            qos_test_utils:mock_providers_qos(Config, NewStoragesMock)
+            qos_tests_utils:mock_providers_qos(Config, NewStoragesMock)
     end,
 
     QosTransfers = transfers_test_utils:list_ended_transfers(WorkerP1, ?SPACE_ID),
@@ -657,7 +659,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
             setup = #setup{
                 assertion_nodes = [WorkerP1, WorkerP2, WorkerP3],
                 files_structure = {pre_created, GuidsAndPaths},
-                root_directory = {qos_test_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
+                root_directory = {qos_tests_utils:get_guid(?FILE_PATH(Filename), GuidsAndPaths), ?FILE_PATH(Filename)}
             },
             scenario = #scenario{
                 type = rest,
@@ -684,7 +686,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     ).
 
 qos_autocleaning_protection_test_base(Config, TestSpec) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     #test_spec_autocleaning{
         run_node = RunNode,
         dir_structure_type = DirStructureType,
@@ -706,7 +708,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
 
     rpc:call(RunNode, file_popularity_api, enable, [?SPACE_ID]),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Name),
-    {_GuidsAndPaths, _} = qos_test_utils:add_qos_test_base(Config, QosSpec),
+    {_GuidsAndPaths, _} = multi_provider_qos_test_SUITE:fulfill_qos_test_base(Config, QosSpec),
 
     Configuration =  #{
         enabled => true,
@@ -755,20 +757,19 @@ init_per_suite(Config) ->
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, transfers_test_utils, transfers_test_mechanism, qos_test_utils, ?MODULE]}
+        {?LOAD_MODULES, [initializer, transfers_test_utils, transfers_test_mechanism, qos_tests_utils, ?MODULE]}
         | Config
     ].
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
-    [WorkerP1, WorkerP2, WorkerP3] = ?config(op_worker_nodes, Config),
     Mock = #{
-        ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-        ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-        ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"other">>)
+        ?P1 => ?TEST_QOS(<<"PL">>),
+        ?P2 => ?TEST_QOS(<<"other">>),
+        ?P3 => ?TEST_QOS(<<"other">>)
     },
-    qos_test_utils:mock_providers_qos(Config, Mock),
+    qos_tests_utils:mock_providers_qos(Config, Mock),
     case ?config(?SPACE_ID_KEY, Config) of
         undefined ->
             [{?SPACE_ID_KEY, ?SPACE_ID} | Config];
@@ -777,7 +778,7 @@ init_per_testcase(_Case, Config) ->
     end.
 
 end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     transfers_test_utils:unmock_replication_worker(Workers),
     transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
     transfers_test_utils:remove_transfers(Config),
@@ -818,7 +819,7 @@ end_per_suite(Config) ->
 ).
 
 create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
-    Workers = [WorkerP1, WorkerP2, _WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2, _WorkerP3] = qos_tests_utils:get_op_nodes_sorted(Config),
     {DirStructure, DirStructureAfter} = case DirStructureType of
         simple ->
             {?simple_dir_structure(QosFilename, [?GET_DOMAIN_BIN(WorkerP2)]),
@@ -828,16 +829,36 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
             ?nested_dir_structure(QosFilename, [?GET_DOMAIN_BIN(WorkerP1), ?GET_DOMAIN_BIN(WorkerP2)])}
     end,
 
-    #{
-        source_provider => WorkerP2,
-        directory_structure_before => DirStructure,
-        assertion_workers => Workers,
-        qos => [
-            #{
-                name => ?Q1,
-                path => ?FILE_PATH(QosFilename),
-                expression => [<<"country=PL">>]
+    #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            worker = WorkerP2,
+            dir_structure = DirStructure
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = WorkerP1,
+                qos_name = ?QOS1,
+                path = ?FILE_PATH(QosFilename),
+                expression = <<"country=PL">>,
+                replicas_num = 1
             }
         ],
-        directory_structure_after => DirStructureAfter
+        expected_qos_entries = [
+            #expected_qos_entry{
+                qos_name = ?QOS1,
+                file_key = {path, ?FILE_PATH(QosFilename)},
+                qos_expression_in_rpn = [<<"country=PL">>],
+                replicas_num = 1
+            }
+        ],
+        expected_file_qos = [
+            #expected_file_qos{
+                path = ?FILE_PATH(QosFilename),
+                qos_entries = [?QOS1],
+                target_storages = #{?PROVIDER_ID(WorkerP1) => [?QOS1]}
+            }
+        ],
+        expected_dir_structure = #test_dir_structure{
+            dir_structure = DirStructureAfter
+        }
     }.

@@ -248,14 +248,16 @@ init_report() ->
 %%--------------------------------------------------------------------
 -spec init_qos_cache_for_space(od_space:id()) -> ok.
 init_qos_cache_for_space(SpaceId) ->
-    schedule({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}, 0).
+    erlang:send_after(0, ?MODULE, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
+    ok.
 
 
 -spec init_qos_cache_for_all_spaces() -> ok.
 init_qos_cache_for_all_spaces() ->
     % TODO: VFS-5744 potential race condition:
     % user may perform operations associated with QoS before cache initialization
-    schedule(?INIT_QOS_CACHE_FOR_ALL_SPACES, 0).
+    erlang:send_after(0, ?MODULE, {sync_timer, ?INIT_QOS_CACHE_FOR_ALL_SPACES}),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -655,7 +657,7 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
-    erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
+    erlang:send_after(Timeout, self(), {sync_timer, Request}),
     ok.
 
 -spec invalidate_permissions_cache() -> ok.
