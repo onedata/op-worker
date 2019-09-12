@@ -93,7 +93,9 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sets access control list of file.
+%% Sets active permissions type to acl and changes access control list
+%% of file. If given acl is `undefined` then previous acl (stored in
+%% file_meta) is left intact.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->

@@ -189,19 +189,20 @@ ensure_proper_file_name(FuseResponse, _Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes file permissions.
+%% Sets active permissions type to posix and changes file mode. If given
+%% mode is `undefined` then previous mode (stored in file_meta) is left
+%% intact.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), undefined | fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
-chmod_insecure(UserCtx, FileCtx, Mode1) ->
-    {Mode2, FileCtx2} = case Mode1 of
-        undefined -> file_ctx:get_mode(FileCtx);
-        _ -> {Mode1, FileCtx}
+chmod_insecure(UserCtx, FileCtx, Mode) ->
+    ok = case Mode of
+        undefined -> ok;
+        _ -> sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode)
     end,
-    ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx2, Mode2),
-    chmod_attrs_only_insecure(FileCtx2, Mode2),
-    fslogic_times:update_ctime(FileCtx2),
+    chmod_attrs_only_insecure(FileCtx, Mode),
+    fslogic_times:update_ctime(FileCtx),
 
     #fuse_response{status = #status{code = ?OK}}.
 

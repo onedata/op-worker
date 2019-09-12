@@ -494,6 +494,8 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance
         {<<"acl">>, undefined} ->
             ?check(lfm:set_acl(SessionId, FileKey, undefined));
         {<<"acl">>, _} ->
+            % It is not possible to change active_permissions_type to acl and
+            % chmod at the same time via gui and so such requests are invalid
             ?ERROR_MALFORMED_DATA;
         _ ->
             ?check(lfm:set_perms(SessionId, FileKey, PosixPerms))

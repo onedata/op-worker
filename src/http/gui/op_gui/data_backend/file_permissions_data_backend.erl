@@ -204,7 +204,7 @@ file_permissions_record(SessId, FileId) ->
         {ok, #file_attr{mode = PermissionsAttr}} ->
             PosixValue = integer_to_binary((PermissionsAttr rem 8#1000), 8),
             GetAclResult = lfm:get_acl(SessId, {guid, FileId}),
-            {Type, AclValue} = case GetAclResult of
+            {ActivePermissionsType , AclValue} = case GetAclResult of
                 {error, ?ENOATTR} ->
                     {<<"posix">>, null};
                 {error, ?EACCES} ->
@@ -220,7 +220,7 @@ file_permissions_record(SessId, FileId) ->
             {ok, [
                 {<<"id">>, FileId},
                 {<<"file">>, FileId},
-                {<<"type">>, Type},
+                {<<"type">>, ActivePermissionsType },
                 {<<"posixValue">>, PosixValue},
                 {<<"aclValue">>, AclValue}
             ]}
