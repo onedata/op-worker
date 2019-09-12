@@ -25,7 +25,9 @@
 -export([
     assert_permitted/4,
     add_names/1, strip_names/1,
-    from_json/2, to_json/2
+
+    from_json/2, to_json/2,
+    validate/2
 ]).
 
 
@@ -101,6 +103,11 @@ to_json(Acl, Format) ->
         ]),
         throw({error, ?EINVAL})
     end.
+
+
+-spec validate(acl(), FileType :: file | dir) -> ok | no_return().
+validate(Acl, FileType) ->
+    lists:foreach(fun(Ace) -> ace:validate(Ace, FileType) end, Acl).
 
 
 %%%===================================================================

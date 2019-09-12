@@ -61,13 +61,13 @@ binary_acl_conversion_test() ->
                 <<"acetype">> => <<"ALLOW">>,
                 <<"identifier">> => <<UserName/binary, "#", UserId/binary>>,
                 <<"aceflags">> => <<"NO_FLAGS">>,
-                <<"acemask">> => <<"READ_ALL, WRITE_ALL">>
+                <<"acemask">> => <<"READ_OBJECT, WRITE_OBJECT">>
             },
             #{
                 <<"acetype">> => <<"DENY">>,
                 <<"identifier">> => <<GroupName/binary, "#", GroupId/binary>>,
                 <<"aceflags">> => <<"IDENTIFIER_GROUP">>,
-                <<"acemask">> => <<"WRITE_ALL">>
+                <<"acemask">> => <<"WRITE_OBJECT">>
             }
         ],
         cdmi
@@ -75,8 +75,20 @@ binary_acl_conversion_test() ->
 
     % then
     ?assertEqual(Acl, [
-        #access_control_entity{acetype = ?allow_mask, identifier = UserId, name = UserName, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, name = GroupName, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #access_control_entity{
+            acetype = ?allow_mask,
+            identifier = UserId,
+            name = UserName,
+            aceflags = ?no_flags_mask,
+            acemask = ?read_object_mask bor ?write_object_mask
+        },
+        #access_control_entity{
+            acetype = ?deny_mask,
+            identifier = GroupId,
+            name = GroupName,
+            aceflags = ?identifier_group_mask,
+            acemask = ?write_object_mask
+        }
     ]).
 
 
@@ -92,9 +104,9 @@ check_permission_test() ->
     % rdwr permission on different ACEs
     ?assertEqual(ok, acl:assert_permitted([Ace1, Ace2], User1, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2], User1, ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2], User1, ?traverse_container_mask, FileCtx)),
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #od_user{}},
@@ -118,16 +130,16 @@ check_group_permission_test() ->
 
     Ace1 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId1, acemask = ?read_mask},
     Ace2 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId2, acemask = ?write_mask},
-    Ace3 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId3, acemask = ?execute_mask},
+    Ace3 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId3, acemask = ?traverse_container_mask},
 
     % read permission
     ?assertEqual(ok, acl:assert_permitted([Ace1, Ace2, Ace3], User1, ?read_mask, FileCtx)),
     % rdwr permission on different ACEs
     ?assertEqual(ok, acl:assert_permitted([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2, Ace3], User1, ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1, Ace2, Ace3], User1, ?traverse_container_mask, FileCtx)),
     % write, not allowed
     ?assertEqual(?EACCES, catch acl:assert_permitted([Ace1], User1, ?write_mask, FileCtx)),
 
@@ -160,9 +172,9 @@ check_owner_principal_permission_test() ->
     % rdwr permission on different ACEs
     ?assertEqual(ok, acl:assert_permitted([Ace5, Ace6], User1, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?traverse_container_mask, FileCtx)),
     meck:validate(file_ctx),
     meck:unload().
 
@@ -185,9 +197,9 @@ check_group_principal_permission_test() ->
     % rdwr permission on different ACEs, not allowed
     ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User1, ?traverse_container_mask, FileCtx)),
     meck:validate(file_ctx),
     meck:unload().
 
@@ -210,9 +222,9 @@ check_everyone_principal_permission_test() ->
     % rdwr permission on different ACEs, not allowed
     ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User2, ?read_mask bor ?write_mask, FileCtx)),
     % rwx permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User2, ?read_mask bor ?write_mask bor ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User2, ?read_mask bor ?write_mask bor ?traverse_container_mask, FileCtx)),
     % x permission, not allowed
-    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User2, ?execute_mask, FileCtx)),
+    ?assertEqual(?EACCES, catch acl:assert_permitted([Ace5, Ace6], User2, ?traverse_container_mask, FileCtx)),
     meck:validate(file_ctx),
     meck:unload().
 

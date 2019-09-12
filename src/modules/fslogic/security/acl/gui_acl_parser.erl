@@ -76,9 +76,7 @@ json_to_acl(AclJson) ->
 type_enum(?allow_mask) ->
     <<"allow">>;
 type_enum(?deny_mask) ->
-    <<"deny">>;
-type_enum(?audit_mask) ->
-    <<"audit">>.
+    <<"deny">>.
 
 
 %%--------------------------------------------------------------------
@@ -91,9 +89,7 @@ type_enum(?audit_mask) ->
 type_mask(<<"allow">>) ->
     ?allow_mask;
 type_mask(<<"deny">>) ->
-    ?deny_mask;
-type_mask(<<"audit">>) ->
-    ?audit_mask.
+    ?deny_mask.
 
 
 %%--------------------------------------------------------------------

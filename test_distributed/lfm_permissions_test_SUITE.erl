@@ -146,11 +146,9 @@ all() ->
     ?list_container,
     ?write_object,
     ?add_object,
-    ?append_data,
     ?add_subcontainer,
     ?read_metadata,
     ?write_metadata,
-    ?execute,
     ?traverse_container,
     ?delete_object,
     ?delete_subcontainer,
@@ -158,9 +156,23 @@ all() ->
     ?write_attributes,
     ?delete,
     ?read_acl,
-    ?write_acl,
-    ?write_owner
+    ?write_acl
 ]).
+-define(DIR_SPECIFIC_PERMS, [
+    ?list_container,
+    ?add_object,
+    ?add_subcontainer,
+    ?traverse_container,
+    ?delete_object,
+    ?delete_subcontainer
+]).
+-define(FILE_SPECIFIC_PERMS, [
+    ?read_object,
+    ?write_object
+]).
+-define(ALL_FILE_PERMS, (?ALL_PERMS -- ?DIR_SPECIFIC_PERMS)).
+-define(ALL_DIR_PERMS, (?ALL_PERMS -- ?FILE_SPECIFIC_PERMS)).
+
 -define(ALL_POSIX_PERMS, [read, write, exec]).
 
 
@@ -706,17 +718,17 @@ set_perms_test(Config) ->
     %% ACL
 
     % owner can always change file perms if he has access to it
-    set_acls(W, #{DirGuid => complementary_perms([?traverse_container]), FileGuid => ?ALL_PERMS}, #{}, ?everyone, ?no_flags_mask),
+    set_acls(W, #{DirGuid => ?ALL_DIR_PERMS -- [?traverse_container], FileGuid => ?ALL_FILE_PERMS}, #{}, ?everyone, ?no_flags_mask),
     ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, OwnerUserSessId, {guid, FileGuid}, 8#000)),
     set_acls(W, #{DirGuid => [?traverse_container], FileGuid => []}, #{}, ?everyone, ?no_flags_mask),
     ?assertMatch(ok, lfm_proxy:set_perms(W, OwnerUserSessId, {guid, FileGuid}, 8#000)),
 
     % other users from space can't change perms no matter what
-    set_acls(W, #{DirGuid => ?ALL_PERMS, FileGuid => ?ALL_PERMS}, #{}, ?everyone, ?no_flags_mask),
+    set_acls(W, #{DirGuid => ?ALL_DIR_PERMS, FileGuid => ?ALL_FILE_PERMS}, #{}, ?everyone, ?no_flags_mask),
     ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, GroupUserSessId, {guid, FileGuid}, 8#000)),
 
     % users outside of space shouldn't even see the file
-    set_acls(W, #{DirGuid => ?ALL_PERMS, FileGuid => ?ALL_PERMS}, #{}, ?everyone, ?no_flags_mask),
+    set_acls(W, #{DirGuid => ?ALL_DIR_PERMS, FileGuid => ?ALL_FILE_PERMS}, #{}, ?everyone, ?no_flags_mask),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:set_perms(W, OtherUserSessId, {guid, FileGuid}, 8#000)).
 
 
@@ -849,7 +861,7 @@ set_acl_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
             lfm_proxy:set_acl(W, SessId, {guid, FileGuid}, [
-                ?ALLOW_ACE(?group, ?no_flags_mask, perms_to_bitmask(?ALL_PERMS))
+                ?ALLOW_ACE(?group, ?no_flags_mask, perms_to_bitmask(?ALL_FILE_PERMS))
             ])
         end
     }, Config).
@@ -1302,7 +1314,9 @@ run_space_priv_test(
     Node, SpaceId, Owner, SpaceUser, PermsPerFile, acl,
     Operation, TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
 ) ->
-    AllAclPermsGranted = maps:map(fun(_, _) -> ?ALL_PERMS end, PermsPerFile),
+    AllAclPermsGranted = maps:map(fun(Guid, _) ->
+        all_perms(Node, Guid)
+    end, PermsPerFile),
     set_acls(Node, AllAclPermsGranted, #{}, ?everyone, ?no_flags_mask),
 
     run_space_priv_test(
@@ -1681,7 +1695,9 @@ run_acl_tests(
     {ComplementaryPermsPerFile, AllRequiredPerms} = maps:fold(
         fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
             {
-                BasePermsPerFileAcc#{FileGuid => complementary_perms(FileRequiredPerms)},
+                BasePermsPerFileAcc#{FileGuid => complementary_perms(
+                    Node, FileGuid, FileRequiredPerms
+                )},
                 [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
             }
         end,
@@ -1755,7 +1771,9 @@ run_acl_tests(
     Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny
 ) ->
-    AllPermsPerFile = maps:map(fun(_, _) -> ?ALL_PERMS end, ComplementaryPermsPerFile),
+    AllPermsPerFile = maps:map(fun(Guid, _) ->
+        all_perms(Node, Guid)
+    end, ComplementaryPermsPerFile),
 
     % Denying only required perms and granting all others should result in eacces
     lists:foreach(fun({Guid, Perm}) ->
@@ -1783,11 +1801,13 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
     end, ok, maps:without(maps:keys(DeniedPermsPerFile), AllowedPermsPerFile)),
 
     maps:fold(fun(Guid, Perms, _) ->
+        AllPerms = all_perms(Node, Guid),
+
         ?assertEqual(ok, lfm_proxy:set_acl(
             Node, ?ROOT_SESS_ID, {guid, Guid},
             [
                 ?DENY_ACE(AceWho, AceFlags, perms_to_bitmask(Perms)),
-                ?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(?ALL_PERMS))
+                ?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(AllPerms))
             ]
         ))
     end, ok, DeniedPermsPerFile).
@@ -1882,31 +1902,34 @@ create_files(Node, OwnerSessId, ParentDirPath, #dir{
     {PermsPerFile0#{DirGuid => DirPerms}, ExtraData1}.
 
 
--spec complementary_perms(Perms :: [binary()]) -> ComplementaryPerms :: [binary()].
-complementary_perms(Perms) ->
-    ?ALL_PERMS -- lists:usort(lists:flatmap(
-        fun
-            (?read_object) -> [?read_object, ?list_container];
-            (?list_container) -> [?read_object, ?list_container];
-            (?write_object) -> [?write_object, ?add_object];
-            (?add_object) -> [?write_object, ?add_object];
-            (?append_data) -> [?append_data, ?add_subcontainer];
-            (?add_subcontainer) -> [?append_data, ?add_subcontainer];
-            (?read_metadata) -> [?read_metadata];
-            (?write_metadata) -> [?write_metadata];
-            (?execute) -> [?execute, ?traverse_container];
-            (?traverse_container) -> [?execute, ?traverse_container];
-            (?delete_object) -> [?delete_object, ?delete_subcontainer];
-            (?delete_subcontainer) -> [?delete_object, ?delete_subcontainer];
-            (?read_attributes) -> [?read_attributes];
-            (?write_attributes) -> [?write_attributes];
-            (?delete) -> [?delete];
-            (?read_acl) -> [?read_acl];
-            (?write_acl) -> [?write_acl];
-            (?write_owner) -> [?write_owner]
-        end,
-        Perms
-    )).
+-spec is_dir(node(), file_id:file_guid()) -> boolean().
+is_dir(Node, Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    {ok, #document{value = #file_meta{type = FileType}}} = ?assertMatch(
+        {ok, _},
+        rpc:call(Node, file_meta, get, [Uuid])
+    ),
+    FileType == ?DIRECTORY_TYPE.
+
+
+-spec all_perms(node(), file_id:file_guid()) -> Perms :: [binary()].
+all_perms(Node, Guid) ->
+    case is_dir(Node, Guid) of
+        true -> ?ALL_DIR_PERMS;
+        false -> ?ALL_FILE_PERMS
+    end.
+
+
+-spec complementary_perms(node(), file_id:file_guid(), Perms :: [binary()]) ->
+    ComplementaryPerms :: [binary()].
+complementary_perms(Node, Guid, Perms) ->
+    ComplementaryPerms = all_perms(Node, Guid) -- Perms,
+    % Special case: because ?delete_object and ?delete_subcontainer translates
+    % to the same bitmask if even one of them is present other must also be removed
+    case lists:member(?delete_object, Perms) or lists:member(?delete_subcontainer, Perms) of
+        true -> ComplementaryPerms -- [?delete_object, ?delete_subcontainer];
+        false -> ComplementaryPerms
+    end.
 
 
 %% @private
@@ -1919,28 +1942,21 @@ perms_to_bitmask(Permissions) ->
 
 %% @private
 -spec perm_to_bitmask(binary()) -> non_neg_integer().
-perm_to_bitmask(?all_perms) -> ?all_perms_mask;
-perm_to_bitmask(?rw) -> ?rw_mask;
-perm_to_bitmask(?read) -> ?read_mask;
-perm_to_bitmask(?write) -> ?write_mask;
 perm_to_bitmask(?read_object) -> ?read_object_mask;
 perm_to_bitmask(?list_container) -> ?list_container_mask;
 perm_to_bitmask(?write_object) -> ?write_object_mask;
 perm_to_bitmask(?add_object) -> ?add_object_mask;
-perm_to_bitmask(?append_data) -> ?append_data_mask;
 perm_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
 perm_to_bitmask(?read_metadata) -> ?read_metadata_mask;
 perm_to_bitmask(?write_metadata) -> ?write_metadata_mask;
-perm_to_bitmask(?execute) -> ?execute_mask;
 perm_to_bitmask(?traverse_container) -> ?traverse_container_mask;
-perm_to_bitmask(?delete_object) -> ?delete_object_mask;
-perm_to_bitmask(?delete_subcontainer) -> ?delete_subcontainer_mask;
+perm_to_bitmask(?delete_object) -> ?delete_child_mask;
+perm_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
 perm_to_bitmask(?read_attributes) -> ?read_attributes_mask;
 perm_to_bitmask(?write_attributes) -> ?write_attributes_mask;
 perm_to_bitmask(?delete) -> ?delete_mask;
 perm_to_bitmask(?read_acl) -> ?read_acl_mask;
-perm_to_bitmask(?write_acl) -> ?write_acl_mask;
-perm_to_bitmask(?write_owner) -> ?write_owner_mask.
+perm_to_bitmask(?write_acl) -> ?write_acl_mask.
 
 
 -spec perm_to_posix_perms(Perm :: binary()) -> PosixPerms :: [atom()].
@@ -1948,11 +1964,9 @@ perm_to_posix_perms(?read_object) -> [read];
 perm_to_posix_perms(?list_container) -> [read];
 perm_to_posix_perms(?write_object) -> [write];
 perm_to_posix_perms(?add_object) -> [write, exec];
-perm_to_posix_perms(?append_data) -> [write];
 perm_to_posix_perms(?add_subcontainer) -> [write];
 perm_to_posix_perms(?read_metadata) -> [read];
 perm_to_posix_perms(?write_metadata) -> [write];
-perm_to_posix_perms(?execute) -> [exec];
 perm_to_posix_perms(?traverse_container) -> [exec];
 perm_to_posix_perms(?delete_object) -> [write, exec];
 perm_to_posix_perms(?delete_subcontainer) -> [write, exec];
