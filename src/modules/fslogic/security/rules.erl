@@ -332,13 +332,13 @@ validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
 
     ReqBit1 = case user_ctx:get_user_id(UserCtx) of
         OwnerId ->
-            ReqBit0 bsl 6;
+            ReqBit0 bsl 6;  % shift to owner posix mode bits
         _ ->
             case file_ctx:is_in_user_space_const(FileCtx, UserCtx) of
                 true ->
-                    ReqBit0 bsl 3;
+                    ReqBit0 bsl 3;  % shift to group posix mode bits
                 false ->
-                    ReqBit0
+                    ReqBit0     % remain at other posix mode bits
             end
     end,
 
