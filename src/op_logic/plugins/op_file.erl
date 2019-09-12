@@ -95,7 +95,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"name">> => {binary, non_empty},
         <<"type">> => {binary, [<<"file">>, <<"dir">>]},
         <<"parent">> => {binary, fun(Parent) ->
-            try gs_protocol:string_to_gri(Parent) of
+            try gri:deserialize(Parent) of
                 #gri{type = op_file, id = ParentGuid, aspect = instance} ->
                     {true, ParentGuid};
                 _ ->
@@ -496,7 +496,7 @@ create_file(SessionId, ParentGuid, Name, dir) ->
     Attempts :: non_neg_integer()
 ) ->
     {ok, file_id:file_guid()} | no_return().
-create_file(_SessId, _ParentGuid, _OriginalName, _Type, Counter, Counter) ->
+create_file(_, _, _, _, Counter, Attempts) when Counter >= Attempts ->
     throw(?ERROR_POSIX(?EEXIST));
 create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),

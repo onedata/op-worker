@@ -81,8 +81,7 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
         {binary, ExpBin} ->
             ExpBin == RespBody;
         _ ->
-            DecodedBody = json_utils:decode(RespBody),
-            ExpectedBody == DecodedBody
+            ExpectedBody == json_utils:decode(RespBody)
     end,
 
     case BodyMatched of
@@ -99,12 +98,7 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
 
 get_rest_error(Error) ->
     #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
-    case ExpBody of
-        {binary, Bin} ->
-            {ExpCode, json_utils:decode(Bin)};
-        _ ->
-            {ExpCode, ExpBody}
-    end.
+    {ExpCode, ExpBody}.
 
 %%%===================================================================
 %%% Internal functions
