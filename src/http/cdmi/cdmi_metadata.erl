@@ -350,9 +350,9 @@ fill_cdmi_metadata(<<"cdmi_ctime">>, Metadata, _SessionId, _FileKey, Attrs) ->
 fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileKey, Attrs) ->
     Metadata#{<<"cdmi_owner">> => Attrs#file_attr.owner_id};
 fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileKey, _Attrs) ->
-    case lfm:get_acl(SessionId, FileKey) of
-        {ok, Acl} ->
-            Metadata#{?ACL_XATTR_NAME => acl:to_json(Acl, cdmi)};
+    case lfm:get_xattr(SessionId, FileKey, ?ACL_XATTR_NAME, false) of
+        {ok, #xattr{name = ?ACL_XATTR_NAME, value = Acl}} ->
+            Metadata#{?ACL_XATTR_NAME => Acl};
         {error, ?ENOATTR} ->
             Metadata;
         {error, Errno} ->

@@ -93,8 +93,13 @@ check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
 check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
     {FileDoc, SubjectCtx2} = file_ctx:get_file_doc_including_deleted(SubjectCtx),
     ShareId = file_ctx:get_share_id_const(SubjectCtx2),
-    {Acl, _} = file_ctx:get_acl(SubjectCtx2),
-    check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx).
+    case file_ctx:get_active_perms_type(SubjectCtx2) of
+        {posix, SubjectCtx3} ->
+            check(Type, FileDoc, UserCtx, ShareId, undefined, SubjectCtx3);
+        {acl, SubjectCtx3} ->
+            {Acl, _} = file_ctx:get_acl(SubjectCtx3),
+            check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx3)
+    end.
 
 
 %%%===================================================================
@@ -162,16 +167,12 @@ check(?write_object, Doc, UserCtx, ShareId, undefined, FileCtx) ->
 check(?add_object, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     {ok, FileCtx2} = check(write, Doc, UserCtx, ShareId, undefined, FileCtx),
     check(exec, Doc, UserCtx, ShareId, undefined, FileCtx2);
-check(?append_data, Doc, UserCtx, ShareId, undefined, FileCtx) ->
-    check(write, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?add_subcontainer, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(write, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?read_metadata, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(read, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?write_metadata, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(write, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?execute, Doc, UserCtx, ShareId, undefined, FileCtx) ->
-    check(exec, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?traverse_container, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(exec, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?delete_object, Doc, UserCtx, ShareId, undefined, FileCtx) ->
@@ -190,8 +191,6 @@ check(?read_acl, _Doc, _UserCtx, _ShareId, undefined, FileCtx) ->
     {ok, FileCtx};
 check(?write_acl, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(owner, Doc, UserCtx, ShareId, undefined, FileCtx);
-check(?write_owner, _Doc, _UserCtx, _ShareId, undefined, _FileCtx) ->
-    throw(?EACCES);
 
 % acl is specified, check access masks
 check(?read_object, _, UserCtx, ShareId, Acl, FileCtx) ->
@@ -218,12 +217,6 @@ check(?add_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
         ?add_object_mask, FileCtx
     ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check(?append_data, _, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
-        Acl, user_ctx:get_user(UserCtx),
-        ?append_data_mask, FileCtx
-    ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?add_subcontainer, _, UserCtx, ShareId, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
@@ -242,12 +235,6 @@ check(?write_metadata, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
         ?write_metadata_mask, FileCtx
     ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check(?execute, _, UserCtx, _, Acl, FileCtx) ->
-    acl:assert_permitted(
-        Acl, user_ctx:get_user(UserCtx),
-        ?execute_mask, FileCtx
-    ),
-    {ok, FileCtx};
 check(?traverse_container, #document{value = #file_meta{is_scope = true}},
     UserCtx, ShareId, Acl, FileCtx
 ) ->
@@ -266,13 +253,13 @@ check(?traverse_container, _, UserCtx, _, Acl, FileCtx) ->
 check(?delete_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?delete_object_mask, FileCtx
+        ?delete_child_mask, FileCtx
     ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?delete_subcontainer, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?delete_subcontainer_mask, FileCtx
+        ?delete_child_mask, FileCtx
     ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?read_attributes, _, UserCtx, _, Acl, FileCtx) ->
@@ -303,12 +290,6 @@ check(?write_acl, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
         ?write_acl_mask, FileCtx
-    ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check(?write_owner, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
-        Acl, user_ctx:get_user(UserCtx),
-        ?write_owner_mask, FileCtx
     ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(Perm, File, User, ShareId, Acl, _FileCtx) ->

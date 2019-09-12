@@ -13,10 +13,6 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
--type access_control_entity() :: #access_control_entity{}.
-
--export_type([access_control_entity/0]).
-
 %% API
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 
@@ -57,7 +53,7 @@ check_perms(SessId, FileKey, Flag) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [access_control_entity()]} | lfm:error_reply().
+    {ok, acl:acl()} | lfm:error_reply().
 get_acl(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_acl{},
@@ -70,23 +66,25 @@ get_acl(SessId, FileKey) ->
 %% Updates file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    EntityList :: [access_control_entity()]) ->
-    ok | lfm:error_reply().
+-spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    undefined | acl:acl()) -> ok | lfm:error_reply().
 set_acl(SessId, FileKey, Acl) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
         #set_acl{acl = #acl{value = Acl}},
-        fun(_) -> ok end).
+        fun(_) -> ok end
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec remove_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | lfm:error_reply().
 remove_acl(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, Guid, #remove_acl{},
-        fun(_) -> ok end).
+    remote_utils:call_fslogic(SessId, provider_request, Guid,
+        #remove_acl{},
+        fun(_) -> ok end
+    ).

@@ -19,11 +19,12 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_acl/2, set_acl/5, remove_acl/2]).
+-export([get_acl/2, set_acl/3, remove_acl/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_acl_insecure/2 with permission checks
@@ -37,17 +38,19 @@ get_acl(_UserCtx, FileCtx) ->
         [_UserCtx, FileCtx],
         fun get_acl_insecure/2).
 
+
 %%--------------------------------------------------------------------
 %% @equiv set_acl_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}, Create :: boolean(),
-    Replace :: boolean()) -> fslogic_worker:provider_response().
-set_acl(_UserCtx, FileCtx, Acl, Create, Replace) ->
+-spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
+    fslogic_worker:provider_response().
+set_acl(_UserCtx, FileCtx, Acl) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx, Acl, Create, Replace],
-        fun set_acl_insecure/5).
+        [_UserCtx, FileCtx, Acl],
+        fun set_acl_insecure/3).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_acl_insecure/2 with permission checks
@@ -61,11 +64,14 @@ remove_acl(_UserCtx, FileCtx) ->
         [_UserCtx, FileCtx],
         fun remove_acl_insecure/2).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets access control list of file.
 %% @end
@@ -73,83 +79,70 @@ remove_acl(_UserCtx, FileCtx) ->
 -spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_acl_insecure(_UserCtx, FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?ACL_KEY) of
-        {ok, Val} ->
-            % ACLs are kept in database without names, as they might change.
-            % Resolve the names here.
-            Acl = acl_names:add(acl:from_json(Val, cdmi)),
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #acl{
-                    value = Acl
-                }
-            };
-        {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end.
+    {Acl, _} = file_ctx:get_acl(FileCtx),
+    % ACLs are kept in database without names, as they might change.
+    % Resolve the names here.
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #acl{
+            value = acl:add_names(Acl)
+        }
+    }.
+
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Sets access control list of file.
+%% Sets active permissions type to acl and changes access control list
+%% of file. If given acl is `undefined` then previous acl (stored in
+%% file_meta) is left intact.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), #acl{},
-    Create :: boolean(), Replace :: boolean()) ->
+-spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
-set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
+set_acl_insecure(_UserCtx, FileCtx, Acl) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
-    AclJson = acl:to_json(acl_names:strip(Val), cdmi),
-    case xattr:set(FileCtx, ?ACL_KEY, AclJson, Create, Replace) of
-        {ok, _} ->
-            ok = permissions_cache:invalidate(),
-            maybe_chmod_storage_file(FileCtx, 8#000),
-            fslogic_times:update_ctime(FileCtx),
-            #provider_response{status = #status{code = ?OK}};
-        {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOENT}}
-    end.
+    AclWithoutNames = case Acl of
+        undefined ->
+            undefined;
+        _ ->
+            case IsDir of
+                true -> acl:validate(Acl, dir);
+                false -> acl:validate(Acl, file)
+            end,
+            acl:strip_names(Acl)
+    end,
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes access control list of file.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-remove_acl_insecure(_UserCtx, FileCtx) ->
-    case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case file_meta:update_perms(FileUuid, undefined, AclWithoutNames, acl) of
         ok ->
             ok = permissions_cache:invalidate(),
-            {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
-                file_ctx:get_file_doc(FileCtx),
-            ok = sfm_utils:chmod_storage_file(
-                user_ctx:new(?ROOT_SESS_ID),
-                FileCtx2, Mode
-            ),
-            ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             fslogic_times:update_ctime(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
-%%-------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tries to chmod file on storage. Succeeds if chmod succeeds or
-%% if chmod returns {error, ?EROFS} succeeds.
+%% Clears access control list of file and changes active permissions
+%% type to posix.
 %% @end
-%%-------------------------------------------------------------------
--spec maybe_chmod_storage_file(file_ctx:ctx(), file_meta:mode()) -> ok.
-maybe_chmod_storage_file(FileCtx, Mode) ->
-    case sfm_utils:chmod_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode) of
+%%--------------------------------------------------------------------
+-spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+remove_acl_insecure(_UserCtx, FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case file_meta:update_perms(FileUuid, undefined, [], posix) of
         ok ->
-            ok;
-        {error, ?EROFS} ->
-            ok
+            ok = permissions_cache:invalidate(),
+            fslogic_times:update_ctime(FileCtx),
+            #provider_response{status = #status{code = ?OK}};
+        {error, not_found} ->
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
