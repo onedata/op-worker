@@ -470,8 +470,8 @@ handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
     guid_req:get_file_path(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_acl{}, FileCtx) ->
     acl_req:get_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_acl{acl = Acl}, FileCtx) ->
-    acl_req:set_acl(UserCtx, FileCtx, Acl, false, false);
+handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
+    acl_req:set_acl(UserCtx, FileCtx, Acl);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_transfer_encoding{}, FileCtx) ->

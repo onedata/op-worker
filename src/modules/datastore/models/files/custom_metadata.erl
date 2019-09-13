@@ -256,7 +256,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -275,7 +275,11 @@ get_record_struct(2) ->
         {space_id, string},
         {file_objectid, string},
         {value, {custom, {json_utils, encode, decode}}}
-    ]}.
+    ]};
+get_record_struct(3) ->
+    % In version 3 only acl was removed from metadata
+    % but struct remains the same.
+    get_record_struct(2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -289,4 +293,10 @@ upgrade_record(1, {?MODULE, SpaceId, Value}) ->
         space_id = SpaceId,
         file_objectid = undefined,
         value = Value
+    }};
+upgrade_record(2, {?MODULE, SpaceId, ObjectId, Value}) ->
+    {3, #custom_metadata{
+        space_id = SpaceId,
+        file_objectid = ObjectId,
+        value = maps:remove(?ACL_KEY, Value)
     }}.

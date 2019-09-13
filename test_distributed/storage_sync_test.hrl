@@ -113,34 +113,32 @@
     end
 ).
 
--define(ACL, #acl{
-    value = [
-        #access_control_entity{
-            acetype = ?allow_mask,
-            aceflags = ?no_flags_mask,
-            identifier = <<"OWNER@">>,
-            acemask = ?read_acl_mask
-        },
-        #access_control_entity{
-            acetype = ?deny_mask,
-            aceflags = ?no_flags_mask,
-            identifier = <<"GROUP@">>,
-            acemask = ?write_acl_mask
-        },
-        #access_control_entity{
-            acetype = ?allow_mask,
-            aceflags = ?no_flags_mask,
-            identifier = <<"EVERYONE@">>,
-            acemask = ?read_acl_mask
-        },
-        #access_control_entity{
-            acetype = ?deny_mask,
-            aceflags = ?no_flags_mask,
-            identifier = <<"ala@nfsdomain.org">>,
-            acemask = ?write_attributes_mask
-        }
-    ]
-}).
+-define(ACL, [
+    #access_control_entity{
+        acetype = ?allow_mask,
+        aceflags = ?no_flags_mask,
+        identifier = <<"OWNER@">>,
+        acemask = ?read_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?deny_mask,
+        aceflags = ?no_flags_mask,
+        identifier = <<"GROUP@">>,
+        acemask = ?write_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?allow_mask,
+        aceflags = ?no_flags_mask,
+        identifier = <<"EVERYONE@">>,
+        acemask = ?read_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?deny_mask,
+        aceflags = ?no_flags_mask,
+        identifier = <<"ala@nfsdomain.org">>,
+        acemask = ?write_attributes_mask
+    }
+]).
 
 -define(BITMASK_TO_BINARY(Mask), <<"0x", (integer_to_binary(Mask, 16))/binary>>).
 
@@ -172,22 +170,20 @@
 ]).
 
 
--define(ACL2, #acl{
-    value = [
-        #access_control_entity{
-            acetype = ?allow_mask,
-            aceflags = ?identifier_group_mask,
-            identifier = <<"group2@nfsdomain.org">>,
-            acemask = ?read_acl_mask
-        },
-        #access_control_entity{
-            acetype = ?deny_mask,
-            aceflags = ?no_flags_mask,
-            identifier = <<"EVERYONE@">>,
-            acemask = ?read_acl_mask
-        }
-    ]
-}).
+-define(ACL2, [
+    #access_control_entity{
+        acetype = ?allow_mask,
+        aceflags = ?identifier_group_mask,
+        identifier = <<"group2@nfsdomain.org">>,
+        acemask = ?read_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?deny_mask,
+        aceflags = ?no_flags_mask,
+        identifier = <<"EVERYONE@">>,
+        acemask = ?read_acl_mask
+    }
+]).
 
 -define(ACL2_JSON, [
     #{
