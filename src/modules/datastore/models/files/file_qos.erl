@@ -108,8 +108,7 @@ get_effective(FileUuidOrDoc) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns effective file_qos for file. If effective value cannot be calculated
-%% because of file_meta documents not being synchronized yet registers
-%% ErrorCallback for this file to be run when document is finally synchronized.
+%% because of file_meta documents not being synchronized yet, ErrorCallback is executed.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective(file_meta:doc() | file_meta:uuid(), effective_value:error_callback()) ->
@@ -140,7 +139,7 @@ get_effective(FileUuid, ErrorCallback) ->
         _ ->
             case ErrorCallback of
                 undefined -> ok;
-                _ -> ErrorCallback(FileUuid)
+                _ -> ErrorCallback(FileUuid, [])
             end,
             undefined
     end.

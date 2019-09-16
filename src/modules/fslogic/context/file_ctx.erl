@@ -70,7 +70,7 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_file_doc/1,
+-export([get_canonical_path/1, get_file_doc/1, get_file_doc_allow_not_existing/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
@@ -355,6 +355,24 @@ get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's file_meta document.
+%% Returns error if there is no such file doc (it is not synced yet).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_doc_allow_not_existing(ctx()) -> {ok, file_meta:doc(), ctx()} | error.
+get_file_doc_allow_not_existing(FileCtx = #file_ctx{file_doc = undefined}) ->
+    Guid = get_guid_const(FileCtx),
+    case file_meta:get({uuid, file_id:guid_to_uuid(Guid)}) of
+        {ok, FileDoc} ->
+            {ok, FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
+        {error, not_found} ->
+            error
+    end;
+get_file_doc_allow_not_existing(FileCtx = #file_ctx{file_doc = FileDoc}) ->
+    {ok, FileDoc, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
