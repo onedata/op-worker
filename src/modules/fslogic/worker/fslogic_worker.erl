@@ -129,7 +129,7 @@ init(_Args) ->
     {fuse_request, session:id(), fuse_request()} |
     {provider_request, session:id(), provider_request()} |
     {proxyio_request, session:id(), proxyio_request()},
-    Result :: nagios_handler:healthcheck_response() | ok | {ok, response()} |
+    Result :: cluster_status:status() | ok | {ok, response()} |
     {error, Reason :: term()} | pong.
 handle(ping) ->
     pong;
