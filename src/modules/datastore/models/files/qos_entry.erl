@@ -6,8 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc The qos_entry document contains information about single QoS requirement
-%%% including QoS expression, number of required replicas, fulfillment status
-%%% and UUID of file or directory for which requirement has been added.
+%%% including QoS expression, number of required replicas, UUID of file or
+%%% directory for which requirement has been added, information of QoS
+%%% requirement can be satisfied, information about traverse requests and
+%%% active traverses.
 %%% Such document is created when user adds QoS requirement for file or directory.
 %%% Requirement added for directory is inherited by whole directory structure.
 %%% Each QoS requirement is evaluated separately. It means that it is not
@@ -23,8 +25,10 @@
 %%% Adding two identical QoS requirements for the same file results in two
 %%% different qos_entry documents.
 %%% QoS requirement is considered as fulfilled when:
+%%%     - there is no information that QoS requirement cannot be
+%%%       satisfied (is_possible field in qos_entry)
+%%%     - there are no pending traverse requests
 %%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
-%%%     - there are no remaining transfers, that were created to fulfill this QoS requirement
 %%%
 %%% NOTE!!!
 %%% If you introduce any changes in this module, please ensure that

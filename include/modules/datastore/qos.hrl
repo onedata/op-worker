@@ -11,8 +11,10 @@
 %%% qos_entry and file_qos.
 %%%
 %%% The qos_entry document contains information about single QoS requirement
-%%% including QoS expression, number of required replicas, fulfillment status
-%%% and UUID of file or directory for which requirement has been added.
+%%% including QoS expression, number of required replicas, UUID of file or
+%%% directory for which requirement has been added, information of QoS
+%%% requirement can be satisfied, information about traverse requests and
+%%% active traverses.
 %%% Such document is created when user adds QoS requirement for file or directory.
 %%% Requirement added for directory is inherited by whole directory structure.
 %%% Each QoS requirement is evaluated separately. It means that it is not
@@ -28,25 +30,27 @@
 %%% Adding two identical QoS requirements for the same file results in two
 %%% different qos_entry documents.
 %%% QoS requirement is considered as fulfilled when:
+%%%     - there is no information that QoS requirement cannot be
+%%%       satisfied (is_possible field in qos_entry)
+%%%     - there are no pending traverse requests
 %%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
-%%%     - there are no remaining transfers, that were created to fulfill this QoS requirement
+%%%
 %%%
 %%% The file_qos item contains aggregated information about QoS defined
 %%% for file or directory. It contains:
-%%%     - qos_entries - holds IDs of all qos_entries defined for this file,
+%%%     - qos_entries - holds IDs of all qos_entries defined for this file (
+%%%       including qos_entries which demands cannot be satisfied),
 %%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
-%%%       should be stored are calculated using QoS expression. Then this mapping
-%%%       is appropriately updated with the calculated storages.
+%%%       should be stored are calculated using QoS expression. Then traverse
+%%%       requests are added to qos_entry document. When provider notice change
+%%%       in qos_entry, it checks whether there is traverse request defined
+%%%       its storage. If yes, provider updates target_storages and
+%%%       starts traverse.
 %%% Each file or directory can be associated with at most one such document.
-%%% It is created/updated when new qos_entry document is created for file or
-%%% directory. In this case target storages are chosen according to QoS expression
-%%% and number of required replicas defined in qos_entry document.
-%%% Then file_qos document is updated - qos_entry ID is added to QoS entries list
-%%% and target storages mapping.
-%%% According to this getting full information about QoS defined for file or
-%%% directory requires calculating effective file_qos as file_qos document
-%%% is not created for each file separately.
+%%% Getting full information about QoS defined for file or directory requires
+%%% calculating effective file_qos as it is inherited from all parents.
+%%%
 %%%
 %%% NOTE!!!
 %%% If you introduce any changes in this module, please ensure that
@@ -56,6 +60,10 @@
 
 -ifndef(QOS_HRL).
 -define(QOS_HRL, 1).
+
+
+-define(QOS_SYNCHRONIZATION_PRIORITY, 224).
+
 
 % macros used for operations on QoS expression
 -define(UNION, <<"|">>).
@@ -76,6 +84,7 @@
 
 
 -define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
+
 
 % Request to remote providers to start QoS traverse.
 -record(qos_traverse_req, {

@@ -281,7 +281,7 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
     QosId = datastore_utils:gen_key(),
 
     {ok, _} = qos_entry:create(SpaceId, QosId, FileUuid, QosExpressionInRPN, ReplicasNum, false),
-    ok = file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+    ok = file_qos:add_qos(FileUuid, SpaceId, QosId),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     ok = qos_entry:add_impossible_qos(QosId, SpaceId),
     QosId.

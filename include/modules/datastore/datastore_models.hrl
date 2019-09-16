@@ -266,10 +266,12 @@
 % can be associated with at most one such record. The value of file_qos for
 % particular file should be calculated using effective value (see file_qos.erl)
 -record(file_qos, {
-    % List containing QoS Ids defined for given file.
+    % List containing qos_entry IDs defined for given file.
     qos_entries = [] :: [qos_entry:id()],
-    % Mapping storage ID -> List containing QoS Ids that requires file replica
-    % on this storage
+    % Mapping storage ID -> list containing qos_entry IDs.
+    % When new QoS is added for file or directory, storages on which replicas
+    % should be stored are calculated using QoS expression. Then this mapping
+    % is appropriately updated with the calculated storages.
     target_storages = #{} :: file_qos:target_storages()
 }).
 

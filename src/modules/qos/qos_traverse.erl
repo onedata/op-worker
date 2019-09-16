@@ -187,7 +187,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
 synchronize_file(UserCtx, FileCtx) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     FileBlock = #file_block{offset = 0, size = Size},
-    case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, undefined, 1) of
+    case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, undefined, ?QOS_SYNCHRONIZATION_PRIORITY) of
         {ok, _} ->
             ok;
         {error, cancelled} ->

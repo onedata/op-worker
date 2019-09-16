@@ -37,7 +37,6 @@
 
 % util functions
 -export([
-    init_qos_bounded_cache/1,
     get_op_nodes_sorted/1, get_guid/2, get_guid/3,
     create_dir_structure/2, create_dir_structure/4,
     create_file/4, create_directory/3,
@@ -271,13 +270,6 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosId, QosName, ExpectedIsPo
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
     [maps:get(QosName, QosNameIdMapping) || QosName <- QosNamesList].
-
-
-init_qos_bounded_cache(Config) ->
-    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
-    lists:foreach(fun(Worker) ->
-        ?assertMatch(ok, rpc:call(Worker, fslogic_worker, init_qos_cache_for_all_spaces, []))
-    end, Workers).
 
 
 %%%====================================================================

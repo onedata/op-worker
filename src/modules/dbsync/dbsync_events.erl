@@ -66,8 +66,7 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    ok = delayed_hooks:execute_hooks(FileDoc),
-    ok = delayed_hooks:delete(FileUuid);
+    ok = delayed_hooks:execute_hooks(FileDoc);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     deleted = false,
@@ -76,8 +75,7 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    ok = delayed_hooks:execute_hooks(FileDoc),
-    ok = delayed_hooks:delete(FileUuid);
+    ok = delayed_hooks:execute_hooks(FileDoc);
 change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}

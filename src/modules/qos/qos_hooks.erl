@@ -46,7 +46,7 @@ handle_qos_entry_change(SpaceId, #document{
         traverse_reqs = TR
     }
 }) ->
-    file_qos:add_qos(FileUuid, SpaceId, QosId, []),
+    file_qos:add_qos(FileUuid, SpaceId, QosId),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     maps:fold(fun(TaskId, #qos_traverse_req{start_file_uuid = StartFileUuid, target_storage = TS}, _) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
@@ -76,6 +76,8 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     EffFileQos = file_qos:get_effective(FileUuid,
         fun(MissingUuid, _Args) ->
+            % new file_ctx has to be created as hook can be executed
+            % after a considerable amount of time
             delayed_hooks:add_hook(MissingUuid, <<"check_qos_", FileUuid/binary>>,
                 ?MODULE, ?FUNCTION_NAME, [file_ctx:get_space_id_const(FileCtx), FileUuid, StorageId])
         end),
@@ -103,7 +105,7 @@ maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
     % TODO VFS-5573 use storage id instead of provider
     case oneprovider:get_id() of
         Storage ->
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
+            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, Storage),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             case file_ctx:get_file_doc_allow_not_existing(FileCtx) of
                 {ok, _FileDoc, FileCtx1} ->

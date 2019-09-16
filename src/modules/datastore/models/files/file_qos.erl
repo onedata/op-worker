@@ -7,20 +7,18 @@
 %%%-------------------------------------------------------------------
 %%% @doc The file_qos item contains aggregated information about QoS defined
 %%% for file or directory. It contains:
-%%%     - qos_entries - holds IDs of all qos_entries defined for this file,
+%%%     - qos_entries - holds IDs of all qos_entries defined for this file (
+%%%       including qos_entries which demands cannot be satisfied),
 %%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
-%%%       should be stored are calculated using QoS expression. Then this mapping
-%%%       is appropriately updated with the calculated storages.
+%%%       should be stored are calculated using QoS expression. Then traverse
+%%%       requests are added to qos_entry document. When provider notice change
+%%%       in qos_entry, it checks whether there is traverse request defined
+%%%       its storage. If yes, provider updates target_storages and
+%%%       starts traverse.
 %%% Each file or directory can be associated with at most one such document.
-%%% It is created/updated when new qos_entry document is created for file or
-%%% directory. In this case target storages are chosen according to QoS expression
-%%% and number of required replicas defined in qos_entry document.
-%%% Then file_qos document is updated - qos_entry ID is added to QoS entries list
-%%% and target storages mapping.
-%%% According to this getting full information about QoS defined for file or
-%%% directory requires calculating effective file_qos as file_qos document
-%%% is not created for each file separately.
+%%% Getting full information about QoS defined for file or directory requires
+%%% calculating effective file_qos as it is inherited from all parents.
 %%%
 %%% NOTE!!!
 %%% If you introduce any changes in this module, please ensure that
@@ -45,7 +43,7 @@
 
 %% higher-level functions operating on file_qos record.
 -export([get_effective/1, get_effective/2, remove_qos_id/2,
-    add_qos/4, is_replica_protected/2, get_qos_to_update/2,
+    add_qos/3, add_qos/4, is_replica_protected/2, get_qos_to_update/2,
     get_qos_entries/1, get_target_storages/1
 ]).
 
@@ -175,29 +173,44 @@ remove_qos_id(FileUuid, QosId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Calls file_qos:create_or_update/2 fun. Document and diff function are
-%% created using QoS ID and list of target storages for that QoS.
+%% @equiv
+%% add_qos(FileUuid, SpaceId, QosId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(file_meta:uuid(), od_space:id(),
-    qos_entry:id(), [storage:id()]) -> ok.
-add_qos(FileUuid, SpaceId, QosId, TargetStoragesList) ->
-    NewTargetStorages = merge_storage_list_to_target_storages(
-        QosId, TargetStoragesList, #{}
-    ),
+-spec add_qos(file_meta:uuid(), od_space:id(), qos_entry:id()) -> ok.
+add_qos(FileUuid, SpaceId, QosId) ->
+    add_qos(FileUuid, SpaceId, QosId, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls file_qos:create_or_update/2 fun. Document and diff function are
+%% created using QoS ID and storage ID for that QoS.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_qos(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id()) -> ok.
+add_qos(FileUuid, SpaceId, QosId, TargetStorage) ->
     NewDoc = #document{
         key = FileUuid,
         scope = SpaceId,
         value = #file_qos{
             qos_entries = [QosId],
-            target_storages = NewTargetStorages
+            target_storages = case TargetStorage of
+                undefined -> #{};
+                _ -> #{TargetStorage => [QosId]}
+            end
         }
     },
 
     Diff = fun(#file_qos{qos_entries = CurrQosEntries, target_storages = CurrTS}) ->
-        UpdatedTS = merge_storage_list_to_target_storages(
-            QosId, TargetStoragesList, CurrTS
-        ),
+        UpdatedTS = case TargetStorage of
+            undefined ->
+                CurrTS;
+            _ ->
+                maps:update_with(
+                    TargetStorage, fun(QosEntries) ->  [QosId | QosEntries] end, [QosId], CurrTS
+                )
+        end,
         {ok, #file_qos{qos_entries = lists:usort([QosId | CurrQosEntries]), target_storages = UpdatedTS}}
     end,
 
@@ -283,24 +296,6 @@ merge_target_storages(ParentStorages, ChildStorages) ->
                 ExistingQosEntries ++ ChildQosEntries
             end, ChildQosEntries, Acc)
     end, ParentStoragesWithoutCommonQos, ChildStorages).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Returns target storages map updated with QoS ID according to
-%% list of storages on which file should be replicated according to this QoS.
-%% @end
-%%--------------------------------------------------------------------
--spec merge_storage_list_to_target_storages(qos_entry:id(), [storage:id()] | undefined,
-    target_storages()) -> target_storages().
-merge_storage_list_to_target_storages(_QosId, undefined, TargetStorages) ->
-    TargetStorages;
-merge_storage_list_to_target_storages(QosId, StorageList, TargetStorages) ->
-    lists:foldl(fun(StorageId, TargetStoragesForFile) ->
-        QosEntryList = maps:get(StorageId, TargetStoragesForFile, []),
-        TargetStoragesForFile#{StorageId => [QosId | QosEntryList]}
-    end, TargetStorages, StorageList).
 
 
 %%%===================================================================

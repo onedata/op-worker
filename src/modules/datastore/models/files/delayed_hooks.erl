@@ -64,10 +64,10 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executes all hooks registered for given file.
+%% Executes all hooks registered for given file, then clears hook list.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_hooks(datastore:doc()) -> ok.
+-spec execute_hooks(datastore:doc()) -> ok | {error, term()}.
 execute_hooks(#document{key = Key}) ->
     Hooks = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #delayed_hooks{hooks = H}}} -> H;
@@ -80,7 +80,9 @@ execute_hooks(#document{key = Key}) ->
             ?debug_stacktrace("Error during execution of delayed hook for file ~p ~p:~p", [Key, Error,Type]),
             ok
         end
-    end, maps:values(Hooks)).
+    end, maps:values(Hooks)),
+
+    delete(Key).
 
 %%--------------------------------------------------------------------
 %% @doc

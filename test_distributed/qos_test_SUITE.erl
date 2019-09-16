@@ -1269,7 +1269,6 @@ init_per_testcase(_, Config) ->
     % do not start file synchronization
     qos_tests_utils:mock_synchronize_transfers(ConfigWithSessionInfo),
     qos_tests_utils:mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    qos_tests_utils:init_qos_bounded_cache(ConfigWithSessionInfo),
     mock_start_traverse(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -1359,7 +1358,7 @@ mock_start_traverse(Config) ->
         fun(FileCtx, QosId, Storage, TaskId) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, [Storage]),
+            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, Storage),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             ok = qos_traverse:start_initial_traverse(FileCtx, QosId, Storage, TaskId),
             {ok, _} = qos_entry:mark_traverse_started(QosId, TaskId),

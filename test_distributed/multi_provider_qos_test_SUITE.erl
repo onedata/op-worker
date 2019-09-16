@@ -1375,7 +1375,6 @@ init_per_testcase(_, Config) ->
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(NewConfig),
     qos_tests_utils:mock_providers_qos(NewConfig, ?TEST_PROVIDERS_QOS),
-    qos_tests_utils:init_qos_bounded_cache(NewConfig),
     NewConfig.
 
 

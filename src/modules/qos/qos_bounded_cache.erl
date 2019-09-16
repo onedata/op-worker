@@ -28,6 +28,8 @@
 
 -define(DEFAULT_CHECK_FREQUENCY, 300000). % 5 min
 -define(DEFAULT_CACHE_SIZE, 15000).
+-define(QOS_BOUNDED_CACHE_CHECK_FREQ, qos_bounded_cache_check_frequency).
+-define(QOS_BOUNDED_CACHE_CACHE_SIZE, qos_bounded_cache_size).
 
 
 %%%===================================================================
@@ -36,11 +38,9 @@
 
 -spec init_group() -> ok | {error, term()}.
 init_group() ->
-    CheckFrequency = application:get_env(
-        ?APP_NAME, qos_bounded_cache_check_frequency, ?DEFAULT_CHECK_FREQUENCY
-    ),
-    Size = application:get_env(?APP_NAME, qos_bounded_cache_size, ?DEFAULT_CACHE_SIZE),
-
+    CheckFrequency = get_param(?QOS_BOUNDED_CACHE_CHECK_FREQ, ?DEFAULT_CHECK_FREQUENCY),
+    Size = get_param(?QOS_BOUNDED_CACHE_CACHE_SIZE, ?DEFAULT_CACHE_SIZE),
+    
     bounded_cache:init_group(?QOS_BOUNDED_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,
@@ -129,3 +129,19 @@ invalidate_on_all_nodes(SpaceId) ->
                 Error: ~p~n", [SpaceId, Error]
             )
     end, Res).
+
+
+get_param(ParamName, DefaultVal) ->
+    Value = application:get_env(?APP_NAME, ParamName, DefaultVal),
+    ensure_non_neg_integer(Value, ParamName, DefaultVal).
+
+
+ensure_non_neg_integer(Value, _, _) when is_integer(Value) andalso Value >= 0 ->
+    Value;
+
+ensure_non_neg_integer(Value, ParamName, DefaultVal) ->
+    ?warning(
+        "Got ~p value for ~p parameter. ~p should be non negatvie integer."
+        "Will use default value instead (~p)", [Value, ParamName, ParamName, DefaultVal]
+    ),
+    DefaultVal.
