@@ -477,7 +477,7 @@ get_file_distribution(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_perms(session:id(), FileKey :: file_key(),
-    NewPerms :: file_meta:posix_permissions()) ->
+    NewPerms :: undefined | file_meta:posix_permissions()) ->
     ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     ?run(fun() -> lfm_perms:set_perms(SessId, FileKey, NewPerms) end).
@@ -488,7 +488,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | error_reply().
+    ok | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
@@ -498,7 +498,7 @@ check_perms(SessId, FileKey, PermType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | error_reply().
+    {ok, acl:acl()} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
 
@@ -508,7 +508,7 @@ get_acl(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    EntityList :: [lfm_perms:access_control_entity()]) -> ok | error_reply().
+    undefined | acl:acl()) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 

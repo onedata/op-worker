@@ -21,6 +21,7 @@
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.
@@ -45,14 +46,16 @@
     {ok, binary()} | {error, term()}.
 get_file_download_url(SessionId, FileGuid) ->
     case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
-        {ok, true} ->
+        ok ->
             Hostname = oneprovider:get_domain(),
             {ok, Code} = file_download_code:create(SessionId, FileGuid),
             URL = str_utils:format_bin("https://~s~s/~s", [
                 Hostname, ?FILE_DOWNLOAD_PATH, Code
             ]),
             {ok, URL};
-        {ok, false} ->
+        {error, ?EACCES} ->
+            ?ERROR_FORBIDDEN;
+        {error, ?EPERM} ->
             ?ERROR_FORBIDDEN;
         Error ->
             Error

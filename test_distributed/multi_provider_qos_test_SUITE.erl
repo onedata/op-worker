@@ -1445,9 +1445,11 @@ fulfill_qos_test_base(Config, TestSpec) ->
     % create initial dir structure
     GuidsAndPaths = qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
     ?assertMatch(true, qos_tests_utils:assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
+
     % add QoS and w8 for fulfillment
     QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
+
     % check file distribution and qos documents
     ?assertMatch(ok, qos_tests_utils:assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
     ?assertMatch(ok, qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, ?ATTEMPTS)),

@@ -309,6 +309,8 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
             op_gui_utils:association_to_ids(ResId)
     end,
     case lfm:stat(SessionId, {guid, FileId}) of
+        {error, ?EACCES} ->
+            op_gui_error:unauthorized();
         {error, ?ENOENT} ->
             op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, FileAttr} ->

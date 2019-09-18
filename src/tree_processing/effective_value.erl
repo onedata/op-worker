@@ -142,14 +142,14 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                                 parent -> true;
                                 _ -> InCriticalSection
                             end,
-                                case get_or_calculate(Cache, ParentDoc, CalculateCallback, InitialCalculationInfo,
-                                    Args, ErrorCallback, Timestamp, InCriticalSection2) of
-                                    {ok, ParentValue, CalculationInfo} ->
-                                        bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
-                                            [Doc, ParentValue, CalculationInfo | Args], Timestamp);
-                                    {error, _} = Error ->
-                                        Error
-                                end;
+                            case get_or_calculate(Cache, ParentDoc, CalculateCallback, InitialCalculationInfo,
+                                Args, ErrorCallback, Timestamp, InCriticalSection2) of
+                                {ok, ParentValue, CalculationInfo} ->
+                                    bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
+                                        [Doc, ParentValue, CalculationInfo | Args], Timestamp);
+                                {error, _} = Error ->
+                                    Error
+                            end;
                         _ ->
                             case ErrorCallback of
                                 undefined -> ok;

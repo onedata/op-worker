@@ -38,8 +38,8 @@
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
--type entity() :: undefined | #od_share{} | #transfer{}.
--type entity_id() :: undefined | od_share:id() | transfer:id().
+-type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{}.
+-type entity_id() :: undefined | od_share:id() | transfer:id() | od_user:id() | od_group:id().
 -type revision() :: gs_protocol:revision().
 -type versioned_entity() :: gs_protocol:versioned_entity().
 -type aspect() :: gs_protocol:aspect().

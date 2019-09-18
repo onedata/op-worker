@@ -295,6 +295,8 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
+    acl = [] :: acl:acl(),
+    active_permissions_type = posix :: file_meta:permissions_type(),
     owner :: undefined | od_user:id(),
     group_owner :: undefined | od_group:id(),
     is_scope = false :: boolean(),

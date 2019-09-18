@@ -97,6 +97,10 @@ add_qos(Config, QosToAdd) ->
     % use first worker from sorted worker list if worker is not specified
     Worker = ensure_worker(Config, WorkerOrUndef),
     SessId = ?SESS_ID(Config, Worker),
+
+    % ensure file exists
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), ?ATTEMPTS),
+
     {ok, QosId} = ?assertMatch(
         {ok, _QosId},
         lfm_proxy:add_qos(Worker, SessId, {path, FilePath}, QosExpression, ReplicasNum)
@@ -323,7 +327,7 @@ assert_qos_entry_document(Worker, QosId, FileUuid, Expression, ReplicasNum, IsPo
         ),
         {QosEntry, ErrMsg}
     end,
-    assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, 1, 1).
+    assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200).
 
 
 assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther) ->
@@ -490,7 +494,6 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
             fill_in_expected_distribution(ExpectedFileDistribution, FileContent)
         ),
         FileLocationsSorted = lists:sort(FileLocations),
-
         case FileLocationsSorted == ExpectedDistributionSorted of
             true ->
                 Res;
