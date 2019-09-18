@@ -28,8 +28,6 @@
     end_per_suite/1, end_per_testcase/2
 ]).
 
--export([fulfill_qos_test_base/2]).
-
 %% tests
 -export([
     simple_key_val_qos/1,
@@ -1276,7 +1274,7 @@ qos_status_test(Config) ->
         wait_for_qos_fulfillment = []
     },
 
-    {GuidsAndPaths, QosNameIdMapping} = fulfill_qos_test_base(Config, QosSpec),
+    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
     QosList = maps:values(QosNameIdMapping),
 
     % this is needed so only traverse transfers will start
@@ -1406,7 +1404,7 @@ run_tests(Config, FileTypes, SourceProviderWorker, TargetProvidersWorkers, TestS
                 ExpectedDirStructure = get_expected_structure_for_single_dir(TargetProvidersWorkers),
                 TestSpecFun(?TEST_DIR_PATH, InitialDirStructure, ExpectedDirStructure)
         end,
-        fulfill_qos_test_base(Config, TestSpec)
+        qos_tests_utils:fulfill_qos_test_base(Config, TestSpec)
     end, FileTypes).
 
 
@@ -1432,38 +1430,13 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
     qos_tests_utils:assert_effective_qos(Config, ExpectedEffectiveQos, QosNameIdMapping, true).
 
 
-fulfill_qos_test_base(Config, TestSpec) ->
-    #fulfill_qos_test_spec{
-        initial_dir_structure = InitialDirStructure,
-        qos_to_add = QosToAddList,
-        wait_for_qos_fulfillment = WaitForQos,
-        expected_qos_entries = ExpectedQosEntries,
-        expected_file_qos = ExpectedFileQos,
-        expected_dir_structure = ExpectedDirStructure
-    } = TestSpec,
-
-    % create initial dir structure
-    GuidsAndPaths = qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
-    ?assertMatch(true, qos_tests_utils:assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
-
-    % add QoS and w8 for fulfillment
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
-    qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
-
-    % check file distribution and qos documents
-    ?assertMatch(ok, qos_tests_utils:assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
-    ?assertMatch(ok, qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, ?ATTEMPTS)),
-    ?assertMatch(true, qos_tests_utils:assert_distribution_in_dir_structure(Config, ExpectedDirStructure, GuidsAndPaths)),
-    {GuidsAndPaths, QosNameIdMapping}.
-
-
 basic_qos_restoration_test_base(Config, DirStructureType) ->
     [Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename, undefined),
-    {GuidsAndPaths, _} = fulfill_qos_test_base(Config, QosSpec),
+    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
     NewData = <<"new_test_data">>,
     StoragePaths = lists:map(fun({Guid, Path}) ->
         SpaceId = file_id:guid_to_space_id(Guid),

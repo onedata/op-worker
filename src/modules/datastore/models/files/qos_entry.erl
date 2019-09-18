@@ -294,7 +294,7 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
     {boolean(), doc()} | ignore | default.
-resolve_conflict(_Ctx, #document{value = RemoteValue, mutators = [RemoteMutator | _]} = RemoteDoc, PrevDoc) ->
+resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, PrevDoc) ->
     LocalReqs = PrevDoc#document.value#qos_entry.traverse_reqs,
     RemoteReqs = RemoteValue#qos_entry.traverse_reqs,
     LocalTraverses = PrevDoc#document.value#qos_entry.traverses,
@@ -305,10 +305,10 @@ resolve_conflict(_Ctx, #document{value = RemoteValue, mutators = [RemoteMutator 
         false ->
             {true, RemoteDoc#document{
                 value = RemoteValue#qos_entry{
-                    traverse_reqs = calculate_new_traverses(LocalReqs, RemoteReqs, RemoteMutator),
-                    traverses = calculate_new_traverses(LocalTraverses, RemoteTraverses, RemoteMutator)
-            }
-        }}
+                    traverse_reqs = calculate_new_traverses(LocalReqs, RemoteReqs),
+                    traverses = calculate_new_traverses(LocalTraverses, RemoteTraverses)
+                }
+            }}
     end.
 
 %%--------------------------------------------------------------------
@@ -319,10 +319,10 @@ resolve_conflict(_Ctx, #document{value = RemoteValue, mutators = [RemoteMutator 
 %% local changes of current provider traverses are taken into account.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_new_traverses(traverse_map(), traverse_map(), od_provider:id()) -> traverse_map().
-calculate_new_traverses(LocalValue, RemoteValue, RemoteMutator) ->
-    {LocalTraverses, _} = split_traverses(LocalValue, RemoteMutator),
-    {_, RemoteTraverses} = split_traverses(RemoteValue, RemoteMutator),
+-spec calculate_new_traverses(traverse_map(), traverse_map()) -> traverse_map().
+calculate_new_traverses(LocalValue, RemoteValue) ->
+    {LocalTraverses, _} = split_traverses(LocalValue),
+    {_, RemoteTraverses} = split_traverses(RemoteValue),
     maps:merge(
         maps:with(LocalTraverses, LocalValue),
         maps:with(RemoteTraverses, RemoteValue)
@@ -334,13 +334,13 @@ calculate_new_traverses(LocalValue, RemoteValue, RemoteMutator) ->
 %% Splits given traverses to those of current provider and those of remote providers.
 %% @end
 %%--------------------------------------------------------------------
--spec split_traverses(traverse_map(), od_provider:id()) -> {[traverse:id()], [traverse:id()]}.
-split_traverses(Traverses, RemoteMutator) ->
-    % ProviderId = oneprovider:get_id(),
+-spec split_traverses(traverse_map()) -> {[traverse:id()], [traverse:id()]}.
+split_traverses(Traverses) ->
+    ProviderId = oneprovider:get_id(),
     maps:fold(fun(TaskId, QosTraverse, {LocalTraverses, RemoteTraverses}) ->
         % TODO VFS-5573 use storage id instead of provider
-        case QosTraverse#qos_traverse_req.target_storage == RemoteMutator of
-            true -> {LocalTraverses, [TaskId | RemoteTraverses]};
-            false -> {[TaskId | LocalTraverses], RemoteTraverses}
+        case QosTraverse#qos_traverse_req.target_storage == ProviderId of
+            true -> {[TaskId | LocalTraverses], RemoteTraverses};
+            false -> {LocalTraverses, [TaskId | RemoteTraverses]}
         end
     end, {[], []}, Traverses).

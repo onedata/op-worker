@@ -37,6 +37,7 @@
 
 % util functions
 -export([
+    fulfill_qos_test_base/2,
     get_op_nodes_sorted/1, get_guid/2, get_guid/3,
     create_dir_structure/2, create_dir_structure/4,
     create_file/4, create_directory/3,
@@ -59,6 +60,31 @@
 %%%====================================================================
 %%% Util functions
 %%%====================================================================
+
+fulfill_qos_test_base(Config, TestSpec) ->
+    #fulfill_qos_test_spec{
+        initial_dir_structure = InitialDirStructure,
+        qos_to_add = QosToAddList,
+        wait_for_qos_fulfillment = WaitForQos,
+        expected_qos_entries = ExpectedQosEntries,
+        expected_file_qos = ExpectedFileQos,
+        expected_dir_structure = ExpectedDirStructure
+    } = TestSpec,
+
+    % create initial dir structure
+    GuidsAndPaths = create_dir_structure(Config, InitialDirStructure),
+    ?assertMatch(true, assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
+
+    % add QoS and w8 for fulfillment
+    QosNameIdMapping = add_multiple_qos_in_parallel(Config, QosToAddList),
+    wait_for_qos_fulfilment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
+
+    % check file distribution and qos documents
+    ?assertMatch(ok, assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
+    ?assertMatch(ok, assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, ?ATTEMPTS)),
+    ?assertMatch(true, assert_distribution_in_dir_structure(Config, ExpectedDirStructure, GuidsAndPaths)),
+    {GuidsAndPaths, QosNameIdMapping}.
+
 
 get_op_nodes_sorted(Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -489,26 +515,28 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
 
     lists:foldl(fun(Worker, Res) ->
         SessId = ?SESS_ID(Config, Worker),
-        {ok, FileLocations} = lfm_proxy:get_file_distribution(Worker, SessId, {guid, FileGuid}),
         ExpectedDistributionSorted = lists:sort(
             fill_in_expected_distribution(ExpectedFileDistribution, FileContent)
         ),
-        FileLocationsSorted = lists:sort(FileLocations),
-        case FileLocationsSorted == ExpectedDistributionSorted of
-            true ->
-                Res;
-            false ->
-                case PrintError of
-                    true ->
-                        ct:pal(
-                            "Wrong file distribution for ~p on worker ~p. ~n"
-                            "Expected: ~p~n"
-                            "Got: ~p~n",
-                            [FilePath, Worker, ExpectedDistributionSorted, FileLocationsSorted]),
-                        false;
-                    false ->
-                        false
-                end
+
+        FileLocationsSorted = case lfm_proxy:get_file_distribution(Worker, SessId, {guid, FileGuid}) of
+            {ok, FileLocations} ->
+                lists:sort(FileLocations);
+            Error ->
+                Error
+        end,
+
+        case {FileLocationsSorted == ExpectedDistributionSorted, PrintError} of
+            {false, false} ->
+                false;
+            {false, true} ->
+                ct:pal(
+                    "Wrong file distribution for ~p on worker ~p. ~n"
+                    "Expected: ~p~n"
+                    "Got: ~p~n",
+                    [FilePath, Worker, ExpectedDistributionSorted, FileLocationsSorted]);
+            {true, _} ->
+                Res
         end
     end, true, Workers).
 
