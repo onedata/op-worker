@@ -84,5 +84,7 @@ set_acl(SessId, FileKey, Acl) ->
     ok | lfm:error_reply().
 remove_acl(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, Guid, #remove_acl{},
-        fun(_) -> ok end).
+    remote_utils:call_fslogic(SessId, provider_request, Guid,
+        #remove_acl{},
+        fun(_) -> ok end
+    ).
