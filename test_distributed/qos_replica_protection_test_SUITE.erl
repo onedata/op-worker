@@ -630,7 +630,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
-    {GuidsAndPaths, _} = multi_provider_qos_test_SUITE:fulfill_qos_test_base(Config, QosSpec),
+    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
     case NewStoragesMock of
         undefined ->
@@ -708,7 +708,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
 
     rpc:call(RunNode, file_popularity_api, enable, [?SPACE_ID]),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Name),
-    {_GuidsAndPaths, _} = multi_provider_qos_test_SUITE:fulfill_qos_test_base(Config, QosSpec),
+    {_GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
     Configuration =  #{
         enabled => true,
