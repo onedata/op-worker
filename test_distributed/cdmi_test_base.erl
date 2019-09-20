@@ -432,34 +432,36 @@ metadata(Config) ->
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     FileName2 = filename:join([binary_to_list(SpaceName), "acl_test_file.txt"]),
-    Ace1 = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?read_mask)
-    },
-    Ace2 = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?deny_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?read_mask bor ?execute_mask)
-    },
-    Ace3 = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?write_mask)
-    },
-    Ace3Full = #{
+    Ace1 = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_all_object_mask
+    }, cdmi),
+    Ace2 = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_all_object_mask
+    }, cdmi),
+    Ace2Full = #{
         <<"acetype">> => ?allow,
         <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
         <<"aceflags">> => ?no_flags,
-        <<"acemask">> => ?write
+        <<"acemask">> => <<
+            ?write_object/binary, ",",
+            ?write_metadata/binary, ",",
+            ?write_attributes/binary, ",",
+            ?delete/binary, ",",
+            ?write_acl/binary
+        >>
     },
 
     create_file(Config, FileName2),
     write_to_file(Config, FileName2, <<"data">>, 0),
-    RequestBody15 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace1, Ace2, Ace3Full]}},
+    RequestBody15 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace1, Ace2Full]}},
     RawRequestBody15 = json_utils:encode(RequestBody15),
     RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
@@ -472,7 +474,7 @@ metadata(Config) ->
     ?assertEqual(1, maps:size(CdmiResponse16)),
     Metadata16 = maps:get(<<"metadata">>, CdmiResponse16),
     ?assertEqual(6, maps:size(Metadata16)),
-    ?assertMatch(#{<<"cdmi_acl">> := [Ace1, Ace2, Ace3]}, Metadata16),
+    ?assertMatch(#{<<"cdmi_acl">> := [Ace1, Ace2]}, Metadata16),
 
     {ok, Code17, _Headers17, Response17} = do_request(WorkerP2, FileName2, get, [user_1_token_header(Config)], []),
     ?assertEqual(200, Code17),
@@ -480,19 +482,21 @@ metadata(Config) ->
     %%------------------------------
 
     %%-- create forbidden by acl ---
-    Ace4 = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?execute_mask)
-    },
-    Ace5 = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?deny_mask),
-        <<"identifier">> => <<UserName1/binary, "#", UserId1/binary>>,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?write_mask)
-    },
-    RequestBody18 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace4, Ace5]}},
+    Ace3 = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_metadata_mask
+    }, cdmi),
+    Ace4 = ace:to_json(#access_control_entity{
+        acetype = ?deny_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_object_mask
+    }, cdmi),
+    RequestBody18 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace3, Ace4]}},
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
 
@@ -765,12 +769,11 @@ use_supported_cdmi_version(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
     % when
-    {ok, Code, _ResponseHeaders, Response} =
+    {ok, Code, _ResponseHeaders, _Response} =
         do_request(Workers, "/random", get, RequestHeaders),
 
     % then
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
+    ?assertEqual(Code, ?HTTP_404_NOT_FOUND).
 
 use_unsupported_cdmi_version(Config) ->
     % given
@@ -1298,15 +1301,16 @@ copy(Config) ->
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     create_file(Config, FileName2),
     FileData2 = <<"data">>,
-    Acl = [#access_control_entity{
+    FileAcl = [#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId1,
         name = UserName1,
         aceflags = ?no_flags_mask,
-        acemask = ?all_perms_mask}],
+        acemask = ?all_object_perms_mask
+    }],
     JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
     Xattrs = [#xattr{name = <<"key1">>, value = <<"value1">>}, #xattr{name = <<"key2">>, value = <<"value2">>}],
-    ok = set_acl(Config, FileName2, Acl),
+    ok = set_acl(Config, FileName2, FileAcl),
     ok = set_json_metadata(Config, FileName2, JsonMetadata),
     ok = add_xattrs(Config, FileName2, Xattrs),
     {ok, _} = write_to_file(Config, FileName2, FileData2, 0),
@@ -1316,7 +1320,7 @@ copy(Config) ->
     ?assert(object_exists(Config, FileName2)),
     ?assert(not object_exists(Config, NewFileName2)),
     ?assertEqual(FileData2, get_file_content(Config, FileName2)),
-    ?assertEqual({ok, Acl}, get_acl(Config, FileName2)),
+    ?assertEqual({ok, FileAcl}, get_acl(Config, FileName2)),
 
     % copy file using cdmi
     RequestHeaders4 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
@@ -1331,17 +1335,24 @@ copy(Config) ->
     ?assertEqual({ok, JsonMetadata}, get_json_metadata(Config, NewFileName2)),
     ?assertEqual(Xattrs ++ [#xattr{name = ?JSON_METADATA_KEY, value = JsonMetadata}],
         get_xattrs(Config, NewFileName2)),
-    ?assertEqual({ok, Acl}, get_acl(Config, NewFileName2)),
+    ?assertEqual({ok, FileAcl}, get_acl(Config, NewFileName2)),
     %%------------------------------
 
     %%---------- dir cp ------------
     % create dir to copy (with some subdirs and subfiles)
     DirName2 = filename:join([binary_to_list(SpaceName), "copy_dir"]) ++ "/",
     NewDirName2 = filename:join([binary_to_list(SpaceName), "new_copy_dir"]) ++ "/",
+    DirAcl = [#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?all_container_perms_mask
+    }],
 
     mkdir(Config, DirName2),
     ?assert(object_exists(Config, DirName2)),
-    set_acl(Config, DirName2, Acl),
+    set_acl(Config, DirName2, DirAcl),
     add_xattrs(Config, DirName2, Xattrs),
     mkdir(Config, filename:join(DirName2, "dir1")),
     mkdir(Config, filename:join(DirName2, "dir2")),
@@ -1375,7 +1386,7 @@ copy(Config) ->
     % assert destination files have been created
     ?assert(object_exists(Config, NewDirName2)),
     ?assertEqual(Xattrs, get_xattrs(Config, NewDirName2)),
-    ?assertEqual({ok, Acl}, get_acl(Config, NewDirName2)),
+    ?assertEqual({ok, DirAcl}, get_acl(Config, NewDirName2)),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir1"))),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir2"))),
     ?assert(object_exists(Config, filename:join([NewDirName2, "dir1", "1"]))),
@@ -1482,56 +1493,67 @@ acl(Config) ->
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
-    Read = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?read_mask)
-    },
+    Read = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_all_object_mask
+    }, cdmi),
     ReadFull = #{
         <<"acetype">> => ?allow,
         <<"identifier">> => Identifier1,
         <<"aceflags">> => ?no_flags,
-        <<"acemask">> => ?read
+        <<"acemask">> => <<
+            ?read_object/binary, ",",
+            ?read_metadata/binary, ",",
+            ?read_attributes/binary, ",",
+            ?read_acl/binary
+        >>
     },
-    Write = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?write_mask)
-    },
+    Write = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_all_object_mask
+    }, cdmi),
     ReadWriteVerbose = #{
         <<"acetype">> => ?allow,
         <<"identifier">> => Identifier1,
         <<"aceflags">> => ?no_flags,
-        <<"acemask">> => <<(?read)/binary, ", ", (?write)/binary>>
+        <<"acemask">> => <<
+            ?read_object/binary, ",",
+            ?read_metadata/binary, ",",
+            ?read_attributes/binary, ",",
+            ?read_acl/binary, ",",
+            ?write_object/binary, ",",
+            ?write_metadata/binary, ",",
+            ?write_attributes/binary, ",",
+            ?delete/binary, ",",
+            ?write_acl/binary
+        >>
     },
-    Execute = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?execute_mask)
-    },
-    WriteAcl = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?write_acl_mask)
-    },
-    Delete = #{
-        <<"acetype">> => acl_logic:bitmask_to_binary(?allow_mask),
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => acl_logic:bitmask_to_binary(?no_flags_mask),
-        <<"acemask">> => acl_logic:bitmask_to_binary(?delete_mask)
-    },
+    WriteAcl = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_acl_mask
+    }, cdmi),
+    Delete = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?delete_mask
+    }, cdmi),
 
     MetadataAclReadFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadFull, WriteAcl]}}),
-    MetadataAclReadExecute = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Read, Execute, WriteAcl]}}),
     MetadataAclDelete = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Delete]}}),
     MetadataAclWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write]}}),
     MetadataAclReadWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write, Read]}}),
     MetadataAclReadWriteFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadWriteVerbose]}}),
-    MetadataAclReadWriteExecute = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write, Read, Execute]}}),
 
     %%----- read file test ---------
     % create test file with dummy data
@@ -1596,9 +1618,27 @@ acl(Config) ->
     File3 = filename:join(Dirname1, "3"),
     File4 = filename:join(Dirname1, "4"),
 
+    DirRead = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_all_container_mask bor ?traverse_container_mask
+    }, cdmi),
+    DirWrite = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        name = UserName1,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_all_container_mask bor ?traverse_container_mask
+    }, cdmi),
+    DirMetadataAclReadWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [DirWrite, DirRead]}}),
+    DirMetadataAclRead = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [DirRead, WriteAcl]}}),
+    DirMetadataAclWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [DirWrite]}}),
+
     % set acl to 'read&write' and test cdmi get request (should succeed)
     RequestHeaders2 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclReadWriteExecute),
+    {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, DirMetadataAclReadWrite),
     {ok, 200, _, _} = do_request(WorkerP2, Dirname1, get, RequestHeaders2, []),
 
     % create files in directory (should succeed)
@@ -1616,12 +1656,12 @@ acl(Config) ->
     ?assert(not object_exists(Config, File2)),
 
     % set acl to 'write' and test cdmi get request (should return 403 forbidden)
-    {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclWrite),
+    {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, DirMetadataAclWrite),
     {ok, Code5, _, Response5} = do_request(Workers, Dirname1, get, RequestHeaders2, []),
     ?assertMatch(EaccesError, {Code5, json_utils:decode(Response5)}),
 
     % set acl to 'read' and test cdmi put request (should return 403 forbidden)
-    {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclReadExecute),
+    {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, DirMetadataAclRead),
     {ok, 200, _, _} = do_request(WorkerP2, Dirname1, get, RequestHeaders2, []),
     {ok, Code6, _, Response6} = do_request(Workers, Dirname1, put, RequestHeaders2, json_utils:encode(#{<<"metadata">> => #{<<"my_meta">> => <<"value">>}})),
     ?assertMatch(EaccesError, {Code6, json_utils:decode(Response6)}),
@@ -1699,10 +1739,9 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
-    {ok, Code6, _Headers6, Response6} =
+    {ok, Code6, _Headers6, _Response6} =
         do_request(WorkerP2, SpaceName ++ "/nonexistent_file", get, RequestHeaders6),
-    ExpRestError6 = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ?assertMatch(ExpRestError6, {Code6, json_utils:decode(Response6)}),
+    ?assertEqual(Code6, ?HTTP_404_NOT_FOUND),
     %%------------------------------
 
     %%--- listing non-existing dir -----
@@ -1711,10 +1750,9 @@ errors(Config) ->
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-    {ok, Code7, _Headers7, Response7} =
+    {ok, Code7, _Headers7, _Response7} =
         do_request(WorkerP2, SpaceName ++ "/nonexisting_dir/", get, RequestHeaders7),
-    ExpRestError7 = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ?assertMatch(ExpRestError7, {Code7, json_utils:decode(Response7)}),
+    ?assertEqual(Code7, ?HTTP_404_NOT_FOUND),
     %%------------------------------
 
     %%--- open binary file without permission -----

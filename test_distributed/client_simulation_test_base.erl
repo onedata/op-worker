@@ -217,7 +217,7 @@ init_per_testcase(Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
             {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
         end
     ),

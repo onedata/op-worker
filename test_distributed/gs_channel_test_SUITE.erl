@@ -40,7 +40,7 @@ oz_connection_test(Config) ->
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CONN_ERROR),
     ?assertMatch(
         ?ERROR_NO_CONNECTION_TO_OZ,
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID]),
+        rpc:call(Node, provider_logic, get, []),
         10
     ),
 
@@ -49,15 +49,15 @@ oz_connection_test(Config) ->
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_NOBODY_IDENTITY),
     ?assertMatch(
         ?ERROR_NO_CONNECTION_TO_OZ,
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID]),
+        rpc:call(Node, provider_logic, get, []),
         10
     ),
 
     % Requests should work when the provider connects to onezone.
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CORRECT_CONNECTION),
     ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID]),
+        {ok, _},
+        rpc:call(Node, provider_logic, get, []),
         10
     ),
 

@@ -24,8 +24,9 @@
 %% API
 -export([new_helper/5]).
 -export([update_args/2, update_admin_ctx/2, update_insecure/2]).
--export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
-    get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
+-export([get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
+    is_insecure/1, get_params/2, get_proxy_params/2, get_timeout/1,
+    get_storage_path_type/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -154,6 +155,19 @@ get_args(#helper_params{helper_args = Args}) ->
 -spec get_admin_ctx(helpers:helper()) -> user_ctx().
 get_admin_ctx(#helper{admin_ctx = Ctx}) ->
     Ctx.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns part of admin context without sensitive information
+%% (passwords, access codes).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_redacted_admin_ctx(helpers:helper()) -> user_ctx().
+get_redacted_admin_ctx(Helper) ->
+    maps:with([<<"username">>, <<"accessKey">>, <<"credentialsType">>],
+        get_admin_ctx(Helper)).
+
 
 %%--------------------------------------------------------------------
 %% @doc

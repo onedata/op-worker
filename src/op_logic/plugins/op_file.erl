@@ -22,6 +22,8 @@
 -include("op_logic.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -77,6 +79,10 @@ operation_supported(get, attrs, private) -> true;
 operation_supported(get, xattrs, private) -> true;
 operation_supported(get, json_metadata, private) -> true;
 operation_supported(get, rdf_metadata, private) -> true;
+operation_supported(get, acl, private) -> true;
+
+operation_supported(update, instance, private) -> true;
+operation_supported(update, acl, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -94,7 +100,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"name">> => {binary, non_empty},
         <<"type">> => {binary, [<<"file">>, <<"dir">>]},
         <<"parent">> => {binary, fun(Parent) ->
-            try gs_protocol:string_to_gri(Parent) of
+            try gri:deserialize(Parent) of
                 #gri{type = op_file, id = ParentGuid, aspect = instance} ->
                     {true, ParentGuid};
                 _ ->
@@ -103,8 +109,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
                 false
             end
         end}
-
-    }
+    },
+    optional => #{<<"createAttempts">> => {integer, {between, 1, 200}}}
 };
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = attrs}}) -> #{
@@ -180,6 +186,38 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = json_metadata}}) -> #{
 data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
     undefined;
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = acl}}) ->
+    undefined;
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
+    optional => #{
+        <<"posixPermissions">> => {binary,
+            fun(Mode) ->
+                try
+                    {true, binary_to_integer(Mode, 8)}
+                catch _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
+                end
+            end
+        },
+        <<"activePermissionsType">> => {binary, [<<"acl">>, <<"posix">>]}
+    }
+};
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = acl}}) -> #{
+    required => #{
+        <<"list">> => {any,
+            fun(JsonAcl) ->
+                try
+                    {true, acl:from_json(JsonAcl, gui)}
+                catch throw:{error, Errno} ->
+                    throw(?ERROR_POSIX(Errno))
+                end
+            end
+        }
+    }
+};
+
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
 
@@ -237,9 +275,17 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata
+    As =:= rdf_metadata;
+    As =:= acl
 ->
     has_access_to_file(Req#op_req.auth, Guid);
+
+authorize(#op_req{operation = update, gri = #gri{id = Guid, aspect = As}} = Req, _) when
+    As =:= instance;
+    As =:= acl
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
 
 authorize(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -270,9 +316,17 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata
+    As =:= rdf_metadata;
+    As =:= acl
 ->
     assert_file_managed_locally(Req#op_req.auth, Guid);
+
+validate(#op_req{operation = update, gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= instance;
+    As =:= acl
+->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -288,16 +342,14 @@ validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}}, 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
 
-    ParentGuid = maps:get(<<"parent">>, Data),
-    Name = maps:get(<<"name">>, Data),
-    Type = maps:get(<<"type">>, Data),
-    % Creates file/directory with default mode
-    Mode = undefined,
-
-    {ok, Guid} = case Type of
-        <<"file">> -> ?check(lfm:create(SessionId, ParentGuid, Name, Mode));
-        <<"dir">> -> ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode))
-    end,
+    {ok, Guid} = create_file(
+        SessionId,
+        maps:get(<<"parent">>, Data),
+        maps:get(<<"name">>, Data),
+        binary_to_atom(maps:get(<<"type">>, Data), utf8),
+        0,
+        maps:get(<<"createAttempts">>, Data, 1)
+    ),
 
     {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
     {ok, resource, {GRI#gri{id = Guid}, Attrs}};
@@ -412,7 +464,15 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     ?check(lfm:get_metadata(SessionId, {guid, FileGuid}, json, FilterList, Inherited));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false)).
+    ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false));
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
+    case lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}) of
+        {ok, _} = Ans ->
+            Ans;
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -421,8 +481,28 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
 %% @end
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
-update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
+    ActivePermsType = maps:get(<<"activePermissionsType">>, Data, undefined),
+    PosixPerms = maps:get(<<"posixPermissions">>, Data, undefined),
+
+    SessionId = Auth#auth.session_id,
+    FileKey = {guid, Guid},
+
+    case {ActivePermsType, PosixPerms} of
+        {undefined, undefined} ->
+            ok;
+        {<<"acl">>, undefined} ->
+            ?check(lfm:set_acl(SessionId, FileKey, undefined));
+        {<<"acl">>, _} ->
+            % It is not possible to change active_permissions_type to acl and
+            % chmod at the same time via gui and so such requests are invalid
+            ?ERROR_MALFORMED_DATA;
+        _ ->
+            ?check(lfm:set_perms(SessionId, FileKey, PosixPerms))
+    end;
+update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
+    Acl = maps:get(<<"list">>, Data),
+    ?check(lfm:set_acl(Auth#auth.session_id, {guid, Guid}, Acl)).
 
 
 %%--------------------------------------------------------------------
@@ -476,6 +556,53 @@ assert_file_managed_locally(?USER(UserId), Guid) ->
             SpaceId = file_id:guid_to_space_id(Guid),
             op_logic_utils:assert_space_supported_locally(SpaceId)
     end.
+
+
+%% @private
+-spec create_file(session:id(), file_id:file_guid(), file_meta:name(), file | dir) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(SessionId, ParentGuid, Name, file) ->
+    lfm:create(SessionId, ParentGuid, Name, undefined);
+create_file(SessionId, ParentGuid, Name, dir) ->
+    lfm:mkdir(SessionId, ParentGuid, Name, undefined).
+
+
+%% @private
+-spec create_file(
+    SessionId :: session:id(),
+    ParentGuid :: file_id:file_guid(),
+    Name :: file_meta:name(),
+    Type :: file | dir,
+    Counter :: non_neg_integer(),
+    Attempts :: non_neg_integer()
+) ->
+    {ok, file_id:file_guid()} | no_return().
+create_file(_, _, _, _, Counter, Attempts) when Counter >= Attempts ->
+    throw(?ERROR_POSIX(?EEXIST));
+create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
+    Name = maybe_add_file_suffix(OriginalName, Counter),
+    case create_file(SessId, ParentGuid, Name, Type) of
+        {ok, Guid} ->
+            {ok, Guid};
+        {error, ?EEXIST} ->
+            create_file(
+                SessId, ParentGuid, OriginalName, Type,
+                Counter + 1, Attempts
+            );
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
+    end.
+
+
+%% @private
+-spec maybe_add_file_suffix(file_meta:name(), Counter :: non_neg_integer()) ->
+    file_meta:name().
+maybe_add_file_suffix(OriginalName, 0) ->
+    OriginalName;
+maybe_add_file_suffix(OriginalName, Counter) ->
+    RootName = filename:rootname(OriginalName),
+    Ext = filename:extension(OriginalName),
+    str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext]).
 
 
 %%--------------------------------------------------------------------

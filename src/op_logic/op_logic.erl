@@ -38,15 +38,15 @@
 -type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
--type entity() :: undefined | #od_share{} | #transfer{}.
--type entity_id() :: undefined | od_share:id() | transfer:id().
+-type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{}.
+-type entity_id() :: undefined | od_share:id() | transfer:id() | od_user:id() | od_group:id().
 -type revision() :: gs_protocol:revision().
 -type versioned_entity() :: gs_protocol:versioned_entity().
 -type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
 -type data() :: gs_protocol:data().
--type gri() :: gs_protocol:gri().
+-type gri() :: gri:gri().
 -type auth_hint() :: gs_protocol:auth_hint().
 
 -type create_result() :: gs_protocol:graph_create_result().
@@ -153,7 +153,7 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), versioned_entity()) ->
-    {true, gs_protocol:gri()} | false.
+    {true, gri:gri()} | false.
 is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEntity) ->
     try
         ensure_authorized(#req_ctx{

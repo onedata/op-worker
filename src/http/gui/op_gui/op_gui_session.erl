@@ -48,8 +48,9 @@ authenticate(Req) ->
     case resolve_auth(Req) of
         undefined ->
             false;
-        Macaroon ->
-            Auth = #macaroon_auth{macaroon = Macaroon},
+        Token ->
+            {PeerIp, _} = cowboy_req:peer(Req),
+            Auth = #token_auth{token = Token, peer_ip = PeerIp},
             case user_identity:get_or_fetch(Auth) of
                 {error, _} ->
                     ?ERROR_UNAUTHORIZED;
@@ -244,6 +245,6 @@ resolve_auth(Req) ->
         undefined ->
             QueryParams = cowboy_req:parse_qs(Req),
             proplists:get_value(<<"token">>, QueryParams, undefined);
-        Macaroon ->
-            Macaroon
+        Token ->
+            Token
     end.

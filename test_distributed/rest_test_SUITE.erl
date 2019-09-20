@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -25,19 +26,19 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    macaroon_auth/1,
+    token_auth/1,
     internal_error_when_handler_crashes/1,
     custom_error_when_handler_throws_error/1
 ]).
 
 
 all() -> ?ALL([
-    macaroon_auth,
+    token_auth,
     internal_error_when_handler_crashes,
     custom_error_when_handler_throws_error
 ]).
 
--define(MACAROON, <<"DUMMY-MACAROON">>).
+-define(TOKEN, <<"DUMMY-TOKEN">>).
 
 -define(USER_ID, <<"test_id">>).
 -define(USER_FULL_NAME, <<"test_name">>).
@@ -51,16 +52,17 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-macaroon_auth(Config) ->
+token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
     % when
     AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
-    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?MACAROON}),
-    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?MACAROON}),
-    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?MACAROON)/binary>>}),
+    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?TOKEN}),
+    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?TOKEN)/binary>>}),
+    %% @todo VFS-5554 Deprecated, included for backward compatibility
+    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?TOKEN}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
@@ -90,8 +92,8 @@ custom_error_when_handler_throws_error(Config) ->
     {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "spaces"),
 
     % then
-    ?assertEqual(400, Status),
-    ?assertEqual(<<"{\"error\":\"Bad value: provided \\\"dummy\\\" must be a valid JSON\"}">>, Body).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_JSON(<<"dummy">>)),
+    ?assertMatch(ExpRestError, {Status, json_utils:decode(Body)}).
 
 
 %%%===================================================================
@@ -223,7 +225,7 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#macaroon_auth{macaroon = ?MACAROON}, ?USER_ID) ->
+        (#token_auth{token = ?TOKEN}, ?USER_ID) ->
             UserDoc;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
@@ -239,8 +241,11 @@ mock_user_logic(Config) ->
     end,
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, user_logic, get_by_auth, fun(Auth) ->
-        GetUserFun(Auth, ?USER_ID)
+    test_utils:mock_expect(Workers, user_logic, preauthorize, fun(Auth) ->
+        case GetUserFun(Auth, ?USER_ID) of
+            {ok, #document{key = UserId}} -> {ok, ?USER(UserId)};
+            {error, _} = Error -> Error
+        end
     end),
     test_utils:mock_expect(Workers, user_logic, exists,
         fun(Auth, UserId) ->
@@ -263,7 +268,7 @@ unmock_user_logic(Config) ->
 mock_provider_id(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:mock_provider_id(
-        Workers, ?PROVIDER_ID, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, ?PROVIDER_ID, <<"access-token">>, <<"identity-token">>
     ).
 
 

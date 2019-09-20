@@ -70,6 +70,8 @@ operation_supported(get, views, private) -> true;
 operation_supported(get, {view, _}, private) -> true;
 operation_supported(get, {query_view, _}, private) -> true;
 operation_supported(get, transfers, private) -> true;
+operation_supported(get, eff_users, private) -> true;
+operation_supported(get, eff_groups, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -151,6 +153,12 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
         <<"page_token">> => {binary, non_empty}
     }
 };
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = eff_users}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = eff_groups}}) ->
+    undefined;
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
@@ -254,6 +262,15 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = As
+}}, _) when
+    As =:= eff_users;
+    As =:= eff_groups
+->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
+
 authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {view, _}
@@ -319,6 +336,12 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view,
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
+    op_logic_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= eff_users;
+    As =:= eff_groups
+->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
@@ -474,7 +497,13 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
         _ ->
             #{}
     end,
-    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)}.
+    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_users}}, _) ->
+    space_logic:get_eff_users(Auth#auth.session_id, SpaceId);
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
+    space_logic:get_eff_groups(Auth#auth.session_id, SpaceId).
 
 
 %%--------------------------------------------------------------------

@@ -50,7 +50,7 @@ handshake_attributes(_Client) ->
 %% {@link gs_translator_behaviour} callback translate_value/3.
 %% @end
 %%--------------------------------------------------------------------
--spec translate_value(gs_protocol:protocol_version(), gs_protocol:gri(),
+-spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
 translate_value(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync create result for:~n
@@ -67,7 +67,7 @@ translate_value(ProtocolVersion, GRI, Data) ->
 %% {@link gs_translator_behaviour} callback translate_resource/3.
 %% @end
 %%--------------------------------------------------------------------
--spec translate_resource(gs_protocol:protocol_version(), gs_protocol:gri(),
+-spec translate_resource(gs_protocol:protocol_version(), gri:gri(),
     ResourceData :: term()) -> Result | fun((aai:auth()) -> Result) when
     Result :: gs_protocol:data() | gs_protocol:error() | no_return().
 translate_resource(_, GRI = #gri{type = op_file}, Data) ->
@@ -76,6 +76,8 @@ translate_resource(_, GRI = #gri{type = op_space}, Data) ->
     translate_space(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_user}, Data) ->
     translate_user(GRI, Data);
+translate_resource(_, GRI = #gri{type = op_group}, Data) ->
+    translate_group(GRI, Data);
 translate_resource(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync get result for:~n
     ProtocolVersion: ~p~n
@@ -92,11 +94,13 @@ translate_resource(ProtocolVersion, GRI, Data) ->
 
 
 %% @private
--spec translate_file(gs_protocol:gri(), Data :: term()) ->
+-spec translate_file(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
     name = Name,
+    owner_id = Owner,
     type = TypeAttr,
+    mode = Mode,
     size = SizeAttr,
     mtime = ModificationTime
 }) ->
@@ -108,12 +112,15 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
     end,
 
     fun(?USER(_UserId, SessId)) ->
+        FileUuid = file_id:guid_to_uuid(Guid),
+        {ok, ActivePermsType} = file_meta:get_active_perms_type(FileUuid),
+
         Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
             true ->
                 null;
             false ->
                 {ok, ParentGuid} = ?check(lfm:get_parent(SessId, {guid, Guid})),
-                gs_protocol:gri_to_string(#gri{
+                gri:serialize(#gri{
                     type = op_file,
                     id = ParentGuid,
                     aspect = instance,
@@ -123,23 +130,45 @@ translate_file(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
 
         #{
             <<"name">> => Name,
+            <<"owner">> => gri:serialize(#gri{
+                type = op_user,
+                id = Owner,
+                aspect = instance,
+                scope = shared
+            }),
             <<"index">> => Name,
             <<"type">> => Type,
+            <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
+            <<"activePermissionsType">> => ActivePermsType,
+            <<"acl">> => gri:serialize(#gri{
+                type = op_file,
+                id = Guid,
+                aspect = acl,
+                scope = private
+            }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
             <<"parent">> => Parent
         }
+    end;
+translate_file(#gri{aspect = acl, scope = private}, Acl) ->
+    try
+        #{
+            <<"list">> => acl:to_json(Acl, gui)
+        }
+    catch throw:{error, Errno} ->
+        throw(?ERROR_POSIX(Errno))
     end.
 
 
 %% @private
--spec translate_space(gs_protocol:gri(), Data :: term()) ->
+-spec translate_space(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
     RootDir = case space_logic:is_supported(Space, oneprovider:get_id()) of
         true ->
             Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-            gs_protocol:gri_to_string(#gri{
+            gri:serialize(#gri{
                 type = op_file,
                 id = Guid,
                 aspect = instance,
@@ -151,12 +180,46 @@ translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, Space) -
 
     #{
         <<"name">> => Space#od_space.name,
+        <<"effUserList">> => gri:serialize(#gri{
+            type = op_space,
+            id = SpaceId,
+            aspect = eff_users,
+            scope = private
+        }),
+        <<"effGroupList">> => gri:serialize(#gri{
+            type = op_space,
+            id = SpaceId,
+            aspect = eff_groups,
+            scope = private
+        }),
         <<"rootDir">> => RootDir
+    };
+translate_space(#gri{aspect = eff_users, scope = private}, Users) ->
+    #{
+        <<"list">> => lists:map(fun(UserId) ->
+            gri:serialize(#gri{
+                type = op_user,
+                id = UserId,
+                aspect = instance,
+                scope = shared
+            })
+        end, maps:keys(Users))
+    };
+translate_space(#gri{aspect = eff_groups, scope = private}, Groups) ->
+    #{
+        <<"list">> => lists:map(fun(GroupId) ->
+            gri:serialize(#gri{
+                type = op_group,
+                id = GroupId,
+                aspect = instance,
+                scope = shared
+            })
+        end, maps:keys(Groups))
     }.
 
 
 %% @private
--spec translate_user(gs_protocol:gri(), Data :: term()) ->
+-spec translate_user(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_user(GRI = #gri{aspect = instance, scope = private}, #od_user{
     full_name = FullName,
@@ -165,15 +228,23 @@ translate_user(GRI = #gri{aspect = instance, scope = private}, #od_user{
     #{
         <<"fullName">> => FullName,
         <<"username">> => gs_protocol:undefined_to_null(Username),
-        <<"spaceList">> => gs_protocol:gri_to_string(GRI#gri{
+        <<"spaceList">> => gri:serialize(GRI#gri{
             aspect = eff_spaces,
             scope = private
         })
     };
+translate_user(#gri{aspect = instance, scope = shared}, #{
+    <<"fullName">> := FullName,
+    <<"username">> := Username
+}) ->
+    #{
+        <<"fullName">> => FullName,
+        <<"username">> => gs_protocol:undefined_to_null(Username)
+    };
 translate_user(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
     #{
         <<"list">> => lists:map(fun(SpaceId) ->
-            gs_protocol:gri_to_string(#gri{
+            gri:serialize(#gri{
                 type = op_space,
                 id = SpaceId,
                 aspect = instance,
@@ -181,3 +252,10 @@ translate_user(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
             })
         end, Spaces)
     }.
+
+
+%% @private
+-spec translate_group(gri:gri(), Data :: term()) ->
+    gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
+translate_group(#gri{aspect = instance, scope = shared}, GroupInfo) ->
+    GroupInfo.

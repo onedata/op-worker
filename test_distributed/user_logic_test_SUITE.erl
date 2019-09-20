@@ -18,8 +18,7 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    authorize_test/1,
-    get_by_auth_test/1,
+    preauthorize_test/1,
     get_test/1,
     get_protected_data_test/1,
     get_shared_data_test/1,
@@ -30,8 +29,7 @@
 ]).
 
 all() -> ?ALL([
-    authorize_test,
-    get_by_auth_test,
+    preauthorize_test,
     get_test,
     get_protected_data_test,
     get_shared_data_test,
@@ -45,45 +43,22 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-authorize_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    InitialCallsNum = logic_tests_common:count_reqs(Config, rpc),
-
-    ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID])
-    ),
-
-    ?assertEqual(InitialCallsNum + 1, logic_tests_common:count_reqs(Config, rpc)),
-
-    % RPC calls are not cached
-    ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID])
-    ),
-
-    ?assertEqual(InitialCallsNum + 2, logic_tests_common:count_reqs(Config, rpc)),
-
-    ok.
-
-
-get_by_auth_test(Config) ->
+preauthorize_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     ?assertMatch(
-        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
+        {ok, ?USER(?USER_1)},
+        rpc:call(Node, user_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     % Getting user by auth is always done by delegating to onezone, so no cache
     % works here
     ?assertMatch(
-        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
+        {ok, ?USER(?USER_1)},
+        rpc:call(Node, user_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

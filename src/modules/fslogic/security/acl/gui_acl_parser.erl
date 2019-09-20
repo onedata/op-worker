@@ -18,9 +18,11 @@
 %% API
 -export([acl_to_json/1, json_to_acl/1]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc Convert acl to gui compatible json.
@@ -35,6 +37,7 @@ acl_to_json(Acl) ->
                 {<<"permissions">>, Mask}
             ] ++ subject(Flag, Identifier)
         end, Acl).
+
 
 %%--------------------------------------------------------------------
 %% @doc Convert gui compatible json to acl.
@@ -57,11 +60,14 @@ json_to_acl(AclJson) ->
         }
     end, AclJson).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Convert acl type mask to type name.
 %% @end
@@ -70,12 +76,11 @@ json_to_acl(AclJson) ->
 type_enum(?allow_mask) ->
     <<"allow">>;
 type_enum(?deny_mask) ->
-    <<"deny">>;
-type_enum(?audit_mask) ->
-    <<"audit">>.
+    <<"deny">>.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Convert acl type name to type mask.
 %% @end
@@ -84,11 +89,11 @@ type_enum(?audit_mask) ->
 type_mask(<<"allow">>) ->
     ?allow_mask;
 type_mask(<<"deny">>) ->
-    ?deny_mask;
-type_mask(<<"audit">>) ->
-    ?audit_mask.
+    ?deny_mask.
+
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Convert acl flag and identifier to subject fields informing who is affected by ACE.
 %% @end
@@ -125,7 +130,9 @@ subject(_, Id) ->
         {<<"group">>, null}
     ].
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Convert acl subject fields to flag and identifier
 %% @end

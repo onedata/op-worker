@@ -50,6 +50,10 @@ handle(Auth, RpcFun, Data) ->
     gs_protocol:rpc_result().
 handle_internal(Auth, <<"getDirChildren">>, Data) ->
     ls(Auth, Data);
+handle_internal(Auth, <<"initializeFileUpload">>, Data) ->
+    register_file_upload(Auth, Data);
+handle_internal(Auth, <<"finalizeFileUpload">>, Data) ->
+    deregister_file_upload(Auth, Data);
 handle_internal(Auth, <<"getFileDownloadUrl">>, Data) ->
     get_file_download_url(Auth, Data);
 handle_internal(Auth, <<"moveFile">>, Data) ->
@@ -94,7 +98,7 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
     case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
         {ok, Children, _, _} ->
             {ok, lists:map(fun({ChildGuid, _ChildName}) ->
-                gs_protocol:gri_to_string(#gri{
+                gri:serialize(#gri{
                     type = op_file,
                     id = ChildGuid,
                     aspect = instance,
@@ -104,6 +108,38 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
+
+
+%% @private
+-spec register_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
+    gs_protocol:rpc_result().
+register_file_upload(?USER(UserId, SessionId), Data) ->
+    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+        required => #{<<"guid">> => {binary, non_empty}}
+    }),
+    FileGuid = maps:get(<<"guid">>, SanitizedData),
+
+    case lfm:stat(SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
+            ok = file_upload_manager:register_upload(UserId, FileGuid),
+            {ok, #{}};
+        {ok, _} ->
+            ?ERROR_BAD_DATA(<<"guid">>);
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
+
+
+%% @private
+-spec deregister_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
+    gs_protocol:rpc_result().
+deregister_file_upload(?USER(UserId), Data) ->
+    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+        required => #{<<"guid">> => {binary, non_empty}}
+    }),
+    FileGuid = maps:get(<<"guid">>, SanitizedData),
+    file_upload_manager:deregister_upload(UserId, FileGuid),
+    {ok, #{}}.
 
 
 %% @private
@@ -148,7 +184,7 @@ move(?USER(_UserId, SessionId) = Auth, Data) ->
 
     case lfm:mv(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
         {ok, NewGuid} ->
-            {ok, #{<<"id">> => gs_protocol:gri_to_string(#gri{
+            {ok, #{<<"id">> => gri:serialize(#gri{
                 type = op_file,
                 id = NewGuid,
                 aspect = instance,
@@ -178,7 +214,7 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
 
     case lfm:cp(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
         {ok, NewGuid} ->
-            {ok, #{<<"id">> => gs_protocol:gri_to_string(#gri{
+            {ok, #{<<"id">> => gri:serialize(#gri{
                 type = op_file,
                 id = NewGuid,
                 aspect = instance,

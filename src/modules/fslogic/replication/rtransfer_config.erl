@@ -58,6 +58,7 @@ start_rtransfer() ->
 %% but then resumed.
 %% @end
 %%--------------------------------------------------------------------
+-spec restart_link() -> ok | {error, not_running}.
 restart_link() ->
     case whereis(rtransfer_link_port) of
         undefined -> {error, not_running};

@@ -143,7 +143,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
 
     {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
 

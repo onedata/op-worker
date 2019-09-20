@@ -17,20 +17,17 @@
 -include("proto/common/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
-% Testing of "authorize" RPC
--define(MOCK_CAVEAT_ID, <<"mockCaveat">>).
--define(MOCK_DISCH_MACAROON, <<"mockDischMac">>).
-
 -define(DUMMY_PROVIDER_ID, <<"dummyProviderId">>).
 
--define(MOCK_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
--define(MOCK_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
+-define(MOCK_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
+-define(MOCK_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
 
 % WebSocket path is used to control gs_client:start_link mock behaviour
 -define(PATH_CAUSING_CONN_ERROR, "/conn_err").
@@ -58,9 +55,9 @@
 -define(HARVESTER_2, <<"harvester2Id">>).
 
 % User authorizations
-% Macaroon auth is translated to {macaroon, Macaroon, DischMacaroons} before graph sync request.
--define(USER_INTERNAL_MACAROON_AUTH(__User), #macaroon_auth{macaroon = __User, disch_macaroons = [__User]}).
--define(USER_GS_MACAROON_AUTH(__User), {macaroon, __User, [__User]}).
+% Token auth is translated to {token, Token} before graph sync request.
+-define(USER_INTERNAL_TOKEN_AUTH(__User), #token_auth{token = __User}).
+-define(USER_GS_TOKEN_AUTH(__User), {token, __User}).
 
 
 -define(USER_PERMS_IN_GROUP_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?GROUP_VIEW, utf8)], ?USER_2 => [atom_to_binary(?GROUP_VIEW, utf8)]}).
@@ -337,7 +334,7 @@
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
+    <<"gri">> => gri:serialize(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
     <<"fullName">> => ?USER_FULL_NAME(__UserId),
     <<"username">> => ?USER_USERNAME(__UserId),
     % @TODO deprecated, included for backward compatibility
@@ -348,7 +345,7 @@
 -define(USER_PROTECTED_DATA_VALUE(__UserId), begin
     __SharedData = ?USER_SHARED_DATA_VALUE(__UserId),
     __SharedData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = protected}),
+        <<"gri">> => gri:serialize(#gri{type = od_user, id = __UserId, aspect = instance, scope = protected}),
         <<"emailList">> => ?USER_EMAIL_LIST(__UserId),
         <<"linkedAccounts">> => ?USER_LINKED_ACCOUNTS_VALUE(__UserId)
     }
@@ -356,7 +353,7 @@ end).
 -define(USER_PRIVATE_DATA_VALUE(__UserId), begin
     __ProtectedData = ?USER_PROTECTED_DATA_VALUE(__UserId),
     __ProtectedData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = private}),
+        <<"gri">> => gri:serialize(#gri{type = od_user, id = __UserId, aspect = instance, scope = private}),
         <<"defaultSpaceId">> => ?USER_DEFAULT_SPACE(__UserId),
         <<"spaceAliases">> => ?USER_SPACE_ALIASES(__UserId),
 
@@ -370,7 +367,7 @@ end).
 
 -define(GROUP_SHARED_DATA_VALUE(__GroupId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_group, id = __GroupId, aspect = instance, scope = shared}),
+    <<"gri">> => gri:serialize(#gri{type = od_group, id = __GroupId, aspect = instance, scope = shared}),
     <<"name">> => ?GROUP_NAME(__GroupId),
     <<"type">> => ?GROUP_TYPE_JSON(__GroupId)
 }).
@@ -378,13 +375,13 @@ end).
 
 -define(SPACE_PROTECTED_DATA_VALUE(__SpaceId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
+    <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
     <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = private}),
+        <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = private}),
         <<"users">> => ?SPACE_DIRECT_USERS_VALUE(__SpaceId),
         <<"effectiveUsers">> => ?SPACE_EFF_USERS_VALUE(__SpaceId),
 
@@ -400,7 +397,7 @@ end).
 
 -define(SHARE_PUBLIC_DATA_VALUE(__ShareId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
+    <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
     <<"name">> => ?SHARE_NAME(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
     <<"handleId">> => ?SHARE_HANDLE(__ShareId),
@@ -409,7 +406,7 @@ end).
 -define(SHARE_PRIVATE_DATA_VALUE(__ShareId), begin
     __PublicData = ?SHARE_PUBLIC_DATA_VALUE(__ShareId),
     __PublicData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_share, id = __ShareId, aspect = instance, scope = private}),
+        <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = private}),
         <<"spaceId">> => ?SHARE_SPACE(__ShareId)
     }
 end).
@@ -417,7 +414,7 @@ end).
 
 -define(PROVIDER_PROTECTED_DATA_VALUE(__ProviderId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
+    <<"gri">> => gri:serialize(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
     <<"name">> => ?PROVIDER_NAME(__ProviderId),
     <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
     <<"online">> => ?PROVIDER_ONLINE(__ProviderId),
@@ -430,7 +427,7 @@ end).
         <<"adminEmail">> => ?PROVIDER_ADMIN_EMAIL(__ProviderId),
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
+        <<"gri">> => gri:serialize(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
         <<"spaces">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> #{};
             _ -> ?PROVIDER_SPACES_VALUE(__ProviderId)
@@ -449,7 +446,7 @@ end).
 
 -define(HANDLE_SERVICE_PRIVATE_DATA_VALUE(__HServiceId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = private}),
+    <<"gri">> => gri:serialize(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = private}),
     <<"name">> => ?HANDLE_SERVICE_NAME(__HServiceId),
     <<"effectiveUsers">> => ?HANDLE_SERVICE_EFF_USERS_VALUE(__HServiceId),
     <<"effectiveGroups">> => ?HANDLE_SERVICE_EFF_GROUPS_VALUE(__HServiceId)
@@ -458,7 +455,7 @@ end).
 
 -define(HANDLE_PUBLIC_DATA_VALUE(__HandleId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
+    <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
     <<"metadata">> => ?HANDLE_METADATA(__HandleId),
     <<"timestamp">> => ?HANDLE_TIMESTAMP_VALUE(__HandleId)
@@ -466,7 +463,7 @@ end).
 -define(HANDLE_PRIVATE_DATA_VALUE(__HandleId), begin
     __PublicData = ?HANDLE_PUBLIC_DATA_VALUE(__HandleId),
     __PublicData#{
-        <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = private}),
+        <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = private}),
         <<"resourceType">> => ?HANDLE_RESOURCE_TYPE(__HandleId),
         <<"resourceId">> => ?HANDLE_RESOURCE_ID(__HandleId),
         <<"handleServiceId">> => ?HANDLE_H_SERVICE(__HandleId),
@@ -477,7 +474,7 @@ end).
 
 -define(HARVESTER_PRIVATE_DATA_VALUE(__HarvesterId), #{
     <<"revision">> => 1,
-    <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = private}),
+    <<"gri">> => gri:serialize(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = private}),
     <<"indices">> => ?HARVESTER_INDICES(__HarvesterId),
     <<"spaces">> => ?HARVESTER_SPACES(__HarvesterId)
 }).

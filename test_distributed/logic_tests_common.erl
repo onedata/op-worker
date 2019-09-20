@@ -63,8 +63,6 @@ mock_gs_client(Config) ->
     Nodes = ?NODES(Config),
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
-    ok = test_utils:mock_new(Nodes, macaroon, [passthrough]),
-    ok = test_utils:mock_new(Nodes, macaroons, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, async_request, fun mock_async_request/2),
@@ -77,7 +75,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, oneprovider, get_id_or_undefined, GetProviderId),
 
     initializer:mock_provider_id(
-        Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_AUTH_MACAROON(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_MACAROON(?PROVIDER_1)
+        Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
@@ -92,24 +90,13 @@ mock_gs_client(Config) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
     end),
 
-    % Mock macaroons handling
-    ok = test_utils:mock_expect(Nodes, macaroons, serialize, fun(M) ->
-        {ok, M}
-    end),
-    ok = test_utils:mock_expect(Nodes, macaroons, deserialize, fun(M) ->
-        {ok, M}
-    end),
-    ok = test_utils:mock_expect(Nodes, macaroon, prepare_for_request, fun(_, DM) ->
-        DM
-    end),
-
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
     rpc:call(hd(Nodes), provider_logic, get, []).
 
 
 unmock_gs_client(Config) ->
     Nodes = ?NODES(Config),
-    test_utils:mock_unload(Nodes, [gs_client, provider_logic, macaroon, macaroons, oneprovider]),
+    test_utils:mock_unload(Nodes, [gs_client, provider_logic, oneprovider]),
     initializer:unmock_provider_ids(Nodes),
     ok.
 
@@ -135,7 +122,7 @@ wait_for_mocked_connection(Config) ->
 
 create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
-    Auth = ?USER_INTERNAL_MACAROON_AUTH(UserId),
+    Auth = ?USER_INTERNAL_TOKEN_AUTH(UserId),
     {ok, #document{value = Identity}} = rpc:call(Node, user_identity, get_or_fetch, [Auth]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [Identity, Auth]),
     % Make sure private user data is fetched (if user identity was cached, it might
@@ -271,30 +258,35 @@ mock_async_request(ClientRef, GsRequest = #gs_req{id = ReqId}) ->
     end.
 
 
-mock_request(#gs_req{request = RPCReq = #gs_req_rpc{}}) ->
-    case RPCReq of
-        #gs_req_rpc{function = <<"authorizeUser">>, args = #{<<"identifier">> := ?MOCK_CAVEAT_ID}} ->
-            {ok, #gs_resp_rpc{result = ?MOCK_DISCH_MACAROON}};
-        _ ->
-            ?ERROR_RPC_UNDEFINED
-    end;
-mock_request(#gs_req{auth_override = Authorization, request = GraphReq = #gs_req_graph{}}) ->
-    mock_graph_request(GraphReq, Authorization);
+mock_request(#gs_req{request = #gs_req_rpc{}}) ->
+    ?ERROR_RPC_UNDEFINED;
+mock_request(#gs_req{auth_override = {AuthOverride, _PeerIp}, request = GraphReq = #gs_req_graph{}}) ->
+    mock_graph_request(GraphReq, AuthOverride);
+mock_request(#gs_req{auth_override = undefined, request = GraphReq = #gs_req_graph{}}) ->
+    mock_graph_request(GraphReq, undefined);
 mock_request(#gs_req{request = #gs_req_unsub{}}) ->
     {ok, #gs_resp_unsub{}}.
 
 
-mock_graph_request(GsGraph = #gs_req_graph{operation = create, data = Data}, Authorization) ->
-    mock_graph_create(GsGraph#gs_req_graph.gri, Authorization, Data);
-mock_graph_request(GsGraph = #gs_req_graph{operation = get, auth_hint = AuthHint}, Authorization) ->
-    mock_graph_get(GsGraph#gs_req_graph.gri, Authorization, AuthHint);
-mock_graph_request(GsGraph = #gs_req_graph{operation = update, data = Data}, Authorization) ->
-    mock_graph_update(GsGraph#gs_req_graph.gri, Authorization, Data);
-mock_graph_request(GsGraph = #gs_req_graph{operation = delete}, Authorization) ->
-    mock_graph_delete(GsGraph#gs_req_graph.gri, Authorization).
+mock_graph_request(GsGraph = #gs_req_graph{operation = create, data = Data}, AuthOverride) ->
+    mock_graph_create(GsGraph#gs_req_graph.gri, AuthOverride, Data);
+mock_graph_request(GsGraph = #gs_req_graph{operation = get, auth_hint = AuthHint}, AuthOverride) ->
+    mock_graph_get(GsGraph#gs_req_graph.gri, AuthOverride, AuthHint);
+mock_graph_request(GsGraph = #gs_req_graph{operation = update, data = Data}, AuthOverride) ->
+    mock_graph_update(GsGraph#gs_req_graph.gri, AuthOverride, Data);
+mock_graph_request(GsGraph = #gs_req_graph{operation = delete}, AuthOverride) ->
+    mock_graph_delete(GsGraph#gs_req_graph.gri, AuthOverride).
 
 
-mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}, ?USER_GS_MACAROON_AUTH(_UserId), _) ->
+mock_graph_create(#gri{type = od_user, id = undefined, aspect = preauthorize, scope = public}, _, Data) ->
+    #{<<"token">> := Token} = Data,
+    Authorization = {token, Token},
+    ?USER_GS_TOKEN_AUTH(UserId) = Authorization,
+    {ok, #gs_resp_graph{data_format = value, data = #{
+        <<"subject">> => aai:subject_to_json(?SUB(user, UserId)), <<"caveats">> => []
+    }}};
+
+mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}, ?USER_GS_TOKEN_AUTH(_UserId), _) ->
     case lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV]) andalso IdP == ?MOCK_IDP of
         true ->
             {ok, #gs_resp_graph{data_format = value, data = #{
@@ -304,7 +296,7 @@ mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, 
             ?ERROR_NOT_FOUND
     end;
 
-mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
+mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, ?USER_GS_TOKEN_AUTH(_UserId), Data) ->
     #{
         <<"shareId">> := ShareId,
         <<"name">> := _Name,
@@ -318,7 +310,7 @@ mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, ?USE
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>)
     end;
 
-mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
+mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?USER_GS_TOKEN_AUTH(_UserId), Data) ->
     #{
         <<"handleServiceId">> := HandleServiceId,
         <<"resourceType">> := _ResourceType,
@@ -334,7 +326,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, ?US
 mock_graph_create(#gri{type = od_space, id = _, aspect = harvest_metadata}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}}.
 
-mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId), Data) ->
+mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, ?USER_GS_TOKEN_AUTH(_UserId), Data) ->
     case Data of
         #{<<"name">> := Name} when is_binary(Name) ->
             {ok, #gs_resp_graph{}};
@@ -354,7 +346,7 @@ mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, und
     end.
 
 
-mock_graph_delete(#gri{type = od_share, id = ShareId, aspect = instance}, ?USER_GS_MACAROON_AUTH(_UserId)) ->
+mock_graph_delete(#gri{type = od_share, id = ShareId, aspect = instance}, ?USER_GS_TOKEN_AUTH(_UserId)) ->
     case lists:member(ShareId, [?SHARE_1, ?SHARE_2]) of
         true ->
             {ok, #gs_resp_graph{}};
@@ -363,25 +355,25 @@ mock_graph_delete(#gri{type = od_share, id = ShareId, aspect = instance}, ?USER_
     end.
 
 
-mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, Authorization, AuthHint) ->
+mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, AuthOverride, AuthHint) ->
     UserId = case Id of
-        ?SELF -> case Authorization of
-            ?USER_GS_MACAROON_AUTH(ClientUserId) ->
+        ?SELF -> case AuthOverride of
+            ?USER_GS_TOKEN_AUTH(ClientUserId) ->
                 ClientUserId;
             _ ->
                 ?ERROR_NOT_FOUND
         end;
         _ -> Id
     end,
-    Authorized = case {Authorization, GRI#gri.scope, AuthHint} of
-        {?USER_GS_MACAROON_AUTH(UserId), _, _} ->
+    Authorized = case {AuthOverride, GRI#gri.scope, AuthHint} of
+        {?USER_GS_TOKEN_AUTH(UserId), _, _} ->
             true;
-        {?USER_GS_MACAROON_AUTH(ClientUser), shared, ?THROUGH_SPACE(_ThroughSpId)} ->
+        {?USER_GS_TOKEN_AUTH(ClientUser), shared, ?THROUGH_SPACE(_ThroughSpId)} ->
             lists:member(atom_to_binary(?SPACE_VIEW, utf8), maps:get(ClientUser, ?SPACE_EFF_USERS_VALUE(_ThroughSpId), [])) andalso
                 maps:is_key(UserId, ?SPACE_EFF_USERS_VALUE(_ThroughSpId));
-        {?USER_GS_MACAROON_AUTH(_OtherUser), _, _} ->
+        {?USER_GS_TOKEN_AUTH(_OtherUser), _, _} ->
             false;
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         {undefined, private, _} ->
             false;
         {undefined, _, _} ->
@@ -411,16 +403,16 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, Authoriza
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Authorization, AuthHint) ->
-    Authorized = case {Authorization, GRI#gri.scope, AuthHint} of
-        {?USER_GS_MACAROON_AUTH(UserId), shared, ?THROUGH_SPACE(_ThroughSpId)} ->
+mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, AuthOverride, AuthHint) ->
+    Authorized = case {AuthOverride, GRI#gri.scope, AuthHint} of
+        {?USER_GS_TOKEN_AUTH(UserId), shared, ?THROUGH_SPACE(_ThroughSpId)} ->
             lists:member(atom_to_binary(?SPACE_VIEW, utf8), maps:get(UserId, ?SPACE_EFF_USERS_VALUE(_ThroughSpId), [])) andalso
                 maps:is_key(GroupId, ?SPACE_EFF_GROUPS_VALUE(_ThroughSpId));
-        {?USER_GS_MACAROON_AUTH(UserId), shared, _} ->
+        {?USER_GS_TOKEN_AUTH(UserId), shared, _} ->
             lists:member(GroupId, ?USER_EFF_GROUPS(UserId));
-        {?USER_GS_MACAROON_AUTH(_UserId), _, _} ->
+        {?USER_GS_TOKEN_AUTH(_UserId), _, _} ->
             false;
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         {undefined, shared, _} ->
             true
     end,
@@ -431,13 +423,13 @@ mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Aut
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Authorization, _) ->
-    Authorized = case {Authorization, GRI#gri.scope} of
-        {?USER_GS_MACAROON_AUTH(UserId), private} ->
+mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, AuthOverride, _) ->
+    Authorized = case {AuthOverride, GRI#gri.scope} of
+        {?USER_GS_TOKEN_AUTH(UserId), private} ->
             lists:member(atom_to_binary(?SPACE_VIEW, utf8), maps:get(UserId, ?SPACE_EFF_USERS_VALUE(SpaceId), []));
-        {?USER_GS_MACAROON_AUTH(UserId), protected} ->
+        {?USER_GS_TOKEN_AUTH(UserId), protected} ->
             maps:is_key(UserId, ?SPACE_EFF_USERS_VALUE(SpaceId));
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         {undefined, _} ->
             true
     end,
@@ -452,11 +444,11 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, Authorization, _) ->
-    Authorized = case {Authorization, GRI#gri.scope} of
-        {?USER_GS_MACAROON_AUTH(UserId), private} ->
+mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, AuthOverride, _) ->
+    Authorized = case {AuthOverride, GRI#gri.scope} of
+        {?USER_GS_TOKEN_AUTH(UserId), private} ->
             maps:is_key(UserId, ?SPACE_EFF_USERS_VALUE(?SHARE_SPACE(ShareId)));
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         {undefined, private} ->
             % Provider is allowed to ask for shares of supported spaces
             true;
@@ -474,13 +466,13 @@ mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, Aut
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance}, Authorization, _) ->
-    Authorized = case {Authorization, GRI#gri.scope} of
-        {?USER_GS_MACAROON_AUTH(_UserId), private} ->
+mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance}, AuthOverride, _) ->
+    Authorized = case {AuthOverride, GRI#gri.scope} of
+        {?USER_GS_TOKEN_AUTH(_UserId), private} ->
             false;
-        {?USER_GS_MACAROON_AUTH(UserId), protected} ->
+        {?USER_GS_TOKEN_AUTH(UserId), protected} ->
             lists:member(UserId, ?PROVIDER_EFF_USERS(ProviderId));
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         {undefined, _} ->
             true
     end,
@@ -495,11 +487,11 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance, scope = private}, Authorization, _) ->
-    Authorized = case Authorization of
-        ?USER_GS_MACAROON_AUTH(UserId) ->
+mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance, scope = private}, AuthOverride, _) ->
+    Authorized = case AuthOverride of
+        ?USER_GS_TOKEN_AUTH(UserId) ->
             lists:member(atom_to_binary(?HANDLE_SERVICE_VIEW, utf8), maps:get(UserId, ?HANDLE_SERVICE_EFF_USERS_VALUE(HServiceId), []));
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         undefined ->
             false
     end,
@@ -510,11 +502,11 @@ mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, Authorization, _) ->
-    Authorized = case {Authorization, GRI#gri.scope} of
-        {?USER_GS_MACAROON_AUTH(UserId), private} ->
+mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, AuthOverride, _) ->
+    Authorized = case {AuthOverride, GRI#gri.scope} of
+        {?USER_GS_TOKEN_AUTH(UserId), private} ->
             lists:member(atom_to_binary(?HANDLE_VIEW, utf8), maps:get(UserId, ?HANDLE_EFF_USERS_VALUE(HandleId), []));
-        % undefined Authorization means asking with provider's auth
+        % undefined AuthOverride means asking with provider's auth
         {undefined, private} ->
             false;
         {_, public} ->
@@ -531,11 +523,11 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance}, Authorization, _) ->
-    Authorized = case {Authorization, GRI#gri.scope} of
+mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance}, AuthOverride, _) ->
+    Authorized = case {AuthOverride, GRI#gri.scope} of
         {undefined, private} ->
             true;
-        {?USER_GS_MACAROON_AUTH(_), _} ->
+        {?USER_GS_TOKEN_AUTH(_), _} ->
             false
     end,
     case Authorized of

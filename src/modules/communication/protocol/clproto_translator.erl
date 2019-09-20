@@ -285,12 +285,10 @@ translate_from_protobuf(#'ProviderHandshakeRequest'{
         nonce = Nonce
     };
 translate_from_protobuf(#'Macaroon'{
-    macaroon = Macaroon,
-    disch_macaroons = DischargeMacaroons
+    macaroon = Macaroon
 }) ->
-    #macaroon_auth{
-        macaroon = Macaroon,
-        disch_macaroons = DischargeMacaroons
+    #token_auth{
+        token = Macaroon
     };
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
@@ -928,7 +926,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode(Value))};
+    #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{
@@ -1323,13 +1321,11 @@ translate_to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-translate_to_protobuf(#macaroon_auth{
-    macaroon = Macaroon,
-    disch_macaroons = DMacaroons
+translate_to_protobuf(#token_auth{
+    token = Macaroon
 }) ->
     #'Macaroon'{
-        macaroon = Macaroon,
-        disch_macaroons = DMacaroons
+        macaroon = Macaroon
     };
 
 
@@ -1941,7 +1937,7 @@ translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
     {acl, #'Acl'{
-        value = json_utils:encode(acl_logic:from_acl_to_json_format(Value))}
+        value = json_utils:encode(acl:to_json(Value, cdmi))}
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};

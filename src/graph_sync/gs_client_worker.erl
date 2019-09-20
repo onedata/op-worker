@@ -29,7 +29,7 @@
 %% @formatter:off
 -type client() :: session:id() | session:auth().
 -type create_result() :: {ok, Data :: term()} |
-                         {ok, {gs_protocol:gri(), doc()}} |
+                         {ok, {gri:gri(), doc()}} |
                          gs_protocol:error().
 -type get_result() :: {ok, doc()} | gs_protocol:error().
 -type update_result() :: ok | gs_protocol:error().
@@ -139,7 +139,7 @@ request(Client, Req, Timeout) ->
 %% Invalidates local cache of given entity instance, represented by GRI.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_cache(gs_protocol:gri()) -> ok.
+-spec invalidate_cache(gri:gri()) -> ok.
 invalidate_cache(#gri{type = Type, id = Id, aspect = instance}) ->
     invalidate_cache(Type, Id).
 
@@ -314,7 +314,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec process_push_message(gs_protocol:push()) -> any().
 process_push_message(#gs_push_nosub{gri = GRI}) ->
-    ?debug("Subscription cancelled: ~s", [gs_protocol:gri_to_string(GRI)]),
+    ?debug("Subscription cancelled: ~s", [gri:serialize(GRI)]),
     invalidate_cache(GRI);
 
 process_push_message(#gs_push_error{error = Error}) ->
@@ -332,7 +332,7 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     end,
 
     invalidate_cache(GRI),
-    ?debug("Entity deleted in OZ: ~s", [gs_protocol:gri_to_string(GRI)]);
+    ?debug("Entity deleted in OZ: ~s", [gri:serialize(GRI)]);
 
 process_push_message(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
     Revision = maps:get(<<"revision">>, Resource),
@@ -353,10 +353,10 @@ start_gs_connection() ->
         Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
-        {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
+        {ok, ProviderAccessToken} = provider_auth:get_access_token(),
 
         gs_client:start_link(
-            Address, {macaroon, ProviderMacaroon, []}, [?GS_PROTOCOL_VERSION],
+            Address, {token, ProviderAccessToken}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts
         )
     catch
@@ -390,7 +390,7 @@ do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
                 {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
                     GRIStr = maps:get(<<"gri">>, Resource),
                     Revision = maps:get(<<"revision">>, Resource),
-                    NewGRI = gs_protocol:string_to_gri(GRIStr),
+                    NewGRI = gri:deserialize(GRIStr),
                     Doc = gs_client_translator:translate(NewGRI, Resource),
                     case coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
                         {ok, NewestDoc} -> {ok, NewestDoc};
@@ -410,7 +410,7 @@ do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
                 #gs_resp_graph{data_format = value, data = Data} ->
                     {ok, Data};
                 #gs_resp_graph{data_format = resource, data = #{<<"gri">> := GRIStr} = Resource} ->
-                    NewGRI = gs_protocol:string_to_gri(GRIStr),
+                    NewGRI = gri:deserialize(GRIStr),
                     Revision = maps:get(<<"revision">>, Resource),
                     Doc = gs_client_translator:translate(NewGRI, Resource),
                     case coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
@@ -519,7 +519,7 @@ maybe_serve_from_cache(_, _) ->
     false.
 
 
--spec coalesce_cache(connection_ref(), gs_protocol:gri(), doc(), gs_protocol:revision()) ->
+-spec coalesce_cache(connection_ref(), gri:gri(), doc(), gs_protocol:revision()) ->
     {ok, doc()} | {error, stale_record}.
 coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = Record}, Rev) ->
     #gri{type = Type, id = Id, scope = Scope} = GRI,
@@ -530,7 +530,7 @@ coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = R
             _ when Rev < CachedRev ->
                 % In case the fetched revision is lower, return 'stale_record'
                 % error, which will cause the request to be repeated
-                ?debug("Stale record ~s: received rev. ~B, but rev. ~B is already cached", [gs_protocol:gri_to_string(GRI), Rev, CachedRev]),
+                ?debug("Stale record ~s: received rev. ~B, but rev. ~B is already cached", [gri:serialize(GRI), Rev, CachedRev]),
                 {error, stale_record};
 
             greater when Rev >= CachedRev ->
@@ -542,7 +542,7 @@ coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = R
                         gri = GRI#gri{scope = CachedScope}
                     }, ?GS_REQUEST_TIMEOUT)
                 end),
-                ?debug("Cached ~s (rev. ~B)", [gs_protocol:gri_to_string(GRI), Rev]),
+                ?debug("Cached ~s (rev. ~B)", [gri:serialize(GRI), Rev]),
                 {ok, put_cache_state(Record, #{
                     scope => Scope, connection_ref => ConnRef, revision => Rev
                 })};
@@ -550,7 +550,7 @@ coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = R
             _ when Rev > CachedRev ->
                 % A doc arrived that has a greater revision, overwrite the
                 % cache, no matter the scopes
-                ?debug("Cached ~s (rev. ~B)", [gs_protocol:gri_to_string(GRI), Rev]),
+                ?debug("Cached ~s (rev. ~B)", [gri:serialize(GRI), Rev]),
                 {ok, put_cache_state(Record, #{
                     scope => Scope, connection_ref => ConnRef, revision => Rev
                 })};
@@ -569,7 +569,7 @@ coalesce_cache(_ConnRef, _GRI, Doc, _Revision) ->
     {ok, Doc}.
 
 
--spec get_from_cache(gs_protocol:gri()) -> {true, doc()} | false.
+-spec get_from_cache(gri:gri()) -> {true, doc()} | false.
 get_from_cache(#gri{type = Type, id = Id}) ->
     case Type:get_from_cache(Id) of
         {ok, Doc} -> {true, Doc};
@@ -587,33 +587,14 @@ resolve_authorization(?ROOT_SESS_ID) ->
     undefined;
 
 resolve_authorization(?GUEST_SESS_ID) ->
-    nobody;
+    {nobody, undefined};
 
 resolve_authorization(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
     resolve_authorization(Auth);
 
-resolve_authorization(#macaroon_auth{} = Auth) ->
-    #macaroon_auth{
-        macaroon = MacaroonBin, disch_macaroons = DischargeMacaroonsBin
-    } = Auth,
-    Macaroon = case macaroons:deserialize(MacaroonBin) of
-        {ok, M} ->
-            M;
-        {error, _} = Error ->
-            ?debug("Declining auth macaroon as it cannot be deserialized (~w): ~p", [
-                Error, Auth
-            ]),
-            throw(?ERROR_UNAUTHORIZED)
-    end,
-    BoundMacaroons = lists:map(
-        fun(DischargeMacaroonBin) ->
-            {ok, DM} = macaroons:deserialize(DischargeMacaroonBin),
-            BDM = macaroon:prepare_for_request(Macaroon, DM),
-            {ok, SerializedBDM} = macaroons:serialize(BDM),
-            SerializedBDM
-        end, DischargeMacaroonsBin),
-    {macaroon, MacaroonBin, BoundMacaroons}.
+resolve_authorization(#token_auth{token = Token, peer_ip = PeerIp}) ->
+    {{token, Token}, PeerIp}.
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().
@@ -672,7 +653,7 @@ cmp_scope(private, private) -> same;
 cmp_scope(private, _) -> greater.
 
 
--spec is_authorized(client(), gs_protocol:auth_hint(), gs_protocol:gri(), doc()) ->
+-spec is_authorized(client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = private}, _) ->
     false;
@@ -730,7 +711,7 @@ is_authorized(_, _, _, _) ->
     unknown.
 
 
--spec is_user_authorized(od_user:id(), client(), gs_protocol:auth_hint(), gs_protocol:gri(), doc()) ->
+-spec is_user_authorized(od_user:id(), client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
 is_user_authorized(UserId, _, _, #gri{type = od_user, id = UserId, scope = private}, _) ->
     true;
