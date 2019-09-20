@@ -34,7 +34,7 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 8
+                        "worker_num": 2
                     }
                 }
             },
@@ -54,90 +54,6 @@
                     }
                 },
                 "worker2": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker3": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker4": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker5": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker6": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker7": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker8": {
                     "vm.args": {
                         "setcookie": "test_cookie"
                     },

@@ -87,7 +87,7 @@ handle(start_strategies) ->
     end;
 handle(check_strategies) ->
     ?debug("Check strategies"),
-%%    check_strategies(),
+    check_strategies(),
     schedule_check_strategy();
 handle(Request = {run_job, _, Job = #space_strategy_job{}}) ->
     ?debug("Run job: ~p", [Request]),
