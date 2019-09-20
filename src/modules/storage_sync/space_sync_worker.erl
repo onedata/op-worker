@@ -69,7 +69,7 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
     Request :: ping | healthcheck | term(),
-    Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
+    Result :: cluster_status:status() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
     Reason :: term().

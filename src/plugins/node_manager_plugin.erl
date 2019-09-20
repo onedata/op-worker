@@ -21,7 +21,8 @@
 %% node_manager_plugin_behaviour callbacks
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0, modules_with_args/0]).
--export([before_init/1, on_cluster_initialized/1]).
+-export([before_init/1]).
+-export([upgrade_cluster/1]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 
@@ -136,6 +137,7 @@ renamed_models() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:before_init/1}.
+%% This callback is executed on all cluster nodes.
 %% @end
 %%--------------------------------------------------------------------
 -spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
@@ -152,13 +154,13 @@ before_init([]) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% This callback is executed when the cluster has been initialized, i.e. all
-%% nodes have connected to cluster manager.
+%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
+%% This callback is executed only on one cluster node.
 %% @end
 %%--------------------------------------------------------------------
--spec on_cluster_initialized(Nodes :: [node()]) -> Result :: ok | {error, Reason :: term()}.
-on_cluster_initialized(_Nodes) ->
-    ok.
+-spec upgrade_cluster(integer()) -> no_return().
+upgrade_cluster(_CurrentGeneration) ->
+    error(not_supported).
 
 %%--------------------------------------------------------------------
 %% @doc

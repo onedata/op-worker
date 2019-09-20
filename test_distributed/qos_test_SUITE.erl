@@ -13,5 +13,11 @@
 
 -export([all/0]).
 
+-export([test/1]).
 
-all() -> [].
+all() -> [
+    test
+].
+
+test(_) ->
+    ok.

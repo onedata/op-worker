@@ -17,12 +17,12 @@
 
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, create/5,
+-export([init/1, teardown/1, stat/3, get_child_attr/4, truncate/4, create/4, create/5,
     create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
-    read/4, silent_read/4, write/4, mkdir/3, mkdir/4, mkdir/5, mv/4, ls/5, ls/6, ls/7,
+    read/4, silent_read/4, write/4, get_file_path/3, get_parent/3, mkdir/3, mkdir/4, mkdir/5, mv/4, mv/5, ls/5, ls/6, ls/7,
     read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
-    get_acl/3, set_acl/4, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
+    get_acl/3, set_acl/4, remove_acl/3, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
@@ -85,6 +85,11 @@ teardown(Config) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
+
+-spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
+    {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
+get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
+    ?EXEC(Worker, lfm:get_child_attr(SessId, ParentGuid, ChildName)).
 
 -spec truncate(node(), session:id(), lfm:file_key() | file_meta:uuid(), non_neg_integer()) ->
     term().
@@ -235,6 +240,16 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
             end
         end).
 
+-spec get_file_path(node(), session:id(), file_id:file_guid()) ->
+    {ok, binary()} | lfm:error_reply().
+get_file_path(Worker, SessId, Guid) ->
+    ?EXEC(Worker, lfm:get_file_path(SessId, Guid)).
+
+-spec get_parent(node(), session:id(), fslogic_worker:file_guid_or_path()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+get_parent(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_parent(SessId, FileKey)).
+
 -spec mkdir(node(), session:id(), binary()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(Worker, SessId, Path) ->
@@ -284,6 +299,11 @@ read_dir_plus(Worker, SessId, FileKey, Offset, Limit, Token) ->
 mv(Worker, SessId, FileKeyFrom, PathTo) ->
     ?EXEC(Worker, lfm:mv(SessId, FileKeyFrom, PathTo)).
 
+-spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
+    ?EXEC(Worker, lfm:mv(SessId, FileKey, TargetParentKey, TargetName)).
+
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
     ok | lfm:error_reply().
 set_perms(Worker, SessId, FileKey, NewPerms) ->
@@ -327,14 +347,19 @@ list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited, ShowInternal)).
 
 -spec get_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | lfm:error_reply().
+    {ok, acl:acl()} | lfm:error_reply().
 get_acl(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_acl(SessId, uuid_to_guid(Worker, FileKey))).
 
--spec set_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), [lfm_perms:access_control_entity()]) ->
+-spec set_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), acl:acl()) ->
     ok | lfm:error_reply().
 set_acl(Worker, SessId, FileKey, EntityList) ->
     ?EXEC(Worker, lfm:set_acl(SessId, uuid_to_guid(Worker, FileKey), EntityList)).
+
+-spec remove_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+    ok | lfm:error_reply().
+remove_acl(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:remove_acl(SessId, uuid_to_guid(Worker, FileKey))).
 
 -spec get_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, xattr:transfer_encoding()} | lfm:error_reply().
@@ -409,7 +434,7 @@ remove_metadata(Worker, SessId, FileKey, Type) ->
     ?EXEC(Worker, lfm:remove_metadata(SessId, FileKey, Type)).
 
 -spec check_perms(node(), session:id(), lfm:file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | {error, term()}.
+    ok | {error, term()}.
 check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
 

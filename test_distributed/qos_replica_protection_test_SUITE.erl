@@ -8,7 +8,7 @@
 %%% @doc
 %%% @end
 %%%--------------------------------------------------------------------
--module(multi_provider_qos_test_SUITE).
+-module(qos_replica_protection_test_SUITE).
 -author("Michal Cwiertnia").
 
 -export([all/0]).
