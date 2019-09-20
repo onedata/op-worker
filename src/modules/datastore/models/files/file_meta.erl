@@ -113,16 +113,26 @@ save(Doc, GeneratedKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new #file_meta and links it as a new child of given as first argument
-%% existing #file_meta.
+%% @equiv create(Parent, FileDoc, all)
 %% @end
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc()) ->
     {ok, uuid()} | {error, term()}.
+create(Parent, FileDoc) ->
+    create(Parent, FileDoc, all).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #file_meta and links it as a new child of given as first argument
+%% existing #file_meta.
+%% @end
+%%--------------------------------------------------------------------
+-spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
+    {ok, uuid()} | {error, term()}.
 create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
     name = FileName,
     is_scope = IsScope
-}}) ->
+}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
@@ -146,53 +156,50 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 
         LocalTreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => ParentDoc#document.scope},
-
-        FileExists = case datastore_model:get_links(Ctx, ParentUuid, all, FileName) of
-            {ok, Links} ->
-                lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
-                    Deleted = case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
-                        {ok, #document{deleted = true}} ->
-                            true;
-                        {ok, #document{value = #file_meta{deleted = true}}} ->
-                            true;
-                        _ ->
-                            false
-                    end,
-                    case {Deleted, TreeId} of
-                        {true, LocalTreeId} ->
-                            datastore_model:delete_links(
-                                Ctx, ParentUuid,
-                                LocalTreeId, FileName
-                            ),
-                            false;
-                        _ ->
-                            not Deleted
-                    end
-                end, Links);
-            {error, not_found} ->
-                false;
-            {error, _} = Err ->
-                Err
-        end,
-
-        case FileExists of
-            false ->
-                Link = {FileName, FileUuid},
-                case datastore_model:add_links(Ctx, ParentUuid, LocalTreeId, Link) of
-                    {ok, #link{}} ->
-                        case file_meta:save(FileDoc3) of
-                            {ok, FileUuid} -> {ok, FileUuid};
-                            Error -> Error
-                        end;
-                    {error, already_exists} ->
-                        create({uuid, ParentUuid}, FileDoc);
-                    {error, Reason} ->
-                        {error, Reason}
+        Link = {FileName, FileUuid},
+        case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
+            {ok, #link{}} ->
+                case file_meta:save(FileDoc3) of
+                    {ok, FileUuid} -> {ok, FileUuid};
+                    Error -> Error
                 end;
-            true ->
-                {error, already_exists};
-            Error ->
-                Error
+            {error, already_exists} = Eexists ->
+                case datastore_model:get_links(Ctx, ParentUuid, CheckTrees, FileName) of
+                    {ok, Links} ->
+                        FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
+                            Deleted = case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
+                                {ok, #document{deleted = true}} ->
+                                    true;
+                                {ok, #document{value = #file_meta{deleted = true}}} ->
+                                    true;
+                                _ ->
+                                    false
+                            end,
+                            case {Deleted, TreeId} of
+                                {true, LocalTreeId} ->
+                                    datastore_model:delete_links(
+                                        Ctx, ParentUuid,
+                                        LocalTreeId, FileName
+                                    ),
+                                    false;
+                                _ ->
+                                    not Deleted
+                            end
+                        end, Links),
+
+                        case FileExists of
+                            false ->
+                                create({uuid, ParentUuid}, FileDoc, []);
+                            _ ->
+                                Eexists
+                        end;
+                    {error, not_found} ->
+                        create({uuid, ParentUuid}, FileDoc, CheckTrees);
+                    _ ->
+                        Eexists
+                end;
+            {error, Reason} ->
+                {error, Reason}
         end
     end).
 
