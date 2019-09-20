@@ -113,20 +113,6 @@ save(Doc) ->
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
     Ctx = ?CTX,
     ?extract_key(datastore_model:save(Ctx#{memory_copies => all}, Doc));
-%%save(#document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc, GeneratedKey) ->
-%%    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc));
-save(#document{value = #file_meta{parent_uuid = ParentUuid}} = Doc, true) ->
-    LabelSize = consistent_hashing:get_label_gen_size(),
-    LabelPart = binary:part(ParentUuid, 0, LabelSize),
-    case LabelPart of
-        <<"space_">> ->
-            % TODO - wylosowac ale na tym samym node!
-            ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc));
-        _ ->
-            GenPart = datastore_utils:gen_short_key(LabelSize),
-            Key = <<LabelPart/binary, GenPart/binary>>,
-            ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc#document{key = Key}))
-    end;
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -144,9 +130,8 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 }}) ->
     ?run(begin
         true = is_valid_filename(FileName),
-%%        ?info("hhhhh ~p", [ParentUuid]),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
-        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc),
+        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         SpaceDirUuid = case IsScope of
             true ->
                 FileDoc2#document.key;
@@ -1005,11 +990,27 @@ get_uuid(FileUuid) ->
 %% Generates uuid if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_uuid(doc()) -> doc().
-fill_uuid(Doc = #document{key = undefined}) ->
+-spec fill_uuid(doc(), doc()) -> doc().
+fill_uuid(Doc = #document{key = undefined, value = #file_meta{is_scope = true}}, _ParentUuid) ->
     NewUuid = datastore_utils:gen_key(),
     Doc#document{key = NewUuid};
-fill_uuid(Doc) ->
+%%fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
+%%    NewUuid = datastore_utils:gen_key(),
+%%    Doc#document{key = NewUuid};
+fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
+    LabelSize = consistent_hashing:get_label_gen_size(),
+    LabelPart = binary:part(ParentUuid, 0, LabelSize),
+    NewUuid = case LabelPart of
+        <<"space_">> ->
+            % TODO - wylosowac ale na tym samym node!
+%%            ?info("aaaaa2 ~p", [{Doc, true}]),
+            datastore_utils:gen_key();
+        _ ->
+            GenPart = datastore_utils:gen_short_key(LabelSize),
+            <<LabelPart/binary, GenPart/binary>>
+    end,
+    Doc#document{key = NewUuid};
+fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
 %%--------------------------------------------------------------------
