@@ -997,7 +997,7 @@ get_uuid(FileUuid) ->
 %% Generates uuid if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_uuid(doc(), doc()) -> doc().
+-spec fill_uuid(doc(), uuid()) -> doc().
 fill_uuid(Doc = #document{key = undefined, value = #file_meta{is_scope = true}}, _ParentUuid) ->
     NewUuid = datastore_utils:gen_key(),
     Doc#document{key = NewUuid};
