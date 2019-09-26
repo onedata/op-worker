@@ -194,7 +194,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 
                         case FileExists of
                             false ->
-                                create({uuid, ParentUuid}, FileDoc, []);
+                                create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
                             _ ->
                                 Eexists
                         end;
