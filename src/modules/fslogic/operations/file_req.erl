@@ -184,7 +184,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
-        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true),
+        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
         #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
@@ -271,7 +271,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
+        {_, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
     catch
@@ -376,12 +376,15 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean()) ->
     no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink) ->
+    open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, true).
+
+open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, CheckLocationExists) ->
     FileCtx = verify_file_exists(FileCtx0, HandleId0),
     SessId = user_ctx:get_session_id(UserCtx),
     check_and_register_open(FileCtx, SessId, HandleId0),
     try
         {FileLocation, FileCtx2} =
-            create_location(FileCtx, UserCtx, VerifyDeletionLink),
+            create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
         HandleId = open_on_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
         {HandleId, FileLocation, FileCtx2}
     catch
@@ -471,16 +474,17 @@ check_and_register_release(_FileCtx, _SessId, _HandleId) ->
 %% Creates location and storage file if extended directIO is set.
 %% @end
 %%--------------------------------------------------------------------
--spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean()) ->
+-spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:record(), file_ctx:ctx()}.
-create_location(FileCtx, UserCtx, VerifyDeletionLink) ->
+create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
     ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
     case ExtDIO of
         true ->
-            location_and_link_utils:get_new_file_location_doc(FileCtx, false, true);
+            {FL, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
+            {FL, FileCtx2};
         _ ->
             {#document{value = FL}, FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink),
+                sfm_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
             {FL, FileCtx2}
     end.
 

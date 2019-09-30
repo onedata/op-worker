@@ -31,13 +31,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_new_file_location_doc(file_ctx:ctx(), StorageFileCreated :: boolean(),
-    GeneratedKey :: boolean()) -> {file_location:record(), file_ctx:ctx()}.
+    GeneratedKey :: boolean()) -> {file_location:record(), file_ctx:ctx(), boolean()}.
 get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {StorageFileId, FileCtx2} = file_ctx:get_new_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-    {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
+    {Size, FileCtx4} = file_ctx:get_file_size_from_remote_locations(FileCtx3),
     Location = #file_location{
         provider_id = oneprovider:get_id(),
         file_id = StorageFileId,
@@ -54,11 +54,11 @@ get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     }, GeneratedKey) of
         {ok, _LocId} ->
             FileCtx5 = file_ctx:add_file_location(FileCtx4, LocId),
-            {Location, FileCtx5};
+            {Location, FileCtx5, true};
         {error, already_exists} ->
             {#document{value = FileLocation}, FileCtx5} =
                 file_ctx:get_local_file_location_doc(FileCtx4),
-            {FileLocation, FileCtx5}
+            {FileLocation, FileCtx5, false}
     end.
 
 %%--------------------------------------------------------------------

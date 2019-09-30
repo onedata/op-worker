@@ -71,17 +71,17 @@
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
-    get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
+    get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6,
     get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
-    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
+    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2, get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/1, get_acl/1, get_mode/1, get_raw_storage_path/1, get_child_canonical_path/2,
-    get_file_size/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
+    get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
     is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
     get_storage_sync_info/1]).
 -export([is_dir/1]).
@@ -499,33 +499,36 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
             end,
             case Continue of
                 true ->
-                    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx2),
-                    #document{value = #storage{helpers
-                    = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
-                    case StoragePathType of
-                        ?FLAT_STORAGE_PATH ->
-                            FileId = get_flat_path_const(FileCtx2),
-                            % TODO - do not get_canonical_path (fix acceptance tests before)
-                            {_, FileCtx3} = get_canonical_path(FileCtx2),
-                            {FileId, FileCtx3#file_ctx{storage_file_id = FileId}};
-                        ?CANONICAL_STORAGE_PATH ->
-                            {FileIdTokens, FileCtx3} = get_canonical_path_tokens(FileCtx2),
-                            {MiR, FileCtx4} = get_mounted_in_root(FileCtx3),
-                            FileId = case {MiR, FileIdTokens} of
-                                         {true, [Root, _SpaceID | Path]} ->
-                                             filename:join([Root | Path]);
-                                         _ ->
-                                             filename:join(FileIdTokens)
-                                     end,
-
-                            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}}
-                    end;
+                    get_new_storage_file_id(FileCtx2);
                 _ ->
-                    {undefined, FileCtx}
+                    {undefined, FileCtx2}
             end
     end;
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
+
+get_new_storage_file_id(FileCtx) ->
+    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
+    #document{value = #storage{helpers
+    = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
+    case StoragePathType of
+        ?FLAT_STORAGE_PATH ->
+            FileId = get_flat_path_const(FileCtx),
+            % TODO - do not get_canonical_path (fix acceptance tests before)
+            {_, FileCtx2} = get_canonical_path(FileCtx),
+            {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
+        ?CANONICAL_STORAGE_PATH ->
+            {FileIdTokens, FileCtx2} = get_canonical_path_tokens(FileCtx),
+            {MiR, FileCtx3} = get_mounted_in_root(FileCtx2),
+            FileId = case {MiR, FileIdTokens} of
+                {true, [Root, _SpaceID | Path]} ->
+                    filename:join([Root | Path]);
+                _ ->
+                    filename:join(FileIdTokens)
+            end,
+
+            {FileId, FileCtx3#file_ctx{storage_file_id = FileId}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -868,7 +871,7 @@ get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
             {undefined, FileCtx2};
         {false, FileCtx2} ->
             get_or_create_local_regular_file_location_doc(FileCtx2,
-                IncludeBlocks)
+                IncludeBlocks, true)
     end.
 
 %%--------------------------------------------------------------------
@@ -891,7 +894,6 @@ get_local_file_location_doc(FileCtx) ->
 get_local_file_location_doc(FileCtx, IncludeBlocks) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
-
     case fslogic_location_cache:get_location(LocalLocationId, FileUuid,
         IncludeBlocks) of
         {ok, Location} ->
@@ -950,8 +952,15 @@ get_file_location_docs(FileCtx) ->
     {[file_location:doc()], ctx()}.
 % TODO VFS-4412 - export as _const function
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
-    {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
+    get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, true).
+
+get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
+    {LocationIds0, FileCtx2} = get_file_location_ids(FileCtx),
     FileUuid = get_uuid_const(FileCtx),
+    LocationIds = case IncludeLocal of
+        true -> LocationIds0;
+        _ -> LocationIds0 -- [file_location:local_id(FileUuid)]
+    end,
     LocationDocs = lists:filtermap(fun(LocId) ->
         case fslogic_location_cache:get_location(LocId, FileUuid,
             GetLocationOpts) of
@@ -1287,28 +1296,36 @@ get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
 %% Returns local file location doc, creates it if it's not present
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_local_regular_file_location_doc(ctx(), boolean()) ->
+-spec get_or_create_local_regular_file_location_doc(ctx(), boolean(), boolean()) ->
     {file_location:doc() | undefined, ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
+get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks, true) ->
     case get_local_file_location_doc(FileCtx, IncludeBlocks) of
         {undefined, FileCtx2} ->
-            {CreatedLocation, FileCtx3} =
-                location_and_link_utils:get_new_file_location_doc(FileCtx2, false, false),
-            {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
-            lists:foreach(fun(ChangedLocation) ->
-                replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
-            end, LocationDocs),
-            FileUuid = get_uuid_const(FileCtx),
-            {
-                #document{
-                    key = file_location:local_id(FileUuid),
-                    value = CreatedLocation
-                },
-                FileCtx4
-            };
+            get_or_create_local_regular_file_location_doc(FileCtx2, IncludeBlocks, false);
         {Location, FileCtx2} ->
             {Location, FileCtx2}
-    end.
+    end;
+get_or_create_local_regular_file_location_doc(FileCtx, _IncludeBlocks, _CheckLocationExists) ->
+    {CreatedLocation, FileCtx2, New} =
+        location_and_link_utils:get_new_file_location_doc(FileCtx, false, false),
+    FileCtx4 = case New of
+        true ->
+            {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
+            lists:foreach(fun(ChangedLocation) ->
+                replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation)
+            end, LocationDocs),
+            FileCtx3;
+        _ ->
+            FileCtx2
+    end,
+    FileUuid = get_uuid_const(FileCtx),
+    {
+        #document{
+            key = file_location:local_id(FileUuid),
+            value = CreatedLocation
+        },
+        FileCtx4
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1319,7 +1336,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
 -spec get_file_size_from_remote_locations(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_file_size_from_remote_locations(FileCtx) ->
-    {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
+    {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx, true, false),
     case LocationDocs of
         [] ->
             {0, FileCtx2};
