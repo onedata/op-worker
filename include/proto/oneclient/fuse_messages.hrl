@@ -67,7 +67,7 @@
 }).
 
 -record(change_mode, {
-    mode :: undefined | file_meta:mode()
+    mode :: file_meta:mode()
 }).
 
 -record(rename, {

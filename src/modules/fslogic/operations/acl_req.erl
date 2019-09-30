@@ -103,21 +103,16 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
 
-    % ACLs are kept in database without names, as they might change.
-    % Strip the names here.
-    AclWithoutNames = case Acl of
-        undefined ->
-            undefined;
-        _ ->
-            case IsDir of
-                true -> acl:validate(Acl, dir);
-                false -> acl:validate(Acl, file)
-            end,
-            acl:strip_names(Acl)
+    case IsDir of
+        true -> acl:validate(Acl, dir);
+        false -> acl:validate(Acl, file)
     end,
 
+    % ACLs are kept in database without names, as they might change.
+    % Strip the names here.
+    AclWithoutNames = acl:strip_names(Acl),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case file_meta:update_perms(FileUuid, undefined, AclWithoutNames, acl) of
+    case file_meta:update_acl(FileUuid, AclWithoutNames) of
         ok ->
             ok = permissions_cache:invalidate(),
             fslogic_times:update_ctime(FileCtx2),
@@ -138,7 +133,7 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case file_meta:update_perms(FileUuid, undefined, [], posix) of
+    case file_meta:update_acl(FileUuid, []) of
         ok ->
             ok = permissions_cache:invalidate(),
             fslogic_times:update_ctime(FileCtx),

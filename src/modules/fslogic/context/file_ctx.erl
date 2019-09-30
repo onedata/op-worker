@@ -964,14 +964,19 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file Active Permissions Type.
+%% Returns file active permissions type (acl if it is defined or posix
+%% otherwise).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_active_perms_type(ctx()) -> {file_meta:permissions_type(), ctx()}.
 get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
-    value = #file_meta{active_permissions_type = ActivePermsType}
+    value = #file_meta{acl = []}
 }}) ->
-    {ActivePermsType, FileCtx};
+    {posix, FileCtx};
+get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{}
+}}) ->
+    {acl, FileCtx};
 get_active_perms_type(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_active_perms_type(FileCtx2).
