@@ -832,8 +832,9 @@ is_child_of_hidden_dir(Path) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns active permissions type for specified file. It is 'acl' if
-%% it is defined or 'posix' otherwise.
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_active_perms_type(file_meta:uuid()) ->

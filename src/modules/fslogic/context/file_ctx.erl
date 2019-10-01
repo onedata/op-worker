@@ -964,8 +964,9 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file active permissions type (acl if it is defined or posix
-%% otherwise).
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_active_perms_type(ctx()) -> {file_meta:permissions_type(), ctx()}.

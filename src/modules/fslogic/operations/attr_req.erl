@@ -189,9 +189,7 @@ ensure_proper_file_name(FuseResponse, _Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets active permissions type to posix and changes file mode. If given
-%% mode is `undefined` then previous mode (stored in file_meta) is left
-%% intact.
+%% Changes file posix mode.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->

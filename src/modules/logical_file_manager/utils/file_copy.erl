@@ -182,15 +182,6 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
             ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr)
     end, Xattrs),
 
-    % Depending on whether acl is active permissions type (if it is it
-    % will be listed with other xattrs) sets mode first and then acl or
-    % other way around.
     {ok, Acl} = lfm:get_acl(SessId, {guid, SourceGuid}),
-    case lists:member(?ACL_KEY, Xattrs) of
-        true ->
-            lfm:set_perms(SessId, {guid, TargetGuid}, Mode),
-            lfm:set_acl(SessId, {guid, TargetGuid}, Acl);
-        false ->
-            lfm:set_acl(SessId, {guid, TargetGuid}, Acl),
-            lfm:set_perms(SessId, {guid, TargetGuid}, Mode)
-    end.
+    lfm:set_acl(SessId, {guid, TargetGuid}, Acl),
+    lfm:set_perms(SessId, {guid, TargetGuid}, Mode).
