@@ -61,8 +61,10 @@ local_id(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(FileUuid, ProviderId) ->
-    <<FileUuid/binary, ProviderId/binary>>.
-%%    datastore_utils:gen_key(ProviderId, FileUuid).
+    case consistent_hashing:has_hash_part(FileUuid) of
+        true -> <<FileUuid/binary, ProviderId/binary>>;
+        _ -> datastore_utils:gen_key(ProviderId, FileUuid)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

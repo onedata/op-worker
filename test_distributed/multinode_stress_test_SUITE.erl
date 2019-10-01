@@ -102,12 +102,12 @@ single_dir_creation_test_base(Config) ->
             lists:foreach(fun({Num, Worker, SessId}) ->
                 spawn(fun() ->
                     try
-                        {SaveOk, SaveError} =
+                        {SaveOk, SaveError, ErrorsList} =
                             rpc:call(Worker, ?MODULE, create_single_call,
                                 [SessId, DirUuid, 1 + Num*FilesNum, FilesNum, NameExtBin]),
                         case SaveError of
                             0 -> Master ! {slave_ans, SaveOk};
-                            _ -> Master ! {slave_ans_error, SaveOk, SaveError}
+                            _ -> Master ! {slave_ans_error, SaveOk, SaveError, ErrorsList}
                         end
                     catch
                         E1:E2 ->
@@ -120,8 +120,8 @@ single_dir_creation_test_base(Config) ->
                 receive
                     {slave_ans, SaveAns} ->
                         SaveAns + Acc;
-                    {slave_ans_error, SaveAns, SaveAnsErrors} ->
-                        ct:print("Slave errors num ~p", [SaveAnsErrors]),
+                    {slave_ans_error, SaveAns, SaveAnsErrors, ErrorsList} ->
+                        ct:print("Slave errors num ~p~nerror list: ~p", [SaveAnsErrors, ErrorsList]),
                         SaveAns + Acc;
                     {slave_error, SlaveError} ->
                         ct:print("Slave error ~p", [SlaveError]),
@@ -181,17 +181,16 @@ end_per_testcase(Case, Config) ->
 %%%===================================================================
 
 create_single_call(SessId, DirUuid, StartNum, FilesNum, NameExtBin) ->
-    lists:foldl(fun(N, {OkNum, ErrorNum}) ->
+    lists:foldl(fun(N, {OkNum, ErrorNum, ErrorsList}) ->
         N2 = integer_to_binary(N),
         File = <<NameExtBin/binary, "_", N2/binary>>,
         case lfm:create(SessId, DirUuid, File, undefined) of
             {ok, _} ->
-                {OkNum+1, ErrorNum};
+                {OkNum+1, ErrorNum, ErrorsList};
             ErrorAns ->
-                ct:print("Create error: ~p", [ErrorAns]),
-                {OkNum, ErrorNum+1}
+                {OkNum, ErrorNum+1, [ErrorAns | ErrorsList]}
         end
-    end, {0,0}, lists:seq(StartNum, StartNum + FilesNum - 1)).
+    end, {0,0,[]}, lists:seq(StartNum, StartNum + FilesNum - 1)).
 
 create_workers_list(_, _, Ans, FinalLength, FinalLength) ->
     Ans;
