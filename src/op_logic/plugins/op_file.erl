@@ -199,8 +199,7 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
                     throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
                 end
             end
-        },
-        <<"activePermissionsType">> => {binary, [<<"acl">>, <<"posix">>]}
+        }
     }
 };
 
@@ -482,23 +481,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(op_logic:req()) -> op_logic:update_result().
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
-    ActivePermsType = maps:get(<<"activePermissionsType">>, Data, undefined),
-    PosixPerms = maps:get(<<"posixPermissions">>, Data, undefined),
-
-    SessionId = Auth#auth.session_id,
-    FileKey = {guid, Guid},
-
-    case {ActivePermsType, PosixPerms} of
-        {undefined, undefined} ->
+    case maps:get(<<"posixPermissions">>, Data, undefined) of
+        undefined ->
             ok;
-        {<<"acl">>, undefined} ->
-            ?check(lfm:set_acl(SessionId, FileKey, undefined));
-        {<<"acl">>, _} ->
-            % It is not possible to change active_permissions_type to acl and
-            % chmod at the same time via gui and so such requests are invalid
-            ?ERROR_MALFORMED_DATA;
-        _ ->
-            ?check(lfm:set_perms(SessionId, FileKey, PosixPerms))
+        PosixPerms ->
+            ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms))
     end;
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
     Acl = maps:get(<<"list">>, Data),

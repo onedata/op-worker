@@ -474,7 +474,7 @@ get_file_distribution(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_perms(session:id(), FileKey :: file_key(),
-    NewPerms :: undefined | file_meta:posix_permissions()) ->
+    NewPerms :: file_meta:posix_permissions()) ->
     ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     ?run(fun() -> lfm_perms:set_perms(SessId, FileKey, NewPerms) end).
@@ -505,7 +505,7 @@ get_acl(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    undefined | acl:acl()) -> ok | error_reply().
+    acl:acl()) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 

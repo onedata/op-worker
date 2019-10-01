@@ -66,8 +66,8 @@ get_acl(SessId, FileKey) ->
 %% Updates file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    undefined | acl:acl()) -> ok | lfm:error_reply().
+-spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(), acl:acl()) ->
+    ok | lfm:error_reply().
 set_acl(SessId, FileKey, Acl) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
