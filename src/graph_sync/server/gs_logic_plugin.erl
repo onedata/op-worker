@@ -121,7 +121,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
     gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 handle_rpc(_, Auth, RpcFun, Data) ->
-    file_rpc:handle(Auth, RpcFun, Data).
+    op_rpc:handle(Auth, RpcFun, Data).
 
 
 %%--------------------------------------------------------------------

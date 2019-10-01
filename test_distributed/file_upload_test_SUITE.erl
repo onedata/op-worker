@@ -66,7 +66,7 @@ registering_upload_for_directory_should_fail(Config) ->
 
     ?assertMatch(
         ?ERROR_BAD_DATA(<<"guid">>),
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ).
@@ -85,7 +85,7 @@ registering_upload_for_non_empty_file_should_fail(Config) ->
 
     ?assertMatch(
         ?ERROR_BAD_DATA(<<"guid">>),
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ).
@@ -102,7 +102,7 @@ registering_upload_for_not_owned_file_should_fail(Config) ->
 
     ?assertMatch(
         ?ERROR_BAD_DATA(<<"guid">>),
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(User1Id, Session1Id), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ).
@@ -138,7 +138,7 @@ upload_test(Config) ->
 
     ?assertMatch(
         {ok, _},
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ),
@@ -148,7 +148,7 @@ upload_test(Config) ->
 
     ?assertMatch(
         {ok, _},
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"finalizeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ),
@@ -171,7 +171,7 @@ stale_upload_file_should_be_deleted(Config) ->
 
     ?assertMatch(
         {ok, _},
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ),
@@ -198,7 +198,7 @@ finished_upload_file_should_be_left_intact(Config) ->
 
     ?assertMatch(
         {ok, _},
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"initializeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ),
@@ -211,7 +211,7 @@ finished_upload_file_should_be_left_intact(Config) ->
 
     ?assertMatch(
         {ok, _},
-        rpc:call(WorkerP1, file_rpc, handle, [
+        rpc:call(WorkerP1, op_rpc, handle, [
             ?USER(UserId, SessionId), <<"finalizeFileUpload">>, #{<<"guid">> => Guid}
         ])
     ),
