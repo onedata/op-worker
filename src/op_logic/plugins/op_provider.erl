@@ -103,7 +103,7 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
-operation_supported(get, instance, shared) -> true;
+operation_supported(get, instance, protected) -> true;
 operation_supported(get, configuration, private) -> true;
 operation_supported(get, test_image, private) -> true;
 

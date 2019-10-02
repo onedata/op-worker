@@ -117,23 +117,25 @@ translate_resource(#gri{aspect = distribution, scope = private}, Distribution) -
             max(Acc, Offset + Size)
     end, 0, Distribution),
 
-    {ok, #{<<"distributionPerProvider">> => lists:foldl(fun(#{
+    DistributionMap = lists:foldl(fun(#{
         <<"providerId">> := ProviderId,
         <<"blocks">> := Blocks,
         <<"totalBlocksSize">> := TotalBlocksSize
-    }, DistributionMap) ->
-        Data = lists:map(fun({BarNum, Fill}) ->
-            {integer_to_binary(BarNum), Fill}
-        end, interpolate_chunks(Blocks, FileSize)),
+    }, Acc) ->
+        Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
+            DataAcc#{integer_to_binary(BarNum) => Fill}
+        end, #{}, interpolate_chunks(Blocks, FileSize)),
 
-        DistributionMap#{ProviderId => #{
+        Acc#{ProviderId => #{
             <<"chunksBarData">> => Data,
             <<"blocksPercentage">> => case FileSize of
                 0 -> 0;
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
         }}
-    end, #{}, Distribution)}}.
+    end, #{}, Distribution),
+
+    #{<<"distributionPerProvider">> => DistributionMap}.
 
 
 %%%===================================================================
