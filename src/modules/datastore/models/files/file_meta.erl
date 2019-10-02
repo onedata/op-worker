@@ -1007,7 +1007,8 @@ get_uuid(FileUuid) ->
 fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
     HashPart = case consistent_hashing:get_label_hash_part(ParentUuid) of
         undefined ->
-            datastore_utils:gen_key(consistent_hashing:get_hash_part_length());
+            HashLenhth = consistent_hashing:get_hash_part_length(),
+            binary:part(ParentUuid, byte_size(ParentUuid), -1 * HashLenhth);
         Part ->
             Part
     end,
