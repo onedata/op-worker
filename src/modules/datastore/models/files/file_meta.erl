@@ -1001,9 +1001,10 @@ get_uuid(FileUuid) ->
 %%fill_uuid(Doc = #document{key = undefined, value = #file_meta{is_scope = true}}, _ParentUuid) ->
 %%    NewUuid = datastore_utils:gen_key(),
 %%    Doc#document{key = NewUuid};
-%%fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
-%%    NewUuid = datastore_utils:gen_key(),
-%%    Doc#document{key = NewUuid};
+fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
+    HashPart = datastore_utils:gen_key(consistent_hashing:get_hash_part_length()),
+    RandPart = datastore_utils:gen_key(),
+    Doc#document{key = consistent_hashing:create_label(HashPart, RandPart)};
 fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
     HashPart = case consistent_hashing:get_label_hash_part(ParentUuid) of
         undefined ->
