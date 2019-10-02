@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([save/2, delete/0]).
@@ -85,7 +85,7 @@ save(ProviderId, RootToken) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns provider Id, or ?ERROR_UNREGISTERED_PROVIDER if it is not yet
+%% Returns provider Id, or ?ERROR_UNREGISTERED_ONEPROVIDER if it is not yet
 %% registered. Upon success, the ProviderId is cached in env variable to be
 %% accessible quickly.
 %% @end
@@ -95,7 +95,7 @@ get_provider_id() ->
     simple_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
-                ?ERROR_UNREGISTERED_PROVIDER;
+                ?ERROR_UNREGISTERED_ONEPROVIDER;
             {error, _} = Error ->
                 Error;
             {ok, #document{value = #provider_auth{provider_id = Id}}} ->
@@ -278,7 +278,7 @@ write_to_file(ProviderId, RootToken) ->
 get_token(Type) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
-            ?ERROR_UNREGISTERED_PROVIDER;
+            ?ERROR_UNREGISTERED_ONEPROVIDER;
         {error, _} = Error ->
             Error;
         {ok, #document{value = ProviderAuth}} ->

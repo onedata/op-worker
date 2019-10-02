@@ -18,7 +18,7 @@
 -include("op_logic.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([handshake_attributes/1, translate_value/3, translate_resource/3]).

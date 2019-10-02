@@ -34,7 +34,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_handle_service:id()) ->
-    {ok, od_handle_service:doc()} | gs_protocol:error().
+    {ok, od_handle_service:doc()} | errors:error().
 get(SessionId, HServiceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,

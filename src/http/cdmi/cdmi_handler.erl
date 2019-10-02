@@ -21,8 +21,8 @@
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% cowboy rest handler API
 -export([

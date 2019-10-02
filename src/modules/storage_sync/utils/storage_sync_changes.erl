@@ -18,7 +18,7 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type hash() :: binary() | undefined.
 

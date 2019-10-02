@@ -19,7 +19,7 @@
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 -define(SYNC_JOB_TIMEOUT, timer:hours(24)).
@@ -175,8 +175,8 @@ start_strategies() ->
                 Error
         end
     catch
-        throw:?ERROR_UNREGISTERED_PROVIDER ->
-            ?ERROR_UNREGISTERED_PROVIDER;
+        throw:?ERROR_UNREGISTERED_ONEPROVIDER ->
+            ?ERROR_UNREGISTERED_ONEPROVIDER;
         Error2:Reason ->
             ?error_stacktrace("Unable to start space strategies due to: ~p",
                 [{Error2, Reason}]),
@@ -202,7 +202,7 @@ check_strategies() ->
                 Error
         end
     catch
-        throw:?ERROR_UNREGISTERED_PROVIDER ->
+        throw:?ERROR_UNREGISTERED_ONEPROVIDER ->
             ?debug("Unable to check space strategies - unregistered provider");
         _:TReason ->
             ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])

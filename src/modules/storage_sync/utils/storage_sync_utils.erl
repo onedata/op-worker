@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API

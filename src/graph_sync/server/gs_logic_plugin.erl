@@ -18,7 +18,7 @@
 -include("op_logic.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 %% API
@@ -42,7 +42,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
-    {ok, aai:auth()} | gs_protocol:error().
+    {ok, aai:auth()} | errors:error().
 verify_handshake_auth(undefined, _) ->
     {ok, ?NOBODY};
 verify_handshake_auth(nobody, _) ->
@@ -89,7 +89,7 @@ client_disconnected(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_auth_override(aai:auth(), gs_protocol:auth_override()) ->
-    {ok, aai:auth()} | gs_protocol:error().
+    {ok, aai:auth()} | errors:error().
 verify_auth_override(_, _) ->
     ?ERROR_UNAUTHORIZED.
 

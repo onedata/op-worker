@@ -12,7 +12,7 @@
 -module(custom_meta_manipulation).
 -author("Tomasz Lichon").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([find/2, insert/3, merge/1]).

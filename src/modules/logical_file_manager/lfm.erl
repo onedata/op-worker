@@ -31,10 +31,9 @@
     end).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.

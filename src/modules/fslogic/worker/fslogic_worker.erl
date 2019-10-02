@@ -20,7 +20,7 @@
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
@@ -630,7 +630,7 @@ periodical_spaces_autocleaning_check() ->
             lists:foreach(fun(SpaceId) ->
                 autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
             end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
             ?debug("Skipping spaces cleanup due to unregistered provider");
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
@@ -647,9 +647,9 @@ rerun_transfers() ->
                 Restarted = transfer:rerun_not_ended_transfers(SpaceId),
                 ?debug("Restarted following transfers: ~p", [Restarted])
             end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
             schedule_rerun_transfers();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             schedule_rerun_transfers();
         Error = {error, _} ->
             ?error("Unable to rerun transfers due to: ~p", [Error])
@@ -665,9 +665,9 @@ restart_autocleaning_runs() ->
             lists:foreach(fun(SpaceId) ->
                 autocleaning_api:restart_autocleaning_run(SpaceId)
             end, SpaceIds);
-        ?ERROR_UNREGISTERED_PROVIDER ->
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
             schedule_restart_autocleaning_runs();
-        ?ERROR_NO_CONNECTION_TO_OZ ->
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             schedule_restart_autocleaning_runs();
         Error = {error, _} ->
             ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
