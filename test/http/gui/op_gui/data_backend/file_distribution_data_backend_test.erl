@@ -31,7 +31,7 @@ run_test_cases(CaseNum) ->
         FileSize ->
             Blocks = test_case(CaseNum, blocks),
             Expected = test_case(CaseNum, expect),
-            ?assertEqual(Expected, file_distribution_data_backend:interpolate_chunks(Blocks, FileSize)),
+            ?assertEqual(Expected, gui_gs_file_translator:interpolate_chunks(Blocks, FileSize)),
             run_test_cases(CaseNum + 1)
     end.
 
