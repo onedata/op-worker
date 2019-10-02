@@ -171,7 +171,8 @@ cache_permission(Rule, Value) ->
 %%--------------------------------------------------------------------
 -spec invalidate() -> ok.
 invalidate() ->
-    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_on_node, []).
+    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_on_node, []),
+    ok.
 
 invalidate_on_node() ->
     CurrentModel = case permissions_cache:get(?STATUS_UUID) of
@@ -190,7 +191,8 @@ invalidate_on_node() ->
                     spawn(fun() ->
                         erlang:apply(CurrentModel, delete_all, []),
                         ok = stop_clearing(CurrentModel)
-                    end);
+                    end),
+                    ok;
                 {error, parallel_cleaning} ->
                     ok
             end

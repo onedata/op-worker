@@ -952,7 +952,7 @@ get_file_location_docs(FileCtx) ->
     {[file_location:doc()], ctx()}.
 % TODO VFS-4412 - export as _const function
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
-    get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, true).
+    get_file_location_docs(FileCtx, GetLocationOpts, true).
 
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
     {LocationIds0, FileCtx2} = get_file_location_ids(FileCtx),
