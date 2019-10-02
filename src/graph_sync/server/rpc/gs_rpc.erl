@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles gs rpc for op.
+%%% This module handles gs rpc.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_rpc).
+-module(gs_rpc).
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
@@ -49,16 +49,22 @@ handle(Auth, RpcFun, Data) ->
 -spec handle_internal(aai:auth(), gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 handle_internal(Auth, <<"getDirChildren">>, Data) ->
-    file_rpc:ls(Auth, Data);
+    file_gs_rpc:ls(Auth, Data);
 handle_internal(Auth, <<"initializeFileUpload">>, Data) ->
-    file_rpc:register_file_upload(Auth, Data);
+    file_gs_rpc:register_file_upload(Auth, Data);
 handle_internal(Auth, <<"finalizeFileUpload">>, Data) ->
-    file_rpc:deregister_file_upload(Auth, Data);
+    file_gs_rpc:deregister_file_upload(Auth, Data);
 handle_internal(Auth, <<"getFileDownloadUrl">>, Data) ->
-    file_rpc:get_file_download_url(Auth, Data);
+    file_gs_rpc:get_file_download_url(Auth, Data);
 handle_internal(Auth, <<"moveFile">>, Data) ->
-    file_rpc:move(Auth, Data);
+    file_gs_rpc:move(Auth, Data);
 handle_internal(Auth, <<"copyFile">>, Data) ->
-    file_rpc:copy(Auth, Data);
+    file_gs_rpc:copy(Auth, Data);
+
+handle_internal(Auth, <<"getSpaceTransfers">>, Data) ->
+    transfer_gs_rpc:get_space_transfers(Auth, Data);
+handle_internal(Auth, <<"getFileTransfers">>, Data) ->
+    transfer_gs_rpc:get_file_transfers(Auth, Data);
+
 handle_internal(_, _, _) ->
     ?ERROR_RPC_UNDEFINED.

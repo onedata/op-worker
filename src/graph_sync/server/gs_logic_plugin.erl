@@ -121,7 +121,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
     gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 handle_rpc(_, Auth, RpcFun, Data) ->
-    op_rpc:handle(Auth, RpcFun, Data).
+    gs_rpc:handle(Auth, RpcFun, Data).
 
 
 %%--------------------------------------------------------------------
@@ -161,7 +161,10 @@ is_subscribable(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_type_supported(gri:gri()) -> boolean().
-is_type_supported(#gri{type = op_file}) -> true;
+is_type_supported(#gri{type = op_provider}) -> true;
 is_type_supported(#gri{type = op_space}) -> true;
 is_type_supported(#gri{type = op_user}) -> true;
+is_type_supported(#gri{type = op_group}) -> true;
+is_type_supported(#gri{type = op_file}) -> true;
+is_type_supported(#gri{type = op_transfer}) -> true;
 is_type_supported(#gri{type = _}) -> false.

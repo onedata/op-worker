@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model implements functions handling gs rpc for files.
+%%% This module handles gs rpc concerning file entities.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_rpc).
+-module(file_gs_rpc).
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
