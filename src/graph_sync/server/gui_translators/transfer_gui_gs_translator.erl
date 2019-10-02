@@ -19,7 +19,7 @@
 -export([translate_resource/2]).
 
 -define(PROVIDER_GRI_ID(__PROVIDER_ID), gri:serialize(#gri{
-    aspect = op_provider,
+    type = op_provider,
     id = __PROVIDER_ID,
     aspect = instance,
     scope = protected
@@ -101,4 +101,8 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
             true -> null;
             false -> FinishTime
         end
-    }.
+    };
+translate_resource(#gri{aspect = progress, scope = private}, ProgressInfo) ->
+    ProgressInfo;
+translate_resource(#gri{aspect = {throughput_charts, _}, scope = private}, ProgressInfo) ->
+    ProgressInfo.

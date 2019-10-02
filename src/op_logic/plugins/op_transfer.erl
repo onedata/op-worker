@@ -60,6 +60,13 @@ op_logic_plugin() ->
 operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;
+operation_supported(get, progress, private) -> true;
+operation_supported(get, {throughput_charts, Type}, private) when
+    Type =:= ?MINUTE_STAT_TYPE;
+    Type =:= ?HOUR_STAT_TYPE;
+    Type =:= ?DAY_STAT_TYPE;
+    Type =:= ?MONTH_STAT_TYPE
+-> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -134,8 +141,15 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
-    aspect = instance
-}}, #transfer{space_id = SpaceId}) ->
+    aspect = As
+}}, #transfer{space_id = SpaceId}) when
+    As =:= instance;
+    As =:= progress;
+    As =:= {throughput_charts, ?MINUTE_STAT_TYPE};
+    As =:= {throughput_charts, ?HOUR_STAT_TYPE};
+    As =:= {throughput_charts, ?DAY_STAT_TYPE};
+    As =:= {throughput_charts, ?MONTH_STAT_TYPE}
+->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
@@ -173,7 +187,14 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
     ok;
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= progress;
+    As =:= {throughput_charts, ?MINUTE_STAT_TYPE};
+    As =:= {throughput_charts, ?HOUR_STAT_TYPE};
+    As =:= {throughput_charts, ?DAY_STAT_TYPE};
+    As =:= {throughput_charts, ?MONTH_STAT_TYPE}
+->
     ok;
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
@@ -204,6 +225,20 @@ create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
+    {ok, Transfer};
+get(#op_req{gri = #gri{aspect = progress}}, #transfer{
+    bytes_replicated = BytesReplicated,
+    files_replicated = FilesReplicated,
+    files_evicted = FilesEvicted
+} = Transfer) ->
+    {ok, #{
+        <<"status">> => get_status(Transfer),
+        <<"timestamp">> => get_last_update(Transfer),
+        <<"replicatedBytes">> => BytesReplicated,
+        <<"replicatedFiles">> => FilesReplicated,
+        <<"evictedFiles">> => FilesEvicted
+    }};
+get(#op_req{gri = #gri{aspect = {throughput_charts, StatsType}}}, Transfer) ->
     {ok, Transfer}.
 
 
@@ -232,3 +267,46 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
         {error, _} = Error ->
             Error
     end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns status of given transfer. Replaces active status with 'replicating'
+%% for replication and 'evicting' for eviction.
+%% In case of migration 'evicting' indicates that the transfer itself has
+%% finished, but source replica eviction is still in progress.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_status(transfer:transfer()) ->
+    transfer:status() | evicting | replicating.
+get_status(T = #transfer{
+    replication_status = completed,
+    replicating_provider = P1,
+    evicting_provider = P2
+}) when is_binary(P1) andalso is_binary(P2) ->
+    case T#transfer.eviction_status of
+        scheduled -> evicting;
+        enqueued -> evicting;
+        active -> evicting;
+        Status -> Status
+    end;
+get_status(T = #transfer{replication_status = skipped}) ->
+    case T#transfer.eviction_status of
+        active -> evicting;
+        Status -> Status
+    end;
+get_status(#transfer{replication_status = active}) -> replicating;
+get_status(#transfer{replication_status = Status}) -> Status.
+
+
+-spec get_last_update(#transfer{}) -> non_neg_integer().
+get_last_update(#transfer{start_time = StartTime, last_update = LastUpdateMap}) ->
+    % It is possible that there is no last update, if 0 bytes were
+    % transferred, in this case take the start time.
+    lists:max([StartTime | maps:values(LastUpdateMap)]).
