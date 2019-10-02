@@ -82,6 +82,8 @@ translate_resource(_, GRI = #gri{type = op_group}, Data) ->
     group_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_file}, Data) ->
     file_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, GRI = #gri{type = op_transfer}, Data) ->
+    transfer_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync get result for:~n"
            "ProtocolVersion: ~p~n"
