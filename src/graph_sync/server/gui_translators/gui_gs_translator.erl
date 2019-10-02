@@ -72,7 +72,9 @@ translate_value(ProtocolVersion, GRI, Data) ->
     ResourceData :: term()) -> Result | fun((aai:auth()) -> Result) when
     Result :: gs_protocol:data() | gs_protocol:error() | no_return().
 translate_resource(_, GRI = #gri{type = op_file}, Data) ->
-    gui_gs_file_translator:translate_resource(GRI, Data);
+    file_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, GRI = #gri{type = op_provider}, Data) ->
+    translate_provider(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_space}, Data) ->
     translate_space(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_user}, Data) ->
@@ -125,6 +127,12 @@ translate_space(#gri{id = SpaceId, aspect = instance, scope = private}, Space) -
             aspect = eff_groups,
             scope = private
         }),
+        <<"providerList">> => gri:serialize(#gri{
+            type = op_space,
+            id = SpaceId,
+            aspect = providers,
+            scope = private
+        }),
         <<"rootDir">> => RootDir
     };
 translate_space(#gri{aspect = eff_users, scope = private}, Users) ->
@@ -148,6 +156,17 @@ translate_space(#gri{aspect = eff_groups, scope = private}, Groups) ->
                 scope = shared
             })
         end, maps:keys(Groups))
+    };
+translate_space(#gri{aspect = providers, scope = private}, Providers) ->
+    #{
+        <<"list">> => lists:map(fun(ProviderId) ->
+            gri:serialize(#gri{
+                type = op_provider,
+                id = ProviderId,
+                aspect = instance,
+                scope = protected
+            })
+        end, maps:keys(Providers))
     }.
 
 
@@ -192,3 +211,14 @@ translate_user(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_group(#gri{aspect = instance, scope = shared}, GroupInfo) ->
     GroupInfo.
+
+
+%% @private
+-spec translate_provider(gri:gri(), Data :: term()) ->
+    gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
+translate_provider(#gri{aspect = instance, scope = protected}, #od_provider{
+    name = Name
+}) ->
+    #{
+        <<"name">> => Name
+    }.

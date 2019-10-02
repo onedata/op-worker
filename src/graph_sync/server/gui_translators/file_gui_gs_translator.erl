@@ -9,7 +9,7 @@
 %%% TODO WRITEME.
 %%% @end
 %%%-------------------------------------------------------------------
--module(gui_gs_file_translator).
+-module(file_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
