@@ -137,7 +137,7 @@ handle(healthcheck) ->
     ok;
 handle(?INVALIDATE_PERMISSIONS_CACHE) ->
     ?debug("Invalidating permissions cache"),
-%%    invalidate_permissions_cache(),
+    invalidate_permissions_cache(),
     schedule_invalidate_permissions_cache();
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
@@ -617,7 +617,7 @@ schedule(Request, Timeout) ->
 -spec invalidate_permissions_cache() -> ok.
 invalidate_permissions_cache() ->
     try
-        permissions_cache:invalidate()
+        permissions_cache:invalidate_on_node()
     catch
         _:Reason ->
             ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
