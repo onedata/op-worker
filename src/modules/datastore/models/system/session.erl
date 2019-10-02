@@ -162,9 +162,9 @@ delete(SessId) ->
 %%--------------------------------------------------------------------
 -spec add_local_links(id(), datastore:tree_id(), datastore:link_name(),
     datastore:link_target()) -> ok | {error, term()}.
-add_local_links(SessId, TreeID, HandleId, Key) ->
+add_local_links(SessId, TreeID, LinkName, LinkValue) ->
     ?extract_ok(datastore_model:add_links(?CTX#{routing => local}, SessId,
-        TreeID, {HandleId, Key}
+        TreeID, {LinkName, LinkValue}
     )).
 
 %%--------------------------------------------------------------------
@@ -174,8 +174,8 @@ add_local_links(SessId, TreeID, HandleId, Key) ->
 %%--------------------------------------------------------------------
 -spec get_local_link(id(), datastore:tree_id(), datastore:link_name()) ->
     {ok, [datastore:link()]} | {error, term()}.
-get_local_link(SessId, TreeID, HandleId) ->
-    datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, HandleId).
+get_local_link(SessId, TreeID, LinkName) ->
+    datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, LinkName).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -197,9 +197,9 @@ fold_local_links(SessId, TreeID, Fun) ->
 -spec delete_local_links
     (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
     (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
-delete_local_links(SessId, TreeID, HandleId) ->
+delete_local_links(SessId, TreeID, LinkName) ->
     datastore_model:delete_links(?CTX#{routing => local},
-        SessId, TreeID, HandleId).
+        SessId, TreeID, LinkName).
 
 %%%===================================================================
 %%% API - field access functions
