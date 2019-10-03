@@ -111,8 +111,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    Ctx = ?CTX,
-    ?extract_key(datastore_model:save(Ctx#{memory_copies => all}, Doc));
+    ?extract_key(datastore_model:save(?CTX#{memory_copies => all}, Doc));
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -550,7 +549,6 @@ get_locations_by_uuid(FileUuid) ->
             {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
                 {ok, []};
             {ok, #document{scope = SpaceId}} ->
-                % TODO - jak ugryzc pobieranie dokumentu space'a w tylu miejscach?
                 {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId),
                 Locations = lists:map(fun(ProviderId) ->
                     file_location:id(FileUuid, ProviderId)
@@ -990,21 +988,12 @@ get_uuid(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fill_uuid(doc(), uuid()) -> doc().
-%%fill_uuid(Doc = #document{key = undefined, value = #file_meta{is_scope = true}}, _ParentUuid) ->
-%%    NewUuid = datastore_utils:gen_key(),
-%%    Doc#document{key = NewUuid};
 fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
-    HashPart = datastore_utils:gen_key(consistent_hashing:get_hash_part_length()),
+    HashPart = consistent_hashing:gen_hashing_key(),
     RandPart = datastore_utils:gen_key(),
     Doc#document{key = consistent_hashing:create_label(HashPart, RandPart)};
 fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
-    HashPart = case consistent_hashing:get_label_hash_part(ParentUuid) of
-        undefined ->
-            HashLenhth = consistent_hashing:get_hash_part_length(),
-            binary:part(ParentUuid, byte_size(ParentUuid), -1 * HashLenhth);
-        Part ->
-            Part
-    end,
+    HashPart = consistent_hashing:get_hashing_key(ParentUuid),
     RandPart = datastore_utils:gen_key(),
     Doc#document{key = consistent_hashing:create_label(HashPart, RandPart)};
 fill_uuid(Doc, _ParentUuid) ->

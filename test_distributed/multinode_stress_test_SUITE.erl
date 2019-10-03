@@ -64,10 +64,6 @@ single_dir_creation_test(Config) ->
 single_dir_creation_test_base(Config) ->
     FilesNum = ?config(files_num, Config),
     ProcNum = ?config(proc_num, Config),
-
-%%    [FirstWorker | _] = ?config(op_worker_nodes, Config),
-%%    Workers = [rpc:call(FirstWorker, consistent_hashing, get_node, [<<"mmmmmm">>])],
-%%    Workers = ?config(op_worker_nodes, Config) -- [rpc:call(FirstWorker, consistent_hashing, get_node, [<<>>])],
     [FirstWorker | _] = Workers = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
 

@@ -55,10 +55,6 @@ get_routing_key(#helper_params_changed_event{storage_id = StorageId}) ->
 get_routing_key(_) ->
     {error, session_only}.
 
-key_from_guid(Prefix, Guid) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    <<Prefix/binary, Uuid/binary>>.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a key of a stream responsible for processing a given event.
@@ -183,3 +179,12 @@ update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
     Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
 update_context(Evt, _Ctx) ->
     Evt.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
+key_from_guid(Prefix, Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    <<Prefix/binary, Uuid/binary>>.

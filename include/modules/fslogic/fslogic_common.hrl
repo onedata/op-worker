@@ -37,7 +37,7 @@
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
 -define(GUEST_IDENTITY, #user_identity{user_id = ?GUEST_USER_ID}).
-% TODO - czy guid musi sie dla routowania zaczynac od uuid?
+
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
 %% Mode for automatically created parent directory while creating file/directory.

@@ -264,7 +264,6 @@ create(SessId, Path) ->
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     remote_utils:call_fslogic(SessId, fuse_request,
-        % TODO - resolve guid powinien byc proxowany zaraz po pobraniu pierwszego dokumentu
         #resolve_guid{path = ParentPath},
         fun(#guid{guid = ParentGuid}) ->
             lfm_files:create(SessId, ParentGuid, Name, Mode)

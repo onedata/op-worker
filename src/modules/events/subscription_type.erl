@@ -53,10 +53,6 @@ get_routing_key(#helper_params_changed_subscription{storage_id = StorageId}) ->
 get_routing_key(_) ->
     {error, session_only}.
 
-key_from_guid(Prefix, Guid) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    <<Prefix/binary, Uuid/binary>>.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a key of a stream responsible for processing events associated with
@@ -153,3 +149,11 @@ update_context(#file_renamed_subscription{} = Object, {file, FileCtx}) ->
 update_context(Object, _Ctx) ->
     Object.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
+key_from_guid(Prefix, Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    <<Prefix/binary, Uuid/binary>>.

@@ -369,15 +369,24 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Opens a file and returns a handle id and location.
+%% @equiv open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink, true)
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_internal(user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean()) ->
     no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
-open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink) ->
-    open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, true).
+open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
+    open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink, true).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Opens a file and returns a handle id and location.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_internal(user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean(), boolean()) ->
+    no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, CheckLocationExists) ->
     FileCtx = verify_file_exists(FileCtx0, HandleId0),
     SessId = user_ctx:get_session_id(UserCtx),

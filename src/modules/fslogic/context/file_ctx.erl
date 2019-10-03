@@ -507,6 +507,12 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates and returns storage file ID (the ID of file on storage).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_new_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
     {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx),
     #document{value = #storage{helpers
@@ -945,7 +951,7 @@ get_file_location_docs(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file location docs.
+%% @equiv get_file_location_docs(FileCtx, GetLocationOpts, true)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_docs(ctx(), fslogic_location_cache:get_doc_opts()) ->
@@ -954,6 +960,13 @@ get_file_location_docs(FileCtx) ->
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
     get_file_location_docs(FileCtx, GetLocationOpts, true).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file location docs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_docs(ctx(), fslogic_location_cache:get_doc_opts(), boolean()) ->
+    {[file_location:doc()], ctx()}.
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
     {LocationIds0, FileCtx2} = get_file_location_ids(FileCtx),
     FileUuid = get_uuid_const(FileCtx),
@@ -1229,7 +1242,7 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %%--------------------------------------------------------------------
 -spec generate_canonical_path(ctx()) -> [file_meta:name()].
 generate_canonical_path(FileCtx) ->
-    % TODO - strasznie kopie po wydajnosci na wielu node'ach
+    % TODO VFS-5804 - use effective value to improve performance
     case is_root_dir_const(FileCtx) of
         true ->
             [<<"/">>];

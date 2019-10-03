@@ -174,6 +174,12 @@ invalidate() ->
     rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_on_node, []),
     ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears all permissions from cache on node.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_on_node() -> ok.
 invalidate_on_node() ->
     CurrentModel = case permissions_cache:get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->

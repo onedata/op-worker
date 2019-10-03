@@ -57,10 +57,8 @@ deregister(SessId, FileGuid) ->
 %%--------------------------------------------------------------------
 -spec invalidate_entries(session:id()) -> ok.
 invalidate_entries(SessId) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    lists:foreach(fun(Node) ->
-        ok = rpc:call(Node, ?MODULE, invalidate_local_entries, [SessId])
-    end, Nodes).
+    {AnsList, []} = rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_local_entries, [SessId]),
+    lists:foreach(fun(Ans) -> ok = Ans end, AnsList).
 
 %%--------------------------------------------------------------------
 %% @doc
