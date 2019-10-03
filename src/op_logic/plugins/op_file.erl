@@ -80,7 +80,6 @@ operation_supported(get, xattrs, private) -> true;
 operation_supported(get, json_metadata, private) -> true;
 operation_supported(get, rdf_metadata, private) -> true;
 operation_supported(get, acl, private) -> true;
-operation_supported(get, distribution, private) -> true;
 
 operation_supported(update, instance, private) -> true;
 operation_supported(update, acl, private) -> true;
@@ -190,9 +189,6 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = acl}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = distribution}}) ->
-    undefined;
-
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     optional => #{
         <<"posixPermissions">> => {binary,
@@ -279,8 +275,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= acl;
-    As =:= distribution
+    As =:= acl
 ->
     has_access_to_file(Req#op_req.auth, Guid);
 
@@ -321,8 +316,7 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= acl;
-    As =:= distribution
+    As =:= acl
 ->
     assert_file_managed_locally(Req#op_req.auth, Guid);
 
@@ -472,10 +466,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
     ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
-    ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
-
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid})).
+    ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%--------------------------------------------------------------------

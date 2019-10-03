@@ -82,6 +82,8 @@ translate_resource(_, GRI = #gri{type = op_group}, Data) ->
     group_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_file}, Data) ->
     file_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, GRI = #gri{type = op_replica}, Data) ->
+    replica_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, GRI = #gri{type = op_transfer}, Data) ->
     transfer_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(ProtocolVersion, GRI, Data) ->
