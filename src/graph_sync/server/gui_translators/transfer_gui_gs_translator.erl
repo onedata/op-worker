@@ -83,8 +83,8 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
     end,
 
     #{
-        <<"evictingProvider">> => EvictingProvider,
         <<"replicatingProvider">> => ReplicatingProvider,
+        <<"evictingProvider">> => EvictingProvider,
         <<"isOngoing">> => IsOngoing,
         <<"dataSource">> => DataSource,
         <<"dataSourceName">> => DataSourceName,
