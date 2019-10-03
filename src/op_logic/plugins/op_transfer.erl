@@ -238,8 +238,30 @@ get(#op_req{gri = #gri{aspect = progress}}, #transfer{
         <<"replicatedFiles">> => FilesReplicated,
         <<"evictedFiles">> => FilesEvicted
     }};
-get(#op_req{gri = #gri{aspect = {throughput_charts, StatsType}}}, Transfer) ->
-    {ok, Transfer}.
+get(#op_req{gri = #gri{aspect = {throughput_charts, ChartsType}}}, Transfer) ->
+    StartTime = Transfer#transfer.start_time,
+
+    % Return historical statistics of finished transfers intact. As for active
+    % ones, pad them with zeroes to current time and erase recent n-seconds to
+    % avoid fluctuations on charts
+    {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
+        false ->
+            RequestedHistograms = transfer_histograms:get(Transfer, ChartsType),
+            Window = transfer_histograms:type_to_time_window(ChartsType),
+            {RequestedHistograms, get_last_update(Transfer), Window};
+        true ->
+            LastUpdates = Transfer#transfer.last_update,
+            CurrentTime = provider_logic:zone_time_seconds(),
+            transfer_histograms:prepare(
+                Transfer, ChartsType, CurrentTime, LastUpdates
+            )
+    end,
+
+    ThroughputCharts = transfer_histograms:to_speed_charts(
+        Histograms, StartTime, LastUpdate, TimeWindow
+    ),
+
+    {ok, #{<<"timestamp">> => LastUpdate, <<"charts">> => ThroughputCharts}}.
 
 
 %%--------------------------------------------------------------------

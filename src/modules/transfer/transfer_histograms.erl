@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -20,12 +20,16 @@
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
 -type timestamp() :: non_neg_integer().
 -type timestamps() :: #{od_provider:id() => non_neg_integer()}.
+-type stats_rec() ::
+    transfer:transfer() |
+    space_transfer_stats:space_transfer_stats().
 
 -export_type([histograms/0]).
 
 %% API
 -export([
-    new/2, update/6,
+    new/2, get/2, update/6,
+    prepare/4,
     pad_with_zeroes/4,
     trim_min_histograms/2, trim_histograms/4, trim_timestamp/1,
     type_to_time_window/1, type_to_hist_length/1,
@@ -57,6 +61,17 @@ new(BytesPerProvider, HistogramsType) ->
     end, BytesPerProvider).
 
 
+-spec get(stats_rec(), HistogramsType :: binary()) -> histograms().
+get(#transfer{min_hist = Hist}, ?MINUTE_STAT_TYPE)             -> Hist;
+get(#transfer{hr_hist = Hist}, ?HOUR_STAT_TYPE)                -> Hist;
+get(#transfer{dy_hist = Hist}, ?DAY_STAT_TYPE)                 -> Hist;
+get(#transfer{mth_hist = Hist}, ?MONTH_STAT_TYPE)              -> Hist;
+get(#space_transfer_stats{min_hist = Hist}, ?MINUTE_STAT_TYPE) -> Hist;
+get(#space_transfer_stats{hr_hist = Hist}, ?HOUR_STAT_TYPE)    -> Hist;
+get(#space_transfer_stats{dy_hist = Hist}, ?DAY_STAT_TYPE)     -> Hist;
+get(#space_transfer_stats{mth_hist = Hist}, ?MONTH_STAT_TYPE)  -> Hist.
+
+
 %%-------------------------------------------------------------------
 %% @doc
 %% Updates transfer_histograms for specified providers.
@@ -84,6 +99,46 @@ update(BytesPerProvider, Histograms, HistogramsType,
         end,
         OldHistograms#{ProviderId => histogram:increment(Histogram, Bytes)}
     end, Histograms, BytesPerProvider).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get histograms of requested type from given record. Pad them with zeroes
+%% to current time and erase recent n-seconds to avoid fluctuations on charts
+%% (due to synchronization between providers). To do that for type other than
+%% minute one, it is required to calculate also mentioned minute hists
+%% (otherwise it is not possible to trim histograms of other types).
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare(stats_rec(), type(), timestamp(), LastUpdates :: timestamps()) ->
+    {histograms(), timestamp(), TimeWindow :: non_neg_integer()}.
+prepare(Stats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
+    Histograms = transfer_histograms:get(Stats, ?MINUTE_STAT_TYPE),
+    Window = ?FIVE_SEC_TIME_WINDOW,
+    PaddedHistograms = pad_with_zeroes(
+        Histograms, Window, LastUpdates, CurrentTime
+    ),
+    {NewHistograms, NewTimestamp} = trim_min_histograms(
+        PaddedHistograms, CurrentTime
+    ),
+    {NewHistograms, NewTimestamp, Window};
+
+prepare(Stats, HistogramsType, CurrentTime, LastUpdates) ->
+    MinHistograms = transfer_histograms:get(Stats, ?MINUTE_STAT_TYPE),
+    RequestedHistograms = transfer_histograms:get(Stats, HistogramsType),
+    TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
+
+    PaddedMinHistograms = pad_with_zeroes(
+        MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, CurrentTime
+    ),
+    PaddedRequestedHistograms = pad_with_zeroes(
+        RequestedHistograms, TimeWindow, LastUpdates, CurrentTime
+    ),
+    {_, NewRequestedHistograms, NewTimestamp} = trim_histograms(
+        PaddedMinHistograms, PaddedRequestedHistograms, TimeWindow, CurrentTime
+    ),
+
+    {NewRequestedHistograms, NewTimestamp, TimeWindow}.
 
 
 %%-------------------------------------------------------------------

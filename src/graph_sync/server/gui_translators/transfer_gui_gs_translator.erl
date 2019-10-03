@@ -104,5 +104,5 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
     };
 translate_resource(#gri{aspect = progress, scope = private}, ProgressInfo) ->
     ProgressInfo;
-translate_resource(#gri{aspect = {throughput_charts, _}, scope = private}, ProgressInfo) ->
-    ProgressInfo.
+translate_resource(#gri{aspect = {throughput_charts, _}, scope = private}, Charts) ->
+    Charts.
