@@ -235,12 +235,12 @@ get_record_struct(3) ->
 upgrade_record(1, ProviderAuth) ->
     % Versions 1 and 2 are the same, but upgrade is triggered to force overwrite
     % of the root token file, which has changed.
-    {ProviderId, RootToken, _, _} = ProviderAuth,
+    {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
     write_to_file(ProviderId, RootToken),
     {2, ProviderAuth};
 upgrade_record(2, ProviderAuth) ->
     % rename the occurrences of macaroon -> token
-    {ProviderId, RootToken, _, _} = ProviderAuth,
+    {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
     % file format is also changed to use 'token' rather than 'macaroon'
     write_to_file(ProviderId, RootToken),
     {3, #provider_auth{provider_id = ProviderId, root_token = RootToken}}.
