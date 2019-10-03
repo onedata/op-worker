@@ -286,9 +286,7 @@
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     is_possible = false :: boolean(),
     % Those are requests to remote providers to start QoS traverse.
-    traverse_reqs = #{} :: qos_entry:traverse_map(),
-    % Traverses in progress under given qos_entry
-    traverses = #{} :: qos_entry:traverse_map()
+    traverse_reqs = #{} :: qos_entry:traverse_map()
 }).
 
 -record(file_meta, {

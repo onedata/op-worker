@@ -134,7 +134,7 @@ task_finished(TaskId) ->
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
-            {ok, _} = qos_entry:mark_traverse_finished(QosId, TaskId),
+            {ok, _} = qos_entry:remove_traverse_req(QosId, TaskId),
             ok;
         <<"restore">> ->
             #{

@@ -264,8 +264,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosId, QosName, ExpectedIsPo
         ErrMsg = case rpc:call(Worker, lfm_qos, get_qos_details, [SessId, QosId]) of
             {ok, #qos_entry{
                 is_possible = IsPossible,
-                traverse_reqs = TraversReqs,
-                traverses = Traverses
+                traverse_reqs = TraversReqs
             }} ->
                 case ExpectedIsPossible of
                     true ->
@@ -274,9 +273,8 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosId, QosName, ExpectedIsPo
                             "Worker: ~p ~n"
                             "QosName: ~p ~n"
                             "IsPossible: ~p ~n"
-                            "TraverseReqs: ~p ~n"
-                            "Traverses: ~p ~n",
-                            [Worker, QosName, IsPossible, TraversReqs, Traverses]
+                            "TraverseReqs: ~p ~n",
+                            [Worker, QosName, IsPossible, TraversReqs]
                         );
                     false ->
                         str_utils:format(

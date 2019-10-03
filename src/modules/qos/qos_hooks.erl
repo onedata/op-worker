@@ -109,9 +109,7 @@ maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             case file_ctx:get_file_doc_allow_not_existing(FileCtx) of
                 {ok, _FileDoc, FileCtx1} ->
-                    ok = qos_traverse:start_initial_traverse(FileCtx1, QosId, Storage, TaskId),
-                    {ok, _} = qos_entry:mark_traverse_started(QosId, TaskId),
-                    ok;
+                    ok = qos_traverse:start_initial_traverse(FileCtx1, QosId, Storage, TaskId);
                 error ->
                     % There is no need to start traverse as appropriate transfers will be started
                     % when file is finally synced. If this is directory, then each child registered
