@@ -99,6 +99,7 @@ EOF
 . /opt/onedata/%{scl}/enable
 mkdir -p %{_builddir}/tmp/cmake3
 ln -nsf /usr/bin/cmake3 %{_builddir}/tmp/cmake3/cmake
+ONEDATA_SCL=%{scl} \
 OVERLAY_VARS="--overlay_vars=rpm.vars.config" \
 LD_LIBRARY_PATH="/opt/onedata/{{scl}}/root/usr/lib64" \
 LDFLAGS="-L/opt/onedata/{{scl}}/root/usr/lib64" \

@@ -15,10 +15,10 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/l
 
 # Add ceph-common library, if X_SCLS is defined, the library is installed
 # as Software Collection on CentOS
-ifndef X_SCLS
+ifndef ONEDATA_SCL
 	LDFLAGS += -Wl,-rpath,/usr/lib/ceph/ /usr/lib/ceph/libceph-common.so.0
 else
-	LDFLAGS += -Wl,-rpath,/opt/onedata/onedata1909/root/usr/lib64/ceph/ /opt/onedata/onedata1909/root/usr/lib64/ceph/libceph-common.so.0
+	LDFLAGS += -Wl,-rpath,/opt/onedata/$(ONEDATA_SCL)/root/usr/lib64/ceph/ /opt/onedata/$(ONEDATA_SCL)/root/usr/lib64/ceph/libceph-common.so.0
 endif
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
