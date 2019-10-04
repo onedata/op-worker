@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([translate_resource/2]).
@@ -46,30 +47,10 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
     index_name = ViewName,
     query_view_params = QueryViewParams
 } = Transfer) ->
-    {DataSource, DataSourceName} = case ViewName of
-        undefined ->
-            {gri:serialize(#gri{
-                type = op_file,
-                id = file_id:pack_guid(FileUuid, SpaceId),
-                aspect = instance,
-                scope = private
-            }), Path};
-        _ ->
-            case view_links:get_view_id(ViewName, SpaceId) of
-                {ok, ViewId} ->
-                    {gri:serialize(#gri{
-                        type = op_view,
-                        id = ViewId,
-                        aspect = instance,
-                        scope = private
-                    }), ViewName};
-                _ ->
-                    {null, ViewName}
-            end
-    end,
+
     QueryParams = case QueryViewParams of
         undefined -> null;
-        _ -> {QueryViewParams}
+        _ -> maps:from_list(QueryViewParams)
     end,
     IsOngoing = transfer:is_ongoing(Transfer),
 
@@ -82,26 +63,48 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
         _ -> ?PROVIDER_GRI_ID(ReplicatingProviderId)
     end,
 
-    #{
-        <<"replicatingProvider">> => ReplicatingProvider,
-        <<"evictingProvider">> => EvictingProvider,
-        <<"isOngoing">> => IsOngoing,
-        <<"dataSource">> => DataSource,
-        <<"dataSourceName">> => DataSourceName,
-        <<"queryParams">> => QueryParams,
-        <<"user">> => gri:serialize(#gri{
-            type = op_user,
-            id = UserId,
-            aspect = instance,
-            scope = shared
-        }),
-        <<"startTime">> => StartTime,
-        <<"scheduleTime">> => ScheduleTime,
-        <<"finishTime">> => case IsOngoing of
-            true -> null;
-            false -> FinishTime
-        end
-    };
+    fun(?USER(_UserId, SessionId)) ->
+        {DataSourceType, DataSourceId, DataSourceName} = case ViewName of
+            undefined ->
+                FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+                FileType = case lfm:stat(SessionId, {guid, FileGuid}) of
+                    {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
+                    {ok, _} -> <<"file">>;
+                    {error, ?ENOENT} -> <<"deleted">>;
+                    {error, _} -> <<"unknown">>
+                end,
+                {FileType, FileGuid, Path};
+            _ ->
+                case view_links:get_view_id(ViewName, SpaceId) of
+                    {ok, IndexId} ->
+                        {<<"view">>, IndexId, ViewName};
+                    _ ->
+                        {<<"view">>, null, ViewName}
+                end
+        end,
+
+        #{
+            <<"replicatingProvider">> => ReplicatingProvider,
+            <<"evictingProvider">> => EvictingProvider,
+            <<"isOngoing">> => IsOngoing,
+            <<"dataSourceType">> => DataSourceType,
+            <<"dataSourceId">> => DataSourceId,
+            <<"dataSourceName">> => DataSourceName,
+            <<"queryParams">> => QueryParams,
+            <<"user">> => gri:serialize(#gri{
+                type = op_user,
+                id = UserId,
+                aspect = instance,
+                scope = shared
+            }),
+            <<"startTime">> => StartTime,
+            <<"scheduleTime">> => ScheduleTime,
+            <<"finishTime">> => case IsOngoing of
+                true -> null;
+                false -> FinishTime
+            end
+        }
+    end;
 translate_resource(#gri{aspect = progress, scope = private}, ProgressInfo) ->
     ProgressInfo;
 translate_resource(#gri{aspect = {throughput_charts, _}, scope = private}, Charts) ->

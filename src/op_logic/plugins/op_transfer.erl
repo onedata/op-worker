@@ -82,16 +82,8 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"dataSource">> => {binary, fun(Parent) ->
-            try gri:deserialize(Parent) of
-                #gri{type = op_file, id = FileGuid, aspect = instance} ->
-                    {true, FileGuid};
-                _ ->
-                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"dataSource">>))
-            catch _:_ ->
-                false
-            end
-        end}
+        <<"dataSourceType">> => {binary, [<<"file">>, <<"dir">>]},
+        <<"dataSourceId">> => {binary, non_empty}
     },
     at_least_one => #{
         <<"replicatingProvider">> => {binary, fun(Parent) ->
