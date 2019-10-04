@@ -151,7 +151,7 @@ authorize(#op_req{auth = ?NOBODY}, _) ->
 authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
     aspect = instance
 }}, _) ->
-    SpaceId = file_id:guid_to_space_id(maps:get(<<"dataSource">>, Data)),
+    SpaceId = file_id:guid_to_space_id(maps:get(<<"dataSourceId">>, Data)),
     ReplicatingProvider = maps:get(<<"replicatingProvider">>, Data, undefined),
     EvictingProvider = maps:get(<<"evictingProvider">>, Data, undefined),
     TransferType = transfer_type(ReplicatingProvider, EvictingProvider),
@@ -219,7 +219,7 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{
     aspect = instance
 }}, _) ->
-    FileGuid = maps:get(<<"dataSource">>, Data),
+    FileGuid = maps:get(<<"dataSourceId">>, Data),
 
     transfer_utils:validate_creation(
         Auth,
@@ -254,7 +254,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
-    FileGuid = maps:get(<<"dataSource">>, Data),
+    FileGuid = maps:get(<<"dataSourceId">>, Data),
     ReplicatingProvider = maps:get(<<"replicatingProvider">>, Data, undefined),
     EvictingProvider = maps:get(<<"evictingProvider">>, Data, undefined),
     TransferType = transfer_type(ReplicatingProvider, EvictingProvider),
