@@ -59,7 +59,7 @@
 -export([get_file_guid/1, get_expression/1, get_replicas_num/1]).
 
 %% functions responsible for traverses under given QoS entry.
--export([remove_traverse_req/2, mark_traverse_started/2, mark_traverse_finished/2]).
+-export([remove_traverse_req/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
@@ -189,45 +189,14 @@ list_impossible_qos() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks given traverse as finished by removing it from traverses map.
+%% Removes given traverse from traverse reqs map.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
 remove_traverse_req(QosId, TraverseId) ->
     update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
-            traverses = maps:remove(TraverseId, TR)
-        }}
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Marks given traverse as started by moving it from traverse requests
-%% map to traverses map.
-%% @end
-%%--------------------------------------------------------------------
--spec mark_traverse_started(id(), traverse:id()) ->  {ok, id()}.
-mark_traverse_started(QosId, TraverseId) ->
-    update(QosId, fun(#qos_entry{traverse_reqs = TR, traverses = Traverses} = QosEntry) ->
-        {TraverseReq, NewTR} = maps:take(TraverseId, TR),
-        {ok, QosEntry#qos_entry{
-            traverse_reqs = NewTR,
-            traverses = Traverses#{TraverseId => TraverseReq}
-        }}
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Marks given traverse as finished by removing it from traverses map.
-%% @end
-%%--------------------------------------------------------------------
--spec mark_traverse_finished(id(), traverse:id()) ->  {ok, id()}.
-mark_traverse_finished(QosId, TraverseId) ->
-    update(QosId, fun(#qos_entry{traverses = Traverses} = QosEntry) ->
-        {ok, QosEntry#qos_entry{
-            traverses = maps:remove(TraverseId, Traverses)
+            traverse_reqs = maps:remove(TraverseId, TR)
         }}
     end).
 
@@ -276,10 +245,6 @@ get_record_struct(1) ->
         {traverse_reqs, #{binary => {record, [
             {start_file_uuid, string},
             {target_storage, string}
-        ]}}},
-        {traverses, #{binary => {record, [
-            {start_file_uuid, string},
-            {target_storage, string}
         ]}}}
     ]}.
 
@@ -297,36 +262,19 @@ get_record_struct(1) ->
 resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, PrevDoc) ->
     LocalReqs = PrevDoc#document.value#qos_entry.traverse_reqs,
     RemoteReqs = RemoteValue#qos_entry.traverse_reqs,
-    LocalTraverses = PrevDoc#document.value#qos_entry.traverses,
-    RemoteTraverses = RemoteValue#qos_entry.traverses,
-    case (LocalReqs == RemoteReqs) and (LocalTraverses == RemoteTraverses) of
+    case (LocalReqs == RemoteReqs) of
         true ->
             default;
         false ->
+            {LocalTraverses, _} = split_traverses(LocalReqs),
+            {_, RemoteTraverses} = split_traverses(RemoteReqs),
             {true, RemoteDoc#document{
                 value = RemoteValue#qos_entry{
-                    traverse_reqs = calculate_new_traverses(LocalReqs, RemoteReqs),
-                    traverses = calculate_new_traverses(LocalTraverses, RemoteTraverses)
+                    traverse_reqs = maps:with(LocalTraverses ++ RemoteTraverses, LocalReqs)
                 }
             }}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calculates new traverses based on local and remote value.
-%% Only remote changes of remote providers traverses and
-%% local changes of current provider traverses are taken into account.
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_new_traverses(traverse_map(), traverse_map()) -> traverse_map().
-calculate_new_traverses(LocalValue, RemoteValue) ->
-    {LocalTraverses, _} = split_traverses(LocalValue),
-    {_, RemoteTraverses} = split_traverses(RemoteValue),
-    maps:merge(
-        maps:with(LocalTraverses, LocalValue),
-        maps:with(RemoteTraverses, RemoteValue)
-    ).
 
 %%--------------------------------------------------------------------
 %% @private

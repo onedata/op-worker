@@ -83,14 +83,13 @@ check_fulfilment(QosId, FileGuid) ->
     {ok, #document{value = QosEntry, scope = SpaceId}} = qos_entry:get(QosId),
     #qos_entry{
         file_uuid = OriginUuid,
-        traverse_reqs = TraverseReqs,
-        traverses = Traverses
+        traverse_reqs = TraverseReqs
     } = QosEntry,
     case QosEntry#qos_entry.is_possible of
         false -> false;
         true ->
             % are all traverses finished?
-            case maps:size(Traverses) == 0 andalso maps:size(TraverseReqs) == 0 of
+            case maps:size(TraverseReqs) == 0 of
                 true ->
                     OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
                     RelativePath = get_relative_path(OriginGuid, FileGuid),
