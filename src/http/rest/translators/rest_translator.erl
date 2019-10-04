@@ -57,7 +57,7 @@ response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
 -spec error_response(errors:error()) -> #rest_resp{}.
 error_response(Error = {error, _}) ->
     #rest_resp{
-        code = errors:http_code(Error),
+        code = errors:to_http_code(Error),
         body = #{<<"error">> => errors:to_json(Error)}
     }.
 
