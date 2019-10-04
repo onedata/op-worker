@@ -627,8 +627,12 @@ invalidate_permissions_cache() ->
 periodical_spaces_autocleaning_check() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
+            MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
+                case consistent_hashing:get_node(SpaceId) of
+                    MyNode -> autocleaning_api:maybe_check_and_start_autocleaning(SpaceId);
+                    _ -> ok
+                end
             end, SpaceIds);
         ?ERROR_UNREGISTERED_PROVIDER ->
             ?debug("Skipping spaces cleanup due to unregistered provider");

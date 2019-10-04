@@ -989,13 +989,10 @@ get_uuid(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec fill_uuid(doc(), uuid()) -> doc().
 fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
-    HashPart = consistent_hashing:gen_hashing_key(),
-    RandPart = datastore_utils:gen_key(),
-    Doc#document{key = consistent_hashing:create_label(HashPart, RandPart)};
+    Doc#document{key = datastore_utils:gen_key()};
 fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
     HashPart = consistent_hashing:get_hashing_key(ParentUuid),
-    RandPart = datastore_utils:gen_key(),
-    Doc#document{key = consistent_hashing:create_label(HashPart, RandPart)};
+    Doc#document{key = datastore_utils:gen_key(HashPart)};
 fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
