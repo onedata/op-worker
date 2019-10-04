@@ -86,25 +86,17 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"dataSourceId">> => {binary, non_empty}
     },
     at_least_one => #{
-        <<"replicatingProvider">> => {binary, fun(Parent) ->
-            try gri:deserialize(Parent) of
-                #gri{type = op_provider, id = ReplicatingProvider, aspect = instance} ->
-                    {true, ReplicatingProvider};
-                _ ->
-                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"replicatingProvider">>))
-            catch _:_ ->
-                false
-            end
+        <<"replicatingProvider">> => {gri, fun
+            (#gri{type = op_provider, id = ProviderId, aspect = instance}) ->
+                {true, ProviderId};
+            (_) ->
+                throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"replicatingProvider">>))
         end},
-        <<"evictingProvider">> => {binary, fun(Parent) ->
-            try gri:deserialize(Parent) of
-                #gri{type = op_provider, id = EvictingProvider, aspect = instance} ->
-                    {true, EvictingProvider};
-                _ ->
-                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"evictingProvider">>))
-            catch _:_ ->
-                false
-            end
+        <<"evictingProvider">> => {gri, fun
+            (#gri{type = op_provider, id = ProviderId, aspect = instance}) ->
+                {true, ProviderId};
+            (_) ->
+                throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"evictingProvider">>))
         end}
     }
 };
