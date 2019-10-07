@@ -139,10 +139,8 @@ fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri
     case provider_logic:get_protected_data(SessionId, ProviderId, AuthHint) of
         {ok, #document{value = Provider}} ->
             {ok, {Provider, 1}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        _ ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end;
 fetch_entity(_) ->
     {ok, {undefined, 1}}.

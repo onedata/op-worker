@@ -20,7 +20,7 @@
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
 -type timestamp() :: non_neg_integer().
 -type timestamps() :: #{od_provider:id() => non_neg_integer()}.
--type stats_rec() ::
+-type stats_record() ::
     transfer:transfer() |
     space_transfer_stats:space_transfer_stats().
 
@@ -61,7 +61,7 @@ new(BytesPerProvider, HistogramsType) ->
     end, BytesPerProvider).
 
 
--spec get(stats_rec(), HistogramsType :: binary()) -> histograms().
+-spec get(stats_record(), HistogramsType :: binary()) -> histograms().
 get(#transfer{min_hist = Hist}, ?MINUTE_STAT_TYPE)             -> Hist;
 get(#transfer{hr_hist = Hist}, ?HOUR_STAT_TYPE)                -> Hist;
 get(#transfer{dy_hist = Hist}, ?DAY_STAT_TYPE)                 -> Hist;
@@ -110,7 +110,7 @@ update(BytesPerProvider, Histograms, HistogramsType,
 %% (otherwise it is not possible to trim histograms of other types).
 %% @end
 %%--------------------------------------------------------------------
--spec prepare(stats_rec(), type(), timestamp(), LastUpdates :: timestamps()) ->
+-spec prepare(stats_record(), type(), timestamp(), LastUpdates :: timestamps()) ->
     {histograms(), timestamp(), TimeWindow :: non_neg_integer()}.
 prepare(Stats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
     Histograms = get(Stats, ?MINUTE_STAT_TYPE),

@@ -87,10 +87,8 @@ fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) 
     case user_logic:get(SessionId, UserId) of
         {ok, #document{value = User}} ->
             {ok, {User, 1}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        _ ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end;
 fetch_entity(#op_req{auth = ?USER(_ClientId, SessionId), auth_hint = AuthHint, gri = #gri{
     id = UserId,
@@ -100,10 +98,8 @@ fetch_entity(#op_req{auth = ?USER(_ClientId, SessionId), auth_hint = AuthHint, g
     case user_logic:get_shared_data(SessionId, UserId, AuthHint) of
         {ok, #document{value = User}} ->
             {ok, {User, 1}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        _ ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end;
 fetch_entity(_) ->
     ?ERROR_FORBIDDEN.
