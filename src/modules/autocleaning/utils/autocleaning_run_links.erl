@@ -29,7 +29,6 @@
 
 -define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 -define(LINK_NAME_ID_PART_LENGTH, 6).
--define(LINK_TIMESTAMP_PART_LENGTH, 10).
 
 
 %%%===================================================================
@@ -95,7 +94,8 @@ list(SpaceId, StartId, Offset, Limit) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec link_key(autocleaning:run_id(), non_neg_integer()) -> link_key().
-link_key(ARId, Timestamp) ->
+link_key(ARId0, Timestamp) ->
+    ARId = consistent_hashing:get_random_labal_part(ARId0),
     TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
     IdPart = binary:part(ARId, 0, ?LINK_NAME_ID_PART_LENGTH),
     <<TimestampPart/binary, IdPart/binary>>.
