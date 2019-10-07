@@ -466,12 +466,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
     ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
-    case lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}) of
-        {ok, _} = Ans ->
-            Ans;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
+    ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%--------------------------------------------------------------------
