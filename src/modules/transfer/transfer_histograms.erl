@@ -113,20 +113,20 @@ update(BytesPerProvider, Histograms, HistogramsType,
 -spec prepare(stats_rec(), type(), timestamp(), LastUpdates :: timestamps()) ->
     {histograms(), timestamp(), TimeWindow :: non_neg_integer()}.
 prepare(Stats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
-    Histograms = transfer_histograms:get(Stats, ?MINUTE_STAT_TYPE),
-    Window = ?FIVE_SEC_TIME_WINDOW,
+    Histograms = get(Stats, ?MINUTE_STAT_TYPE),
+    TimeWindow = ?FIVE_SEC_TIME_WINDOW,
     PaddedHistograms = pad_with_zeroes(
-        Histograms, Window, LastUpdates, CurrentTime
+        Histograms, TimeWindow, LastUpdates, CurrentTime
     ),
     {NewHistograms, NewTimestamp} = trim_min_histograms(
         PaddedHistograms, CurrentTime
     ),
-    {NewHistograms, NewTimestamp, Window};
+    {NewHistograms, NewTimestamp, TimeWindow};
 
 prepare(Stats, HistogramsType, CurrentTime, LastUpdates) ->
-    MinHistograms = transfer_histograms:get(Stats, ?MINUTE_STAT_TYPE),
-    RequestedHistograms = transfer_histograms:get(Stats, HistogramsType),
-    TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
+    MinHistograms = get(Stats, ?MINUTE_STAT_TYPE),
+    RequestedHistograms = get(Stats, HistogramsType),
+    TimeWindow = type_to_time_window(HistogramsType),
 
     PaddedMinHistograms = pad_with_zeroes(
         MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, CurrentTime

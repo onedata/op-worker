@@ -54,6 +54,8 @@ handshake_attributes(_Client) ->
 %%--------------------------------------------------------------------
 -spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
+translate_value(_, #gri{type = op_replica, aspect = instance}, TransferId) ->
+    TransferId;
 translate_value(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync create result for:~n"
            "ProtocolVersion: ~p~n"
