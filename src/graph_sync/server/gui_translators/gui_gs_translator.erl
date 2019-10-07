@@ -54,6 +54,10 @@ handshake_attributes(_Client) ->
 %%--------------------------------------------------------------------
 -spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
+translate_value(_, #gri{aspect = throughput_charts}, Charts) ->
+    Charts;
+translate_value(_, #gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
+    Charts;
 translate_value(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync create result for:~n"
            "ProtocolVersion: ~p~n"

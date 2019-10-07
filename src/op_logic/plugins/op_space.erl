@@ -73,6 +73,7 @@ operation_supported(get, transfers, private) -> true;
 operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
 operation_supported(get, providers, private) -> true;
+operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -163,6 +164,21 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_groups}}) ->
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = providers}}) ->
     undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_charts, _}}}) ->
+    #{required => #{
+        <<"transferType">> => {binary, [
+            ?JOB_TRANSFERS_TYPE,
+            ?ON_THE_FLY_TRANSFERS_TYPE,
+            ?ALL_TRANSFERS_TYPE
+        ]},
+        <<"chartsType">> => {binary, [
+            ?MINUTE_STAT_TYPE,
+            ?HOUR_STAT_TYPE,
+            ?DAY_STAT_TYPE,
+            ?MONTH_STAT_TYPE
+        ]}
+    }};
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
@@ -276,6 +292,12 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = {transfers_throughput_charts, _}
+}}, _) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
+
 authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {view, _}
@@ -348,6 +370,12 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) whe
     As =:= eff_groups;
     As =:= providers
 ->
+    op_logic_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{
+    id = SpaceId,
+    aspect = {transfers_throughput_charts, _}
+}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
@@ -512,7 +540,45 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
     space_logic:get_eff_groups(Auth#auth.session_id, SpaceId);
 
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
-    space_logic:get_provider_ids(Auth#auth.session_id, SpaceId).
+    space_logic:get_provider_ids(Auth#auth.session_id, SpaceId);
+
+get(#op_req{data = Data, gri = #gri{
+    id = SpaceId,
+    aspect = {transfers_throughput_charts, ProviderId}
+}}, _) ->
+    TargetProvider = case ProviderId of
+        <<"undefined">> -> undefined;
+        _ -> ProviderId
+    end,
+    TransferType = maps:get(<<"transferType">>, Data),
+    ChartsType = maps:get(<<"chartsType">>, Data),
+    TimeWindow = transfer_histograms:type_to_time_window(ChartsType),
+
+    % Some functions from transfer_histograms module require specifying
+    % start time parameter. But there is no conception of start time for
+    % space_transfer_stats doc. So a long past value like 0 (year 1970) is used.
+    StartTime = 0,
+
+    #space_transfer_stats_cache{
+        timestamp = LastUpdate,
+        stats_in = StatsIn,
+        stats_out = StatsOut
+    } = space_transfer_stats_cache:get(
+        TargetProvider, SpaceId, TransferType, ChartsType
+    ),
+
+    InputThroughputCharts = transfer_histograms:to_speed_charts(
+        StatsIn, StartTime, LastUpdate, TimeWindow
+    ),
+    OutputThroughputCharts = transfer_histograms:to_speed_charts(
+        StatsOut, StartTime, LastUpdate, TimeWindow
+    ),
+
+    {ok, value, #{
+        <<"timestamp">> => LastUpdate,
+        <<"inputCharts">> => InputThroughputCharts,
+        <<"outputCharts">> => OutputThroughputCharts
+    }}.
 
 
 %%--------------------------------------------------------------------
