@@ -26,7 +26,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
--export([get/0, get/1, get/2, get_protected_data/2]).
+-export([get/0, get/1, get/2, get_protected_data/2, get_protected_data/3]).
 -export([to_string/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
@@ -115,6 +115,23 @@ get_protected_data(SessionId, ProviderId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
         gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
+        subscribe = true
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider doc restricted to protected data by given ProviderId
+%% using specified AuthHint.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_protected_data(gs_client_worker:client(), od_provider:id(),
+    gs_protocol:auth_hint()) -> {ok, od_provider:doc()} | gs_protocol:error().
+get_protected_data(SessionId, ProviderId, AuthHint) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = ProviderId, aspect = instance, scope = protected},
+        auth_hint = AuthHint,
         subscribe = true
     }).
 

@@ -228,6 +228,17 @@ check_type(integer, _Key, Int) when is_integer(Int) ->
 check_type(integer, Key, _) ->
     throw(?ERROR_BAD_VALUE_INTEGER(Key));
 
+check_type(gri, _Key, #gri{} = GRI) ->
+    GRI;
+check_type(gri, Key, EncodedGri) when is_binary(EncodedGri) ->
+    try
+        gri:deserialize(EncodedGri)
+    catch _:_ ->
+        throw(?ERROR_BAD_DATA(Key))
+    end;
+check_type(gri, Key, _) ->
+    throw(?ERROR_BAD_DATA(Key));
+
 check_type(json, _Key, JSON) when is_map(JSON) ->
     JSON;
 check_type(json, Key, _) ->

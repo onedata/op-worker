@@ -82,10 +82,8 @@ fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId}
     case group_logic:get_shared_data(Auth#auth.session_id, GroupId, AuthHint) of
         {ok, #document{value = Group}} ->
             {ok, {Group, 1}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        _ ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end;
 fetch_entity(_) ->
     ?ERROR_FORBIDDEN.

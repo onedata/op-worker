@@ -72,6 +72,7 @@ operation_supported(get, {query_view, _}, private) -> true;
 operation_supported(get, transfers, private) -> true;
 operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
+operation_supported(get, providers, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -158,6 +159,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_users}}) ->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = eff_groups}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = providers}}) ->
     undefined;
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
@@ -267,7 +271,8 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = As
 }}, _) when
     As =:= eff_users;
-    As =:= eff_groups
+    As =:= eff_groups;
+    As =:= providers
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
@@ -340,7 +345,8 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}},
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= eff_users;
-    As =:= eff_groups
+    As =:= eff_groups;
+    As =:= providers
 ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
@@ -503,7 +509,10 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_users}}, _) ->
     space_logic:get_eff_users(Auth#auth.session_id, SpaceId);
 
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
-    space_logic:get_eff_groups(Auth#auth.session_id, SpaceId).
+    space_logic:get_eff_groups(Auth#auth.session_id, SpaceId);
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
+    space_logic:get_provider_ids(Auth#auth.session_id, SpaceId).
 
 
 %%--------------------------------------------------------------------

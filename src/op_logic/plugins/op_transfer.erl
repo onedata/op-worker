@@ -57,9 +57,17 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
+operation_supported(create, instance, private) -> true;
 operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;
+operation_supported(get, progress, private) -> true;
+operation_supported(get, {throughput_charts, Type}, private) when
+    Type =:= ?MINUTE_STAT_TYPE;
+    Type =:= ?HOUR_STAT_TYPE;
+    Type =:= ?DAY_STAT_TYPE;
+    Type =:= ?MONTH_STAT_TYPE
+-> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -72,6 +80,27 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
+    required => #{
+        <<"dataSourceType">> => {binary, [<<"file">>, <<"dir">>]},
+        <<"dataSourceId">> => {binary, non_empty}
+    },
+    at_least_one => #{
+        <<"replicatingProvider">> => {gri, fun
+            (#gri{type = op_provider, id = ProviderId, aspect = instance}) ->
+                {true, ProviderId};
+            (_) ->
+                throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"replicatingProvider">>))
+        end},
+        <<"evictingProvider">> => {gri, fun
+            (#gri{type = op_provider, id = ProviderId, aspect = instance}) ->
+                {true, ProviderId};
+            (_) ->
+                throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"evictingProvider">>))
+        end}
+    }
+};
+
 data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
     undefined;
 
@@ -116,6 +145,16 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
+    aspect = instance
+}}, _) ->
+    SpaceId = file_id:guid_to_space_id(maps:get(<<"dataSourceId">>, Data)),
+    ReplicatingProvider = maps:get(<<"replicatingProvider">>, Data, undefined),
+    EvictingProvider = maps:get(<<"evictingProvider">>, Data, undefined),
+    TransferType = transfer_type(ReplicatingProvider, EvictingProvider),
+
+    transfer_utils:authorize_creation(SpaceId, UserId, TransferType, true);
+
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -134,8 +173,15 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
-    aspect = instance
-}}, #transfer{space_id = SpaceId}) ->
+    aspect = As
+}}, #transfer{space_id = SpaceId}) when
+    As =:= instance;
+    As =:= progress;
+    As =:= {throughput_charts, ?MINUTE_STAT_TYPE};
+    As =:= {throughput_charts, ?HOUR_STAT_TYPE};
+    As =:= {throughput_charts, ?DAY_STAT_TYPE};
+    As =:= {throughput_charts, ?MONTH_STAT_TYPE}
+->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
@@ -170,10 +216,30 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{
+    aspect = instance
+}}, _) ->
+    FileGuid = maps:get(<<"dataSourceId">>, Data),
+
+    transfer_utils:validate_creation(
+        Auth,
+        file_id:guid_to_space_id(FileGuid),
+        maps:get(<<"replicatingProvider">>, Data, undefined),
+        maps:get(<<"evictingProvider">>, Data, undefined),
+        {guid, FileGuid}
+    );
+
 validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
     ok;
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= progress;
+    As =:= {throughput_charts, ?MINUTE_STAT_TYPE};
+    As =:= {throughput_charts, ?HOUR_STAT_TYPE};
+    As =:= {throughput_charts, ?DAY_STAT_TYPE};
+    As =:= {throughput_charts, ?MONTH_STAT_TYPE}
+->
     ok;
 
 validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
@@ -186,6 +252,33 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
+    SessionId = Auth#auth.session_id,
+    FileGuid = maps:get(<<"dataSourceId">>, Data),
+    ReplicatingProvider = maps:get(<<"replicatingProvider">>, Data, undefined),
+    EvictingProvider = maps:get(<<"evictingProvider">>, Data, undefined),
+    TransferType = transfer_type(ReplicatingProvider, EvictingProvider),
+
+    Result = case TransferType of
+        replication ->
+            lfm:schedule_file_replication(
+                SessionId, {guid, FileGuid}, ReplicatingProvider, undefined
+            );
+        _ ->
+            lfm:schedule_replica_eviction(
+                SessionId, {guid, FileGuid},
+                EvictingProvider, ReplicatingProvider
+            )
+    end,
+
+    case Result of
+        {ok, TransferId} ->
+            {ok, #document{value = Transfer}} = transfer:get(TransferId),
+            {ok, resource, {GRI#gri{id = TransferId}, Transfer}};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
+
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of
         {ok, NewTransferId} ->
@@ -204,7 +297,43 @@ create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
-    {ok, transfer_to_json(Transfer)}.
+    {ok, Transfer};
+get(#op_req{gri = #gri{aspect = progress}}, #transfer{
+    bytes_replicated = BytesReplicated,
+    files_replicated = FilesReplicated,
+    files_evicted = FilesEvicted
+} = Transfer) ->
+    {ok, #{
+        <<"status">> => get_status(Transfer),
+        <<"timestamp">> => get_last_update(Transfer),
+        <<"replicatedBytes">> => BytesReplicated,
+        <<"replicatedFiles">> => FilesReplicated,
+        <<"evictedFiles">> => FilesEvicted
+    }};
+get(#op_req{gri = #gri{aspect = {throughput_charts, ChartsType}}}, Transfer) ->
+    StartTime = Transfer#transfer.start_time,
+
+    % Return historical statistics of finished transfers intact. As for active
+    % ones, pad them with zeroes to current time and erase recent n-seconds to
+    % avoid fluctuations on charts
+    {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
+        false ->
+            RequestedHistograms = transfer_histograms:get(Transfer, ChartsType),
+            Window = transfer_histograms:type_to_time_window(ChartsType),
+            {RequestedHistograms, get_last_update(Transfer), Window};
+        true ->
+            LastUpdates = Transfer#transfer.last_update,
+            CurrentTime = provider_logic:zone_time_seconds(),
+            transfer_histograms:prepare(
+                Transfer, ChartsType, CurrentTime, LastUpdates
+            )
+    end,
+
+    ThroughputCharts = transfer_histograms:to_speed_charts(
+        Histograms, StartTime, LastUpdate, TimeWindow
+    ),
+
+    {ok, #{<<"timestamp">> => LastUpdate, <<"charts">> => ThroughputCharts}}.
 
 
 %%--------------------------------------------------------------------
@@ -240,74 +369,49 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
 
 
 %% @private
--spec transfer_to_json(transfer:transfer()) -> map().
-transfer_to_json(#transfer{
-    file_uuid = FileUuid,
-    space_id = SpaceId,
-    user_id = UserId,
-    rerun_id = RerunId,
-    path = Path,
-    replication_status = ReplicationStatus,
-    eviction_status = EvictionStatus,
-    evicting_provider = EvictingProvider,
-    replicating_provider = ReplicatingProviderId,
-    callback = Callback,
-    files_to_process = FilesToProcess,
-    files_processed = FilesProcessed,
-    failed_files = FailedFiles,
-    files_replicated = FilesReplicated,
-    bytes_replicated = BytesReplicated,
-    files_evicted = FilesEvicted,
-    schedule_time = ScheduleTime,
-    start_time = StartTime,
-    finish_time = FinishTime,
-    last_update = LastUpdate,
-    min_hist = MinHist,
-    hr_hist = HrHist,
-    dy_hist = DyHist,
-    mth_hist = MthHist
-}) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    NullableCallback = utils:ensure_defined(Callback, undefined, null),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+-spec transfer_type(
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id()
+) ->
+    transfer:type().
+transfer_type(undefined, ProviderId) when is_binary(ProviderId) -> eviction;
+transfer_type(ProviderId, undefined) when is_binary(ProviderId) -> replication;
+transfer_type(_, _) -> migration.
 
-    ReplicationStatusBin = atom_to_binary(ReplicationStatus, utf8),
-    ReplicatingProvider = utils:ensure_defined(
-        ReplicatingProviderId, undefined, null
-    ),
 
-    #{
-        <<"fileId">> => FileObjectId,
-        <<"userId">> => UserId,
-        <<"rerunId">> => utils:ensure_defined(RerunId, undefined, null),
-        <<"path">> => Path,
-        <<"transferStatus">> => ReplicationStatusBin,
-        <<"replicationStatus">> => ReplicationStatusBin,
-        <<"invalidationStatus">> => atom_to_binary(EvictionStatus, utf8),
-        <<"replicaEvictionStatus">> => atom_to_binary(EvictionStatus, utf8),
-        <<"targetProviderId">> => ReplicatingProvider,
-        <<"replicatingProviderId">> => ReplicatingProvider,
-        <<"evictingProviderId">> => utils:ensure_defined(
-            EvictingProvider, undefined, null
-        ),
-        <<"callback">> => NullableCallback,
-        <<"filesToProcess">> => FilesToProcess,
-        <<"filesProcessed">> => FilesProcessed,
-        <<"filesTransferred">> => FilesReplicated,
-        <<"filesReplicated">> => FilesReplicated,
-        <<"failedFiles">> => FailedFiles,
-        <<"filesInvalidated">> => FilesEvicted,
-        <<"fileReplicasEvicted">> => FilesEvicted,
-        <<"bytesTransferred">> => BytesReplicated,
-        <<"bytesReplicated">> => BytesReplicated,
-        <<"scheduleTime">> => ScheduleTime,
-        <<"startTime">> => StartTime,
-        <<"finishTime">> => FinishTime,
-        % It is possible that there is no last update, if 0 bytes were
-        % transferred, in this case take the start time.
-        <<"lastUpdate">> => lists:max([StartTime | maps:values(LastUpdate)]),
-        <<"minHist">> => MinHist,
-        <<"hrHist">> => HrHist,
-        <<"dyHist">> => DyHist,
-        <<"mthHist">> => MthHist
-    }.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns status of given transfer. Replaces active status with 'replicating'
+%% for replication and 'evicting' for eviction.
+%% In case of migration 'evicting' indicates that the transfer itself has
+%% finished, but source replica eviction is still in progress.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_status(transfer:transfer()) ->
+    transfer:status() | evicting | replicating.
+get_status(T = #transfer{
+    replication_status = completed,
+    replicating_provider = P1,
+    evicting_provider = P2
+}) when is_binary(P1) andalso is_binary(P2) ->
+    case T#transfer.eviction_status of
+        scheduled -> evicting;
+        enqueued -> evicting;
+        active -> evicting;
+        Status -> Status
+    end;
+get_status(T = #transfer{replication_status = skipped}) ->
+    case T#transfer.eviction_status of
+        active -> evicting;
+        Status -> Status
+    end;
+get_status(#transfer{replication_status = active}) -> replicating;
+get_status(#transfer{replication_status = Status}) -> Status.
+
+
+-spec get_last_update(#transfer{}) -> non_neg_integer().
+get_last_update(#transfer{start_time = StartTime, last_update = LastUpdateMap}) ->
+    % It is possible that there is no last update, if 0 bytes were
+    % transferred, in this case take the start time.
+    lists:max([StartTime | maps:values(LastUpdateMap)]).
