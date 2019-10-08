@@ -566,7 +566,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 
 
 -spec create_test_users_and_spaces_unsafe([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
-create_test_users_and_spaces_unsafe([FirstWorker | _] = AllWorkers, ConfigPath, Config) ->
+create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     timer:sleep(2000), % Sometimes the posthook starts too fast
 
     {ok, ConfigJSONBin} = file:read_file(ConfigPath),
@@ -698,7 +698,11 @@ create_test_users_and_spaces_unsafe([FirstWorker | _] = AllWorkers, ConfigPath, 
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports),
-    rpc:call(FirstWorker, fslogic_worker, init_cannonical_paths_cache, [all]),
+
+    lists:foreach(fun(DomainWorker) ->
+        rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
+    end, get_different_domain_workers(Config)),
+
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
