@@ -126,7 +126,7 @@ get_protected_data(SessionId, ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_provider:id(),
-    gs_protocol:auth_hint()) -> {ok, od_provider:doc()} | gs_protocol:error().
+    gs_protocol:auth_hint()) -> {ok, od_provider:doc()} | errors:error().
 get_protected_data(SessionId, ProviderId, AuthHint) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,

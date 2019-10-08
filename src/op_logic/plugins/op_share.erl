@@ -17,7 +17,6 @@
 
 -include("op_logic.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/errors.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
