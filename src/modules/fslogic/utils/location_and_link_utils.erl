@@ -183,7 +183,7 @@ init_cannonical_paths_cache(all) ->
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_PROVIDER]);
+            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
             ?critical("Unable to initialize cannonical_paths bounded caches due to: ~p", [Error])
     catch
