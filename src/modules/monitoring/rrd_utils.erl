@@ -15,7 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/monitoring/rrd_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create_rrd/4, update_rrd/4, export_rrd/3]).

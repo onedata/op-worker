@@ -16,12 +16,27 @@
 -include("op_logic.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([
+    translate_value/2,
+    translate_resource/2
+]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
+    #{<<"list">> => lists:map(fun(TransferId) -> gri:serialize(#gri{
+        type = op_transfer,
+        id = TransferId,
+        aspect = instance,
+        scope = private
+    }) end, TransfersIds)};
+translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
+    Charts.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

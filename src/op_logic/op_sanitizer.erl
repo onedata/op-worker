@@ -17,7 +17,7 @@
 
 -include("op_logic.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type type_constraint() :: any | boolean | integer | binary | json.
 -type value_constraint() ::
@@ -237,6 +237,21 @@ check_type(gri, Key, EncodedGri) when is_binary(EncodedGri) ->
         throw(?ERROR_BAD_DATA(Key))
     end;
 check_type(gri, Key, _) ->
+    throw(?ERROR_BAD_DATA(Key));
+
+check_type(page_token, _Key, null) ->
+    undefined;
+check_type(page_token, _Key, <<"null">>) ->
+    undefined;
+check_type(page_token, _Key, undefined) ->
+    undefined;
+check_type(page_token, _Key, <<"undefined">>) ->
+    undefined;
+check_type(page_token, Key, <<>>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Key));
+check_type(page_token, _Key, PageToken) when is_binary(PageToken) ->
+    PageToken;
+check_type(page_token, Key, _) ->
     throw(?ERROR_BAD_DATA(Key));
 
 check_type(json, _Key, JSON) when is_map(JSON) ->

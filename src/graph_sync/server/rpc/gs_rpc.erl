@@ -14,7 +14,7 @@
 
 -include("op_logic.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([handle/3]).
@@ -60,11 +60,5 @@ handle_internal(Auth, <<"moveFile">>, Data) ->
     file_gs_rpc:move(Auth, Data);
 handle_internal(Auth, <<"copyFile">>, Data) ->
     file_gs_rpc:copy(Auth, Data);
-
-handle_internal(Auth, <<"getSpaceTransfers">>, Data) ->
-    transfer_gs_rpc:get_space_transfers(Auth, Data);
-handle_internal(Auth, <<"getFileTransfers">>, Data) ->
-    transfer_gs_rpc:get_file_transfers(Auth, Data);
-
 handle_internal(_, _, _) ->
     ?ERROR_RPC_UNDEFINED.

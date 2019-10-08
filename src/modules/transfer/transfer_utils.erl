@@ -11,7 +11,7 @@
 -module(transfer_utils).
 -author("Jakub Kudzia").
 
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 %% API

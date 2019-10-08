@@ -19,7 +19,7 @@
 -include("op_logic.hrl").
 -include("global_definitions.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
 -export([gather_configuration/0]).

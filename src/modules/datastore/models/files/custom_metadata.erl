@@ -18,7 +18,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get/1, update/2, delete/1, create_or_update/2]).
@@ -268,13 +268,13 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {space_id, string},
-        {value, {custom, {json_utils, encode, decode}}}
+        {value, {custom, json, {json_utils, encode, decode}}}
     ]};
 get_record_struct(2) ->
     {record, [
         {space_id, string},
         {file_objectid, string},
-        {value, {custom, {json_utils, encode, decode}}}
+        {value, {custom, json, {json_utils, encode, decode}}}
     ]};
 get_record_struct(3) ->
     % In version 3 only acl was removed from metadata

@@ -17,7 +17,7 @@
 -include("modules/fslogic/fslogic_sufix.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([add_link/3, list/4, delete_links/2, get_view_id/2]).

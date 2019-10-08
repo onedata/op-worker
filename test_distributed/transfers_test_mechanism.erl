@@ -19,13 +19,12 @@
 -include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include("rest_test_utils.hrl").
+-include("proto/common/credentials.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([run_test/2]).
