@@ -19,7 +19,7 @@
 -include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 

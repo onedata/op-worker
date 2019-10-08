@@ -17,7 +17,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get_or_fetch/1, delete/1, get_or_fetch_user_id/1]).

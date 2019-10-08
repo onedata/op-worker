@@ -17,7 +17,7 @@
 
 -include("op_logic.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type type_constraint() :: any | boolean | integer | binary | json.
 -type value_constraint() ::

@@ -16,7 +16,7 @@
 
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/onedata.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([handle/2]).
 -export([redirect/2]).

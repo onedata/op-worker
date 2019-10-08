@@ -45,7 +45,7 @@
 %% inscribed in the token.
 %% @end
 %%--------------------------------------------------------------------
--spec preauthorize(#token_auth{}) -> {ok, aai:auth()} | gs_protocol:error().
+-spec preauthorize(#token_auth{}) -> {ok, aai:auth()} | errors:error().
 preauthorize(#token_auth{token = Token, peer_ip = PeerIp}) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -63,7 +63,7 @@ preauthorize(#token_auth{token = Token, peer_ip = PeerIp}) ->
             Error;
         {ok, #{<<"subject">> := Subject, <<"caveats">> := Caveats}} ->
             {ok, #auth{
-                subject = aai:json_to_subject(Subject),
+                subject = aai:deserialize_subject(Subject),
                 caveats = [caveats:deserialize(C) || C <- Caveats]
             }}
     end.
@@ -75,7 +75,7 @@ preauthorize(#token_auth{token = Token, peer_ip = PeerIp}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_user:id()) ->
-    {ok, od_user:doc()} | gs_protocol:error().
+    {ok, od_user:doc()} | errors:error().
 get(_, ?ROOT_USER_ID) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
 get(_, ?GUEST_USER_ID) ->
@@ -94,7 +94,7 @@ get(Client, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_user:id()) ->
-    {ok, od_user:doc()} | gs_protocol:error().
+    {ok, od_user:doc()} | errors:error().
 get_protected_data(_, ?ROOT_USER_ID) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
 get_protected_data(_, ?GUEST_USER_ID) ->
@@ -113,7 +113,7 @@ get_protected_data(Client, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
-    {ok, od_user:doc()} | gs_protocol:error().
+    {ok, od_user:doc()} | errors:error().
 get_protected_data(Client, UserId, AuthHint) ->
     gs_client_worker:request(Client, #gs_req_graph{
         operation = get,
@@ -129,7 +129,7 @@ get_protected_data(Client, UserId, AuthHint) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_shared_data(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
-    {ok, od_user:doc()} | gs_protocol:error().
+    {ok, od_user:doc()} | errors:error().
 get_shared_data(_, ?ROOT_USER_ID, _) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
 get_shared_data(_, ?GUEST_USER_ID, _) ->
@@ -159,13 +159,13 @@ exists(Client, UserId) ->
 
 
 -spec get_full_name(gs_client_worker:client(), od_user:id()) ->
-    {ok, od_user:full_name()} | gs_protocol:error().
+    {ok, od_user:full_name()} | errors:error().
 get_full_name(Client, UserId) ->
     get_full_name(Client, UserId, undefined).
 
 
 -spec get_full_name(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
-    od_user:full_name() | gs_protocol:error().
+    od_user:full_name() | errors:error().
 get_full_name(Client, UserId, AuthHint) ->
     case get_shared_data(Client, UserId, AuthHint) of
         {ok, #document{value = #od_user{full_name = FullName}}} ->
@@ -176,7 +176,7 @@ get_full_name(Client, UserId, AuthHint) ->
 
 
 -spec fetch_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
-    {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | gs_protocol:error().
+    {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | errors:error().
 fetch_idp_access_token(Client, UserId, IdP) ->
     Result = gs_client_worker:request(Client, #gs_req_graph{
         operation = create,
@@ -206,7 +206,7 @@ has_eff_group(Client, UserId, GroupId) when is_binary(UserId) ->
 
 
 -spec get_eff_spaces(od_user:doc() | od_user:record()) ->
-    {ok, [od_space:id()]} | gs_protocol:error().
+    {ok, [od_space:id()]} | errors:error().
 get_eff_spaces(#od_user{eff_spaces = EffSpaces}) ->
     {ok, EffSpaces};
 get_eff_spaces(#document{value = User}) ->
@@ -214,7 +214,7 @@ get_eff_spaces(#document{value = User}) ->
 
 
 -spec get_eff_spaces(gs_client_worker:client(), od_user:id()) ->
-    {ok, [od_space:id()]} | gs_protocol:error().
+    {ok, [od_space:id()]} | errors:error().
 get_eff_spaces(Client, UserId) ->
     case get(Client, UserId) of
         {ok, Doc} ->

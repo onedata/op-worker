@@ -14,7 +14,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([apply/2]).
 -export([
@@ -281,13 +281,13 @@ get_op_worker_version() ->
 
 
 -spec provider_logic_update(Data :: #{binary() => term()}) ->
-    ok | gs_protocol:error().
+    ok | errors:error().
 provider_logic_update(Data) ->
     provider_logic:update(Data).
 
 
 -spec support_space(tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | gs_protocol:error().
+    {ok, od_space:id()} | errors:error().
 support_space(Token, SupportSize) ->
     provider_logic:support_space(Token, SupportSize).
 
@@ -303,7 +303,7 @@ space_storage_delete(SpaceId) ->
     space_storage:delete(SpaceId).
 
 
--spec get_spaces() -> {ok, [od_space:id()]} | gs_protocol:error().
+-spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
 get_spaces() ->
     provider_logic:get_spaces().
 
@@ -320,7 +320,7 @@ supports_space(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_details(od_space:id()) ->
-    {ok, #{atom() := term()}} | gs_protocol:error().
+    {ok, #{atom() := term()}} | errors:error().
 get_space_details(SpaceId) ->
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = Record}} ->
@@ -343,7 +343,7 @@ get_space_details(SpaceId) ->
 %% Returns current provider's data in a map.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_details() -> {ok, #{atom() := term()}} | gs_protocol:error().
+-spec get_provider_details() -> {ok, #{atom() := term()}} | errors:error().
 get_provider_details() ->
     case provider_logic:get() of
         {ok, #document{key = Id, value = Record}} ->
@@ -362,18 +362,18 @@ get_provider_details() ->
 
 
 -spec is_subdomain_delegated() ->
-    {true, Subdomain :: binary()} | false | gs_protocol:error().
+    {true, Subdomain :: binary()} | false | errors:error().
 is_subdomain_delegated() ->
     provider_logic:is_subdomain_delegated().
 
 
 -spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | gs_protocol:error().
+    ok | {error, subdomain_exists} | errors:error().
 set_delegated_subdomain(Subdomain) ->
     provider_logic:set_delegated_subdomain(Subdomain).
 
 
--spec set_domain(binary()) -> ok | gs_protocol:error().
+-spec set_domain(binary()) -> ok | errors:error().
 set_domain(Domain) ->
     provider_logic:set_domain(Domain).
 
@@ -384,7 +384,7 @@ space_quota_current_size(SpaceId) ->
 
 
 -spec update_space_support_size(od_space:id(), NewSupportSize :: integer()) ->
-    ok | gs_protocol:error().
+    ok | errors:error().
 update_space_support_size(SpaceId, NewSupportSize) ->
     provider_logic:update_space_support_size(SpaceId, NewSupportSize).
 

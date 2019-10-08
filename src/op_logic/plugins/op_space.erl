@@ -20,8 +20,7 @@
 
 -include("op_logic.hrl").
 -include("modules/datastore/transfer.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).

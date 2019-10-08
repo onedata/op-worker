@@ -14,7 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([

@@ -29,7 +29,7 @@
 -include("op_logic.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 % Some of the types are just aliases for types from gs_protocol, this is
 % for better readability of logic modules.
@@ -54,7 +54,7 @@
 -type delete_result() :: gs_protocol:graph_delete_result().
 -type update_result() :: gs_protocol:graph_update_result().
 -type result() :: create_result() | get_result() | update_result() | delete_result().
--type error() :: gs_protocol:error().
+-type error() :: errors:error().
 
 -export_type([
     req/0,

@@ -17,7 +17,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
 -type bitmask() :: non_neg_integer().
