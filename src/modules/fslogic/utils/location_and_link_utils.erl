@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -180,9 +180,9 @@ init_cannonical_paths_cache(all) ->
             lists:foreach(fun(Space) ->
                 ok = init_cannonical_paths_cache(Space)
             end, SpaceIds);
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_OZ]);
-        ?ERROR_UNREGISTERED_PROVIDER ->
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
             ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_PROVIDER]);
         Error = {error, _} ->
             ?critical("Unable to initialize cannonical_paths bounded caches due to: ~p", [Error])
