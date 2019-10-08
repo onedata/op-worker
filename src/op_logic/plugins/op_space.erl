@@ -178,10 +178,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
             ?ALL_TRANSFERS_TYPE
         ]},
         <<"chartsType">> => {binary, [
-            ?MINUTE_STAT_TYPE,
-            ?HOUR_STAT_TYPE,
-            ?DAY_STAT_TYPE,
-            ?MONTH_STAT_TYPE
+            ?MINUTE_PERIOD,
+            ?HOUR_PERIOD,
+            ?DAY_PERIOD,
+            ?MONTH_PERIOD
         ]}
     }
 };
@@ -561,7 +561,7 @@ get(#op_req{data = Data, gri = #gri{
     end,
     TransferType = maps:get(<<"transferType">>, Data),
     ChartsType = maps:get(<<"chartsType">>, Data),
-    TimeWindow = transfer_histograms:type_to_time_window(ChartsType),
+    TimeWindow = transfer_histograms:period_to_time_window(ChartsType),
 
     % Some functions from transfer_histograms module require specifying
     % start time parameter. But there is no conception of start time for

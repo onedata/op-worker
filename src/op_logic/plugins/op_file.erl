@@ -199,9 +199,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = acl}}) ->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
-    optional => #{
-        <<"endedInfo">> => {binary, [<<"count">>, <<"ids">>]}
-    }
+    optional => #{<<"include_ended_list">> => {boolean, any}}
 };
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
@@ -294,9 +292,7 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
 ->
     has_access_to_file(Req#op_req.auth, Guid);
 
-authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) when
-    As =:= transfers
-->
+authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = transfers}} = Req, _) ->
     ?USER(UserId) = Req#op_req.auth,
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
@@ -497,13 +493,19 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
         ended := Ended
     }} = transferred_file:get_transfers(FileGuid),
 
-    {ok, value, #{
-        <<"ongoing">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ongoing],
-        <<"ended">> => case maps:get(<<"endedInfo">>, Data, <<"count">>) of
-            <<"count">> -> length(Ended);
-            <<"ids">> -> [?TRANSFER_GRI_ID(Tid) || Tid <- Ended]
-        end
-    }}.
+    Transfers = #{
+        <<"ongoingList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ongoing],
+        <<"endedCount">> => length(Ended)
+
+    },
+    case maps:get(<<"include_ended_list">>, Data, false) of
+        true ->
+            {ok, value, Transfers#{
+                <<"endedList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ended]
+            }};
+        false ->
+            {ok, value, Transfers}
+    end.
 
 
 %%--------------------------------------------------------------------

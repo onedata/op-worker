@@ -104,10 +104,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = throughput_charts}}) -> #{
     required => #{<<"chartsType">> => {binary, [
-        ?MINUTE_STAT_TYPE,
-        ?HOUR_STAT_TYPE,
-        ?DAY_STAT_TYPE,
-        ?MONTH_STAT_TYPE
+        ?MINUTE_PERIOD,
+        ?HOUR_PERIOD,
+        ?DAY_PERIOD,
+        ?MONTH_PERIOD
     ]}}
 };
 
@@ -318,7 +318,7 @@ get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
     {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
         false ->
             RequestedHistograms = transfer_histograms:get(Transfer, ChartsType),
-            Window = transfer_histograms:type_to_time_window(ChartsType),
+            Window = transfer_histograms:period_to_time_window(ChartsType),
             {RequestedHistograms, get_last_update(Transfer), Window};
         true ->
             LastUpdates = Transfer#transfer.last_update,
