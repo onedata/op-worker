@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -179,6 +180,10 @@ init_cannonical_paths_cache(all) ->
             lists:foreach(fun(Space) ->
                 ok = init_cannonical_paths_cache(Space)
             end, SpaceIds);
+        ?ERROR_NO_CONNECTION_TO_OZ ->
+            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_OZ]);
+        ?ERROR_UNREGISTERED_PROVIDER ->
+            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_PROVIDER]);
         Error = {error, _} ->
             ?critical("Unable to initialize cannonical_paths bounded caches due to: ~p", [Error])
     catch
@@ -186,11 +191,20 @@ init_cannonical_paths_cache(all) ->
             ?critical_stacktrace("Unable to initialize cannonical_paths bounded caches due to: ~p", [{Error2, Reason}])
     end;
 init_cannonical_paths_cache(Space) ->
-    try bounded_cache:init_cache(get_cannonical_paths_cache_name(Space), #{group => <<"cannonical_paths_cache">>}) of
-        ok ->
-            ok;
-        Error = {error, _} ->
-            ?critical("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p", [Space, Error])
+    try
+        Name = get_cannonical_paths_cache_name(Space),
+        case bounded_cache:cache_exists(Name) of
+            true ->
+                ok;
+            _ ->
+                case bounded_cache:init_cache(Name, #{group => <<"cannonical_paths_cache">>}) of
+                    ok ->
+                        ok;
+                    Error = {error, _} ->
+                        ?critical("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p",
+                            [Space, Error])
+                end
+        end
     catch
         Error2:Reason ->
             ?critical_stacktrace("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p",
