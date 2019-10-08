@@ -69,10 +69,10 @@ operation_supported(get, instance, private) -> true;
 operation_supported(get, views, private) -> true;
 operation_supported(get, {view, _}, private) -> true;
 operation_supported(get, {query_view, _}, private) -> true;
-operation_supported(get, transfers, private) -> true;
 operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
 operation_supported(get, providers, private) -> true;
+operation_supported(get, transfers, private) -> true;
 operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
@@ -148,14 +148,6 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {query_view, _}}}) -> #{
     }
 };
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
-    optional => #{
-        <<"state">> => {binary, [<<"waiting">>, <<"ongoing">>, <<"ended">>]},
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
-        <<"page_token">> => {binary, non_empty}
-    }
-};
-
 data_spec(#op_req{operation = get, gri = #gri{aspect = eff_users}}) ->
     undefined;
 
@@ -165,8 +157,21 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_groups}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = providers}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_charts, _}}}) ->
-    #{required => #{
+data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+    optional => #{
+        <<"state">> => {binary, [
+            ?WAITING_TRANSFERS_STATE,
+            ?ONGOING_TRANSFERS_STATE,
+            ?ENDED_TRANSFERS_STATE
+        ]},
+        <<"offset">> => {integer, any},
+        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"page_token">> => {page_token, any}
+    }
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_charts, _}}}) -> #{
+    required => #{
         <<"transferType">> => {binary, [
             ?JOB_TRANSFERS_TYPE,
             ?ON_THE_FLY_TRANSFERS_TYPE,
@@ -178,7 +183,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
             ?DAY_STAT_TYPE,
             ?MONTH_STAT_TYPE
         ]}
-    }};
+    }
+};
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
@@ -278,12 +284,6 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = transfers
-}}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
-
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
-    id = SpaceId,
     aspect = As
 }}, _) when
     As =:= eff_users;
@@ -291,6 +291,12 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     As =:= providers
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
+
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = transfers
+}}, _) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
@@ -362,14 +368,14 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {view, _}}},
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view, _}}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
-
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= eff_users;
     As =:= eff_groups;
     As =:= providers
 ->
+    op_logic_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{
@@ -500,17 +506,29 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {query_view, ViewName}}} = Req, _)
             Error
     end;
 
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_users}}, _) ->
+    space_logic:get_eff_users(Auth#auth.session_id, SpaceId);
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
+    space_logic:get_eff_groups(Auth#auth.session_id, SpaceId);
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
+    space_logic:get_provider_ids(Auth#auth.session_id, SpaceId);
+
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
-    PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
+    StartId = maps:get(<<"page_token">>, Data, undefined),
     TransferState = maps:get(<<"state">>, Data, <<"ongoing">>),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_TRANSFER_LIST_LIMIT),
-
-    {StartId, Offset} = case PageToken of
-        <<"null">> ->
-            {undefined, 0};
-        _ ->
-            % Start after the page token (link key from last listing) if it is given
-            {PageToken, 1}
+    Offset = case {StartId, maps:get(<<"offset">>, Data, undefined)} of
+        {undefined, undefined} ->
+            % Start from the beginning if no page_token and offset given
+            0;
+        {_, undefined} ->
+            % Start after given page token (link key from last listing)
+            % if no offset given
+            1;
+        {_, Int} when is_integer(Int) ->
+            Int
     end,
 
     {ok, Transfers} = case TransferState of
@@ -531,16 +549,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
         _ ->
             #{}
     end,
-    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
-
-get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_users}}, _) ->
-    space_logic:get_eff_users(Auth#auth.session_id, SpaceId);
-
-get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
-    space_logic:get_eff_groups(Auth#auth.session_id, SpaceId);
-
-get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
-    space_logic:get_provider_ids(Auth#auth.session_id, SpaceId);
+    {ok, value, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
 
 get(#op_req{data = Data, gri = #gri{
     id = SpaceId,
