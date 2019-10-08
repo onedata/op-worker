@@ -24,6 +24,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -44,6 +45,13 @@
     <<"mtime">>, <<"storage_group_id">>, <<"storage_user_id">>, <<"name">>,
     <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
 ]).
+
+-define(TRANSFER_GRI_ID(__TID), gri:serialize(#gri{
+    type = op_transfer,
+    id = __TID,
+    aspect = instance,
+    scope = private
+})).
 
 
 %%%===================================================================
@@ -80,6 +88,7 @@ operation_supported(get, xattrs, private) -> true;
 operation_supported(get, json_metadata, private) -> true;
 operation_supported(get, rdf_metadata, private) -> true;
 operation_supported(get, acl, private) -> true;
+operation_supported(get, transfers, private) -> true;
 
 operation_supported(update, instance, private) -> true;
 operation_supported(update, acl, private) -> true;
@@ -189,6 +198,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = rdf_metadata}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = acl}}) ->
     undefined;
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
+    optional => #{<<"include_ended_list">> => {boolean, any}}
+};
+
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     optional => #{
         <<"posixPermissions">> => {binary,
@@ -279,6 +292,11 @@ authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _)
 ->
     has_access_to_file(Req#op_req.auth, Guid);
 
+authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = transfers}} = Req, _) ->
+    ?USER(UserId) = Req#op_req.auth,
+    SpaceId = file_id:guid_to_space_id(Guid),
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
+
 authorize(#op_req{operation = update, gri = #gri{id = Guid, aspect = As}} = Req, _) when
     As =:= instance;
     As =:= acl
@@ -316,7 +334,8 @@ validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = As}} = Req, _) 
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= acl
+    As =:= acl;
+    As =:= transfers
 ->
     assert_file_managed_locally(Req#op_req.auth, Guid);
 
@@ -466,7 +485,27 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
     ?check(lfm:get_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf, [], false));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
-    ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid})).
+    ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
+
+get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
+    {ok, #{
+        ongoing := Ongoing,
+        ended := Ended
+    }} = transferred_file:get_transfers(FileGuid),
+
+    Transfers = #{
+        <<"ongoingList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ongoing],
+        <<"endedCount">> => length(Ended)
+
+    },
+    case maps:get(<<"include_ended_list">>, Data, false) of
+        true ->
+            {ok, value, Transfers#{
+                <<"endedList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ended]
+            }};
+        false ->
+            {ok, value, Transfers}
+    end.
 
 
 %%--------------------------------------------------------------------

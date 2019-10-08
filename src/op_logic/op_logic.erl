@@ -368,6 +368,7 @@ process_request(#req_ctx{
 }) ->
     case Plugin:get(Req, Entity) of
         {ok, Data} -> {ok, {Data, Rev}};
+        {ok, value, _} = Res -> Res;
         {error, _} = Error -> Error
     end;
 

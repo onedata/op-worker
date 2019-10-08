@@ -45,6 +45,8 @@ response(#op_req{operation = get} = OpReq, {ok, Data}) ->
     #op_req{gri = GRI = #gri{type = Model}} = OpReq,
     Translator = entity_type_to_translator(Model),
     Translator:get_response(GRI, Data);
+response(#op_req{operation = get} = OpReq, {ok, value, Data}) ->
+    response(OpReq, {ok, Data});
 response(#op_req{operation = update}, ok) ->
     ?NO_CONTENT_REPLY;
 response(#op_req{operation = delete}, ok) ->

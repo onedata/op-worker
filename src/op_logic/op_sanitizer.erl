@@ -239,6 +239,21 @@ check_type(gri, Key, EncodedGri) when is_binary(EncodedGri) ->
 check_type(gri, Key, _) ->
     throw(?ERROR_BAD_DATA(Key));
 
+check_type(page_token, _Key, null) ->
+    undefined;
+check_type(page_token, _Key, <<"null">>) ->
+    undefined;
+check_type(page_token, _Key, undefined) ->
+    undefined;
+check_type(page_token, _Key, <<"undefined">>) ->
+    undefined;
+check_type(page_token, Key, <<>>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Key));
+check_type(page_token, _Key, PageToken) when is_binary(PageToken) ->
+    PageToken;
+check_type(page_token, Key, _) ->
+    throw(?ERROR_BAD_DATA(Key));
+
 check_type(json, _Key, JSON) when is_map(JSON) ->
     JSON;
 check_type(json, Key, _) ->

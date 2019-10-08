@@ -371,13 +371,13 @@ space_transfer_stat_record(RecordId) ->
     [
         {<<"id">>, RecordId},
         {<<"minuteStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?MINUTE_STAT_TYPE, TargetProvider, SpaceId)},
+            TransferType, ?MINUTE_PERIOD, TargetProvider, SpaceId)},
         {<<"hourStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?HOUR_STAT_TYPE, TargetProvider, SpaceId)},
+            TransferType, ?HOUR_PERIOD, TargetProvider, SpaceId)},
         {<<"dayStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?DAY_STAT_TYPE, TargetProvider, SpaceId)},
+            TransferType, ?DAY_PERIOD, TargetProvider, SpaceId)},
         {<<"monthStat">>, op_gui_utils:ids_to_association(
-            TransferType, ?MONTH_STAT_TYPE, TargetProvider, SpaceId)}
+            TransferType, ?MONTH_PERIOD, TargetProvider, SpaceId)}
     ].
 
 
@@ -402,7 +402,7 @@ space_transfer_time_stat_record(StatId) ->
         <<"undefined">> -> undefined;
         _ -> Provider
     end,
-    TimeWindow = transfer_histograms:type_to_time_window(StatsType),
+    TimeWindow = transfer_histograms:period_to_time_window(StatsType),
 
     #space_transfer_stats_cache{
         timestamp = LastUpdate,

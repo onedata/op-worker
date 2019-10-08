@@ -62,12 +62,7 @@ operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;
 operation_supported(get, progress, private) -> true;
-operation_supported(get, {throughput_charts, Type}, private) when
-    Type =:= ?MINUTE_STAT_TYPE;
-    Type =:= ?HOUR_STAT_TYPE;
-    Type =:= ?DAY_STAT_TYPE;
-    Type =:= ?MONTH_STAT_TYPE
--> true;
+operation_supported(get, throughput_charts, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -106,6 +101,15 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = throughput_charts}}) -> #{
+    required => #{<<"chartsType">> => {binary, [
+        ?MINUTE_PERIOD,
+        ?HOUR_PERIOD,
+        ?DAY_PERIOD,
+        ?MONTH_PERIOD
+    ]}}
+};
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
@@ -177,10 +181,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, #transfer{space_id = SpaceId}) when
     As =:= instance;
     As =:= progress;
-    As =:= {throughput_charts, ?MINUTE_STAT_TYPE};
-    As =:= {throughput_charts, ?HOUR_STAT_TYPE};
-    As =:= {throughput_charts, ?DAY_STAT_TYPE};
-    As =:= {throughput_charts, ?MONTH_STAT_TYPE}
+    As =:= throughput_charts
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
@@ -235,10 +236,7 @@ validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
 validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
     As =:= progress;
-    As =:= {throughput_charts, ?MINUTE_STAT_TYPE};
-    As =:= {throughput_charts, ?HOUR_STAT_TYPE};
-    As =:= {throughput_charts, ?DAY_STAT_TYPE};
-    As =:= {throughput_charts, ?MONTH_STAT_TYPE}
+    As =:= throughput_charts
 ->
     ok;
 
@@ -310,8 +308,9 @@ get(#op_req{gri = #gri{aspect = progress}}, #transfer{
         <<"replicatedFiles">> => FilesReplicated,
         <<"evictedFiles">> => FilesEvicted
     }};
-get(#op_req{gri = #gri{aspect = {throughput_charts, ChartsType}}}, Transfer) ->
+get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
     StartTime = Transfer#transfer.start_time,
+    ChartsType = maps:get(<<"chartsType">>, Data),
 
     % Return historical statistics of finished transfers intact. As for active
     % ones, pad them with zeroes to current time and erase recent n-seconds to
@@ -319,7 +318,7 @@ get(#op_req{gri = #gri{aspect = {throughput_charts, ChartsType}}}, Transfer) ->
     {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
         false ->
             RequestedHistograms = transfer_histograms:get(Transfer, ChartsType),
-            Window = transfer_histograms:type_to_time_window(ChartsType),
+            Window = transfer_histograms:period_to_time_window(ChartsType),
             {RequestedHistograms, get_last_update(Transfer), Window};
         true ->
             LastUpdates = Transfer#transfer.last_update,
@@ -333,7 +332,10 @@ get(#op_req{gri = #gri{aspect = {throughput_charts, ChartsType}}}, Transfer) ->
         Histograms, StartTime, LastUpdate, TimeWindow
     ),
 
-    {ok, #{<<"timestamp">> => LastUpdate, <<"charts">> => ThroughputCharts}}.
+    {ok, value, #{
+        <<"timestamp">> => LastUpdate,
+        <<"charts">> => ThroughputCharts
+    }}.
 
 
 %%--------------------------------------------------------------------
