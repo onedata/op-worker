@@ -282,8 +282,9 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            CanonicalPath = filename:join(generate_canonical_path(FileCtx)),
-            {CanonicalPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
+            {Path, FileCtx2} = generate_canonical_path(FileCtx),
+            CanonicalPath = filename:join(Path),
+            {CanonicalPath, FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
     {Path, FileCtx}.
@@ -299,10 +300,10 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            CanonicalPathTokens = generate_canonical_path(FileCtx),
+            {CanonicalPathTokens, FileCtx2} = generate_canonical_path(FileCtx),
             CanonicalPath = filename:join(CanonicalPathTokens),
             {CanonicalPathTokens,
-                FileCtx#file_ctx{canonical_path = CanonicalPath}}
+                FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
     {fslogic_path:split(Path), FileCtx}.
@@ -600,7 +601,8 @@ get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
         andalso UserCtx =/= undefined
         andalso (not session_utils:is_special(user_ctx:get_session_id(UserCtx))) of
         false ->
-            get_name_of_nonspace_file(FileCtx);
+            {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+            {Name, FileCtx2};
         true ->
             {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
             {Name, FileCtx2#file_ctx{file_name = Name}}
@@ -1240,22 +1242,33 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %% Generates canonical path
 %% @end
 %%--------------------------------------------------------------------
--spec generate_canonical_path(ctx()) -> [file_meta:name()].
+-spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
 generate_canonical_path(FileCtx) ->
-    % TODO VFS-5804 - use effective value to improve performance
-    case is_root_dir_const(FileCtx) of
-        true ->
-            [<<"/">>];
-        false ->
-            {ParentCtx, FileCtx2} = get_parent(FileCtx, undefined),
-            case is_space_dir_const(FileCtx2) of
-                true ->
-                    SpaceId = get_space_id_const(FileCtx2),
-                    generate_canonical_path(ParentCtx) ++ [SpaceId];
-                false ->
-                    {Name, _FileCtx3} = get_name_of_nonspace_file(FileCtx2),
-                    generate_canonical_path(ParentCtx) ++ [Name]
-            end
+    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}}, ParentValue, CalculationInfo]) ->
+        case fslogic_uuid:is_root_dir_uuid(Uuid) of
+            true ->
+                {ok, [<<"/">>], CalculationInfo};
+            false ->
+                SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(Uuid)),
+                case is_binary(SpaceId) of
+                    true ->
+                        {ok, [<<"/">>, SpaceId], CalculationInfo};
+                    false ->
+                        {ok, ParentValue ++ [Name], CalculationInfo}
+                end
+        end
+    end,
+    {#document{value = #file_meta{name = FileName, type = FileType}, scope = Space} = Doc, FileCtx2} =
+        get_file_doc(FileCtx),
+    CacheName = location_and_link_utils:get_cannonical_paths_cache_name(Space),
+    case FileType of
+        ?DIRECTORY_TYPE ->
+            {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
+            {Path, FileCtx2};
+        _ ->
+            {ok, ParentDoc} = file_meta:get_parent(Doc),
+            {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
+            {Path ++ [FileName], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -1295,19 +1308,6 @@ generate_flat_path(FileCtx) ->
                     end
             end
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns name of file that is not a space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_name_of_nonspace_file(ctx()) -> {file_meta:name(), ctx()} | no_return().
-get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
-    {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-    {Name, FileCtx2#file_ctx{file_name = Name}};
-get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
-    {FileName, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @private

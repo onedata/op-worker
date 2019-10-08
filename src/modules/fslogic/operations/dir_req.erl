@@ -200,7 +200,7 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
         (error) -> false;
         (_Attrs) -> true
     end,
-    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 200),
+    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 10),
     ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, length(Children)),
 
     fslogic_times:update_atime(FileCtx2),
