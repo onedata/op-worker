@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([maybe_create_proxied_session/2]).
+-export([maybe_create_proxied_session/3]).
 -export([
     protocol_upgrade_request/1,
     process_protocol_upgrade_request/1,
@@ -38,20 +38,20 @@
 %% Creates proxy session if requested by peer.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_create_proxied_session(od_provider:id(), #client_message{}) ->
-    ok | {error, term()}.
-maybe_create_proxied_session(ProviderId, #client_message{
+-spec maybe_create_proxied_session(od_provider:id(), inet:ip4_address(),
+    #client_message{}) -> ok | {error, term()}.
+maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
     effective_session_auth = Auth
 }) when EffSessionId =/= undefined ->
     Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, Auth, fuse
+        EffSessionId, ProviderId, Auth#token_auth{peer_ip = ProviderIp}, fuse
     ),
     case Res of
         {ok, _} -> ok;
         Error -> Error
     end;
-maybe_create_proxied_session(_, _) ->
+maybe_create_proxied_session(_, _, _) ->
     ok.
 
 

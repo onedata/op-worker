@@ -110,6 +110,7 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
+    peer_ip = undefined :: undefined | inet:ip4_address(),
     verify_msg = true :: boolean(),
 
     % routing information base - structure necessary for routing.
@@ -553,6 +554,7 @@ connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeou
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
     {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
+    {ok, {IpAddress, _Port}} = ssl:peername(Socket),
 
     {Ok, Closed, Error} = Transport:messages(),
     State = #state{
@@ -566,6 +568,7 @@ connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeou
         status = upgrading_protocol,
         session_id = SessionId,
         peer_id = ProviderId,
+        peer_ip = IpAddress,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG,
         rib = router:build_rib(SessionId)
     },
@@ -629,6 +632,7 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
 
         NewState = State#state{
             peer_id = PeerId,
+            peer_ip = IpAddress,
             session_id = SessionId,
             rib = router:build_rib(SessionId)
         },
@@ -686,11 +690,12 @@ handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     {ok, State};
 handle_client_message(#state{
     peer_id = PeerId,
+    peer_ip = PeerIp,
     session_id = SessId
 } = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, SessId),
-        case connection_utils:maybe_create_proxied_session(PeerId, Msg) of
+        case connection_utils:maybe_create_proxied_session(PeerId, PeerIp, Msg) of
             ok ->
                 route_message(State, Msg);
             Error ->
