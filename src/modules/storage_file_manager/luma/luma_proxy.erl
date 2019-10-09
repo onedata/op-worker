@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([get_user_ctx/5, get_request_headers/1, get_group_ctx/4]).
@@ -103,11 +104,11 @@ get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
 %%-------------------------------------------------------------------
 -spec get_request_headers(luma_config:config()) -> map().
 get_request_headers(#luma_config{api_key = undefined}) ->
-    #{<<"content-type">> => <<"application/json">>};
+    #{?HDR_CONTENT_TYPE => <<"application/json">>};
 get_request_headers(#luma_config{api_key = APIKey}) ->
     #{
-        <<"content-type">> => <<"application/json">>,
-        <<"x-auth-token">> => APIKey
+        ?HDR_CONTENT_TYPE => <<"application/json">>,
+        ?HDR_X_AUTH_TOKEN => APIKey
     }.
 
 %%%===================================================================

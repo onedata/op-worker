@@ -19,6 +19,7 @@
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -61,8 +62,8 @@ user_1_token_header(Config) ->
     rest_test_utils:user_token_header(Config, <<"user1">>).
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
--define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
--define(OBJECT_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-object">>}).
+-define(CONTAINER_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-container">>}).
+-define(OBJECT_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-object">>}).
 
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
@@ -88,7 +89,7 @@ list_dir(Config) ->
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
 
     ?assertEqual(200, Code1),
-    ?assertMatch(#{<<"content-type">> := <<"application/cdmi-container">>}, Headers1),
+    ?assertMatch(#{?HDR_CONTENT_TYPE := <<"application/cdmi-container">>}, Headers1),
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertMatch(#{<<"objectType">> :=  <<"application/cdmi-container">>}, 
                  CdmiResponse1),
@@ -249,7 +250,7 @@ get_file(Config) ->
         do_request(WorkerP2, FileName, get, [user_1_token_header(Config)]),
     ?assertEqual(200, Code4),
 
-    ?assertMatch(#{<<"content-type">> := <<"application/octet-stream">>}, Headers4),
+    ?assertMatch(#{?HDR_CONTENT_TYPE := <<"application/octet-stream">>}, Headers4),
     ?assertEqual(FileContent, Response4),
     %%------------------------------
 
@@ -664,7 +665,7 @@ create_file(Config) ->
     %%------ create noncdmi --------
     ?assert(not object_exists(Config, ToCreate5)),
 
-    RequestHeaders5 = [{<<"content-type">>, <<"application/binary">>}],
+    RequestHeaders5 = [{?HDR_CONTENT_TYPE, <<"application/binary">>}],
     {ok, Code5, _Headers5, _Response5} =
         do_request(Workers, ToCreate5, put,
             [user_1_token_header(Config) | RequestHeaders5], FileContent),
@@ -874,7 +875,7 @@ objectid(Config) ->
     CdmiResponse0 = json_utils:decode(Response0),
     SpaceRootId = maps:get(<<"objectID">>, CdmiResponse0),
 
-    ?assertMatch(#{<<"content-type">> := <<"application/cdmi-container">>}, Headers1),
+    ?assertMatch(#{?HDR_CONTENT_TYPE := <<"application/cdmi-container">>}, Headers1),
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertMatch(#{<<"objectName">> := <<"/">>}, CdmiResponse1),
     RootId = maps:get(<<"objectID">>, CdmiResponse1, undefined),
@@ -986,7 +987,7 @@ capabilities(Config) ->
         do_request(Workers, "cdmi_capabilities/", get, RequestHeaders8, []),
     ?assertEqual(200, Code8),
 
-    ?assertMatch(#{<<"content-type">> := <<"application/cdmi-capability">>}, Headers8),
+    ?assertMatch(#{?HDR_CONTENT_TYPE := <<"application/cdmi-capability">>}, Headers8),
     CdmiResponse8 = (json_utils:decode(Response8)),
     ?assertMatch(#{<<"objectID">> := ?ROOT_CAPABILITY_ID}, CdmiResponse8),
     ?assertMatch(#{<<"objectName">> := <<?ROOT_CAPABILITY_PATH>>}, CdmiResponse8),
@@ -1166,7 +1167,7 @@ mimetype_and_encoding(Config) ->
     %% create file with given mime and encoding using non-cdmi request
     FileName6 = filename:join([binary_to_list(SpaceName), "mime_file_noncdmi.txt"]),
     FileContent6 = <<"some content">>,
-    RequestHeaders6 = [{<<"Content-Type">>, <<"text/plain; charset=utf-8">>}, user_1_token_header(Config)],
+    RequestHeaders6 = [{?HDR_CONTENT_TYPE, <<"text/plain; charset=utf-8">>}, user_1_token_header(Config)],
     {ok, Code6, _Headers6, _Response6} = do_request(Workers, FileName6, put, RequestHeaders6, FileContent6),
     ?assertEqual(201, Code6),
 
@@ -1794,7 +1795,7 @@ errors(Config) ->
 
 accept_header(Config) ->
     [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    AcceptHeader = {<<"Accept">>, <<"*/*">>},
+    AcceptHeader = {?HDR_ACCEPT, <<"*/*">>},
 
     % when
     {ok, Code1, _Headers1, _Response1} =
@@ -1818,7 +1819,7 @@ create_raw_file_with_cdmi_version_header_should_succeed(Config) ->
     ?assertMatch(
         {ok, 201, _ResponseHeaders2, _Response2},
         do_request(Workers, binary_to_list(SpaceName) ++ "/file2", put,
-            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {<<"Content-type">>, <<"text/plain">>}],
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {?HDR_CONTENT_TYPE, <<"text/plain">>}],
             <<"data2">>
         )).
 
@@ -1836,7 +1837,7 @@ create_raw_dir_with_cdmi_version_header_should_succeed(Config) ->
     ?assertMatch(
         {ok, 201, _ResponseHeaders2, _Response2},
         do_request(Workers, binary_to_list(SpaceName) ++ "/dir2/", put,
-            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {<<"Content-type">>, <<"application/json">>}],
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {?HDR_CONTENT_TYPE, <<"application/json">>}],
             <<"{}">>
         )).
 
