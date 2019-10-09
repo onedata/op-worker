@@ -92,12 +92,13 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     session_id = SessId,
-    auth = #token_auth{token = Token} = Auth
+    auth = #token_auth{token = Token} = Auth0
 } = Req, IpAddress) when is_binary(SessId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
-    case user_identity:get_or_fetch(Auth) of
+    Auth1 = Auth0#token_auth{peer_ip = IpAddress},
+    case user_identity:get_or_fetch(Auth1) of
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
@@ -105,7 +106,7 @@ handle_client_handshake(#client_handshake_request{
             throw(invalid_token);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
             {ok, _} = session_manager:reuse_or_create_fuse_session(
-                SessId, Iden, Auth
+                SessId, Iden, Auth1
             ),
             {UserId, SessId}
     end.
@@ -149,6 +150,7 @@ handle_provider_handshake(#provider_handshake_request{
         SessionId, Identity
     ),
     {ProviderId, SessionId}.
+
 
 %% @private
 -spec assert_client_compatibility(#client_handshake_request{}, inet:ip_address()) ->

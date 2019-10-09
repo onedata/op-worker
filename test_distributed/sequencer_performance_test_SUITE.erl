@@ -254,7 +254,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    [{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -291,11 +291,10 @@ session_setup(Worker) ->
 -spec session_setup(Worker :: node(), SessId :: session:id()) ->
     {ok, SessId :: session:id()}.
 session_setup(Worker, SessId) ->
-    Self = self(),
     Iden = #user_identity{user_id = <<"user_id">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, undefined, Self]
-    )),
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, SessId, Iden, undefined, self()
+    ),
     {ok, SessId}.
 
 %%--------------------------------------------------------------------

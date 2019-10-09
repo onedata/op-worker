@@ -441,7 +441,7 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base, fuse_test_utils]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
@@ -556,12 +556,11 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-init_session(Worker, SessID) ->
-    Self = self(),
+init_session(Worker, SessId) ->
     Iden = #user_identity{user_id = <<"u1">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessID, Iden, undefined, Self]
-    )).
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, SessId, Iden, undefined, self()
+    ).
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

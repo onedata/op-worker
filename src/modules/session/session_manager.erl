@@ -20,17 +20,14 @@
 
 %% API
 -export([
-    reuse_or_create_fuse_session/2,
     reuse_or_create_fuse_session/3,
-    reuse_or_create_fuse_session/4
-]).
--export([reuse_or_create_rest_session/2]).
--export([
+    reuse_or_create_rest_session/2,
     reuse_or_create_incoming_provider_session/2,
     reuse_or_create_outgoing_provider_session/2,
-    reuse_or_create_proxied_session/4
+    reuse_or_create_proxied_session/4,
+    reuse_or_create_gui_session/2,
+    create_root_session/0, create_guest_session/0
 ]).
--export([reuse_or_create_gui_session/2, create_root_session/0, create_guest_session/0]).
 -export([remove_session/1]).
 
 %% Test API
@@ -42,15 +39,6 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv reuse_or_create_fuse_session(SessId, Iden, undefined)
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(session:id(), session:identity()) ->
-    {ok, session:id()} | error().
-reuse_or_create_fuse_session(SessId, Iden) ->
-    reuse_or_create_fuse_session(SessId, Iden, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,18 +50,6 @@ reuse_or_create_fuse_session(SessId, Iden) ->
 reuse_or_create_fuse_session(SessId, Iden, Auth) ->
     reuse_or_create_session(SessId, fuse, Iden, Auth).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates FUSE session or if session exists reuses it
-%% and registers connection for it.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(session:id(), session:identity(),
-    session:auth() | undefined, pid()) -> {ok, session:id()} | error().
-reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
-    {ok, _} = reuse_or_create_fuse_session(SessId, Iden, Auth),
-    session_connections:register(SessId, Conn),
-    {ok, SessId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,6 +61,7 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
 reuse_or_create_incoming_provider_session(SessId, Iden) ->
     reuse_or_create_session(SessId, provider_incoming, Iden, undefined).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates outgoing provider's session or if session exists reuses it.
@@ -94,6 +71,7 @@ reuse_or_create_incoming_provider_session(SessId, Iden) ->
     session:identity()) -> {ok, session:id()} | error().
 reuse_or_create_outgoing_provider_session(SessId, Iden) ->
     reuse_or_create_session(SessId, provider_outgoing, Iden, undefined).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -111,6 +89,7 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
             {error, {invalid_identity, Iden}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates or reuses proxy session and starts session supervisor.
@@ -119,7 +98,7 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 -spec reuse_or_create_proxied_session(SessId :: session:id(),
     ProxyVia :: oneprovider:id(),
     session:auth(), SessionType :: atom()) ->
-    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+    {ok, session:id()} | error().
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = #user_identity{} = Iden}} ->
@@ -130,46 +109,54 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
             Error
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
-    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+-spec reuse_or_create_gui_session(session:identity(), session:auth()) ->
+    {ok, session:id()} | error().
 reuse_or_create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_key(<<"">>, term_to_binary({Iden, Auth})),
     reuse_or_create_session(SessId, gui, Iden, Auth).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates root session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_root_session() -> {ok, session:id()} | {error, Reason :: term()}.
+-spec create_root_session() -> {ok, session:id()} | error().
 create_root_session() ->
-    Sess = #session{
-        type = root,
-        status = active,
-        identity = #user_identity{user_id = ?ROOT_USER_ID},
-        auth = ?ROOT_AUTH
-    },
-    start_session(#document{key = ?ROOT_SESS_ID, value = Sess}, root).
+    start_session(#document{
+        key = ?ROOT_SESS_ID,
+        value = #session{
+            type = root,
+            status = active,
+            identity = #user_identity{user_id = ?ROOT_USER_ID},
+            auth = ?ROOT_AUTH
+        }
+    }).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates guest session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_guest_session() -> {ok, session:id()} | {error, Reason :: term()}.
+-spec create_guest_session() -> {ok, session:id()} | error().
 create_guest_session() ->
-    Sess = #session{
-        type = guest,
-        status = active,
-        identity = #user_identity{user_id = ?GUEST_USER_ID},
-        auth = ?GUEST_AUTH
-    },
-    start_session(#document{key = ?GUEST_SESS_ID, value = Sess}, guest).
+    start_session(#document{
+        key = ?GUEST_SESS_ID,
+        value = #session{
+            type = guest,
+            status = active,
+            identity = #user_identity{user_id = ?GUEST_USER_ID},
+            auth = ?GUEST_AUTH
+        }
+    }).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -177,7 +164,7 @@ create_guest_session() ->
 %% client.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(session:id()) -> ok | {error, Reason :: term()}.
+-spec remove_session(session:id()) -> ok | error().
 remove_session(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
@@ -199,9 +186,11 @@ remove_session(SessId) ->
             {error, Reason}
     end.
 
+
 %%%===================================================================
 %%% Internal functions exported for tests
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc @private
@@ -221,6 +210,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc @private
 %% Creates session or if session exists reuses it.
@@ -229,7 +219,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
     ProxyVia :: oneprovider:id() | undefined) ->
-    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+    {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
     Sess = #session{
         type = SessType,
@@ -262,7 +252,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         {ok, SessId} ->
             {ok, SessId};
         {error, not_found} ->
-            case start_session(#document{key = SessId, value = Sess}, SessType) of
+            case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
                     reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia);
                 Other ->
@@ -272,15 +262,15 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
             {error, Reason}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Creates session doc and starts supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session(session:doc(), session:type()) ->
-    {ok, session:id()} | {error, term()}.
-start_session(Doc, SessType) ->
+-spec start_session(session:doc()) -> {ok, session:id()} | error().
+start_session(#document{value = #session{type = SessType}} = Doc) ->
     case session:create(Doc) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
@@ -288,6 +278,7 @@ start_session(Doc, SessType) ->
         Error ->
             Error
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private

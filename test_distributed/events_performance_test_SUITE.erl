@@ -362,7 +362,7 @@ init_per_suite(Config) ->
         initializer:clear_subscriptions(Worker),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 
 init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
@@ -430,9 +430,9 @@ end_per_testcase(_Case, Config) ->
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:identity(), Conn :: pid()) -> ok.
 session_setup(Worker, SessId, Iden, Conn) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #token_auth{}, Conn]
-    )).
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, SessId, Iden, #token_auth{}, Conn
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

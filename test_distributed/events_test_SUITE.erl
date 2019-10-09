@@ -145,7 +145,7 @@ init_per_suite(Config) ->
         initializer:clear_subscriptions(Worker),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
@@ -237,7 +237,7 @@ end_per_testcase(_Case, Config) ->
     initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     ok.
 
 %%%===================================================================
@@ -263,11 +263,10 @@ session_setup(Worker) ->
 -spec session_setup(Worker :: node(), SessId :: session:id()) ->
     {ok, SessId :: session:id()}.
 session_setup(Worker, SessId) ->
-    Self = self(),
     Iden = #user_identity{user_id = <<"user1">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #token_auth{}, Self]
-    )),
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, SessId, Iden, #token_auth{}, self()
+    ),
     {ok, SessId}.
 
 %%--------------------------------------------------------------------

@@ -32,6 +32,8 @@
 -include_lib("clproto/include/messages.hrl").
 
 -export([
+    reuse_or_create_fuse_session/4, reuse_or_create_fuse_session/5,
+
     connect_as_provider/3, connect_as_client/4,
 
     connect_via_token/1, connect_via_token/2,
@@ -89,6 +91,34 @@
 %% ====================================================================
 %% API
 %% ====================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates FUSE session or if session exists reuses it
+%% and registers connection for it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(session:id(), session:identity(),
+    session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
+    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth),
+    session_connections:register(SessId, Conn),
+    {ok, SessId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls reuse_or_create_fuse_session/4 on specified Worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(node(), session:id(), session:identity(),
+    session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Worker, SessId, Iden, Auth, Conn) ->
+    ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
+        reuse_or_create_fuse_session, [SessId, Iden, Auth, Conn]
+    )).
+
 
 generate_msg_id() ->
     ID = case get(msg_id_generator) of
