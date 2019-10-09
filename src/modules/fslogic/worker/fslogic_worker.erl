@@ -110,6 +110,7 @@ init_cannonical_paths_cache(Space) ->
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     location_and_link_utils:init_cannonical_paths_cache_group(),
+    erlang:send_after(0, self(), {sync_timer, ?INIT_CANNONICAL_PATHS_CACHE(all)}),
 
     transfer:init(),
     clproto_serializer:load_msg_defs(),
