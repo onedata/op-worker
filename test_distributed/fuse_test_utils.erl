@@ -137,7 +137,7 @@ connect_as_provider(Node, ProviderId, Nonce) ->
     HandshakeReqMsg = #'ClientMessage'{
         message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
             provider_id = ProviderId,
-            nonce = Nonce
+            token = Nonce
         }
         }},
     RawMsg = messages:encode_msg(HandshakeReqMsg),
@@ -167,7 +167,7 @@ connect_as_provider(Node, ProviderId, Nonce) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using a token, sessionId and version.
+%% Connect to given node using a token, nonce and version.
 %% @end
 %%--------------------------------------------------------------------
 connect_as_client(Node, Nonce, Token, Version) ->
@@ -228,8 +228,8 @@ connect_via_token(Node, SocketOpts) ->
 %% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
 %% @end
 %%--------------------------------------------------------------------
-connect_via_token(Node, SocketOpts, SessionId) ->
-    connect_via_token(Node, SocketOpts, SessionId, #token_auth{
+connect_via_token(Node, SocketOpts, Nonce) ->
+    connect_via_token(Node, SocketOpts, Nonce, #token_auth{
         token = ?TOKEN
     }).
 
@@ -238,9 +238,9 @@ connect_via_token(Node, SocketOpts, SessionId) ->
 %% Connect to given node using a token, with custom socket opts and session id.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), session:id(), #token_auth{}) ->
+-spec connect_via_token(Node :: node(), SocketOpts :: list(), Nonce :: binary(), #token_auth{}) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
+connect_via_token(Node, SocketOpts, Nonce, #token_auth{token = Token} = Auth) ->
     % given
     OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
@@ -249,7 +249,7 @@ connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
-            session_id = SessId,
+            session_id = Nonce,
             macaroon = #'Macaroon'{macaroon = Token},
             version = Version
         }
@@ -272,9 +272,18 @@ connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
     }}},
         RM
     ),
+
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce, Auth#token_auth{peer_ip = local_ip_v4()}})),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
+
+local_ip_v4() ->
+    {ok, Addrs} = inet:getifaddrs(),
+    hd([
+        Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
+        size(Addr) == 4, Addr =/= {127,0,0,1}
+    ]).
 
 connect_and_upgrade_proto(Hostname, Port) ->
     {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,

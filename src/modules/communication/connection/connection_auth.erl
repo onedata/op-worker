@@ -117,10 +117,10 @@ handle_client_handshake(#client_handshake_request{
     {od_provider:id(), session:id()} | no_return().
 handle_provider_handshake(#provider_handshake_request{
     provider_id = ProviderId,
-    nonce = Nonce
-}, IpAddress) when is_binary(ProviderId) andalso is_binary(Nonce) ->
+    token = Token
+}, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
-    case provider_logic:verify_provider_identity(ProviderId) of
+    case provider_logic:verify_provider_identity(ProviderId, Token) of
         ok ->
             ok;
         Error ->
@@ -130,18 +130,6 @@ handle_provider_handshake(#provider_handshake_request{
                 inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_provider)
-    end,
-
-    case provider_logic:verify_provider_nonce(ProviderId, Nonce) of
-        ok ->
-            ok;
-        Error1 ->
-            ?debug("Discarding provider connection from ~ts @ ~s as its "
-                   "nonce cannot be verified: ~p", [
-                provider_logic:to_string(ProviderId),
-                inet_parse:ntoa(IpAddress), Error1
-            ]),
-            throw(invalid_nonce)
     end,
 
     Identity = #user_identity{provider_id = ProviderId},

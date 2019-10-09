@@ -24,7 +24,7 @@
 
 -record(provider_handshake_request, {
     provider_id :: od_provider:id(),
-    nonce :: binary()
+    token :: tokens:serialized()
 }).
 
 -record(handshake_response, {

@@ -645,13 +645,6 @@ init_per_testcase(Case, Config) when
         end
     end),
 
-    test_utils:mock_expect(Workers, provider_logic, verify_provider_nonce, fun(_ProviderId, Nonce) ->
-        case Nonce of
-            ?CORRECT_NONCE -> ok;
-            ?INCORRECT_NONCE -> ?ERROR_UNAUTHORIZED
-        end
-    end),
-
     test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
         ok
     end),

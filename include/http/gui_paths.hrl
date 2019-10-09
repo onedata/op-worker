@@ -39,9 +39,6 @@
 %% configuration endpoint can be used.
 -define(IDENTITY_TOKEN_PATH, "/get_identity_macaroon").
 
-%% Endpoint used to verify authorization nonces issued by this provider
--define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
-
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 

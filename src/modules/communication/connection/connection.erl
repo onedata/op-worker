@@ -597,12 +597,12 @@ handle_protocol_upgrade_response(State, Data) ->
             {error, invalid_protocol_upgrade_response};
         true ->
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Nonce} = authorization_nonce:create(),
+            {ok, Token} = provider_auth:get_identity_token(),
             ClientMsg = #client_message{
                 message_id = MsgId,
                 message_body = #provider_handshake_request{
                     provider_id = oneprovider:get_id(),
-                    nonce = Nonce
+                    token = Token
                 }
             },
             #state{socket = Socket, transport = Transport} = State,
