@@ -181,8 +181,8 @@ init_per_testcase(Case, Config) when
     initializer:communicator_mock(Worker),
     {ok, SubId} = create_subscription(Case, Worker),
     SessIds = lists:map(fun(N) ->
-        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-        session_setup(Worker, SessId),
+        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
+        {ok, SessId} = session_setup(Worker, Nonce),
         SessId
     end, lists:seq(0, 4)),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
@@ -247,12 +247,12 @@ end_per_suite(_Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"nonce">>
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+-spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
+    session_setup(Worker, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -260,14 +260,12 @@ session_setup(Worker) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
+-spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
     Iden = #user_identity{user_id = <<"user1">>},
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, #token_auth{}, self()
-    ),
-    {ok, SessId}.
+        Worker, Nonce, Iden, #token_auth{}, self()
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

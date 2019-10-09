@@ -91,9 +91,9 @@ get_handshake_error_msg(_) ->
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
-    session_id = SessId,
+    nonce = Nonce,
     auth = #token_auth{token = Token} = Auth0
-} = Req, IpAddress) when is_binary(SessId) ->
+} = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
 
@@ -105,10 +105,10 @@ handle_client_handshake(#client_handshake_request{
             ?debug("Cannot authorize user based on token ~s due to ~w", [Token, Error]),
             throw(invalid_token);
         {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
-            {ok, _} = session_manager:reuse_or_create_fuse_session(
-                SessId, Iden, Auth1
+            {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
+                Nonce, Iden, Auth1
             ),
-            {UserId, SessId}
+            {UserId, SessionId}
     end.
 
 

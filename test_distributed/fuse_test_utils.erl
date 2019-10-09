@@ -99,10 +99,10 @@
 %% and registers connection for it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(session:id(), session:identity(),
+-spec reuse_or_create_fuse_session(Nonce :: binary(), session:identity(),
     session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
-reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
-    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth),
+reuse_or_create_fuse_session(Nonce, Iden, Auth, Conn) ->
+    {ok, SessId} = session_manager:reuse_or_create_fuse_session(Nonce, Iden, Auth),
     session_connections:register(SessId, Conn),
     {ok, SessId}.
 
@@ -112,11 +112,11 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Conn) ->
 %% Calls reuse_or_create_fuse_session/4 on specified Worker.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(node(), session:id(), session:identity(),
+-spec reuse_or_create_fuse_session(node(), Nonce :: binary(), session:identity(),
     session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
-reuse_or_create_fuse_session(Worker, SessId, Iden, Auth, Conn) ->
+reuse_or_create_fuse_session(Worker, Nonce, Iden, Auth, Conn) ->
     ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
-        reuse_or_create_fuse_session, [SessId, Iden, Auth, Conn]
+        reuse_or_create_fuse_session, [Nonce, Iden, Auth, Conn]
     )).
 
 
@@ -170,10 +170,10 @@ connect_as_provider(Node, ProviderId, Nonce) ->
 %% Connect to given node using a token, sessionId and version.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_client(Node, SessId, Token, Version) ->
+connect_as_client(Node, Nonce, Token, Version) ->
     HandshakeMessage = #'ClientMessage'{
         message_body = {client_handshake_request, #'ClientHandshakeRequest'{
-            session_id = SessId,
+            session_id = Nonce,
             macaroon = Token,
             version = Version
         }

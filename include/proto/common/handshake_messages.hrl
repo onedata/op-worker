@@ -17,7 +17,7 @@
 
 -record(client_handshake_request, {
     auth :: #token_auth{},
-    session_id :: session:id(),
+    nonce :: binary(),
     version :: binary(),
     compatible_oneprovider_versions :: [binary()]
 }).

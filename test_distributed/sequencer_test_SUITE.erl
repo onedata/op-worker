@@ -22,7 +22,11 @@
 -include_lib("proto/oneclient/server_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -150,6 +154,9 @@ init_per_testcase(Case, Config) when
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
+end_per_suite(_Config) ->
+    ok.
+
 end_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
     Case =:= send_message_should_inject_stream_id_into_message ->
@@ -179,12 +186,12 @@ end_per_testcase(Case, Config) when
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"nonce">>
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+-spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
+    session_setup(Worker, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -192,17 +199,15 @@ session_setup(Worker) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
+-spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
     fuse_test_utils:reuse_or_create_fuse_session(
         Worker,
-        SessId,
+        Nonce,
         #user_identity{user_id = <<"user_id">>},
         undefined,
         self()
-    ),
-    {ok, SessId}.
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
