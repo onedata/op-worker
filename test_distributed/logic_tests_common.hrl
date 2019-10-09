@@ -18,7 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

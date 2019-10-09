@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([split_skipping_dots/1]).

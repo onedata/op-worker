@@ -23,17 +23,17 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% @formatter:off
 -type client() :: session:id() | session:auth().
 -type create_result() :: {ok, Data :: term()} |
                          {ok, {gri:gri(), doc()}} |
-                         gs_protocol:error().
--type get_result() :: {ok, doc()} | gs_protocol:error().
--type update_result() :: ok | gs_protocol:error().
--type delete_result() :: ok | gs_protocol:error().
+                         errors:error().
+-type get_result() :: {ok, doc()} | errors:error().
+-type update_result() :: ok | errors:error().
+-type delete_result() :: ok | errors:error().
 -type result() :: create_result() |
                   get_result() |
                   update_result() |
@@ -71,7 +71,7 @@
 %% Starts gs_client_worker instance and registers it globally.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, pid()} | gs_protocol:error().
+-spec start_link() -> {ok, pid()} | errors:error().
 start_link() ->
     gen_server2:start_link(?MODULE, [], []).
 
@@ -211,7 +211,7 @@ init([]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_call({async_request, _, _}, _From, #state{client_ref = undefined} = State) ->
-    {reply, ?ERROR_NO_CONNECTION_TO_OZ, State};
+    {reply, ?ERROR_NO_CONNECTION_TO_ONEZONE, State};
 
 handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = ClientRef, promises = Promises} = State) ->
     ReqId = gs_client:async_request(ClientRef, GsReq),
@@ -344,7 +344,7 @@ process_push_message(#gs_push_graph{gri = GRI, data = Resource, change_type = up
 %%%===================================================================
 
 -spec start_gs_connection() ->
-    {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | gs_protocol:error().
+    {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | errors:error().
 start_gs_connection() ->
     try
         provider_logic:assert_zone_compatibility(),
@@ -353,10 +353,11 @@ start_gs_connection() ->
         Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
-        {ok, ProviderAccessToken} = provider_auth:get_access_token(),
+        {ok, AccessToken} = provider_auth:get_access_token(),
+        OpWorkerAccessToken = tokens:build_service_access_token(?OP_WORKER, AccessToken),
 
         gs_client:start_link(
-            Address, {token, ProviderAccessToken}, [?GS_PROTOCOL_VERSION],
+            Address, {token, OpWorkerAccessToken}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts
         )
     catch
@@ -432,11 +433,11 @@ do_request(Client, #gs_req_graph{} = GraphReq, Timeout) ->
 
 -spec call_onezone(client(), gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(),
     timeout()) -> {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-gs_protocol:error().
+errors:error().
 call_onezone(Client, Request, Timeout) ->
     case get_connection_pid() of
         undefined ->
-            ?ERROR_NO_CONNECTION_TO_OZ;
+            ?ERROR_NO_CONNECTION_TO_ONEZONE;
         Pid ->
             call_onezone(Pid, Client, Request, Timeout)
     end.
@@ -445,7 +446,7 @@ call_onezone(Client, Request, Timeout) ->
 -spec call_onezone(connection_ref(), client(),
     gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(), timeout()) ->
     {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-    gs_protocol:error().
+    errors:error().
 call_onezone(ConnRef, Client, Request, Timeout) ->
     try
         SubType = case Request of
@@ -473,7 +474,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         end
     catch
         exit:{timeout, _} -> ?ERROR_TIMEOUT;
-        exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_OZ;
+        exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_ONEZONE;
         throw:{error, _} = Err -> Err;
         Type:Reason ->
             ?error_stacktrace("Unexpected error during call to gs_client_worker - ~p:~p", [
@@ -484,7 +485,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
 
 
 -spec maybe_serve_from_cache(client(), gs_protocol:graph_req()) ->
-    {true, doc()} | false | gs_protocol:error().
+    {true, doc()} | false | errors:error().
 maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
     case get_from_cache(GRI) of
         false ->

@@ -20,10 +20,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 
 %% API
@@ -148,7 +147,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
                     ),
                     op_gui_async:push_updated(<<"file-shared">>, FileDataNewName),
                     ok;
-                {error, {403, <<>>, <<>>}} ->
+                ?ERROR_FORBIDDEN ->
                     op_gui_error:report_warning(<<"You do not have permissions to "
                     "manage shares in this space.">>);
                 _ ->

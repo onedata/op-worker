@@ -27,15 +27,10 @@
     many_files_creation_tree_test/1, many_files_creation_tree_test_base/1]).
 -export([create_single_call/5]).
 
--define(STRESS_NO_CLEARING_CASES, [
-    single_dir_creation_test
-%%    many_files_creation_tree_test
-]).
-
 -define(TIMEOUT, timer:minutes(1)).
 
 all() ->
-    ?STRESS_ALL([], ?STRESS_NO_CLEARING_CASES).
+    ?STRESS_ALL([many_files_creation_tree_test], [single_dir_creation_test]).
 
 %%%===================================================================
 %%% Test functions

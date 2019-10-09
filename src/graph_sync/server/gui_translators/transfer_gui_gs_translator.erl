@@ -14,10 +14,13 @@
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([
+    translate_value/2,
+    translate_resource/2
+]).
 
 -define(PROVIDER_GRI_ID(__PROVIDER_ID), gri:serialize(#gri{
     type = op_provider,
@@ -30,6 +33,11 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = throughput_charts}, Charts) ->
+    Charts.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

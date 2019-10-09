@@ -17,7 +17,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 bitmask_acl_conversion_test() ->

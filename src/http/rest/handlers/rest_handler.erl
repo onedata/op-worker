@@ -21,7 +21,7 @@
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
 -type parse_body() :: ignore | as_json_params | as_is.

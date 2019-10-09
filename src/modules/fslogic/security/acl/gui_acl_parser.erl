@@ -12,7 +12,7 @@
 -module(gui_acl_parser).
 -author("Tomasz Lichon").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API

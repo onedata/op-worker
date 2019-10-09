@@ -22,7 +22,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% API
@@ -698,6 +698,11 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports),
+
+    lists:foreach(fun(DomainWorker) ->
+        rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
+    end, get_different_domain_workers(Config)),
+
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 

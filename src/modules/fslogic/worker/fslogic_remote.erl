@@ -22,7 +22,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

@@ -20,8 +20,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.

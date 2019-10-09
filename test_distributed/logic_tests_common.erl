@@ -283,7 +283,7 @@ mock_graph_create(#gri{type = od_user, id = undefined, aspect = preauthorize, sc
     Authorization = {token, Token},
     ?USER_GS_TOKEN_AUTH(UserId) = Authorization,
     {ok, #gs_resp_graph{data_format = value, data = #{
-        <<"subject">> => aai:subject_to_json(?SUB(user, UserId)), <<"caveats">> => []
+        <<"subject">> => aai:serialize_subject(?SUB(user, UserId)), <<"caveats">> => []
     }}};
 
 mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, IdP}}, ?USER_GS_TOKEN_AUTH(_UserId), _) ->

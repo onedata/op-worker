@@ -19,7 +19,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 % Key of in-memory mapping of uploads kept in session.
 -define(UPLOAD_MAP, upload_map).
