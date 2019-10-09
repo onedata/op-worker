@@ -136,7 +136,7 @@ send_to_provider(SessionId, Msg, RecipientPid, Retries) ->
 -spec communicate_with_provider(session:id(), generic_message()) ->
     {ok | message()} | error().
 communicate_with_provider(SessionId, Msg) ->
-    communicate_with_provider(SessionId, Msg, 1).
+    communicate_with_provider(SessionId, Msg, 3).
 
 
 %%--------------------------------------------------------------------
