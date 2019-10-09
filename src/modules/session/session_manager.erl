@@ -75,23 +75,6 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates REST session or if session exists reuses it.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_or_create_rest_session(session:identity(),
-    session:auth() | undefined) -> {ok, session:id()} | error().
-reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
-    SessId = session_utils:get_rest_session_id(Iden),
-    case user_logic:exists(?ROOT_SESS_ID, UserId) of
-        true ->
-            reuse_or_create_session(SessId, rest, Iden, Auth);
-        false ->
-            {error, {invalid_identity, Iden}}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Creates or reuses proxy session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
@@ -112,13 +95,30 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates REST session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_rest_session(session:identity(),
+    session:auth() | undefined) -> {ok, session:id()} | error().
+reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({rest, Auth})),
+    case user_logic:exists(?ROOT_SESS_ID, UserId) of
+        true ->
+            reuse_or_create_session(SessId, rest, Iden, Auth);
+        false ->
+            {error, {invalid_identity, Iden}}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_gui_session(session:identity(), session:auth()) ->
     {ok, session:id()} | error().
 reuse_or_create_gui_session(Iden, Auth) ->
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({Iden, Auth})),
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({gui, Auth})),
     reuse_or_create_session(SessId, gui, Iden, Auth).
 
 
@@ -236,14 +236,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         (#session{identity = ValidIden} = ExistingSess) ->
             case Iden of
                 ValidIden ->
-                    %% @TODO VFS-5718 - always overwrite the token, which is not
-                    %% ideal but better than reusing the older token, which
-                    %% could have expired.
-                    %% User's REST session CANNOT be a singleton per user, as it
-                    %% is done now, because every user can have different tokens
-                    %% and IPs from he is requesting, and currently they are all
-                    %% mapped to the last token that was utilized.
-                    {ok, ExistingSess#session{auth = Auth}};
+                    {ok, ExistingSess};
                 _ ->
                     {error, {invalid_identity, Iden}}
             end
