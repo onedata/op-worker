@@ -95,7 +95,7 @@ list(SpaceId, StartId, Offset, Limit) ->
 %%-------------------------------------------------------------------
 -spec link_key(autocleaning:run_id(), non_neg_integer()) -> link_key().
 link_key(ARId0, Timestamp) ->
-    ARId = consistent_hashing:get_random_labal_part(ARId0),
+    ARId = consistent_hashing:get_random_label_part(ARId0),
     TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
     IdPart = binary:part(ARId, 0, ?LINK_NAME_ID_PART_LENGTH),
     <<TimestampPart/binary, IdPart/binary>>.
