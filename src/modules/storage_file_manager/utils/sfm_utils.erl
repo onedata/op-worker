@@ -205,42 +205,6 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
         _ -> FinalCtx
     end.
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% WRITEME
-%% @end
-%%-------------------------------------------------------------------
-pretend_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
-    pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, []).
-
-
-pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, ParentCtxs) ->
-    case file_ctx:is_space_dir_const(DirCtx) of
-        true ->
-            SpaceId = file_ctx:get_space_id_const(DirCtx),
-            pretend_parent_dirs_created_on_storage_down(ParentCtxs, SpaceId);
-        false ->
-            case file_ctx:get_dir_location_doc(DirCtx) of
-                {DirLocation, DirCtx2} ->
-                    case dir_location:is_storage_file_created(DirLocation) of
-                        true ->
-                            SpaceId = file_ctx:get_space_id_const(DirCtx),
-                            pretend_parent_dirs_created_on_storage_down(ParentCtxs, SpaceId);
-                        false ->
-                            {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
-                            pretend_parent_dirs_created_on_storage_up(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
-                    end
-
-            end
-    end.
-
-pretend_parent_dirs_created_on_storage_down([], _SpaceId) ->
-    ok;
-pretend_parent_dirs_created_on_storage_down([DirCtx | RestCtxs], SpaceId) ->
-    Uuid = file_ctx:get_uuid_const(DirCtx),
-    dir_location:mark_dir_created_on_storage(Uuid, SpaceId),
-    pretend_parent_dirs_created_on_storage_down(RestCtxs, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -386,7 +350,7 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
 %% Creates directory on storage with suitable mode and owner.
 %% @end
 %%-------------------------------------------------------------------
--spec create_dir(file_ctx:ctx(), od_space:id(), storage:doc()) -> file_ctx:ctx().
+-spec create_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> file_ctx:ctx().
 create_dir(FileCtx, SpaceId, StorageId) ->
     {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
@@ -512,3 +476,44 @@ handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
 %%                    {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)}
 %%            end
 %%    end.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is used to pretend that directory has been created
+%% on S3 storage with storage_sync enabled. It is necessary, as S3 does
+%% not create directories on storage and sync must be able to distinguish
+%% remote directory that has never been synchronized with local directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec pretend_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
+pretend_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
+    pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, []).
+
+-spec pretend_parent_dirs_created_on_storage_up(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> ok.
+pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, ParentCtxs) ->
+    case file_ctx:is_space_dir_const(DirCtx) of
+        true ->
+            pretend_parent_dirs_created_on_storage_down(ParentCtxs);
+        false ->
+            case file_ctx:get_dir_location_doc(DirCtx) of
+                {DirLocation, DirCtx2} ->
+                    case dir_location:is_storage_file_created(DirLocation) of
+                        true ->
+                            pretend_parent_dirs_created_on_storage_down(ParentCtxs);
+                        false ->
+                            {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
+                            pretend_parent_dirs_created_on_storage_up(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
+                    end
+
+            end
+    end.
+
+-spec pretend_parent_dirs_created_on_storage_down([file_ctx:ctx()]) -> ok.
+pretend_parent_dirs_created_on_storage_down([]) ->
+    ok;
+pretend_parent_dirs_created_on_storage_down([DirCtx | RestCtxs]) ->
+    Uuid = file_ctx:get_uuid_const(DirCtx),
+    SpaceId = file_ctx:get_space_id_const(DirCtx),
+    dir_location:mark_dir_created_on_storage(Uuid, SpaceId),
+    pretend_parent_dirs_created_on_storage_down(RestCtxs).

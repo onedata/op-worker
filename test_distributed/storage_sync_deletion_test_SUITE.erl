@@ -15,7 +15,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% export for ct
@@ -24,6 +24,7 @@
 %% tests
 -export([
     delete_child_file_basic_test/1,
+    delete_child_file_basic_synchronous_run_test/1,
     empty_child_dir_should_not_be_deleted_test/1,
     delete_child_subtree_test/1,
     delete_nested_child_on_object_storage_test/1,
@@ -37,6 +38,7 @@
 
 -define(TEST_CASES, [
     delete_child_file_basic_test,
+    delete_child_file_basic_synchronous_run_test,
     empty_child_dir_should_not_be_deleted_test,
     delete_child_subtree_test,
     delete_nested_child_on_object_storage_test,
@@ -107,6 +109,9 @@ end).
 delete_child_file_basic_test(Config) ->
     ?FOR_ALL_STORAGE_CONFIGS(fun delete_child_file_basic_test_base/1, [Config]).
 
+delete_child_file_basic_synchronous_run_test(Config) ->
+    ?FOR_ALL_STORAGE_CONFIGS(fun delete_child_file_basic_synchronous_run_test_base/1, [Config]).
+
 empty_child_dir_should_not_be_deleted_test(Config) ->
     ?FOR_ALL_STORAGE_CONFIGS(fun empty_child_dir_should_not_be_deleted_test_base/1, [Config]).
 
@@ -165,6 +170,25 @@ delete_child_file_basic_test_base(Config) ->
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, Guid}), ?TIMEOUT),
     ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
+
+delete_child_file_basic_synchronous_run_test_base(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SpaceId = ?config(space_id, Config),
+    StorageType = ?config(storage_type, Config),
+    MountInRoot = ?config(mount_in_root, Config),
+    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SessionId = ?SESSION_ID(Config, W),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    Child = <<"child1">>,
+
+    {ok, Guid} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
+    {ok, H} = lfm_proxy:open(W, SessionId, {guid, Guid}, write),
+    {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
+
+    run_sync_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, Guid})),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1)).
 
 empty_child_dir_should_not_be_deleted_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -424,7 +448,10 @@ get_storage_id(Worker, SpaceId) ->
     StorageId.
 
 run_deletion(Worker, StorageFileCtx, FileCtx, Mode) ->
-    ok = rpc:call(Worker, storage_sync_deletion, run, [undefined, StorageFileCtx, FileCtx, Mode, false]).
+    ok = rpc:call(Worker, storage_sync_deletion, run, [StorageFileCtx, FileCtx, Mode, false, true]).
+
+run_sync_deletion(Worker, StorageFileCtx, FileCtx, Mode) ->
+    ok = rpc:call(Worker, storage_sync_deletion, run, [StorageFileCtx, FileCtx, Mode, false, false]).
 
 clean_spaces(Worker) ->
     lists:foreach(fun(SpaceId) ->

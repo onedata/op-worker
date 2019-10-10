@@ -218,6 +218,7 @@ get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).
 
+-spec type(id() | record() | doc()) -> helper:type().
 type(Storage) ->
     Helper = get_helper(Storage),
     helper:type(Helper).

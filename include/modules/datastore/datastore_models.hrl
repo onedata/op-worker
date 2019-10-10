@@ -248,11 +248,10 @@
 }).
 
 -record(storage_sync_info, {
-    children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
-    delayed_children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
+    children_attrs_hashes = #{} :: storage_sync_info:hashes(),
+    delayed_children_attrs_hashes = #{} :: storage_sync_info:hashes(),
     mtime :: undefined | non_neg_integer(),
     last_stat :: undefined | non_neg_integer(),
-    % todo comment, used only in deletion detection
     batches_to_process = 0 :: non_neg_integer(),
     batches_processed = 0:: non_neg_integer()
 }).
@@ -421,14 +420,13 @@
 -record(storage_sync_config, {
     import_enabled = false :: boolean(),
     update_enabled = false :: boolean(),
-    import_config = #{} :: map(), % todo type
-    update_config = #{} :: map() % todo type
+    import_config = #{} :: space_strategies:import_config(),
+    update_config = #{} :: space_strategies:update_config()
 }).
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
     % todo VFS-5717 rename model to storage_sync_configs?
-    % todo maybe merge space_strategies with storage_strategies to one model?
     sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
@@ -490,6 +488,27 @@
 %% The Key of this document is UserId.
 -record(files_to_chown, {
     file_guids = [] :: [fslogic_worker:file_guid()]
+}).
+
+-record(storage_traverse_job, {
+    % Information about execution environment and processing task
+    pool :: traverse:pool(),
+    task_id :: traverse:id(),
+    callback_module :: traverse:callback_module(),
+    % storage traverse specific fields
+    storage_file_id :: helper:name(),
+    space_id :: od_space:id(),
+    storage_id :: storage:id(),
+    offset = 0 ::  non_neg_integer(),
+    batch_size :: non_neg_integer(),
+    marker :: undefined | helpers:marker(),
+    max_depth :: non_neg_integer(),
+    execute_slave_on_dir :: boolean(),
+    async_master_jobs :: boolean(),
+    async_next_batch_job :: boolean(),
+    compute_init :: term(),
+    compute_enabled :: boolean(),
+    info :: storage_traverse:info()
 }).
 
 %% Model for holding current quota state for spaces

@@ -36,9 +36,9 @@
 -type user_ctx() :: #{binary() => binary()}.
 -type group_ctx() :: #{binary() => binary()}.
 -type params() :: #helper_params{}.
--type type() :: binary().   % ?BLOCK_STORAGE | ?OBJECT_STORAGE
+-type type() :: object | block.
 
--export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
+-export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0, type/0]).
 
 %%%===================================================================
 %%% API

@@ -80,8 +80,7 @@ run_after(_Function, _Args, Result) ->
     Result.
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = SpaceId}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
+run_after(Doc) ->
     ok = permissions_cache:invalidate(),
     emit_monitoring_event(Doc),
     maybe_revise_space_harvesters(Doc),

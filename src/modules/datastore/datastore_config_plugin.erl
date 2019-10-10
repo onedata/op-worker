@@ -73,7 +73,8 @@ get_models() -> [
     harvesting_state,
     idp_access_token,
     tree_traverse_job,
-    storage_sync_links
+    storage_sync_links,
+    storage_traverse_job
 ].
 
 %%--------------------------------------------------------------------

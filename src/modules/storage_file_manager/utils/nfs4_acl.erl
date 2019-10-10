@@ -169,7 +169,7 @@ normalize([ACE | Rest], NormalizedACL, SpaceId, StorageId) ->
 %% Normalizes given #access_control_entity.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_ace(ace:ace(), storage_file_ctx:ctx()) -> {ace:ace(), od_space:id(), storage:id()}.
+-spec normalize_ace(ace:ace(), od_space:id(), storage:id()) -> ace:ace().
 normalize_ace(ACE = #access_control_entity{identifier = ?owner}, _SpaceId, _StorageId) ->
     ACE;
 normalize_ace(ACE = #access_control_entity{identifier = ?group}, _SpaceId, _StorageId) ->

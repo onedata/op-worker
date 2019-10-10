@@ -34,8 +34,8 @@
 -define(FLAT_STORAGE_PATH, <<"flat">>).
 
 %% Storage types
--define(OBJECT_STORAGE, <<"object">>).
--define(BLOCK_STORAGE, <<"block">>).
+-define(OBJECT_STORAGE, object).
+-define(BLOCK_STORAGE, block).
 
 -define(DEFAULT_HELPER_TIMEOUT, 120000).
 

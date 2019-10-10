@@ -50,7 +50,7 @@ refresh_helpers_by_storage(StorageId) ->
     session:id(), od_space:id(), storage:doc() | storage:id()) -> ok.
 refresh_handle_params(Handle, SessionId, SpaceId, StorageDoc = #document{value = #storage{}}) ->
     % gather information
-    {ok, Helper} = storage:get_helper(StorageDoc),
+    Helper = storage:get_helper(StorageDoc),
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageDoc),
     {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),

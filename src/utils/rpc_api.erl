@@ -195,7 +195,7 @@ get_space_storage(Key) ->
     space_storage:get(Key).
 
 
--spec space_storage_get_storage_ids(space_storage:id()) -> [storage:id()].
+-spec space_storage_get_storage_ids(space_storage:id()) -> {ok, [storage:id()]}.
 space_storage_get_storage_ids(SpaceId) ->
     space_storage:get_storage_ids(SpaceId).
 
@@ -445,28 +445,29 @@ get_root_token_file_path() ->
 
 
 -spec get_storage_import_details(od_space:id(), storage:id()) ->
-    space_strategy:config().
+    space_strategies:sync_details().
 get_storage_import_details(SpaceId, StorageId) ->
-    space_strategies:get_storage_import_details(SpaceId, StorageId).
+    space_strategies:get_import_details(SpaceId, StorageId).
 
 
 -spec get_storage_update_details(od_space:id(), storage:id()) ->
-    space_strategy:config().
+    space_strategies:sync_details().
 get_storage_update_details(SpaceId, StorageId) ->
-    space_strategies:get_storage_update_details(SpaceId, StorageId).
+    space_strategies:get_update_details(SpaceId, StorageId).
 
 
--spec modify_storage_import(od_space:id(), space_strategy:name(),
-space_strategy:arguments()) ->
-    {ok, datastore:key()} | {error, term()}.
+-spec modify_storage_import(od_space:id(), space_strategy:name(), space_strategies:import_config()) ->
+    ok | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, Args) ->
-    storage_sync:modify_storage_import(SpaceId, StrategyName, Args).
+    % todo wywalić w onepaneluy StrategyName
+    storage_sync:enable_import(SpaceId, Args).
 
 
 -spec modify_storage_update(od_space:id(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
+    space_strategies:update_config()) -> ok | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, Args) ->
-    storage_sync:modify_storage_update(SpaceId, StrategyName, Args).
+    Enabled = StrategyName =:= simple_scan,
+    storage_sync:configure_storage_update(SpaceId, Enabled, Args).
 
 
 -spec storage_sync_monitoring_get_metric(od_space:id(),
@@ -477,15 +478,15 @@ storage_sync_monitoring_get_metric(SpaceId, Type, Window) ->
 
 
 -spec storage_sync_monitoring_get_import_state(od_space:id()) ->
-    storage_import:state().
+    storage_sync_traverse:scan_status().
 storage_sync_monitoring_get_import_state(SpaceId) ->
-    storage_sync_monitoring:get_import_state(SpaceId).
+    storage_sync_monitoring:get_import_status(SpaceId).
 
 
 -spec storage_sync_monitoring_get_update_state(od_space:id()) ->
-    storage_update:state().
+    storage_sync_traverse:scan_status().
 storage_sync_monitoring_get_update_state(SpaceId) ->
-    storage_sync_monitoring:get_update_state(SpaceId).
+    storage_sync_monitoring:get_update_status(SpaceId).
 
 
 -spec restart_rtransfer_link() -> ok | {error, not_running}.

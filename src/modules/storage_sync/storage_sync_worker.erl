@@ -16,12 +16,10 @@
 -author("Jakub Kudzia").
 -behavior(worker_plugin_behaviour).
 
-%%-include("modules/datastore/datastore_models.hrl").
-%%-include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% Interval between successive checks of spaces' storage_sync configuration.
 -define(STORAGE_SYNC_CHECK_INTERVAL, application:get_env(?APP_NAME, storage_sync_check_interval, 10)).
@@ -36,6 +34,9 @@
 
 %% API
 -export([notify_connection_to_oz/0, is_syncable_s3/1]).
+
+%% Exported for tests
+-export([schedule_spaces_check/1]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -72,8 +73,7 @@ handle(?PROVIDER_CONNECTED_TO_OZ) ->
     init_on_connection_to_oz();
 handle(?SPACES_CHECK) ->
     ?debug("Check spaces"),
-    check_spaces(),
-    schedule_spaces_check();
+    check_spaces();
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -88,7 +88,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     storage_sync_traverse:stop_pool(),
-%%    storage_sync_deletion:stop_pool(),
+    storage_sync_deletion:stop_pool(),
     ok.
 
 %%%===================================================================
@@ -105,51 +105,7 @@ notify_connection_to_oz() ->
 
 -spec init_on_connection_to_oz() -> ok.
 init_on_connection_to_oz() ->
-    try
-        case reset_stalled_scans() of
-            ok ->
-                schedule_spaces_check();
-            Error = {error, Reason}
-                when Reason =:= ?ERROR_NO_CONNECTION_TO_OZ
-                orelse Reason =:= ?ERROR_UNREGISTERED_PROVIDER
-            ->
-                ?error("storage_sync_worker could not initialise due to error ~w", [Error]);
-            Error = {error, _} ->
-                ?error("storage_sync_worker could not initialise due to unexpected error ~w", [Error]),
-                schedule_init_on_connection_to_oz(?INIT_ERROR_INTERVAL)
-        end
-    catch
-        Error2:Reason2 ->
-            ?error_stacktrace("storage_sync_worker could not initialise due to: ~w", [{Error2, Reason2}]),
-            schedule_init_on_connection_to_oz(?INIT_ERROR_INTERVAL)
-    end.
-
--spec reset_stalled_scans() -> ok | {error, term()}.
-reset_stalled_scans() ->
-    case provider_logic:get_spaces() of
-        {ok, Spaces} ->
-            lists:foreach(fun(SpaceId) ->
-                {ok, SyncConfigs} = space_strategies:get_sync_configs(SpaceId),
-                maps:fold(fun(StorageId, SyncConfig, undefined) ->
-                    reset_stalled_scans(SpaceId, StorageId, SyncConfig)
-                end, undefined, SyncConfigs)
-            end, Spaces);
-        Error = {error, _} ->
-            Error
-    end.
-
--spec reset_stalled_scans(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
-reset_stalled_scans(SpaceId, StorageId, SyncConfig) ->
-    {ImportEnabled, _ImportConfig} = space_strategies:get_import_details(SyncConfig),
-    case ImportEnabled of
-        false ->
-            ok;
-        _ ->
-            case storage_sync_monitoring:is_scan_in_progress(SpaceId, StorageId) of
-                false -> ok;
-                true -> storage_sync_monitoring:reset(SpaceId, StorageId)
-            end
-    end.
+    schedule_spaces_check().
 
 %%--------------------------------------------------------------------
 %% @private
@@ -163,27 +119,28 @@ check_spaces() ->
     try
         case provider_logic:get_spaces() of
             {ok, Spaces} ->
-                lists:foreach(fun(SpaceId) -> check_space(SpaceId) end, Spaces);
-            Error = {error, _} ->
-                ?debug("Unable to check space strategies due to: ~p", [Error]),
-                Error
+                lists:foreach(fun(SpaceId) -> check_space(SpaceId) end, Spaces),
+                schedule_spaces_check();
+            {error, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
+                ?warning("storage_sync_worker was unable to check spaces due to no connection to oz");
+            {error, ?ERROR_UNREGISTERED_ONEPROVIDER} ->
+                ?warning("storage_sync_worker was unable to check spaces due to unregistered provider");
+            {error, _} = Error ->
+                ?error("storage_sync_worker was unable to check spaces due to unexpected ~p", [Error]),
+                schedule_spaces_check()
         end
     catch
-        throw:?ERROR_UNREGISTERED_PROVIDER ->
-            ?debug("Unable to check space strategies - unregistered provider");
-        _:TReason ->
-            ?error_stacktrace("Unable to check space strategies due to: ~p", [TReason])
+        Error2:Reason ->
+            ?error_stacktrace("storage_sync_worker was unable to check spaces due to unexpected ~p", [Error2, Reason]),
+            schedule_spaces_check()
     end.
 
 -spec check_space(od_space:id()) -> ok.
 check_space(SpaceId) ->
-    case space_strategies:get_sync_configs(SpaceId) of
-        {ok, SyncConfigs} ->
-            maps:fold(fun(StorageId, SyncConfig, undefined) ->
-                check_storage(SpaceId, StorageId, SyncConfig)
-            end, undefined, SyncConfigs);
-        _ -> ok
-    end.
+    {ok, SyncConfigs} = space_strategies:get_sync_configs(SpaceId),
+    maps:fold(fun(StorageId, SyncConfig, undefined) ->
+        check_storage(SpaceId, StorageId, SyncConfig)
+    end, undefined, SyncConfigs).
 
 -spec check_storage(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
 check_storage(SpaceId, StorageId, SyncConfig) ->
@@ -261,6 +218,7 @@ is_syncable(StorageId) when is_binary(StorageId) ->
             false
     end.
 
+-spec is_syncable_s3(storage:doc()) -> boolean().
 is_syncable_s3(StorageDoc = #document{value = #storage{}}) ->
     Helper = storage:get_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
@@ -277,6 +235,10 @@ schedule_init_on_connection_to_oz(Interval) ->
 -spec schedule_spaces_check() -> ok.
 schedule_spaces_check() ->
     schedule(?STORAGE_SYNC_CHECK_INTERVAL, ?SPACES_CHECK).
+
+-spec schedule_spaces_check(non_neg_integer()) -> ok.
+schedule_spaces_check(IntervalSeconds) ->
+    schedule(IntervalSeconds, ?SPACES_CHECK).
 
 -spec schedule(non_neg_integer(), term()) -> ok.
 schedule(IntervalSeconds, Request) ->

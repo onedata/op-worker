@@ -23,9 +23,6 @@
     delete_link/5, delete_recursive/4
 ]).
 
--define(storage_sync_links_call(Node, Function, Args),
-    rpc:call(Node, storage_sync_links, Function, Args)).
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -34,19 +31,19 @@ add_link(Worker, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId) ->
     add_link(Worker, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, false).
 
 add_link(Worker, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves) ->
-    ?storage_sync_links_call(Worker, add_link, [RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves]).
+    rpc:call(Worker, storage_sync_links, add_link_recursive, [RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves]).
 
 get_link(Worker, RootId, ChildName) ->
-    ?storage_sync_links_call(Worker, get_link, [RootId, ChildName]).
+    rpc:call(Worker, storage_sync_links, get_link, [RootId, ChildName]).
 
 get_link(Worker, RootStorageFileId, SpaceId, StorageId, ChildName) ->
-    ?storage_sync_links_call(Worker, get_link, [RootStorageFileId, SpaceId, StorageId, ChildName]).
+    rpc:call(Worker, storage_sync_links, get_link, [RootStorageFileId, SpaceId, StorageId, ChildName]).
 
 list(Worker, RootStorageFileId, SpaceId, StorageId, Limit) ->
-    ?storage_sync_links_call(Worker, list, [RootStorageFileId, SpaceId, StorageId, Limit]).
+    rpc:call(Worker, storage_sync_links, list, [RootStorageFileId, SpaceId, StorageId, Limit]).
 
 list(Worker, RootStorageFileId, SpaceId, StorageId, Token, Limit) ->
-    ?storage_sync_links_call(Worker, list, [RootStorageFileId, SpaceId, StorageId, Token, Limit]).
+    rpc:call(Worker, storage_sync_links, list, [RootStorageFileId, SpaceId, StorageId, Token, Limit]).
 
 list_recursive(Worker, RootStorageFileId, SpaceId, StorageId) ->
     list_recursive(Worker, RootStorageFileId, SpaceId, StorageId, undefined, 1000, []).
@@ -72,13 +69,7 @@ list_recursive(Worker, RootStorageFileId, SpaceId, StorageId, Token, Limit, Resu
 
 
 delete_link(Worker, RootStorageFileId, SpaceId, StorageId, ChildName) ->
-    ?storage_sync_links_call(Worker, delete_link, [RootStorageFileId, SpaceId, StorageId, ChildName]).
+    rpc:call(Worker, storage_sync_links, delete_link, [RootStorageFileId, SpaceId, StorageId, ChildName]).
 
 delete_recursive(Worker, RootStorageFileId, SpaceId, StorageId) ->
-    ?storage_sync_links_call(Worker, delete_recursive, [RootStorageFileId, SpaceId, StorageId]).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
+    rpc:call(Worker, storage_sync_links, delete_recursive, [RootStorageFileId, SpaceId, StorageId]).

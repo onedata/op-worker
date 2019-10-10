@@ -36,7 +36,8 @@
     get_update_status/1, get_update_status/2,
     get_info/2, get_metric/3,
     is_scan_in_progress/1, is_scan_in_progress/2,
-    get_scans_num/1, get_import_finish_time/1, get_last_update_finish_time/1]).
+    get_scans_num/1, get_scans_num/2,
+    get_import_finish_time/1, get_last_update_finish_time/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -372,7 +373,7 @@ get_info(SpaceId, StorageId) ->
 %%-------------------------------------------
 -spec get_import_status(od_space:id()) -> storage_sync_traverse:scan_status().
 get_import_status(SpaceId) ->
-    StorageId = get_storage_id(SpaceId),
+    StorageId = space_storage:get_storage_id(SpaceId),
     get_import_status(SpaceId, StorageId).
 
 -spec get_import_status(od_space:id(), storage:id()) -> storage_sync_traverse:scan_status().
@@ -401,7 +402,7 @@ get_import_status(SpaceId, StorageId) ->
 %% Returns state of update. Possible values: not_started, in_progress, finished.
 %% @end
 %%-------------------------------------------------------------------
--spec get_update_status(od_space:id()) -> storage_sync_traverse:scan_status().
+-spec get_update_status(od_space:id() | record() | doc()) -> storage_sync_traverse:scan_status().
 get_update_status(#document{value = SSM = #storage_sync_monitoring{}}) ->
     get_update_status(SSM);
 get_update_status(#storage_sync_monitoring{
@@ -423,22 +424,31 @@ get_update_status(#storage_sync_monitoring{
 }) when (LastUpdateStartTime =/= undefined) ->
     finished;
 get_update_status(SpaceId) when is_binary(SpaceId) ->
-    StorageId = get_storage_id(SpaceId),
+    StorageId = space_storage:get_storage_id(SpaceId),
     get_update_status(SpaceId, StorageId).
 
 -spec get_update_status(od_space:id(), storage:id()) -> storage_sync_traverse:scan_status().
 get_update_status(SpaceId, StorageId) ->
-    StorageId = get_storage_id(SpaceId),
+    StorageId = space_storage:get_storage_id(SpaceId),
     case get(SpaceId, StorageId) of
         {ok, Doc} -> get_update_status(Doc);
         {error, not_found} -> not_started
     end.
 
--spec get_scans_num(doc() | record()) -> non_neg_integer().
+-spec get_scans_num(doc() | record()) -> {ok, non_neg_integer()}.
 get_scans_num(#storage_sync_monitoring{scans = Scans}) ->
-    Scans;
+    {ok, Scans};
 get_scans_num(#document{value = SSM}) ->
     get_scans_num(SSM).
+
+-spec get_scans_num(od_space:id(), storage:id()) -> {ok, non_neg_integer()} | error().
+get_scans_num(SpaceId, StorageId) ->
+    case get(SpaceId, StorageId) of
+        {ok, Doc} ->
+            get_scans_num(Doc);
+        Error = {error, _}->
+            Error
+    end.
 
 -spec get_import_finish_time(doc() | record()) -> non_neg_integer().
 get_import_finish_time(#storage_sync_monitoring{import_finish_time = ImportFinishTime}) ->
@@ -459,7 +469,7 @@ get_last_update_finish_time(#document{value = SSM}) ->
 %%-------------------------------------------------------------------
 -spec get_metric(od_space:id(), plot_counter_type(), window()) -> proplists:proplist().
 get_metric(SpaceId, Type, Window) ->
-    StorageId = get_storage_id(SpaceId),
+    StorageId = space_storage:get_storage_id(SpaceId),
     case ?MODULE:get(SpaceId, StorageId) of
         {ok, #document{value = SSM}} ->
             return_histogram_and_timestamp(SSM, Type, Window);
@@ -608,21 +618,6 @@ decrement_queue_length_histograms(SSM = #storage_sync_monitoring{
     }.
 
 %%-------------------------------------------------------------------
-%% @doc
-%% This function returns StorageId for given SpaceId.
-%% WARNING!!! After allowing to support one space with many storages
-%% on one provider, this function will be useless !!!
-%% @end
-%%-------------------------------------------------------------------
--spec get_storage_id(od_space:id()) -> storage:id().
-get_storage_id(SpaceId) ->
-    {ok, #document{
-        value = #space_strategies{
-            sync_configs = SyncConfigs
-        }}} = space_strategies:get(SpaceId),
-    hd(maps:keys(SyncConfigs)).
-
-%%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% This functions checks whether scan has been finished. If true
@@ -656,8 +651,7 @@ mark_finished_scan(SpaceId, StorageId) ->
 %% it updates suitable counters and histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mark_finished_import_scan(record())
-        -> record().
+-spec maybe_mark_finished_import_scan(record()) -> record().
 maybe_mark_finished_import_scan(SSM = #storage_sync_monitoring{
     scans = Scans,
     import_finish_time = undefined
@@ -674,8 +668,7 @@ maybe_mark_finished_import_scan(SSM = #storage_sync_monitoring{
 %% it updates suitable counters and histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_mark_finished_update_scan(record())
-        -> record().
+-spec maybe_mark_finished_update_scan(record()) -> record().
 maybe_mark_finished_update_scan(SSM = #storage_sync_monitoring{
     scans = Scans
 }) ->

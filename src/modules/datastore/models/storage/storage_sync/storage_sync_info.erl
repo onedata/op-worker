@@ -1,4 +1,4 @@
-    %%%-------------------------------------------------------------------
+%%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
 %%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -22,12 +22,18 @@
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
 -type diff() :: datastore_doc:diff(record()).
+-type hash() :: storage_sync_hash:hash().
+-type hashes() :: #{non_neg_integer() => storage_sync_hash:hash()}.
 
--export_type([key/0, doc/0, record/0]).
+-export_type([key/0, doc/0, record/0, hashes/0]).
 
 %% API
-    -export([delete/2, get/2, create_or_update/3, get_mtime/1, update_mtime_and_hash/5, update_mtime/3,
-        increase_batches_to_process/2, increase_batches_processed/2, mark_processed_batch/6, all_batches_processed/1, init_new_scan/2, update_delayed_hashes/2, mark_processed_batch/7]).
+-export([get/2, get_mtime/1, delete/2, init_new_scan/2,
+    update_mtime/4, increase_batches_to_process/2,
+    mark_processed_batch/6, all_batches_processed/1, mark_processed_batch/7]).
+
+% exported for CT tests
+-export([create_or_update/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2, id/2]).
@@ -37,22 +43,26 @@
     routing => global
 }).
 
-%TODO add update functions to encapsulate this record
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 -spec get(helpers:file_id(), od_space:id()) -> {ok, doc()} | error().
 get(StorageFileId, SpaceId) ->
-%%    ?alert("ID2: ~p ~p ~p", [StorageFileId, SpaceId, id(StorageFileId, SpaceId)]),
     datastore_model:get(?CTX, id(StorageFileId, SpaceId)).
 
+-spec get_mtime(record() | doc()) -> non_neg_integer().
 get_mtime(#document{value = SSI}) ->
     get_mtime(SSI);
-get_mtime(#storage_sync_info{mtime = MTime}) ->
-    MTime.
+get_mtime(#storage_sync_info{mtime = Mtime}) ->
+    Mtime.
 
+
+-spec delete(helpers:file_id(), od_space:id()) -> ok | error().
+delete(StorageFileId, SpaceId) ->
+    datastore_model:delete(?CTX, id(StorageFileId, SpaceId)).
+
+-spec all_batches_processed(record() | doc()) -> boolean().
 all_batches_processed(#document{value = SSI}) ->
     all_batches_processed(SSI);
 all_batches_processed(#storage_sync_info{
@@ -61,24 +71,7 @@ all_batches_processed(#storage_sync_info{
 }) ->
     BatchesToProcess =:= BatchesProcessed.
 
--spec update_mtime_and_hash(helpers:file_id(), od_space:id(), non_neg_integer(), non_neg_integer(),
-    binary()) -> ok | error().
-update_mtime_and_hash(StorageFileId, SpaceId, NewMtime, BatchKey, BatchNewHash) ->
-    ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
-        fun(SSI = #storage_sync_info{children_attrs_hashes = CAH}) ->
-            {ok, SSI#storage_sync_info{
-                mtime = NewMtime,
-                children_attrs_hashes = CAH#{BatchKey => BatchNewHash}
-                }}
-        end
-    )).
-
--spec update_mtime(helpers:file_id(), od_space:id(), non_neg_integer()) -> ok.
-update_mtime(StorageFileId, SpaceId, NewMtime) ->
-    ok = ?extract_ok(create_or_update(StorageFileId, SpaceId, fun(SSI) ->
-        {ok, SSI#storage_sync_info{mtime = NewMtime}}
-    end)).
-
+-spec init_new_scan(helpers:file_id(), od_space:id()) -> ok.
 init_new_scan(StorageFileId, SpaceId) ->
     ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
         fun(SSI) ->
@@ -88,10 +81,18 @@ init_new_scan(StorageFileId, SpaceId) ->
                 delayed_children_attrs_hashes = #{}
             }}
         end
-    )),
-%%    ?alert("CREATED FOR ~p", [{StorageFileId, SpaceId}]),
-    ok.
+    )).
 
+-spec update_mtime(helpers:file_id(), od_space:id(), non_neg_integer(), non_neg_integer()) -> ok.
+update_mtime(StorageFileId, SpaceId, NewMtime, StatTimestamp) ->
+    ok = ?extract_ok(create_or_update(StorageFileId, SpaceId, fun(SSI) ->
+        {ok, SSI#storage_sync_info{
+            mtime = NewMtime,
+            last_stat = StatTimestamp
+        }}
+    end)).
+
+-spec increase_batches_to_process(helpers:file_id(), od_space:id()) -> ok.
 increase_batches_to_process(StorageFileId, SpaceId) ->
     ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
         fun(SSI = #storage_sync_info{batches_to_process = ToProcess}) ->
@@ -99,15 +100,16 @@ increase_batches_to_process(StorageFileId, SpaceId) ->
         end
     )).
 
-increase_batches_processed(StorageFileId, SpaceId) ->
-    create_or_update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{batches_processed = Processed}) ->
-        {ok, SSI#storage_sync_info{batches_processed = Processed + 1}}
-    end).
-
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(),
+    undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
 mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate) ->
     mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate, true).
 
-mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate, UpdateDelayedHashesWhenFinished) ->
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(),
+    undefined | non_neg_integer(), undefined | hash(), boolean(), boolean()) -> {ok, doc()}.
+mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate,
+    UpdateDelayedHashesWhenFinished
+) ->
     update(StorageFileId, SpaceId, fun(SSI0 = #storage_sync_info{
         batches_processed = BatchesProcessed,
         batches_to_process = BatchesToProcess,
@@ -116,9 +118,9 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHa
     }) ->
         SSI1 = case DelayHashUpdate of
             true ->
-                SSI0#storage_sync_info{delayed_children_attrs_hashes = update_map(BatchKey, BatchHash, DCAH)};
+                SSI0#storage_sync_info{delayed_children_attrs_hashes = update_hashes_map(BatchKey, BatchHash, DCAH)};
             false ->
-                SSI0#storage_sync_info{children_attrs_hashes = update_map(BatchKey, BatchHash, CAH)}
+                SSI0#storage_sync_info{children_attrs_hashes = update_hashes_map(BatchKey, BatchHash, CAH)}
         end,
         SSI2 = case BatchesProcessed + 1 =:= BatchesToProcess of
             true ->
@@ -142,37 +144,19 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHa
         {ok, SSI3}
     end).
 
-update_delayed_hashes(StorageFileId, SpaceId) ->
-    update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
-        children_attrs_hashes = CAH,
-        delayed_children_attrs_hashes = DCAH
-    }) ->
-        {ok, SSI#storage_sync_info{
-            children_attrs_hashes = maps:merge(CAH, DCAH),
-            delayed_children_attrs_hashes = #{}
-        }}
-    end).
-
--spec create_or_update(helpers:file_id(), od_space:id(), diff()) -> ok | error().
-create_or_update(StorageFileId, SpaceId, Diff) ->
-    % todo zmiana kolejnosc argumentów
-    Id = id(StorageFileId, SpaceId),
-%%    ?alert("ID: ~p ~p ~p", [StorageFileId, SpaceId, Id]),
-    DefaultDoc = default_doc(Id, Diff, SpaceId),
-    datastore_model:update(?CTX, Id, Diff, DefaultDoc).
-
--spec update(helpers:file_id(), diff(), od_space:id()) -> ok | error().
-update(StorageFileId, SpaceId, Diff) ->
-    Id = id(StorageFileId, SpaceId),
-    datastore_model:update(?CTX, Id, Diff).
-
--spec delete(helpers:file_id(), od_space:id()) -> ok | error().
-delete(StorageFileId, SpaceId) ->
-    datastore_model:delete(?CTX, id(StorageFileId, SpaceId)).
+%%===================================================================
+%% Exported for CT tests
+%%===================================================================
 
 -spec id(helpers:file_id(), od_space:id()) -> key().
 id(StorageFileId, SpaceId) ->
     datastore_utils:gen_key(SpaceId, StorageFileId).
+
+-spec create_or_update(helpers:file_id(), od_space:id(), diff()) -> ok | error().
+create_or_update(StorageFileId, SpaceId, Diff) ->
+    Id = id(StorageFileId, SpaceId),
+    DefaultDoc = default_doc(Id, Diff, SpaceId),
+    datastore_model:update(?CTX, Id, Diff, DefaultDoc).
 
 %%===================================================================
 %% Internal functions
@@ -186,6 +170,11 @@ default_doc(Key, Diff, SpaceId) ->
         value = NewSSI,
         scope = SpaceId
     }.
+
+-spec update(helpers:file_id(), od_space:id(), diff()) -> ok | error().
+update(StorageFileId, SpaceId, Diff) ->
+    Id = id(StorageFileId, SpaceId),
+    datastore_model:update(?CTX, Id, Diff).
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -263,11 +252,7 @@ upgrade_record(3, {?MODULE, ChildrenAttrsHash, MTime, LastSTat}) ->
         batches_processed = 0
     }}.
 
-
-
-update_map(undefined, _Value, Map) ->
-    Map;
-update_map(_Key, undefined, Map) ->
-    Map;
-update_map(Key, Value, Map) ->
-    Map#{Key => Value}.
+-spec update_hashes_map(non_neg_integer() | undefined, hash() | undefined, map()) -> map().
+update_hashes_map(undefined, _Value, Map) -> Map;
+update_hashes_map(_Key, undefined, Map) -> Map;
+update_hashes_map(Key, Value, Map) -> Map#{Key => Value}.

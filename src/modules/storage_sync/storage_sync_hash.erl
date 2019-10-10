@@ -6,11 +6,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module with helper functions for storage_sync.
-%%% Functions in this module are responsible for detecting changes of
-%%% synchronized files.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_sync_changes).  %todo maybe rename this module
+-module(storage_sync_hash).
 -author("Jakub Kudzia").
 
 
@@ -25,35 +23,15 @@
 -export_type([hash/0]).
 
 %% API
--export([children_attrs_hash_has_changed/3, mtime_has_changed/2,
-    compute_files_attrs_hash/2, hash/1, compute_file_attrs_hash/2]).
+-export([children_attrs_hash_has_changed/3, hash/1, compute_file_attrs_hash/2]).
 
 %%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether mtime has changed since last synchronization.
-%% @end
-%%-------------------------------------------------------------------
--spec mtime_has_changed(storage_sync_info:doc() | undefined, storage_file_ctx:ctx()) ->
-    {boolean(), storage_file_ctx:ctx()}.
-mtime_has_changed(undefined, StorageFileCtx) ->
-%%    ?alert("CHANGED 1"),
-    {true, StorageFileCtx};
-mtime_has_changed(#document{
-    value = #storage_sync_info{mtime = LastMtime}
-}, StorageFileCtx) ->
-    {#statbuf{st_mtime = StMtime}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-%%    ?alert("CHANGED 2 ~p ~p", [StMtime, LastMtime]),
-    {not (LastMtime =:= StMtime), StorageFileCtx2}.
-
-%%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Checks whether hash of children attrs has changed since last
 %% synchronization.
 %% @end
 %%-------------------------------------------------------------------
--spec children_attrs_hash_has_changed(storage_sync_info:doc() | undefined, hash(), binary()) ->
+-spec children_attrs_hash_has_changed(storage_sync_info:doc() | undefined, hash(), non_neg_integer()) ->
     boolean().
 children_attrs_hash_has_changed(undefined, _CurrentChildrenAttrsHash, _Key) ->
     true;
@@ -61,9 +39,6 @@ children_attrs_hash_has_changed(#document{
     value = #storage_sync_info{children_attrs_hashes = PreviousHashes}
 }, CurrentChildrenAttrsHash, Key) ->
     PreviousHash = maps:get(Key, PreviousHashes, undefined),
-%%    ?alert("PREVIOUS HASH: ~p", [PreviousHash]),
-%%    ?alert("CurrentChildrenAttrsHash: ~p", [CurrentChildrenAttrsHash]),
-
     case {PreviousHash, CurrentChildrenAttrsHash} of
         {Hash, Hash} -> false;
         {undefined, <<"">>} -> false;
@@ -71,30 +46,6 @@ children_attrs_hash_has_changed(#document{
     end.
 
 %%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Counts hash of attributes of files associated with passed contexts.
-%% @end
-%%-------------------------------------------------------------------
--spec compute_files_attrs_hash([storage_file_ctx:ctx()], boolean()) ->
-    {hash(), [storage_file_ctx:ctx()]}.
-compute_files_attrs_hash([], _SyncAcl) ->
-    {undefined, []};
-compute_files_attrs_hash(StorageFileCtxs, SyncAcl) ->
-    try
-        {H, Ctxs} = lists:foldr(fun(StorageFileCtx, {Hash0, StorageFileCtxs0}) ->
-            {FileHash, StorageFileCtx2} = compute_file_attrs_hash(StorageFileCtx, SyncAcl),
-            {[FileHash | Hash0], [StorageFileCtx2 | StorageFileCtxs0]}
-        end, {[], []}, StorageFileCtxs),
-        {hash(H), Ctxs}
-    catch
-        Error:Reason ->
-            ?error_stacktrace("count_files_attrs_hash failed due to: ~p:~p", [Error, Reason]),
-            {undefined, StorageFileCtxs}
-    end.
-
-%%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Counts hash of attributes of file associated with passed context.
 %% If file has been remove, it will return empty hash.
@@ -149,13 +100,6 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
             {<<"">>, StorageFileCtx3};
         ?REGULAR_FILE_TYPE ->
             FileId = storage_file_ctx:get_file_name_const(StorageFileCtx2),
-%%            ?emergency("FileId = ~p", [FileId]),
-%%            ?emergency("StMode = ~p", [StMode]),
-%%            ?emergency("StSize = ~p", [StSize]),
-%%            ?emergency("StAtime = ~p", [StAtime]),
-%%            ?emergency("STMtime = ~p", [STMtime]),
-%%            ?emergency("STCtime = ~p", [STCtime]),
-%%            ?emergency("Xattr = ~p", [Xattr]),
             {hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
 

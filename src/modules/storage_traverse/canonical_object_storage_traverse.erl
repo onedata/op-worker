@@ -6,10 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Helper module for storage_traverse that allows for traversing
+%%% over canonical object storages.
+%%% The module encapsulates operations on corresponding helpers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(object_storage_traverse).   % todo rename to canonical-object?
+-module(canonical_object_storage_traverse).
 -author("Jakub Kudzia").
 
 
@@ -17,11 +19,11 @@
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% storage_traverse callbacks
--export([init_type_specific_opts/2, get_children_batch/1, generate_master_and_slave_jobs/3, batch_id/1, fold/3]).
+-export([init_type_specific_opts/2, get_children_batch/1, generate_master_and_slave_jobs/3, batch_id/1]).
 
 -type batch_id() :: {Offset :: non_neg_integer(), Marker :: helpers:marker(), Size :: non_neg_integer()}.
 
@@ -43,7 +45,7 @@ init_type_specific_opts(StorageTraverse = #storage_traverse{
             StorageTraverse#storage_traverse{marker = Marker}
     end.
 
--spec get_children_batch(storage_traverse:job()) -> {ok, [helper:file_id()]} | {error, term()}.
+-spec get_children_batch(storage_traverse:job()) -> {ok, [helpers:file_id()]} | {error, term()}.
 get_children_batch(#storage_traverse{max_depth = 0}) ->
     {ok, []};
 get_children_batch(#storage_traverse{
@@ -55,47 +57,9 @@ get_children_batch(#storage_traverse{
     Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
     storage_file_manager:listobjects(Handle, Marker, Offset, BatchSize).
 
-fold(StorageTraverse = #storage_traverse{max_depth = 0}, _Fun, Init) ->
-    {Init, StorageTraverse};
-fold(TraverseJob = #storage_traverse{
-    storage_file_ctx = StorageFileCtx,
-    offset = Offset,
-    batch_size = BatchSize,
-    marker = Marker,
-    max_depth = MaxDepth
-}, Fun, Init) ->
-    Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
-    case storage_file_manager:listobjects(Handle, Marker, Offset, BatchSize) of
-        {ok, ChildrenIds} ->
-            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-            FileTokens = filename:split(StorageFileId),
-            {Result, NewMarker} = lists:foldl(fun(ChildStorageFileId, {Acc, _LastChildId}) ->
-                ChildTokens = filename:split(ChildStorageFileId),
-                case length(ChildTokens) - length(FileTokens) > MaxDepth of
-                    true ->
-                        {Acc, ChildStorageFileId};
-                    false ->
-                        {Fun(ChildStorageFileId, Acc), ChildStorageFileId}
-                end
-            end, {Init, Marker}, ChildrenIds),
-            TraverseJob2 = TraverseJob#storage_traverse{
-                offset = Offset + length(ChildrenIds),
-                marker = NewMarker
-            },
-            case length(ChildrenIds) < BatchSize of
-                true ->
-                    {ok, Result};
-                false ->
-                    fold(TraverseJob2, Fun, Result)
-            end;
-        Error = {error, _} ->
-            Error
-    end.
-
-
-
 -spec generate_master_and_slave_jobs(storage_traverse:job(),
-    traverse:master_job_extended_args(), [helpers:file_id()]) -> {ok, traverse:master_job_map()}.
+    traverse:master_job_extended_args(), [helpers:file_id()]) ->
+    {ok, traverse:master_job_map()} | {ok, traverse:master_job_map(), term()}.
 generate_master_and_slave_jobs(#storage_traverse{
     storage_file_ctx = StorageFileCtx,
     max_depth = 0,

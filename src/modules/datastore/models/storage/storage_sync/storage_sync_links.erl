@@ -5,23 +5,22 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Model for WRITEME
+%%% In this module, util functions for operating on storage_sync_links
+%%% are implemented.
+%%% storage_sync_links are links used by storage_sync to compare lists of
+%%% files on storage with lists of files in the Onedata system.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_links).
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_link/5, delete_link/4, delete_recursive/3, list/4, list/5]).
+-export([add_link_recursive/5, list/5, delete_recursive/3]).
 
-% todo debug delete
--export([get_link/2, get_link/4]).
+%% exported for CT tests
+-export([get_link/2, get_link/4, list/4, delete_link/4]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -29,7 +28,7 @@
 -type root_id() :: binary().
 -type link_name() :: helpers:file_id().
 -type link_target() :: root_id() | undefined.
--type fold_fun() :: datastore:fold_fun(link_name(), link_target()).
+-type fold_fun() :: datastore:fold_fun({link_name(), link_target()}).
 -type error() :: {error, term()}.
 
 -export_type([link_name/0, link_target/0]).
@@ -38,15 +37,48 @@
 -define(SEPARATOR, "_").
 -define(ROOT_ID(RootStorageFileId, SpaceId, StorageId),
     <<"storage_sync_links_", (base64:encode(crypto:hash(md5, [RootStorageFileId, SpaceId, StorageId])))/binary>>).
-%%    % todo tutaj leci jakis blad ze nie moze zencodować stringa jak jest hash moze zamienic na base64
-%%    <<"storage_sync_links_", SpaceId/binary, "_", StorageId/binary, "_", RootStorageFileId/binary>>).
-
-
-% TODO
-% TODO * deletion of whole trees structure
 
 %%%===================================================================
 %%% API functions
+%%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function adds link associated with ChildStorageFileId to tree
+%% associated with RootStorageFileId.
+%% This function is recursive, which means, that if ChildStorageFileId
+%% is not a direct child of RootStorageFileId, the function will create
+%% intermediate links and trees.
+%% e. g.
+%% call add_link(<<"/root1">>, <<"/root1/dir1/dir2/dir3/leaf">>)
+%% will create the following links (link is presented as a pair {LinkName, LinkValue}):
+%%    * ?ROOT(<<"/root1">>) -> {<<"dir1">>, ?ROOT(<<"/root1/dir1">>)}
+%%    * ?ROOT(<<"/root1/dir1">>) -> {<<"dir2">>, ?ROOT(<<"/root1/dir1/dir2">>)}
+%%    * ?ROOT(<<"/root1/dir1/dir2">>) -> {<<"dir3">>, ?ROOT(<<"/root1/dir1/dir2/dir3">>)}
+%%    * ?ROOT(<<"/root1/dir1/dir2/dir3">>) -> {<<"leaf">>, LeafValue)}
+%%
+%% Depending on the value of the MarkLeaves flag, LeafValue can be:
+%%    * undefined if MarkLeaves == true
+%%    * ?ROOT(<<"/root1/dir1/dir2/dir3/leaf">> if MarkLeaves == false.
+%% @end
+%%-------------------------------------------------------------------
+-spec add_link_recursive(helpers:file_id(), od_space:id(), storage:id(), link_name(), boolean()) -> ok.
+add_link_recursive(RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves) ->
+    ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(RootStorageFileId),
+    RootId = ?ROOT_ID(RootStorageFileId, SpaceId    , StorageId),
+    add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, ChildrenTokens, MarkLeaves).
+
+-spec list(helpers:file_id(), od_space:id(), storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
+    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+list(RootStorageFileId, SpaceId, StorageId, Token, Limit) ->
+    list_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), Token, Limit).
+
+-spec delete_recursive(helpers:file_id(), od_space:id(), storage:id()) -> ok.
+delete_recursive(RootStorageFileId, SpaceId, StorageId) ->
+    delete_recursive_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId)).
+
+%%%===================================================================
+%%% functions exported for CT tests
 %%%===================================================================
 
 -spec get_link(root_id(), link_name()) -> {ok, link_target()} | error().
@@ -60,87 +92,14 @@ get_link(RootId, ChildName) ->
 get_link(RootStorageFileId, SpaceId, StorageId, ChildName) ->
     get_link(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), ChildName).
 
-
--spec add_link(helpers:file_id(), od_space:id(), storage:id(), link_name(), boolean()) -> ok.
-add_link(RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves) ->
-    % todo opisać, że MarkLeaves dodaje linka dla liscia z targetem undefined, dzieki czemu na object storage'u bedziemy wiedziec kiedy jest lisc i
-    % nie bedziemy bez sensu dla kazdego pliku reg. szukac jego drzewa (bo go nie ma)
-    % z kolei na block storage'u zawsze bedzie target ustawiony, ale sync olewa to bo i tak jedzie tylko po jednym katalogu
-    ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(RootStorageFileId),
-    RootId = ?ROOT_ID(RootStorageFileId, SpaceId, StorageId),
-    add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, ChildrenTokens, MarkLeaves).
-
+-spec list(helpers:file_id(), od_space:id(), storage:id(), non_neg_integer()) ->
+    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
 list(RootStorageFileId, SpaceId, StorageId, Limit) ->
-    list(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), Limit).
-
-list(RootId, Limit) ->
-    list(RootId, #link_token{}, Limit).
-
--spec list(helpers:file_id(), od_space:id(), storage:id(), datastore_link_iter:token()) ->
-    {ok, [link_name()]}. % todo extended info
-list(RootStorageFileId, SpaceId, StorageId, Token, Limit) ->
-    list(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), Token, Limit).
-
-list(RootId, Token, Limit) ->
-    Token2 = utils:ensure_defined(Token, undefined, #link_token{}),
-    Opts = #{token => Token2},
-    Opts2 = case Limit of
-        all -> Opts;
-        _ -> Opts#{size => Limit}
-    end,
-    list_internal(RootId, Opts2).
-
-list_internal(RootId, Opts) ->
-    {{ok, ChildrenReversed}, NewToken} = for_each(RootId,
-        fun(ChildName, ChildTreeRootId, FilesAcc) ->
-            [{ChildName, ChildTreeRootId} | FilesAcc]
-        end, [], Opts
-    ),
-    {{ok, lists:reverse(ChildrenReversed)}, NewToken}.
-
-% todo ogarnac, bo niektore funkcje, ktore maja Rootid jako arugment powinny byc internal
-
--spec delete_recursive(helpers:file_id(), od_space:id(), storage:id()) -> ok.
-delete_recursive(RootStorageFileId, SpaceId, StorageId) ->
-    delete_recursive(?ROOT_ID(RootStorageFileId, SpaceId, StorageId)).
-
-delete_recursive(undefined) ->
-    ok;
-delete_recursive(RootId) ->
-    delete_recursive(RootId, #link_token{}).
-
-delete_recursive(RootId, Token) ->
-    case list(RootId, Token, 1000) of
-        {{ok, Children}, Token2} ->
-            delete_children(RootId, Children),
-            case Token2#link_token.is_last of
-                true ->
-                    ok;
-                false ->
-                    delete_recursive(RootId, Token2)
-            end;
-        {error, not_found} ->
-            ok
-    end.
-
-delete_children(_RootId, []) ->
-    ok;
-delete_children(RootId, [{ChildName, ChildRootId} | Rest]) ->
-    delete_recursive(ChildRootId),
-    delete_link(RootId, ChildName),
-    delete_children(RootId, Rest).
-
+    list_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), #link_token{}, Limit).
 
 -spec delete_link(helpers:file_id(), od_space:id(), storage:id(), link_name()) -> ok.
 delete_link(RootStorageFileId, SpaceId, StorageId, ChildName) ->
-    delete_link(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), ChildName).
-
-delete_link(RootId, ChildName) ->
-    TreeId = oneprovider:get_id(),
-    case datastore_model:delete_links(?CTX, RootId, TreeId, ChildName) of
-        [] -> ok;
-        ok -> ok
-    end.
+    delete_link_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), ChildName).
 
 %%%===================================================================
 %%% Internal functions
@@ -160,7 +119,7 @@ add_link_recursive(_RootId, _RootStorageFileId, _SpaceId, _StorageId, [], _MarkL
     ok;
 add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, [ChildName | RestChildren], MarkLeaves) ->
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
-    ChildRootId = case get_link(RootStorageFileId, SpaceId, StorageId, ChildName) of
+    ChildRootId = case get_link(RootId, ChildName) of
         {ok, ChildRootId0} ->
             ChildRootId0;
         {error, not_found} ->
@@ -173,18 +132,74 @@ add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, [ChildName | R
     end,
     add_link_recursive(ChildRootId, ChildStorageFileId, SpaceId, StorageId, RestChildren, MarkLeaves).
 
+-spec list_internal(root_id(), undefined | datastore_links_iter:token(), non_neg_integer()) ->
+    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+list_internal(RootId, Token, Limit) ->
+    Token2 = utils:ensure_defined(Token, undefined, #link_token{}),
+    Opts = #{token => Token2},
+    Opts2 = case Limit of
+        all -> Opts;
+        _ -> Opts#{size => Limit}
+    end,
+    list_internal(RootId, Opts2).
+
+-spec list_internal(root_id(), datastore_links_iter:fold_opts()) ->
+    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+list_internal(RootId, Opts) ->
+    Result = for_each(RootId, fun({ChildName, ChildTreeRootId}, FilesAcc) ->
+        [{ChildName, ChildTreeRootId} | FilesAcc]
+    end, [], Opts),
+    case Result of
+        {{ok, ChildrenReversed}, NewToken} ->
+            {{ok, lists:reverse(ChildrenReversed)}, NewToken};
+        Error = {error, _} ->
+            Error
+    end.
+
+-spec delete_recursive_internal(root_id()) -> ok.
+delete_recursive_internal(RootId) ->
+    delete_recursive_internal(RootId, #link_token{}).
+
+-spec delete_recursive_internal(undefined | root_id(), datastore_links_iter:token()) -> ok.
+delete_recursive_internal(RootId, Token) ->
+    case list_internal(RootId, Token, 1000) of
+        {{ok, Children}, Token2} ->
+            delete_children(RootId, Children),
+            case Token2#link_token.is_last of
+                true ->
+                    ok;
+                false ->
+                    delete_recursive_internal(RootId, Token2)
+            end;
+        {error, not_found} ->
+            ok
+    end.
+
+-spec delete_children(root_id(), [{link_name(), link_target()}]) -> ok.
+delete_children(_RootId, []) ->
+    ok;
+delete_children(RootId, [{ChildName, undefined} | Rest]) ->
+    delete_link_internal(RootId, ChildName),
+    delete_children(RootId, Rest);
+delete_children(RootId, [{ChildName, ChildRootId} | Rest]) ->
+    delete_recursive_internal(ChildRootId),
+    delete_link_internal(RootId, ChildName),
+    delete_children(RootId, Rest).
+
 -spec delete_link_internal(root_id(), link_name()) -> ok.
 delete_link_internal(RootId, ChildName) ->
     TreeId = oneprovider:get_id(),
-    datastore_model:delete_links(?CTX, RootId, TreeId, ChildName).
-
+    case datastore_model:delete_links(?CTX, RootId, TreeId, ChildName) of
+        [] -> ok;
+        ok -> ok
+    end.
 
 -spec for_each(root_id(), fold_fun(), Acc0 :: term(), datastore:fold_opts()) ->
     {{ok, Acc :: term()}, datastore_links_iter:token()} | {error, term()}.
 for_each(RootId, Callback, Acc0, Opts) ->
     datastore_model:fold_links(?CTX, RootId, all,
         fun(#link{name = StorageFileId, target = Target}, Acc) ->
-            {ok, Callback(StorageFileId, Target, Acc)}
+            {ok, Callback({StorageFileId, Target}, Acc)}
         end, Acc0, Opts).
 
 

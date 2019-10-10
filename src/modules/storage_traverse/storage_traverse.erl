@@ -6,28 +6,33 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
-% todo describe compute_fun
+%%% This modules implements functions for traversing files on storage.
+%%% It uses traverse framework.
+%%% To use storage_traverse, new callback module has to be defined (see traverse_behaviour.erl from cluster_worker) that
+%%% uses callbacks defined in this module and additionally provides do_slave_job function implementation.
+%%% Next, pool and tasks are started using init and run functions from this module.
+%%% The traverse jobs (see traverse.erl for jobs definition) are persisted using tree_traverse_job datastore model
+%%% which stores jobs locally and synchronizes main job for each task between providers (to allow tasks execution
+%%% on other provider resources).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_traverse).
 -author("Jakub Kudzia").
 
-
 -include("global_definitions.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/4, stop/1, run/5, run/6, reset_info/1, fold/3]).
+-export([init/4, stop/1, run/5, run/6, reset_info/1, storage_type_callback_module/1]).
 
 %% Traverse callbacks
--export([do_master_job/2, get_job/1, update_job_progress/5]).
+-export([do_master_job/2, get_job/1, update_job_progress/6]).
 
 %% Util functions
--export([get_storage_file_ctx/1, get_space_id/1, get_storage_id/1]).
+-export([]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TASK_ID, <<(?POOL_NAME)/binary, "_", (datastore_utils:gen_key())/binary>>).
@@ -35,13 +40,14 @@
 -type pool() :: traverse:pool() | atom().
 -type info() :: term().
 -type job() :: #storage_traverse{}.
+-type storage_type_callback_module() :: block_storage_traverse | canonical_object_storage_traverse.
 
 %% @formatter:off
 -type next_batch_job_prehook() :: fun( (TraverseJob :: job()) -> term()).
 -type children_batch_job_prehook() :: fun( (TraverseJob :: job()) -> term()).
 
 -type compute() :: fun(
-    (StorageFileCtx :: storage_file_ctx:ctx(), ComputeAcc :: term()) ->
+    (StorageFileCtx :: storage_file_ctx:ctx(), Info :: info(), ComputeAcc :: term()) ->
     {ComputeResult :: term(), UpdatedStorageFileCtx :: storage_file_ctx:ctx()}
 ).
 
@@ -49,10 +55,18 @@
 -type run_opts() :: #{
     execute_slave_on_dir => boolean(),
     async_master_jobs => boolean(),
+    async_next_batch_job => boolean(),
+    next_batch_job_prehook => next_batch_job_prehook(),
+    children_master_job_prehook => children_batch_job_prehook(),
     offset => non_neg_integer(),
     batch_size => non_neg_integer(),
-    marker => helpers:marker(),
-    max_depth => non_neg_integer()
+    marker => undefined | helpers:marker(),
+    max_depth => non_neg_integer(),
+    % custom function that is called on each listed child
+    compute_fun => undefined | compute(),
+    compute_init => term(),
+    % allows to disable compute for specific batch, by default its enabled, but compute_fun must be defined
+    compute_enabled => boolean()
 }.
 
 -type opts() :: #{
@@ -63,7 +77,8 @@
 }.
 %% @formatter:on
 
--export_type([run_opts/0, opts/0, info/0, job/0, next_batch_job_prehook/0, compute/0, children_batch_job_prehook/0]).
+-export_type([run_opts/0, opts/0, info/0, job/0, next_batch_job_prehook/0, compute/0,
+    children_batch_job_prehook/0, storage_type_callback_module/0]).
 
 %%%===================================================================
 %%% API functions
@@ -105,7 +120,6 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         space_id = SpaceId,
         storage_doc = StorageDoc,
         storage_type_module = StorageTypeModule,
-        % todo use defaults here
         execute_slave_on_dir = maps:get(execute_slave_on_dir, RunOpts, ?DEFAULT_EXECUTE_SLAVE_ON_DIR),
         async_next_batch_job = maps:get(async_next_batch_job, RunOpts, ?DEFAULT_ASYNC_NEXT_BATCH_JOB),
         async_master_jobs = maps:get(async_master_jobs, RunOpts, ?DEFAULT_ASYNC_MASTER_JOBS),
@@ -124,16 +138,17 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     ChildrenMasterJobPrehook(StorageTraverse2),
     traverse:run(Pool, DefinedTaskId, StorageTraverse2).
 
--spec fold(job(),
-    fun((ChildStorageFileId :: helpers:file_id(), Acc :: term()) -> Result :: term()),
-    term()) -> {ok, term()} | {error, term()}.
-fold(StorageTraverse = #storage_traverse{storage_type_module = StorageTypeModule}, Fun, Init) ->
-    StorageTypeModule:fold(StorageTraverse, Fun, Init).
+-spec storage_type_callback_module(helper:type()) -> module().
+storage_type_callback_module(?BLOCK_STORAGE) ->
+    block_storage_traverse;
+storage_type_callback_module(?OBJECT_STORAGE) ->
+    canonical_object_storage_traverse.
 
 %%%===================================================================
-%%% Functions for custom modules TODO
+%%% Functions for custom modules
 %%%===================================================================
 
+-spec reset_info(job()) -> info().
 reset_info(TraverseJob = #storage_traverse{callback_module = CallbackModule, info = Info}) ->
     case erlang:function_exported(CallbackModule, reset_info, 1) of
         true ->
@@ -146,7 +161,8 @@ reset_info(TraverseJob = #storage_traverse{callback_module = CallbackModule, inf
 %%% Pool callbacks
 %%%===================================================================
 
--spec do_master_job(job(), traverse:id()) -> {ok, traverse:master_job_map()} | {error, term()}.
+-spec do_master_job(job(), traverse:master_job_extended_args()) ->
+    {ok, traverse:master_job_map()} |{ok, traverse:master_job_map(), term()} | {error, term()}.
 do_master_job(TraverseJob = #storage_traverse{
     storage_file_ctx = StorageFileCtx,
     storage_type_module = StorageTypeModule,
@@ -155,7 +171,6 @@ do_master_job(TraverseJob = #storage_traverse{
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     case StorageTypeModule:get_children_batch(TraverseJob) of
         {ok, ChildrenIds} ->
-%%            ?alert("CHILDREN ~p", [ChildrenIds]),
             StorageTypeModule:generate_master_and_slave_jobs(TraverseJob, ChildrenIds, Args);
         Error = {error, ?ENOENT} ->
             ?warning("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
@@ -166,40 +181,20 @@ do_master_job(TraverseJob = #storage_traverse{
     end.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
-    traverse:job(), traverse:pool(), traverse:id(), traverse:job_status()) ->
+    traverse:job(), traverse:pool(), traverse:id(), traverse:job_status(), traverse:callback_module()) ->
     {ok, traverse:job_id()}  | {error, term()}.
-update_job_progress(ID, Job, Pool, TaskID, Status) ->
-    % TODO
-    %%    ?alert("update_job_progress ~p", [{ID, Job, Pool, TaskID, Status}]),
-    ID2 = list_to_binary(ref_to_list(make_ref())),
-    {ok, ID2}.
+update_job_progress(main_job, _Job, _Pool, _TaskId, _Status, _CallbackModule) ->
+    {ok, datastore_utils:gen_key()};
+update_job_progress(Id, Job, Pool, TaskId, Status, CallbackModule)
+    when Status =:= waiting
+    orelse Status =:= on_pool
+    ->
+    storage_traverse_job:save_master_job(Id, Job, Pool, TaskId, CallbackModule);
+update_job_progress(Id, _Job, _Pool, _TaskId, _Status, _CallbackModule) ->
+    ok = storage_traverse_job:delete_master_job(Id),
+    {ok, Id}.
 
 -spec get_job(traverse:job_id()) ->
     {ok, traverse:job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_job(DocOrID) ->
-    % TODO
-    %%    ?alert("update_job_progress ~p", [{ID, Job, Pool, TaskID, Status}]),
-    ok.
-
-%%===================================================================
-%% Util functions
-%%===================================================================
-
-get_storage_file_ctx(#storage_traverse{storage_file_ctx = StorageFileCtx}) ->
-    StorageFileCtx.
-
-get_space_id(#storage_traverse{space_id = SpaceId}) ->
-    SpaceId.
-
-get_storage_id(#storage_traverse{storage_doc = #document{key = StorageId}}) ->
-    StorageId.
-
-%%===================================================================
-%% Internal functions
-%%===================================================================
-
--spec storage_type_callback_module(helper:type()) -> module().
-storage_type_callback_module(?BLOCK_STORAGE) ->
-    block_storage_traverse;
-storage_type_callback_module(?OBJECT_STORAGE) ->
-    object_storage_traverse.
+    storage_traverse_job:get_master_job(DocOrID).

@@ -6,21 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Helper module for storage_traverse that allows for traversing
+%%% over block storages.
+%%% Currently canonical posix, glusterfs and nulldevice helpers are supported.
+%%% The module encapsulates operations on corresponding helpers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(block_storage_traverse).
 -author("Jakub Kudzia").
 
-
 -include("global_definitions.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% storage_traverse callbacks
--export([init_type_specific_opts/2, get_children_batch/1, generate_master_and_slave_jobs/3, batch_id/1, fold/3]).
+-export([init_type_specific_opts/2, get_children_batch/1, generate_master_and_slave_jobs/3, batch_id/1]).
 
 -type batch_id() :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
 
@@ -34,7 +36,7 @@
 init_type_specific_opts(StorageTraverse = #storage_traverse{}, _Opts) ->
     StorageTraverse.
 
--spec get_children_batch(storage_traverse:job()) -> {ok, [helper:file_id()]} | {error, term()}.
+-spec get_children_batch(storage_traverse:job()) -> {ok, [helpers:file_id()]} | {error, term()}.
 get_children_batch(#storage_traverse{max_depth = 0}) ->
     {ok, []};
 get_children_batch(#storage_traverse{
@@ -42,39 +44,12 @@ get_children_batch(#storage_traverse{
     offset = Offset,
     batch_size = BatchSize
 }) ->
-%%    ?alert("BatchSize: ~p", [BatchSize]),
     Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
     storage_file_manager:readdir(Handle, Offset, BatchSize).
 
-fold(TraverseJob = #storage_traverse{max_depth = 0}, _Fun, Init) ->
-    {Init, TraverseJob};
-fold(TraverseJob = #storage_traverse{
-    storage_file_ctx = StorageFileCtx,
-    offset = Offset,
-    batch_size = BatchSize
-}, Fun, Init) ->
-    Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    case storage_file_manager:readdir(Handle, Offset, BatchSize) of
-        {ok, ChildrenNames} ->
-            Result = lists:foldl(fun(ChildName, Acc) ->
-                ChildStorageFileId = filename:join(StorageFileId, ChildName),
-                Fun(ChildStorageFileId, Acc)
-            end, Init, ChildrenNames),
-            case length(ChildrenNames) < BatchSize of
-                true ->
-                    {ok, Result};
-                false ->
-                    TraverseJob2 = TraverseJob#storage_traverse{offset = Offset + length(ChildrenNames)},
-                    fold(TraverseJob2, Fun, Result)
-            end;
-        Error = {error, _} ->
-            Error
-    end.
-
 -spec generate_master_and_slave_jobs(storage_traverse:job(), [helpers:file_id()],
     traverse:master_job_extended_args()) ->
-    {ok, traverse:master_job_map()} | {ok, traverse:master_job_map()}.
+    {ok, traverse:master_job_map()} | {ok, traverse:master_job_map(), term()}.
 generate_master_and_slave_jobs(#storage_traverse{
     storage_file_ctx = StorageFileCtx,
     max_depth = 0,
@@ -135,13 +110,10 @@ generate_master_and_slave_jobs(TraverseJob = #storage_traverse{
                     {#statbuf{st_mode = Mode}, ChildCtx2} = storage_file_ctx:stat(ChildCtx),
                     {ComputePartialResult, ChildCtx3} =
                         compute(ComputeFun, ChildCtx2, Info, ComputeAcc, ComputeEnabled),
-    %%                ?alert("PARTIAL RESULT: ~p", [ComputePartialResult]),
                     case file_meta:type(Mode) of
                         ?REGULAR_FILE_TYPE ->
-                            % todo job should be created by callback function
                             {MasterJobsIn, [{ChildCtx3, ResetInfo} | SlaveJobsIn], ComputePartialResult};
                         ?DIRECTORY_TYPE ->
-                            % todo callback ???
                             ChildMasterJob = get_child_master_job(ChildCtx3, TraverseJob, ResetInfo),
                             ChildMasterJobPrehook(ChildMasterJob),
                             {[ChildMasterJob | MasterJobsIn], SlaveJobsIn, ComputePartialResult}

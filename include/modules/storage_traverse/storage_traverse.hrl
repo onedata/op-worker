@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Header file for modules using storage_traverse pool.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -25,10 +25,10 @@
 -define(DEFAULT_CHILDREN_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).
 
 -record(storage_traverse, {
-    storage_file_ctx :: helpers:file_id(),
+    storage_file_ctx :: storage_file_ctx:ctx(),
     space_id :: od_space:id(),
     storage_doc :: storage:doc(),
-    storage_type_module :: module(),
+    storage_type_module :: storage_traverse:storage_type_callback_module(),
     execute_slave_on_dir = ?DEFAULT_EXECUTE_SLAVE_ON_DIR :: boolean(),
     async_master_jobs = ?DEFAULT_ASYNC_MASTER_JOBS :: boolean(),
     async_next_batch_job = ?DEFAULT_ASYNC_NEXT_BATCH_JOB :: boolean(),
@@ -38,15 +38,12 @@
     batch_size = ?DEFAULT_BATCH_SIZE :: non_neg_integer(),
     marker :: undefined | helpers:marker(),
     max_depth = ?DEFAULT_MAX_DEPTH :: non_neg_integer(),
+    % custom function that is called on each listed child
     compute_fun :: undefined | storage_traverse:compute(),
     compute_init :: term(),
-    compute_enabled = true :: boolean(),   % allows to disable compute for specific batch, by default its enabled, but compute_fun must be defined
-    callback_module :: module(),
-    info :: storage_traverse:info()
-}).
-
--record(storage_traverse_child, {
-    storage_file_ctx :: helpers:file_id(),
+    % allows to disable compute for specific batch, by default its enabled, but compute_fun must be defined
+    compute_enabled = true :: boolean(),
+    callback_module :: traverse:callback_module(),
     info :: storage_traverse:info()
 }).
 

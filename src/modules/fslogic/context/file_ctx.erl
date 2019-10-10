@@ -47,8 +47,7 @@
     is_import_on :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
     storage_path_type :: undefined | helpers:storage_path_type(),
-    mounted_in_root :: undefined | boolean(),
-    storage_sync_info :: undefined | storage_sync_info:doc()
+    mounted_in_root :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -82,8 +81,8 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/1, get_acl/1, get_mode/1, get_raw_storage_path/1, get_child_canonical_path/2,
     get_file_size/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
-    get_storage_sync_info/1]).
+    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1
+]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -1083,24 +1082,6 @@ get_group_owner(FileCtx = #file_ctx{
 get_group_owner(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_group_owner(FileCtx2).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns local #storage_sync_info document for given FileCtx.
-%% @end
-%%-------------------------------------------------------------------
--spec get_storage_sync_info(ctx()) -> {storage_sync_info:doc() | undefined, ctx()}.
-get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = undefined}) ->
-    {FilePath, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = get_space_id_const(FileCtx2),
-    case storage_sync_info:get(FilePath, SpaceId) of
-        {error, _Reason} ->
-            {undefined, FileCtx2};
-        {ok, StorageSyncInfo} ->
-            {StorageSyncInfo, FileCtx2#file_ctx{storage_sync_info = StorageSyncInfo}}
-    end;
-get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = StorageSyncInfo}) ->
-    {StorageSyncInfo, FileCtx}.
 
 
 %%--------------------------------------------------------------------

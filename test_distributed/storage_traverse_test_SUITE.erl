@@ -436,7 +436,7 @@ do_slave_job({StorageFileCtx, {Pid, DirsCounterRef, FilesCounterRef, _ComputeCou
     end.
 
 update_job_progress(ID, Job, Pool, TaskID, Status) ->
-    storage_traverse:update_job_progress(ID, Job, Pool, TaskID, Status).
+    storage_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
 
 get_job(DocOrID) ->
     storage_traverse:get_job(DocOrID).

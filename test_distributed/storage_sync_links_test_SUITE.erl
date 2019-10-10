@@ -11,11 +11,8 @@
 -module(storage_sync_links_test_SUITE).
 -author("Jakub Kudzia").
 
-
 -include("storage_sync_links_test_utils.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
-%%-include_lib("ctool/include/test/assertions.hrl").
-%%-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
@@ -73,8 +70,6 @@
 all() -> ?ALL(?TEST_CASES).
 
 -define(POOL, ?MODULE).
--define(storage_sync_links_call(Node, Function, Args),
-    rpc:call(Node, storage_sync_links, Function, Args)).
 
 -define(RAND_STR, <<(crypto:strong_rand_bytes(16))/binary>>).
 -define(SPACE_ID, <<"space_", ?RAND_STR/binary>>).
