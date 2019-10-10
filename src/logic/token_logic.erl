@@ -70,7 +70,7 @@ preauthorize(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
 verify_identity(SerializedToken) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_token, id = undefined, aspect = preauthorize, scope = public},
+        gri = #gri{type = od_token, id = undefined, aspect = verify_identity, scope = public},
         data = #{
             <<"token">> => SerializedToken
         }
