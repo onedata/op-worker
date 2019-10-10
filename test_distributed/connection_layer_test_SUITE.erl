@@ -177,7 +177,7 @@ fulfill_promises_after_connection_close_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Auth = #token_auth{token = Token},
 
     {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
@@ -230,7 +230,7 @@ fulfill_promises_after_connection_error_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Auth = #token_auth{token = Token},
 
     {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
@@ -351,7 +351,7 @@ heartbeats_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Auth = #token_auth{token = Token},
 
     RootGuid = get_guid(Worker1, SessId, <<"/space_name1">>),
@@ -428,7 +428,7 @@ socket_timeout_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Auth = #token_auth{token = Token},
 
     RootGuid = get_guid(Worker1, SessId, <<"/space_name1">>),
@@ -473,7 +473,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Auth = #token_auth{token = Token},
     RootGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
 

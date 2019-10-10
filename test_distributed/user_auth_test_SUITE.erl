@@ -188,7 +188,7 @@ mock_user_logic(Config) ->
         (_, _) ->
             {error, not_found}
     end),
-    test_utils:mock_expect(Workers, user_logic, preauthorize, fun(#token_auth{token = ?TOKEN}) ->
+    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(#token_auth{token = ?TOKEN}) ->
         {ok, ?USER(?USER_ID)}
     end).
 

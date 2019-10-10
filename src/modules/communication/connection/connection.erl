@@ -92,6 +92,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -110,7 +111,7 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
-    peer_ip = undefined :: undefined | inet:ip4_address(),
+    peer_ip :: inet:ip4_address(),
     verify_msg = true :: boolean(),
 
     % routing information base - structure necessary for routing.
@@ -483,6 +484,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     % included in limiting the number of e.g. REST connections.
     ranch:remove_connection(Ref),
 
+    {ok, {IpAddress, _Port}} = ssl:peername(Socket),
     {Ok, Closed, Error} = Transport:messages(),
 
     State = #state{
@@ -492,6 +494,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         ok = Ok,
         closed = Closed,
         error = Error,
+        peer_ip = IpAddress,
         type = incoming,
         status = performing_handshake,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
@@ -602,7 +605,9 @@ handle_protocol_upgrade_response(State, Data) ->
                 peer_id = ProviderId
             } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = provider_auth:get_identity_token(ProviderId),
+            {ok, Token} = provider_auth:get_identity_token_for_audience(
+                ?AUD(?OP_WORKER, ProviderId)
+            ),
             ClientMsg = #client_message{
                 message_id = MsgId,
                 message_body = #provider_handshake_request{
@@ -625,9 +630,8 @@ handle_handshake(#state{type = outgoing} = State, Data) ->
 
 %% @private
 -spec handle_handshake_request(state(), binary()) -> {ok, state()} | error().
-handle_handshake_request(#state{socket = Socket} = State, Data) ->
+handle_handshake_request(#state{peer_ip = IpAddress} = State, Data) ->
     try
-        {ok, {IpAddress, _Port}} = ssl:peername(Socket),
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, undefined),
 
         {PeerId, SessionId} = connection_auth:handle_handshake(
@@ -636,7 +640,6 @@ handle_handshake_request(#state{socket = Socket} = State, Data) ->
 
         NewState = State#state{
             peer_id = PeerId,
-            peer_ip = IpAddress,
             session_id = SessionId,
             rib = router:build_rib(SessionId)
         },

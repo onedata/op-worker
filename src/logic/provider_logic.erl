@@ -22,6 +22,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("http/gui_paths.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
@@ -50,7 +51,7 @@
 -export([assert_zone_compatibility/0]).
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
--export([verify_provider_identity/1, verify_provider_identity/2]).
+-export([verify_provider_identity/1]).
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
@@ -732,13 +733,15 @@ zone_get_offline_access_idps() ->
 verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
-        {ok, LocalIdentityToken} = provider_auth:get_identity_token(ProviderId),
-        Headers = tokens:build_access_token_header(LocalIdentityToken),
+        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_audience(
+            ?AUD(?OP_WORKER, ProviderId)
+        ),
+        Headers = tokens:build_access_token_header(OurIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, Headers, <<>>, SslOpts) of
-            {ok, 200, _, IdentityToken} ->
-                verify_provider_identity(ProviderId, IdentityToken);
+            {ok, 200, _, TheirIdentityToken} ->
+                verify_provider_identity(ProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
             {error, _} = Error ->
@@ -751,24 +754,6 @@ verify_provider_identity(ProviderId) ->
         ]),
         ?ERROR_UNAUTHORIZED
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Verifies given provider in Onezone based on its identity token.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
-    ok | errors:error().
-verify_provider_identity(ProviderId, IdentityToken) ->
-    ?CREATE_RETURN_OK(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_provider, id = undefined, aspect = verify_provider_identity},
-        data = #{
-            <<"providerId">> => ProviderId,
-            <<"token">> => IdentityToken
-        }
-    })).
 
 
 %%--------------------------------------------------------------------
@@ -961,3 +946,17 @@ http_get_configuration(URL, SslOpts) ->
 -spec binaries_to_strings([binary()]) -> [string()].
 binaries_to_strings(List) ->
     [binary_to_list(B) || B <- List].
+
+
+%% @private
+-spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
+    ok | errors:error().
+verify_provider_identity(ProviderId, IdentityToken) ->
+    case token_logic:verify_identity(IdentityToken) of
+        {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
+            ok;
+        {ok, _} ->
+            ?ERROR_TOKEN_SUBJECT_INVALID;
+        {error, _} = Error ->
+            Error
+    end.

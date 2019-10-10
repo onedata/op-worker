@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Interface for reading and manipulating tokens via Graph Sync.
+%%% Interface for manipulating tokens via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(token_logic).

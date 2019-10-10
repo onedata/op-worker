@@ -26,7 +26,7 @@
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_access_token/0, get_identity_token/1]).
+-export([get_access_token/0, get_identity_token_for_audience/1]).
 -export([get_root_token_file_path/0]).
 
 %% datastore_model callbacks
@@ -140,19 +140,17 @@ get_access_token() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns identity token for this provider. The token can be used only
-%% by specified provider (ProviderId) solely to verify this provider's
+%% Returns identity token for this provider usable only by specified
+%% audience. The token can be used solely to verify this provider's
 %% identity and carries no authorization. The token is confined with
 %% TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_identity_token(od_provider:id()) ->
+-spec get_identity_token_for_audience(aai:audience()) ->
     {ok, tokens:serialized()} | {error, term()}.
-get_identity_token(ProviderId) ->
+get_identity_token_for_audience(Audience) ->
     {ok, Token} = get_token(identity),
-    {ok, tokens:confine(Token, #cv_audience{
-        whitelist = [?AUD(?OP_WORKER, ProviderId)]
-    })}.
+    {ok, tokens:confine(Token, #cv_audience{whitelist = [Audience]})}.
 
 
 %%--------------------------------------------------------------------

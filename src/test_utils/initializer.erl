@@ -274,7 +274,7 @@ setup_session(Worker, [{_, #user_config{
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
-        {{session_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
+        {{auth_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
         {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
@@ -870,7 +870,7 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, user_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
+    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
             UserId -> {ok, ?USER(UserId)}

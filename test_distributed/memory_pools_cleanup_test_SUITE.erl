@@ -139,7 +139,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     Auth = #token_auth{token = Token},
 
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),

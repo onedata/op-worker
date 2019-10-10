@@ -36,11 +36,12 @@
 handle(<<"GET">>, Req) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
-            throw(?ERROR_BAD_TOKEN);
+            throw(?ERROR_UNAUTHORIZED);
         PeerAccessToken ->
             case token_logic:verify_identity(PeerAccessToken) of
                 {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
-                    {ok, IdentityToken} = provider_auth:get_identity_token(ProviderId),
+                    Audience = ?AUD(?OP_WORKER, ProviderId),
+                    {ok, IdentityToken} = provider_auth:get_identity_token_for_audience(Audience),
                     cowboy_req:reply(
                         ?HTTP_200_OK,
                         #{<<"content-type">> => <<"text/plain">>},
@@ -48,7 +49,7 @@ handle(<<"GET">>, Req) ->
                         Req
                     );
                 {ok, _} ->
-                    throw(?ERROR_BAD_TOKEN);
+                    throw(?ERROR_TOKEN_SUBJECT_INVALID);
                 {error, _} = Error ->
                     throw(Error)
             end

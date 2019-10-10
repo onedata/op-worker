@@ -13,14 +13,12 @@
 -author("Tomasz Lichon").
 -author("Michal Wrzeszcz").
 
--include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/onedata.hrl").
 
 %% API
 -export([handle_handshake/2, get_handshake_error_msg/1]).
@@ -114,10 +112,10 @@ handle_provider_handshake(#provider_handshake_request{
     token = Token
 }, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
-    case provider_logic:verify_provider_identity(ProviderId, Token) of
-        ok ->
+    case token_logic:verify_identity(Token) of
+        {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             ok;
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"providerId">>) ->
+        {ok, _} ->
             throw(invalid_provider);
         {error, _} = Error ->
             ?debug("Discarding provider connection from ~ts @ ~s as its "

@@ -575,7 +575,7 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     #env{p1 = P1, file1 = Filename} = gen_test_env(Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
-    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
+    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     Auth = #token_auth{token = Token},
 
     SpaceSize = available_size(SupportingProvider, SpaceId),

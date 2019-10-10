@@ -641,7 +641,7 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Workers, provider_logic, verify_provider_identity, fun(ProviderId, Token) ->
         case {ProviderId, Token} of
             {?INCORRECT_PROVIDER_ID, _} ->
-                ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"providerId">>);
+                ?ERROR_TOKEN_SUBJECT_INVALID;
             {?CORRECT_PROVIDER_ID, ?INCORRECT_TOKEN} ->
                 ?ERROR_BAD_TOKEN;
             {?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN} ->
