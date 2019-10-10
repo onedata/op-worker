@@ -102,9 +102,9 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 response_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
-    {ok, {_Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    Nonce = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
+    {ok, {_Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
 
     MsgId = <<"1">>,
     Ping = fuse_test_utils:generate_ping_message(MsgId),
@@ -122,13 +122,13 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessionId = crypto:strong_rand_bytes(10),
+    Nonce = crypto:strong_rand_bytes(10),
     % Create a couple of connections within the same session
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock3, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock4, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock5, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
 
     Ping = fuse_test_utils:generate_ping_message(),
 
@@ -153,9 +153,9 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
 fallback_during_sending_response_because_of_connection_error_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
+    Nonce = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
 
     mock_ranch_ssl_to_fail_once(Worker1),
     MsgId = <<"1">>,
@@ -175,17 +175,20 @@ fallback_during_sending_response_because_of_connection_error_test(Config) ->
 fulfill_promises_after_connection_close_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Auth = #token_auth{token = Token},
 
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock3, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock4, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
-    {ok, {Sock5, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
+    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
+    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
+    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
-    {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
+    {ok, _} = lfm_proxy:create(Worker1, SessId, Path, 8#770),
 
     % Send 2 requests via each of 5 connections, immediately close four of them
     ok = ssl:send(Sock1, create_resolve_guid_req(Path)),
@@ -225,14 +228,17 @@ fulfill_promises_after_connection_close_test(Config) ->
 
 fulfill_promises_after_connection_error_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Auth = #token_auth{token = Token},
 
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessionId),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
-    {ok, _} = lfm_proxy:create(Worker1, SessionId, Path, 8#770),
+    {ok, _} = lfm_proxy:create(Worker1, SessId, Path, 8#770),
 
     mock_ranch_ssl_to_fail_once(Workers),
     ok = ssl:send(Sock2, create_resolve_guid_req(Path)),
@@ -269,9 +275,9 @@ fulfill_promises_after_connection_error_test(Config) ->
 send_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessionId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
-    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessionId),
+    Nonce = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
+    {ok, {Sock2, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
 
     % In case of errors send_sync should try sending via other connections
     mock_ranch_ssl_to_fail_once(Workers),
@@ -330,10 +336,10 @@ communicate_test(Config) ->
 
 client_keepalive_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = crypto:strong_rand_bytes(10),
+    Nonce = crypto:strong_rand_bytes(10),
 
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce),
     % send keepalive msg and assert it will not end in decoding error
     % on provider side (following communication should succeed)
     ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
@@ -343,11 +349,14 @@ client_keepalive_test(Config) ->
 
 heartbeats_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Auth = #token_auth{token = Token},
 
-    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    RootGuid = get_guid(Worker1, SessId, <<"/space_name1">>),
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SID),
+    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
 
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
@@ -382,9 +391,10 @@ fsync_timeouts_test(Config, Sock, RootGuid) ->
 
 async_request_manager_memory_management_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = crypto:strong_rand_bytes(10),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(
+        Worker1, [{active, true}], crypto:strong_rand_bytes(10)
+    ),
     {ok, AsyncReqManager} = rpc:call(
         Worker1, session_connections, get_async_req_manager, [SessionId]
     ),
@@ -416,13 +426,16 @@ async_request_manager_memory_management_test(Config) ->
 
 socket_timeout_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SID = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Auth = #token_auth{token = Token},
 
-    RootGuid = get_guid(Worker1, SID, <<"/space_name1">>),
+    RootGuid = get_guid(Worker1, SessId, <<"/space_name1">>),
     initializer:remove_pending_messages(),
 
     lists:foreach(fun(MainNum) ->
-        {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SID),
+        {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
 
         lists:foreach(fun(Num) ->
             NumBin = integer_to_binary(Num),
@@ -459,6 +472,9 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Auth = #token_auth{token = Token},
     RootGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     Mod = replica_synchronizer,
@@ -468,7 +484,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
         meck:passthrough([FileUuid, SessId])
     end),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
 
     % when
     fuse_test_utils:create_file(Sock, RootGuid, <<"f1">>),
@@ -548,13 +564,7 @@ init_per_testcase(heartbeats_test, Config) ->
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?TOKEN}) ->
-            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
-        end
-    ),
-
+    mock_user_identity(Workers),
     CP_Pid = spawn_control_proc(),
 
     test_utils:mock_new(Workers, helpers),
@@ -673,8 +683,11 @@ unmock_ranch_ssl(Node) ->
 mock_user_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?TOKEN}) ->
-            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
+        fun
+            (#token_auth{token = ?TOKEN}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
+            (#token_auth{token = <<"DUMMY-USER-TOKEN-", UserId/binary>>}) ->
+                {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ).
 

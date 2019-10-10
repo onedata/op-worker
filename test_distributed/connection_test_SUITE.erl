@@ -107,8 +107,8 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 
 -define(CORRECT_PROVIDER_ID, <<"correct-iden-mac">>).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
--define(CORRECT_NONCE, <<"correct-nonce">>).
--define(INCORRECT_NONCE, <<"incorrect-nonce">>).
+-define(CORRECT_TOKEN, <<"correct-token">>).
+-define(INCORRECT_TOKEN, <<"incorrect-token">>).
 
 -define(ATTEMPTS, 60).
 
@@ -124,10 +124,10 @@ provider_connection_test(Config) ->
     lists:foreach(fun({ProviderId, Nonce, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Nonce))
     end, [
-        {?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE, 'INVALID_PROVIDER'},
-        {?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE, 'INVALID_PROVIDER'},
-        {?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE, 'INVALID_NONCE'},
-        {?CORRECT_PROVIDER_ID, ?CORRECT_NONCE, 'OK'}
+        {?INCORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'INVALID_PROVIDER'},
+        {?INCORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_PROVIDER'},
+        {?CORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
+        {?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'OK'}
     ]).
 
 
@@ -498,7 +498,7 @@ rtransfer_connection_secret_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     {ok, Sock} = fuse_test_utils:connect_as_provider(
-        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN
     ),
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
 
@@ -522,7 +522,7 @@ rtransfer_nodes_ips_test(Config) ->
     ),
 
     {ok, Sock} = fuse_test_utils:connect_as_provider(
-        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN
     ),
 
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
@@ -638,10 +638,14 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, provider_logic, [passthrough]),
 
-    test_utils:mock_expect(Workers, provider_logic, verify_provider_identity, fun(ProviderId) ->
-        case ProviderId of
-            ?CORRECT_PROVIDER_ID -> ok;
-            ?INCORRECT_PROVIDER_ID -> ?ERROR_UNAUTHORIZED
+    test_utils:mock_expect(Workers, provider_logic, verify_provider_identity, fun(ProviderId, Token) ->
+        case {ProviderId, Token} of
+            {?INCORRECT_PROVIDER_ID, _} ->
+                ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"providerId">>);
+            {?CORRECT_PROVIDER_ID, ?INCORRECT_TOKEN} ->
+                ?ERROR_BAD_TOKEN;
+            {?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN} ->
+                ok
         end
     end),
 

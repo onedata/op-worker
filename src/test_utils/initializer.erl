@@ -36,6 +36,7 @@
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
 -export([put_into_cache/1]).
+-export([local_ip_v4/0]).
 
 -define(DUMMY_USER_TOKEN(__UserId), <<"DUMMY-USER-TOKEN-", __UserId/binary>>).
 
@@ -235,14 +236,28 @@ clear_subscriptions(Worker) ->
 -spec setup_session(Worker :: node(), [#user_config{}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
-    token = Token, groups = Groups, name = UserName}} | R], Config) ->
+setup_session(Worker, [{_, #user_config{
+    id = UserId,
+    spaces = Spaces,
+    token = Token,
+    groups = Groups,
+    name = UserName
+}} | R], Config) ->
 
     Name = fun(Text, User) ->
-        list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
+        list_to_binary(Text ++ "_" ++ binary_to_list(User))
+    end,
 
-    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
-    Iden = #user_identity{user_id = UserId},
+    Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
+
+    Identity = #user_identity{user_id = UserId},
+    Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
+    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+        Worker,
+        session_manager,
+        reuse_or_create_fuse_session,
+        [Nonce, Identity, Auth])
+    ),
 
     lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
@@ -251,9 +266,6 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         end
     end, Spaces),
 
-    Auth = #token_auth{token = Token},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, Auth])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     [
         {{spaces, UserId}, Spaces},
@@ -262,6 +274,8 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
+        {{session_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
+        {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
@@ -1335,3 +1349,12 @@ index_of(Value, List) ->
         {Value, Index} -> Index;
         false -> not_found
     end.
+
+
+%% @private
+local_ip_v4() ->
+    {ok, Addrs} = inet:getifaddrs(),
+    hd([
+        Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
+        size(Addr) == 4, Addr =/= {127,0,0,1}
+    ]).

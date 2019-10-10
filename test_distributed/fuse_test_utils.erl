@@ -133,11 +133,11 @@ generate_msg_id() ->
 %% Connect to given node using a providerId and nonce.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_provider(Node, ProviderId, Nonce) ->
+connect_as_provider(Node, ProviderId, Token) ->
     HandshakeReqMsg = #'ClientMessage'{
         message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
             provider_id = ProviderId,
-            token = Nonce
+            token = Token
         }
         }},
     RawMsg = messages:encode_msg(HandshakeReqMsg),
@@ -273,17 +273,13 @@ connect_via_token(Node, SocketOpts, Nonce, #token_auth{token = Token} = Auth) ->
         RM
     ),
 
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce, Auth#token_auth{peer_ip = local_ip_v4()}})),
+    SessId = datastore_utils:gen_key(
+        <<"">>,
+        term_to_binary({fuse, Nonce, Auth#token_auth{peer_ip = initializer:local_ip_v4()}})
+    ),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
-
-local_ip_v4() ->
-    {ok, Addrs} = inet:getifaddrs(),
-    hd([
-        Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
-        size(Addr) == 4, Addr =/= {127,0,0,1}
-    ]).
 
 connect_and_upgrade_proto(Hostname, Port) ->
     {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,

@@ -60,12 +60,6 @@ get_handshake_error_msg(invalid_provider) ->
             status = 'INVALID_PROVIDER'
         }
     };
-get_handshake_error_msg(invalid_nonce) ->
-    #server_message{
-        message_body = #handshake_response{
-            status = 'INVALID_NONCE'
-        }
-    };
 get_handshake_error_msg({badmatch, {error, Error}}) ->
     get_handshake_error_msg(Error);
 get_handshake_error_msg({Code, Error, _Description}) when is_integer(Code) ->
@@ -123,13 +117,15 @@ handle_provider_handshake(#provider_handshake_request{
     case provider_logic:verify_provider_identity(ProviderId, Token) of
         ok ->
             ok;
-        Error ->
+        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"providerId">>) ->
+            throw(invalid_provider);
+        {error, _} = Error ->
             ?debug("Discarding provider connection from ~ts @ ~s as its "
                    "identity cannot be verified: ~p", [
                 provider_logic:to_string(ProviderId),
                 inet_parse:ntoa(IpAddress), Error
             ]),
-            throw(invalid_provider)
+            throw(invalid_token)
     end,
 
     Identity = #user_identity{provider_id = ProviderId},
