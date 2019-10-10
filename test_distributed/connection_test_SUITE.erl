@@ -22,9 +22,10 @@
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
--include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -125,7 +126,7 @@ provider_connection_test(Config) ->
         ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Nonce))
     end, [
         {?INCORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'INVALID_PROVIDER'},
-        {?INCORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_PROVIDER'},
+        {?INCORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
         {?CORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
         {?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'OK'}
     ]).
@@ -636,17 +637,13 @@ init_per_testcase(Case, Config) when
     Case =:= rtransfer_nodes_ips_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, provider_logic, [passthrough]),
+    test_utils:mock_new(Workers, token_logic, [passthrough]),
 
-    test_utils:mock_expect(Workers, provider_logic, verify_provider_identity, fun(ProviderId, Token) ->
-        case {ProviderId, Token} of
-            {?INCORRECT_PROVIDER_ID, _} ->
-                ?ERROR_TOKEN_SUBJECT_INVALID;
-            {?CORRECT_PROVIDER_ID, ?INCORRECT_TOKEN} ->
-                ?ERROR_BAD_TOKEN;
-            {?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN} ->
-                ok
-        end
+    test_utils:mock_expect(Workers, token_logic, verify_identity, fun
+        (?CORRECT_TOKEN) ->
+            {ok, ?SUB(?ONEPROVIDER, ?CORRECT_PROVIDER_ID)};
+        (?INCORRECT_TOKEN) ->
+            ?ERROR_BAD_TOKEN
     end),
 
     test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
@@ -682,7 +679,7 @@ end_per_testcase(Case, Config) when
     Case =:= rtransfer_nodes_ips_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [provider_logic]),
+    test_utils:mock_validate_and_unload(Workers, [provider_logic, token_logic]),
     end_per_testcase(default, Config);
 
 end_per_testcase(python_client_test, Config) ->

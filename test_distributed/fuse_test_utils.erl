@@ -39,6 +39,8 @@
     connect_via_token/1, connect_via_token/2,
     connect_via_token/3, connect_via_token/4,
 
+    connect_as_user/4,
+
     generate_msg_id/0
 ]).
 -export([connect_and_upgrade_proto/2]).
@@ -293,6 +295,26 @@ connect_and_upgrade_proto(Hostname, Port) ->
     after timer:minutes(1) ->
         exit(timeout)
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node with specified user authorization.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_as_user(Config :: term(), node(), User :: binary(),  SocketOpts :: list()) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_as_user(Config, Node, User, SocketOpts) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    Nonce = ?config({session_nonce, {User, ?GET_DOMAIN(Node)}}, Config),
+    Token = ?config({auth_token, {User, ?GET_DOMAIN(Node)}}, Config),
+    Auth = #token_auth{token = Token},
+
+    ?assertMatch(
+        {ok, {_, SessId}},
+        fuse_test_utils:connect_via_token(Node, SocketOpts, Nonce, Auth)
+    ).
+
 
 receive_server_message() ->
     receive_server_message([message_stream_reset, subscription, message_request,

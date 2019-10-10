@@ -137,10 +137,8 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
     client_simulation_test_base:verify_streams(Config),
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Auth = #token_auth{token = Token},
+    User = <<"user1">>,
+    SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
 
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
@@ -148,7 +146,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, true}]),
 
     {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
 

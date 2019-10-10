@@ -175,16 +175,13 @@ fallback_during_sending_response_because_of_connection_error_test(Config) ->
 fulfill_promises_after_connection_close_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Auth = #token_auth{token = Token},
 
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
-    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
-    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
-    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
-    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
+    User = <<"user1">>,
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, true}]),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, false}]),
+    {ok, {Sock3, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, false}]),
+    {ok, {Sock4, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, false}]),
+    {ok, {Sock5, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, false}]),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
@@ -228,13 +225,10 @@ fulfill_promises_after_connection_close_test(Config) ->
 
 fulfill_promises_after_connection_error_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Auth = #token_auth{token = Token},
 
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
-    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce, Auth),
+    User = <<"user1">>,
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, true}]),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, false}]),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
@@ -349,14 +343,10 @@ client_keepalive_test(Config) ->
 
 heartbeats_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Auth = #token_auth{token = Token},
 
+    {ok, {Sock, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, <<"user1">>, [{active, true}]),
     RootGuid = get_guid(Worker1, SessId, <<"/space_name1">>),
     initializer:remove_pending_messages(),
-    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
 
     create_timeouts_test(Config, Sock, RootGuid),
     ls_timeouts_test(Config, Sock, RootGuid),
@@ -427,15 +417,12 @@ async_request_manager_memory_management_test(Config) ->
 socket_timeout_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Auth = #token_auth{token = Token},
 
     RootGuid = get_guid(Worker1, SessId, <<"/space_name1">>),
     initializer:remove_pending_messages(),
 
     lists:foreach(fun(MainNum) ->
-        {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
+        {ok, {Sock2, SessId}} = fuse_test_utils:connect_as_user(Config, Worker1, <<"user1">>, [{active, true}]),
 
         lists:foreach(fun(Num) ->
             NumBin = integer_to_binary(Num),
@@ -472,9 +459,6 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    Auth = #token_auth{token = Token},
     RootGuid = get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     Mod = replica_synchronizer,
@@ -484,7 +468,7 @@ closing_last_connection_should_cancel_all_session_transfers_test(Config) ->
         meck:passthrough([FileUuid, SessId])
     end),
 
-    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_as_user(Config, Worker1, <<"user1">>, [{active, true}]),
 
     % when
     fuse_test_utils:create_file(Sock, RootGuid, <<"f1">>),

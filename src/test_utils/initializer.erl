@@ -1233,20 +1233,16 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             ok
         end),
 
-    VerifyProviderIdentityFun = fun(ProviderId, Token) ->
-        case Token of
-            ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId) -> ok;
-            _ -> ?ERROR_BAD_TOKEN
-        end
+    VerifyProviderIdentityFun = fun
+        (?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)) ->
+            {ok, ?SUB(?ONEPROVIDER, ProviderId)};
+        (_) ->
+            ?ERROR_BAD_TOKEN
     end,
 
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        fun(ProviderId) ->
-            VerifyProviderIdentityFun(ProviderId, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId))
-        end),
+    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        VerifyProviderIdentityFun).
+    test_utils:mock_expect(AllWorkers, token_logic, verify_identity, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private

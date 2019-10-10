@@ -573,15 +573,13 @@ events_sent_to_client_proxyio(Config) ->
 
 events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     #env{p1 = P1, file1 = Filename} = gen_test_env(Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
-    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
-    Token = ?config({auth_token, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
-    Auth = #token_auth{token = Token},
+    User = <<"user1">>,
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(P1)}}, Config),
 
     SpaceSize = available_size(SupportingProvider, SpaceId),
     RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    {ok, {Conn, SessId}} = fuse_test_utils:connect_via_token(P1, [{active, true}], Nonce, Auth),
+    {ok, {Conn, SessId}} = fuse_test_utils:connect_as_user(Config, P1, User, [{active, true}]),
     SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),
     rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId]),
 
