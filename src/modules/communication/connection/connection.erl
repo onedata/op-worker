@@ -596,8 +596,13 @@ handle_protocol_upgrade_response(State, Data) ->
             ?error("Received invalid protocol upgrade response: ~p", [Data]),
             {error, invalid_protocol_upgrade_response};
         true ->
+            #state{
+                socket = Socket,
+                transport = Transport,
+                peer_id = ProviderId
+            } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = provider_auth:get_identity_token(),
+            {ok, Token} = provider_auth:get_identity_token(ProviderId),
             ClientMsg = #client_message{
                 message_id = MsgId,
                 message_body = #provider_handshake_request{
@@ -605,7 +610,6 @@ handle_protocol_upgrade_response(State, Data) ->
                     token = Token
                 }
             },
-            #state{socket = Socket, transport = Transport} = State,
             ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
             send_client_message(State, ClientMsg)
     end.

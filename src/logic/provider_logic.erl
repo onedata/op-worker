@@ -732,12 +732,11 @@ zone_get_offline_access_idps() ->
 verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
-        %% @todo VFS-5554 Deprecated, included for backward compatibility
-        %% Must be supported in the 19.09.* line, later the counterpart in the
-        %% configuration endpoint can be used.
+        {ok, LocalIdentityToken} = provider_auth:get_identity_token(ProviderId),
+        Headers = tokens:build_access_token_header(LocalIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
-        case http_client:get(URL, #{}, <<>>, SslOpts) of
+        case http_client:get(URL, Headers, <<>>, SslOpts) of
             {ok, 200, _, IdentityToken} ->
                 verify_provider_identity(ProviderId, IdentityToken);
             {ok, Code, _, _} ->
@@ -767,9 +766,7 @@ verify_provider_identity(ProviderId, IdentityToken) ->
         gri = #gri{type = od_provider, id = undefined, aspect = verify_provider_identity},
         data = #{
             <<"providerId">> => ProviderId,
-            <<"token">> => IdentityToken,
-            %% @todo VFS-5554 Deprecated, included for backward compatibility
-            <<"macaroon">> => IdentityToken
+            <<"token">> => IdentityToken
         }
     })).
 

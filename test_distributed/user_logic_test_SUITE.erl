@@ -50,7 +50,7 @@ preauthorize_test(Config) ->
 
     ?assertMatch(
         {ok, ?USER(?USER_1)},
-        rpc:call(Node, user_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
+        rpc:call(Node, token_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
@@ -58,7 +58,7 @@ preauthorize_test(Config) ->
     % works here
     ?assertMatch(
         {ok, ?USER(?USER_1)},
-        rpc:call(Node, user_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
+        rpc:call(Node, token_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 

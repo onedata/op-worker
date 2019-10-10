@@ -8,9 +8,6 @@
 %%% @doc
 %%% This module implements dynamic_page_behaviour and is called
 %%% when identity token page is visited.
-%%% @todo VFS-5554 Deprecated, included for backward compatibility
-%%% Must be supported in the 19.09.* line, later the counterpart in the
-%%% configuration endpoint can be used.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(page_identity_token).
@@ -18,13 +15,17 @@
 
 -behaviour(dynamic_page_behaviour).
 
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
 -export([handle/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -33,10 +34,22 @@
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
-    {ok, IdentityToken} = provider_auth:get_identity_token(),
-    cowboy_req:reply(
-        ?HTTP_200_OK,
-        #{<<"content-type">> => <<"text/plain">>},
-        IdentityToken,
-        Req
-    ).
+    case tokens:parse_access_token_header(Req) of
+        undefined ->
+            throw(?ERROR_BAD_TOKEN);
+        PeerAccessToken ->
+            case token_logic:verify_identity(PeerAccessToken) of
+                {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
+                    {ok, IdentityToken} = provider_auth:get_identity_token(ProviderId),
+                    cowboy_req:reply(
+                        ?HTTP_200_OK,
+                        #{<<"content-type">> => <<"text/plain">>},
+                        IdentityToken,
+                        Req
+                    );
+                {ok, _} ->
+                    throw(?ERROR_BAD_TOKEN);
+                {error, _} = Error ->
+                    throw(Error)
+            end
+    end.

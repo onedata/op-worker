@@ -367,7 +367,6 @@ expected_configuration(Node) ->
     RtransferPort = proplists:get_value(server_port, TransferConfig),
     {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
     {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
-    {ok, IdentityToken} = rpc:call(Node, provider_auth, get_identity_token, []),
 
     #{
         <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
@@ -379,8 +378,7 @@ expected_configuration(Node) ->
         <<"rtransferPort">> => RtransferPort,
         <<"compatibleOnezoneVersions">> => CompOzVersions,
         <<"compatibleOneproviderVersions">> => CompOpVersions,
-        <<"compatibleOneclientVersions">> => CompOcVersions,
-        <<"identityToken">> => IdentityToken
+        <<"compatibleOneclientVersions">> => CompOcVersions
     }.
 
 
