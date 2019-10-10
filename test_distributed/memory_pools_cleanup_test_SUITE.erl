@@ -11,6 +11,7 @@
 -module(memory_pools_cleanup_test_SUITE).
 -author("Michal Stanisz").
 
+-include_lib("proto/common/credentials.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -137,13 +138,17 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Nonce = ?config({session_nonce, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Token = ?config({session_token, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    Auth = #token_auth{token = Token},
+
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce, Auth),
 
     {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
 

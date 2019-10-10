@@ -41,10 +41,17 @@ all() -> ?ALL([token_authentication]).
 token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = <<"SessionId">>,
+    Nonce = <<"nonce">>,
+    SessionId = datastore_utils:gen_key(
+        <<"">>,
+        term_to_binary({fuse, Nonce, #token_auth{
+            token = ?TOKEN,
+            peer_ip = initializer:local_ip_v4()
+        }})
+    ),
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?TOKEN, SessionId),
+    {ok, Sock} = connect_via_token(Worker1, ?TOKEN, Nonce),
 
     % then
     ?assertMatch(
