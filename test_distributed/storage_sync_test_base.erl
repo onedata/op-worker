@@ -1461,8 +1461,8 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
     lfm_proxy:close(W1, Handle5),
 
     assert_num_results(History, ?assertHashChangedFun(?SPACE_PATH, ?SPACE_ID, true), 0),
-    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath2, ?SPACE_ID, {true, _}), 0),
-    assert_num_results_gte(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, {true, _}), 1),
+    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath2, ?SPACE_ID, true), 0),
+    assert_num_results_gte(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, true), 1),
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), 5 * ?ATTEMPTS),
@@ -1594,8 +1594,8 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     lfm_proxy:close(W1, Handle5),
 
     assert_num_results(History, ?assertHashChangedFun(StorageTestDirPath2, ?SPACE_ID, true), 0),
-    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath2, ?SPACE_ID, {true, _}), 0),
-    assert_num_results_gte(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, {true, _}), 1),
+    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath2, ?SPACE_ID, true), 0),
+    assert_num_results_gte(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, true), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -3069,7 +3069,7 @@ chmod_file_update2_test(Config, MountSpaceInRoot) ->
     test_utils:mock_unload(W1, storage_sync_hash),
 
     assert_num_results_gte(History, ?assertHashChangedFun(StorageTestDirPath, ?SPACE_ID, true), 1),
-    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, {true, _}), 0),
+    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, true), 0),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -3635,7 +3635,7 @@ enable_update(Config, SpaceId, StorageId) ->
     WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
     DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
     SyncAcl = maps:get(sync_acl, UpdateConfig, ?SYNC_ACL),
-    ok = rpc:call(W1, storage_sync, configure_storage_update,
+    ok = rpc:call(W1, storage_sync, configure_update,
         [SpaceId, StorageId, true, #{
             max_depth => ?MAX_DEPTH,
             scan_interval => ScanInterval,
@@ -3665,7 +3665,7 @@ get_update_details(Worker, SpaceId, StorageId) ->
 disable_update(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     StorageId = sfm_test_utils:get_storage_id(W1, ?SPACE_ID),
-    rpc:call(W1, storage_sync, disable_update, [?SPACE_ID]),
+    rpc:call(W1, storage_sync, disable_update, [?SPACE_ID, StorageId]),
     ?assertMatch({false, _}, get_update_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
     assertNoUpdateInProgress(W1, ?SPACE_ID, ?ATTEMPTS),
     ok.

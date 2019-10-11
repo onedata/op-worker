@@ -28,8 +28,8 @@
     get_import_details/1, get_import_details/2,
     get_update_details/1, get_update_details/2, 
     get_sync_configs/1, is_import_on/1,
-    enable_import/3, configure_update/4,
-    disable_import/2, disable_update/2]).
+    configure_import/4, configure_update/4
+]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -99,39 +99,18 @@ is_import_on(SpaceId) ->
             end
     end, false, StorageIds).
 
--spec enable_import(od_space:id(), storage:id(), import_config()) -> ok.
-enable_import(SpaceId, StorageId, Config) ->
-    ConfigWithDefaults = fill_import_config(Config),
-    DefaultSyncConfig = default_import_sync_config(true, Config),
-    ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
-        NewSS = maps:update_with(StorageId, fun
-            (SSC = #storage_sync_config{import_enabled = false}) ->
-                SSC#storage_sync_config{import_enabled = true, import_config = ConfigWithDefaults};
-            (#storage_sync_config{import_enabled = true}) ->
-                {error, import_already_enabled}
-            end,
+-spec configure_import(od_space:id(), storage:id(), boolean(), import_config()) -> ok.
+configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
+    DefaultSyncConfig = default_import_sync_config(Enabled, NewConfig),
+    ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
+        NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{import_config = OldConfig}) ->
+            UpdatedConfig = maps:merge(OldConfig, NewConfig),
+            SSC#storage_sync_config{import_enabled = Enabled, import_config = UpdatedConfig}
+        end,
             DefaultSyncConfig, SyncConfigs
         ),
         {ok, SS#space_strategies{sync_configs = NewSS}}
     end, default_record(StorageId, DefaultSyncConfig))).
-
--spec disable_import(od_space:id(), storage:id()) -> ok.
-disable_import(SpaceId, StorageId) ->
-    UpdateFun = fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
-        NewSS = case maps:is_key(StorageId, SyncConfigs) of
-            true ->
-                maps:update_with(StorageId, fun(SSC) ->
-                    SSC#storage_sync_config{import_enabled = false}
-                end, SyncConfigs);
-            false ->
-                SS
-        end,
-        {ok, SS#space_strategies{sync_configs = NewSS}}
-    end,
-    case ?extract_ok(update(SpaceId, UpdateFun)) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end.
 
 -spec configure_update(od_space:id(), storage:id(), boolean(), update_config()) -> ok.
 configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
@@ -145,25 +124,6 @@ configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
         ),
         {ok, SS#space_strategies{sync_configs = NewSS}}
     end, default_record(StorageId, DefaultSyncConfig))).
-
--spec disable_update(od_space:id(), storage:id()) -> ok.
-disable_update(SpaceId, StorageId) ->
-    UpdateFun = fun
-        (#space_strategies{sync_configs = SyncConfigs} = SS) ->
-            NewSS = case maps:is_key(StorageId, SyncConfigs) of
-                true ->
-                    maps:update_with(StorageId, fun(SSC) ->
-                        SSC#storage_sync_config{update_enabled = false}
-                    end, SyncConfigs);
-                false ->
-                    SS
-            end,
-        {ok, SS#space_strategies{sync_configs = NewSS}}
-    end,
-    case ?extract_ok(update(SpaceId, UpdateFun)) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end.
 
 -spec get_import_details(od_space:id(), storage:id()) -> sync_details() | {error, term()}.
 get_import_details(SpaceId, StorageId) ->
@@ -217,10 +177,6 @@ get_sync_configs(SpaceId)  ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 -spec update(key(), diff(), record()) -> {ok, key()} | {error, term()}.
 update(Key, Diff, Default) ->
@@ -349,8 +305,8 @@ get_record_struct(6) ->
         {sync_configs, #{string => {record, [
             {import_enabled, boolean},
             {update_enabled, boolean},
-            {import_config, {custom, {json_utils, encode, decode}}},
-            {update_config, {custom, {json_utils, encode, decode}}}
+            {import_config, {custom, json, {json_utils, encode, decode}}},
+            {update_config, {custom, json, {json_utils, encode, decode}}}
         ]}}}
     ]}.
 %%--------------------------------------------------------------------

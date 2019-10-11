@@ -523,9 +523,9 @@ create_file_in_dir_update_test(Config) ->
     storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
         SpaceStoragePath, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results(History2, ?assertMtimeChangedFun(
-        StorageTestDirPath2, ?SPACE_ID, {true, _}), 0),
+        StorageTestDirPath2, ?SPACE_ID, true), 0),
     storage_sync_test_base:assert_num_results_gte(History2, ?assertMtimeChangedFun(
-        StorageTestDirPath, ?SPACE_ID, {true, _}), 1),
+        StorageTestDirPath, ?SPACE_ID, true), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -656,7 +656,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
     lfm_proxy:close(W1, Handle5),
 
     storage_sync_test_base:assert_num_results_gte(History2, ?assertMtimeChangedFun(
-        StorageTestDirPath, ?SPACE_ID, {true, _}), 1),
+        StorageTestDirPath, ?SPACE_ID, true), 1),
     storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
         StorageTestDirPath, ?SPACE_ID, true), 1),
     storage_sync_test_base:assert_num_results(History2, ?assertMtimeChangedFun(
@@ -1314,7 +1314,7 @@ chmod_file_update2_test(Config) ->
     storage_sync_test_base:assert_num_results_gte(History, ?assertHashChangedFun(
         StorageTestDirPath, ?SPACE_ID, true), 1),
     storage_sync_test_base:assert_num_results(History2, ?assertMtimeChangedFun(
-        StorageTestDirPath, ?SPACE_ID, {true, _}), 0),
+        StorageTestDirPath, ?SPACE_ID, true), 0),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,

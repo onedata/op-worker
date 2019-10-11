@@ -16,35 +16,42 @@
 
 %% API
 -export([
-    enable_import/2, enable_import/3,
-    configure_storage_update/3, configure_storage_update/4,
-    disable_import/2, disable_update/1,
+    enable_import/3, configure_import/3, configure_import/4, disable_import/2,
+    configure_update/3, configure_update/4, disable_update/2,
     get_import_details/2, get_update_details/2, cancel/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec enable_import(od_space:id(), space_strategies:import_config()) -> ok | {error, term()}.
-enable_import(SpaceId, Args) ->
-    StorageId = space_storage:get_storage_id(SpaceId),
-    enable_import(SpaceId, StorageId, Args).
-
 -spec enable_import(od_space:id(), storage:id(), space_strategies:import_config()) ->
     ok | {error, term()}.
 enable_import(SpaceId, StorageId, Config) ->
     file_meta:make_space_exist(SpaceId),
-    space_strategies:enable_import(SpaceId, StorageId, Config).
+    configure_import(SpaceId, StorageId, true, Config).
 
--spec configure_storage_update(od_space:id(), boolean(), space_strategies:update_config()) ->
-    ok | {error, term()}.
-configure_storage_update(SpaceId, Enabled, Config) ->
+-spec configure_import(od_space:id(), boolean(), space_strategies:import_config()) -> ok.
+configure_import(SpaceId, Enabled, Config) ->
     StorageId = space_storage:get_storage_id(SpaceId),
-    configure_storage_update(SpaceId, StorageId, Enabled, Config).
+    configure_import(SpaceId, StorageId, Enabled, Config).
 
--spec configure_storage_update(od_space:id(), storage:id(), boolean(),
+-spec configure_import(od_space:id(), storage:id(), boolean(), space_strategies:import_config()) -> ok.
+configure_import(SpaceId, StorageId, Enabled, Config) ->
+    space_strategies:configure_import(SpaceId, StorageId, Enabled, Config).
+
+-spec disable_import(od_space:id(), storage:id()) -> ok.
+disable_import(SpaceId, StorageId) ->
+    configure_import(SpaceId, StorageId, false, #{}).
+
+-spec configure_update(od_space:id(), boolean(), space_strategies:update_config()) ->
+    ok | {error, term()}.
+configure_update(SpaceId, Enabled, Config) ->
+    StorageId = space_storage:get_storage_id(SpaceId),
+    configure_update(SpaceId, StorageId, Enabled, Config).
+
+-spec configure_update(od_space:id(), storage:id(), boolean(),
     space_strategies:update_config()) -> ok | {error, term()}.
-configure_storage_update(SpaceId, StorageId, Enabled, Config) ->
+configure_update(SpaceId, StorageId, Enabled, Config) ->
     file_meta:make_space_exist(SpaceId),
     {ImportEnabled, _} = get_import_details(SpaceId, StorageId),
     case {Enabled, ImportEnabled} of
@@ -54,18 +61,9 @@ configure_storage_update(SpaceId, StorageId, Enabled, Config) ->
             space_strategies:configure_update(SpaceId, StorageId, Enabled, Config)
     end.
 
--spec disable_import(od_space:id(), storage:id()) -> ok.
-disable_import(SpaceId, StorageId) ->
-    space_strategies:disable_import(SpaceId, StorageId).
-
--spec disable_update(od_space:id()) -> ok.
-disable_update(SpaceId) ->
-    StorageId = space_storage:get_storage_id(SpaceId),
-    disable_storage_update(SpaceId, StorageId).
-
--spec disable_storage_update(od_space:id(), storage:id()) -> ok.
-disable_storage_update(SpaceId, StorageId) ->
-    space_strategies:disable_update(SpaceId, StorageId).
+-spec disable_update(od_space:id(), storage:id()) -> ok.
+disable_update(SpaceId, StorageId) ->
+    configure_update(SpaceId, StorageId, false, #{}).
 
 -spec get_import_details(od_space:id(), storage:id()) ->
     space_strategies:sync_details() | {error, term()}.
