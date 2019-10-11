@@ -107,6 +107,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([
@@ -227,7 +228,7 @@ stream_space_changes(Req, State) ->
         {Req2, State2} ->
             State3 = ?MODULE:init_stream(State2),
             Req3 = cowboy_req:stream_reply(
-                ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req2
+                ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"application/json">>}, Req2
             ),
             stream_loop(Req3, State3),
             cowboy_req:stream_body(<<"">>, fin, Req3),

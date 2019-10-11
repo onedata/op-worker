@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([new/2, new/4]).
@@ -370,11 +371,15 @@ safe_remove(StorageId) ->
 %%--------------------------------------------------------------------
 -spec supports_any_space(StorageId :: id()) -> boolean().
 supports_any_space(StorageId) ->
-    {ok, Spaces} = provider_logic:get_spaces(),
-    lists:any(fun(SpaceId) ->
-        {ok, StorageIds} = space_storage:get_storage_ids(SpaceId),
-        lists:member(StorageId, StorageIds)
-    end, Spaces).
+    case provider_logic:get_spaces() of
+        {ok, Spaces} ->
+            lists:any(fun(SpaceId) ->
+                {ok, StorageIds} = space_storage:get_storage_ids(SpaceId),
+                lists:member(StorageId, StorageIds)
+            end, Spaces);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            false
+    end.
 
 
 %%--------------------------------------------------------------------

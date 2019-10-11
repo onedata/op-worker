@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -582,7 +583,7 @@ get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
     Path = <<"changes/metadata/", SpaceId/binary, Qs/binary>>,
     Payload = json_utils:encode(Json),
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/json">>}
+        {?HDR_CONTENT_TYPE, <<"application/json">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, post, Headers, Payload, Opts) of
