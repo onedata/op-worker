@@ -12,13 +12,14 @@
 -module(initializer).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
+-include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("global_definitions.hrl").
--include("http/gui_paths.hrl").
+-include("test_utils/initializer.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -38,10 +39,6 @@
 -export([put_into_cache/1]).
 -export([local_ip_v4/0]).
 
--define(DUMMY_USER_TOKEN(__UserId), <<"DUMMY-USER-TOKEN-", __UserId/binary>>).
-
--define(DUMMY_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
--define(DUMMY_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
 
 -record(user_config, {
     id :: od_user:id(),

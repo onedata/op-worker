@@ -605,7 +605,7 @@ handle_protocol_upgrade_response(State, Data) ->
                 peer_id = ProviderId
             } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = provider_auth:get_identity_token_for_audience(
+            {ok, Token} = provider_auth:get_identity_token(
                 ?AUD(?OP_WORKER, ProviderId)
             ),
             ClientMsg = #client_message{

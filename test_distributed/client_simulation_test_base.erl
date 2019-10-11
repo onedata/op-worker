@@ -14,6 +14,7 @@
 -include("fuse_test_utils.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("test_utils/initializer.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -220,7 +221,7 @@ init_per_testcase(Config) ->
         fun
             (#token_auth{token = ?TOKEN}) ->
                 {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-            (#token_auth{token = <<"DUMMY-USER-TOKEN-", UserId/binary>>}) ->
+            (#token_auth{token = ?DUMMY_USER_TOKEN(UserId)}) ->
                 {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ),

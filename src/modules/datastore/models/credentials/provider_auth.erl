@@ -26,7 +26,7 @@
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_access_token/0, get_identity_token_for_audience/1]).
+-export([get_access_token/0, get_identity_token/1]).
 -export([get_root_token_file_path/0]).
 
 %% datastore_model callbacks
@@ -135,7 +135,7 @@ is_registered() ->
 %%--------------------------------------------------------------------
 -spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_access_token() ->
-    get_token(access).
+    get_token(access, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -146,11 +146,10 @@ get_access_token() ->
 %% TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_identity_token_for_audience(aai:audience()) ->
+-spec get_identity_token(aai:audience()) ->
     {ok, tokens:serialized()} | {error, term()}.
-get_identity_token_for_audience(Audience) ->
-    {ok, Token} = get_token(identity),
-    {ok, tokens:confine(Token, #cv_audience{whitelist = [Audience]})}.
+get_identity_token(Audience) ->
+    get_token(identity, Audience).
 
 
 %%--------------------------------------------------------------------
@@ -277,8 +276,10 @@ write_to_file(ProviderId, RootToken) ->
     end.
 
 
--spec get_token(access | identity) -> {ok, tokens:serialized()} | {error, term()}.
-get_token(Type) ->
+%% @private
+-spec get_token(access | identity, Audience :: undefined | aai:audience()) ->
+    {ok, tokens:serialized()} | {error, term()}.
+get_token(Type, AllowedAudience) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
             ?ERROR_UNREGISTERED_ONEPROVIDER;
@@ -291,13 +292,15 @@ get_token(Type) ->
                     {ok, CachedToken};
                 false ->
                     RootToken = ProviderAuth#provider_auth.root_token,
-                    NewToken = tokens:confine(RootToken, caveats_for_token(Type)),
+                    Caveats = caveats_for_token(Type, AllowedAudience),
+                    NewToken = tokens:confine(RootToken, Caveats),
                     cache_token(Type, NewToken),
                     {ok, NewToken}
             end
     end.
 
 
+%% @private
 -spec get_cached_token(access | identity, record()) ->
     {ValidUntil :: time_utils:seconds(), tokens:serialized()}.
 get_cached_token(access, ProviderAuth) ->
@@ -306,6 +309,7 @@ get_cached_token(identity, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_identity_token.
 
 
+%% @private
 -spec cache_token(access | identity, tokens:serialized()) -> ok.
 cache_token(Type, Token) ->
     {ok, _} = datastore_model:update(?CTX, ?PROVIDER_AUTH_KEY, fun(ProviderAuth) ->
@@ -320,11 +324,25 @@ cache_token(Type, Token) ->
     ok.
 
 
--spec caveats_for_token(access | identity) -> [caveats:caveat()].
-caveats_for_token(access) -> [
-    #cv_time{valid_until = ?NOW() + ?TOKEN_TTL}
-];
-caveats_for_token(identity) -> [
-    #cv_time{valid_until = ?NOW() + ?TOKEN_TTL},
-    #cv_authorization_none{}
-].
+%% @private
+-spec caveats_for_token(access | identity, Audience :: undefined | aai:audience()) ->
+    [caveats:caveat()].
+caveats_for_token(access, Audience) ->
+    maybe_add_audience_caveat(
+        [#cv_time{valid_until = ?NOW() + ?TOKEN_TTL}],
+        Audience
+    );
+caveats_for_token(identity, Audience) ->
+    maybe_add_audience_caveat(
+        [#cv_time{valid_until = ?NOW() + ?TOKEN_TTL}, #cv_authorization_none{}],
+        Audience
+    ).
+
+
+%% @private
+-spec maybe_add_audience_caveat(caveats:caveat(), undefined | aai:audience()) ->
+    caveats:caveat().
+maybe_add_audience_caveat(Caveats, undefined) ->
+    Caveats;
+maybe_add_audience_caveat(Caveats, Audience) ->
+    [#cv_audience{whitelist = Audience} | Caveats].

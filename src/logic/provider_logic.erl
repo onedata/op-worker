@@ -733,7 +733,7 @@ zone_get_offline_access_idps() ->
 verify_provider_identity(ProviderId) ->
     try
         {ok, Domain} = get_domain(ProviderId),
-        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_audience(
+        {ok, OurIdentityToken} = provider_auth:get_identity_token(
             ?AUD(?OP_WORKER, ProviderId)
         ),
         Headers = tokens:build_access_token_header(OurIdentityToken),

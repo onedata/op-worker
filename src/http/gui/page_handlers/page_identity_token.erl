@@ -41,7 +41,7 @@ handle(<<"GET">>, Req) ->
             case token_logic:verify_identity(PeerAccessToken) of
                 {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
                     Audience = ?AUD(?OP_WORKER, ProviderId),
-                    {ok, IdentityToken} = provider_auth:get_identity_token_for_audience(Audience),
+                    {ok, IdentityToken} = provider_auth:get_identity_token(Audience),
                     cowboy_req:reply(
                         ?HTTP_200_OK,
                         #{<<"content-type">> => <<"text/plain">>},

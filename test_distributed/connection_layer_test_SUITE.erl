@@ -16,17 +16,12 @@
 
 -include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
--include("proto/common/clproto_message_id.hrl").
--include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/common/handshake_messages.hrl").
--include("proto/oneclient/diagnostic_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("test_utils/initializer.hrl").
 -include_lib("clproto/include/messages.hrl").
--include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -670,7 +665,7 @@ mock_user_identity(Workers) ->
         fun
             (#token_auth{token = ?TOKEN}) ->
                 {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-            (#token_auth{token = <<"DUMMY-USER-TOKEN-", UserId/binary>>}) ->
+            (#token_auth{token = ?DUMMY_USER_TOKEN(UserId)}) ->
                 {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ).
