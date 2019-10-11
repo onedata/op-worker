@@ -8,6 +8,9 @@
 %%% @doc
 %%% This module implements dynamic_page_behaviour and is called
 %%% when identity token page is visited.
+%%% @todo VFS-5554 Deprecated, included for backward compatibility
+%%% Must be supported in the 19.09.* line, later the counterpart in the
+%%% configuration endpoint can be used.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(page_identity_token).
@@ -18,6 +21,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([handle/2]).
 
@@ -44,7 +48,7 @@ handle(<<"GET">>, Req) ->
                     {ok, IdentityToken} = provider_auth:get_identity_token(Audience),
                     cowboy_req:reply(
                         ?HTTP_200_OK,
-                        #{<<"content-type">> => <<"text/plain">>},
+                        #{?HDR_CONTENT_TYPE => <<"text/plain">>},
                         IdentityToken,
                         Req
                     );

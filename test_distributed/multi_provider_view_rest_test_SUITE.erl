@@ -22,6 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -1113,7 +1114,7 @@ create_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Spatial, Pr
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
@@ -1128,7 +1129,7 @@ update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, patch, Headers, MapFunction) of
@@ -1141,7 +1142,7 @@ update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
 add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, ReduceFunction) of
@@ -1154,7 +1155,7 @@ add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
 remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, delete, Headers, []) of
@@ -1166,7 +1167,7 @@ remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
 
 get_view_via_rest(Config, Worker, SpaceId, ViewName) ->
     Path = ?VIEW_PATH(SpaceId, ViewName),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->
             {ok, json_utils:decode(Body)};

@@ -21,6 +21,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([init/2]).
 -export([websocket_init/1]).
@@ -114,7 +115,7 @@ init(Req, Opts) ->
     Host = cowboy_req:host(Req),
     case op_gui_session:authenticate(Req) of
         ?ERROR_UNAUTHORIZED ->
-            {ok, cowboy_req:reply(401, #{<<"connection">> => <<"close">>}, Req), Opts};
+            {ok, cowboy_req:reply(401, #{?HDR_CONNECTION => <<"close">>}, Req), Opts};
         false ->
             {cowboy_websocket, Req, {?GUEST_IDENTITY, ?GUEST_AUTH, Host}};
         {ok, Identity, Auth} ->

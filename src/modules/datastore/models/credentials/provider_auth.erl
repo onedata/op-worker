@@ -340,8 +340,8 @@ caveats_for_token(identity, Audience) ->
 
 
 %% @private
--spec maybe_add_audience_caveat(caveats:caveat(), undefined | aai:audience()) ->
-    caveats:caveat().
+-spec maybe_add_audience_caveat([caveats:caveat()], undefined | aai:audience()) ->
+    [caveats:caveat()].
 maybe_add_audience_caveat(Caveats, undefined) ->
     Caveats;
 maybe_add_audience_caveat(Caveats, Audience) ->
