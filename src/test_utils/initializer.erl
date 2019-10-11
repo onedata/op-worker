@@ -186,7 +186,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, cluster_logic, harvester_logic, space_storage]),
+        provider_logic, cluster_logic, harvester_logic, space_storage, provider_auth]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -480,6 +480,13 @@ mock_provider_ids(Config) ->
 %%--------------------------------------------------------------------
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
 mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
+    ok = test_utils:mock_new(Workers, provider_auth),
+    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token,
+        fun(_Audience) ->
+            {ok, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)}
+        end
+    ),
+
     % Mock cached auth and identity tokens with large TTL
     ExpirationTime = time_utils:system_time_seconds() + 999999999,
     rpc:call(hd(Workers), datastore_model, save, [#{model => provider_auth}, #document{
