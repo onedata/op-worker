@@ -18,6 +18,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([maybe_create_proxied_session/2]).
@@ -80,12 +81,12 @@ protocol_upgrade_request(Hostname) -> <<
 -spec process_protocol_upgrade_request(cowboy_req:req()) ->
     ok | {error, update_required}.
 process_protocol_upgrade_request(Req) ->
-    ConnTokens = cowboy_req:parse_header(<<"connection">>, Req, []),
+    ConnTokens = cowboy_req:parse_header(?HDR_CONNECTION, Req, []),
     case lists:member(<<"upgrade">>, ConnTokens) of
         false ->
             {error, upgrade_required};
         true ->
-            case cowboy_req:parse_header(<<"upgrade">>, Req, []) of
+            case cowboy_req:parse_header(?HDR_UPGRADE, Req, []) of
                 [<<?CLIENT_PROTOCOL_UPGRADE_NAME>>] ->
                     ok;
                 _ ->

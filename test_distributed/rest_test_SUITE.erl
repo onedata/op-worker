@@ -16,11 +16,12 @@
 -include("proto/common/handshake_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
@@ -58,11 +59,11 @@ token_auth(Config) ->
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
-    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?TOKEN}),
-    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?TOKEN)/binary>>}),
+    AuthFail = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>}),
+    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => ?TOKEN}),
+    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", (?TOKEN)/binary>>}),
     %% @todo VFS-5554 Deprecated, included for backward compatibility
-    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?TOKEN}),
+    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => ?TOKEN}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
