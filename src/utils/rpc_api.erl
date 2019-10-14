@@ -462,10 +462,9 @@ configure_storage_import(SpaceId, Enabled, Args) ->
     storage_sync:configure_import(SpaceId, Enabled, Args).
 
 
--spec configure_storage_update(od_space:id(), space_strategy:name(),
+-spec configure_storage_update(od_space:id(), boolean(),
     space_strategies:update_config()) -> ok | {error, term()}.
-configure_storage_update(SpaceId, StrategyName, Args) ->
-    Enabled = StrategyName =:= simple_scan,
+configure_storage_update(SpaceId, Enabled, Args) ->
     storage_sync:configure_update(SpaceId, Enabled, Args).
 
 

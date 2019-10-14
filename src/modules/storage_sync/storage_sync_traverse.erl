@@ -378,9 +378,8 @@ do_update_master_job(TraverseJob = #storage_traverse{
                     FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, SlavesDescription) ->
                         case maps:get(slave_jobs_failed, SlavesDescription) of
                             0 ->
-                                {ok, SSIDoc2} =
-                                    storage_sync_info:mark_processed_batch
-                                    (StorageFileId, SpaceId, STMtime, undefined, undefined, true, false),
+                                {ok, SSIDoc2} = storage_sync_info:mark_processed_batch(StorageFileId,
+                                    SpaceId, STMtime, undefined, undefined, true, false),
                                 case storage_sync_info:all_batches_processed(SSIDoc2) of
                                     true ->
                                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),

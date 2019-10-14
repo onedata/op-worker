@@ -131,7 +131,7 @@ check_spaces() ->
         end
     catch
         Error2:Reason ->
-            ?error_stacktrace("storage_sync_worker was unable to check spaces due to unexpected ~p", [Error2, Reason]),
+            ?error_stacktrace("storage_sync_worker was unable to check spaces due to unexpected ~p:~p", [Error2, Reason]),
             schedule_spaces_check()
     end.
 

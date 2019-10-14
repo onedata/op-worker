@@ -101,10 +101,11 @@ is_import_on(SpaceId) ->
 
 -spec configure_import(od_space:id(), storage:id(), boolean(), import_config()) -> ok.
 configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
-    DefaultSyncConfig = default_import_sync_config(Enabled, NewConfig),
+    FilledConfig = fill_import_config(NewConfig),
+    DefaultSyncConfig = default_import_sync_config(Enabled, FilledConfig),
     ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
         NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{import_config = OldConfig}) ->
-            UpdatedConfig = maps:merge(OldConfig, NewConfig),
+            UpdatedConfig = maps:merge(OldConfig, FilledConfig),
             SSC#storage_sync_config{import_enabled = Enabled, import_config = UpdatedConfig}
         end,
             DefaultSyncConfig, SyncConfigs
@@ -114,10 +115,11 @@ configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
 
 -spec configure_update(od_space:id(), storage:id(), boolean(), update_config()) -> ok.
 configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
-    DefaultSyncConfig = default_update_sync_config(Enabled, NewConfig),
+    FilledConfig = fill_update_config(NewConfig),
+    DefaultSyncConfig = default_update_sync_config(Enabled, FilledConfig),
     ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
         NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{update_config = OldConfig}) ->
-            UpdatedConfig = maps:merge(OldConfig, NewConfig),
+            UpdatedConfig = maps:merge(OldConfig, FilledConfig),
             SSC#storage_sync_config{update_enabled = Enabled, update_config = UpdatedConfig}
         end,
             DefaultSyncConfig, SyncConfigs
