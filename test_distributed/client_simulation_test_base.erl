@@ -23,6 +23,7 @@
 -export([init_per_suite/1, init_per_testcase/1, end_per_testcase/1]).
 -export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
 -export([prepare_file/2, use_file/4]).
+-export([create_new_file_subscriptions/3]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
