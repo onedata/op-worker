@@ -26,7 +26,7 @@
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_access_token/0, get_identity_token/0]).
+-export([get_access_token/0, get_identity_token/1]).
 -export([get_root_token_file_path/0]).
 
 %% datastore_model callbacks
@@ -140,14 +140,17 @@ get_access_token() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns identity token for this provider. The token can be used solely
-%% to verify provider's identity and carries no authorization. It can be safely
-%% exposed to public view. The token is confined with TTL for security.
+%% Returns identity token for this provider usable only by specified
+%% audience. The token can be used solely to verify this provider's
+%% identity and carries no authorization. The token is confined with
+%% TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
-get_identity_token() ->
-    get_token(identity).
+-spec get_identity_token(aai:audience()) ->
+    {ok, tokens:serialized()} | {error, term()}.
+get_identity_token(Audience) ->
+    {ok, Token} = get_token(identity),
+    {ok, tokens:confine(Token, #cv_audience{whitelist = [Audience]})}.
 
 
 %%--------------------------------------------------------------------
@@ -274,6 +277,7 @@ write_to_file(ProviderId, RootToken) ->
     end.
 
 
+%% @private
 -spec get_token(access | identity) -> {ok, tokens:serialized()} | {error, term()}.
 get_token(Type) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
@@ -288,13 +292,15 @@ get_token(Type) ->
                     {ok, CachedToken};
                 false ->
                     RootToken = ProviderAuth#provider_auth.root_token,
-                    NewToken = tokens:confine(RootToken, caveats_for_token(Type)),
+                    Caveats = caveats_for_token(Type),
+                    NewToken = tokens:confine(RootToken, Caveats),
                     cache_token(Type, NewToken),
                     {ok, NewToken}
             end
     end.
 
 
+%% @private
 -spec get_cached_token(access | identity, record()) ->
     {ValidUntil :: time_utils:seconds(), tokens:serialized()}.
 get_cached_token(access, ProviderAuth) ->
@@ -303,6 +309,7 @@ get_cached_token(identity, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_identity_token.
 
 
+%% @private
 -spec cache_token(access | identity, tokens:serialized()) -> ok.
 cache_token(Type, Token) ->
     {ok, _} = datastore_model:update(?CTX, ?PROVIDER_AUTH_KEY, fun(ProviderAuth) ->

@@ -24,7 +24,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
--export([preauthorize/1]).
 -export([get/2, get_protected_data/2, get_shared_data/3]).
 -export([exists/2]).
 -export([get_full_name/2, get_full_name/3]).
@@ -37,36 +36,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Pre-authorizes a user - asks Onezone to verify given token, and upon success,
-%% returns the auth object, including user's identity and caveats that were
-%% inscribed in the token.
-%% @end
-%%--------------------------------------------------------------------
--spec preauthorize(#token_auth{}) -> {ok, aai:auth()} | errors:error().
-preauthorize(#token_auth{token = Token, peer_ip = PeerIp}) ->
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_user, id = undefined, aspect = preauthorize, scope = public},
-        data = #{
-            <<"token">> => Token,
-            <<"peerIp">> => case PeerIp of
-                undefined -> null;
-                _ -> element(2, {ok, _} = ip_utils:to_binary(PeerIp))
-            end
-        }
-    }),
-    case Result of
-        {error, _} = Error ->
-            Error;
-        {ok, #{<<"subject">> := Subject, <<"caveats">> := Caveats}} ->
-            {ok, #auth{
-                subject = aai:deserialize_subject(Subject),
-                caveats = [caveats:deserialize(C) || C <- Caveats]
-            }}
-    end.
 
 
 %%--------------------------------------------------------------------

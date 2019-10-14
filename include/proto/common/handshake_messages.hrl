@@ -17,14 +17,14 @@
 
 -record(client_handshake_request, {
     auth :: #token_auth{},
-    session_id :: session:id(),
+    nonce :: binary(),
     version :: binary(),
     compatible_oneprovider_versions :: [binary()]
 }).
 
 -record(provider_handshake_request, {
     provider_id :: od_provider:id(),
-    nonce :: binary()
+    token :: tokens:serialized()
 }).
 
 -record(handshake_response, {

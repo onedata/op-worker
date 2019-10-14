@@ -22,9 +22,10 @@
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
--include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -107,8 +108,8 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 
 -define(CORRECT_PROVIDER_ID, <<"correct-iden-mac">>).
 -define(INCORRECT_PROVIDER_ID, <<"incorrect-iden-mac">>).
--define(CORRECT_NONCE, <<"correct-nonce">>).
--define(INCORRECT_NONCE, <<"incorrect-nonce">>).
+-define(CORRECT_TOKEN, <<"correct-token">>).
+-define(INCORRECT_TOKEN, <<"incorrect-token">>).
 
 -define(ATTEMPTS, 60).
 
@@ -124,10 +125,10 @@ provider_connection_test(Config) ->
     lists:foreach(fun({ProviderId, Nonce, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Nonce))
     end, [
-        {?INCORRECT_PROVIDER_ID, ?CORRECT_NONCE, 'INVALID_PROVIDER'},
-        {?INCORRECT_PROVIDER_ID, ?INCORRECT_NONCE, 'INVALID_PROVIDER'},
-        {?CORRECT_PROVIDER_ID, ?INCORRECT_NONCE, 'INVALID_NONCE'},
-        {?CORRECT_PROVIDER_ID, ?CORRECT_NONCE, 'OK'}
+        {?INCORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'INVALID_PROVIDER'},
+        {?INCORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
+        {?CORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
+        {?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'OK'}
     ]).
 
 
@@ -498,7 +499,7 @@ rtransfer_connection_secret_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     {ok, Sock} = fuse_test_utils:connect_as_provider(
-        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN
     ),
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
 
@@ -522,7 +523,7 @@ rtransfer_nodes_ips_test(Config) ->
     ),
 
     {ok, Sock} = fuse_test_utils:connect_as_provider(
-        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_NONCE
+        Worker1, ?CORRECT_PROVIDER_ID, ?CORRECT_TOKEN
     ),
 
     ssl:setopts(Sock, [{active, once}, {packet, 4}]),
@@ -636,20 +637,13 @@ init_per_testcase(Case, Config) when
     Case =:= rtransfer_nodes_ips_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, provider_logic, [passthrough]),
+    test_utils:mock_new(Workers, token_logic, [passthrough]),
 
-    test_utils:mock_expect(Workers, provider_logic, verify_provider_identity, fun(ProviderId) ->
-        case ProviderId of
-            ?CORRECT_PROVIDER_ID -> ok;
-            ?INCORRECT_PROVIDER_ID -> ?ERROR_UNAUTHORIZED
-        end
-    end),
-
-    test_utils:mock_expect(Workers, provider_logic, verify_provider_nonce, fun(_ProviderId, Nonce) ->
-        case Nonce of
-            ?CORRECT_NONCE -> ok;
-            ?INCORRECT_NONCE -> ?ERROR_UNAUTHORIZED
-        end
+    test_utils:mock_expect(Workers, token_logic, verify_identity, fun
+        (?CORRECT_TOKEN) ->
+            {ok, ?SUB(?ONEPROVIDER, ?CORRECT_PROVIDER_ID)};
+        (?INCORRECT_TOKEN) ->
+            ?ERROR_BAD_TOKEN
     end),
 
     test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
@@ -685,7 +679,7 @@ end_per_testcase(Case, Config) when
     Case =:= rtransfer_nodes_ips_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [provider_logic]),
+    test_utils:mock_validate_and_unload(Workers, [provider_logic, token_logic]),
     end_per_testcase(default, Config);
 
 end_per_testcase(python_client_test, Config) ->
@@ -727,8 +721,8 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
 
 
 handshake_as_client(Node, Token, Version) ->
-    SessId = crypto:strong_rand_bytes(10),
-    case fuse_test_utils:connect_as_client(Node, SessId, Token, Version) of
+    Nonce = crypto:strong_rand_bytes(10),
+    case fuse_test_utils:connect_as_client(Node, Nonce, Token, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';
