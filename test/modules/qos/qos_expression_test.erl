@@ -13,7 +13,7 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 

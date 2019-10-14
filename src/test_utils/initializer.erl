@@ -1339,4 +1339,4 @@ index_of(Value, List) ->
 
 
 init_qos_bounded_cache(Workers) ->
-    rpc:multicall(Workers, fslogic_worker, init_qos_cache_for_all_spaces, []).
+    rpc:multicall(Workers, qos_bounded_cache, ensure_exists_for_all_spaces, []).

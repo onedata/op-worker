@@ -36,7 +36,7 @@
 -include("modules/fslogic/metadata.hrl").
 -include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
 -export([create_or_update/2, delete/1]).

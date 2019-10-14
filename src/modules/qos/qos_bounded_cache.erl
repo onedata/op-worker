@@ -21,8 +21,9 @@
 %% API
 -export([
     init_group/0, init/1,
-    ensure_exists_on_all_nodes/1, ensure_exists/1,
-    invalidate_on_all_nodes/1
+    ensure_exists_for_all_spaces/0,
+    ensure_exists_on_all_nodes/1,
+    ensure_exists/1, invalidate_on_all_nodes/1
 ]).
 
 
@@ -36,6 +37,11 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes bounded_cache group for QoS.
+%% @end
+%%--------------------------------------------------------------------
 -spec init_group() -> ok | {error, term()}.
 init_group() ->
     CheckFrequency = get_param(?QOS_BOUNDED_CACHE_CHECK_FREQ, ?DEFAULT_CHECK_FREQUENCY),
@@ -51,6 +57,20 @@ init_group() ->
 -spec init(od_space:id()) -> ok | {error, term()}.
 init(SpaceId) ->
     bounded_cache:init_cache(?CACHE_TABLE_NAME(SpaceId), #{group => ?QOS_BOUNDED_CACHE_GROUP}).
+
+
+ensure_exists_for_all_spaces() ->
+    % TODO: VFS-5744 potential race condition:
+    % user may perform operations associated with QoS before cache initialization
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun(SpaceId) -> ensure_exists_on_all_nodes(SpaceId) end, SpaceIds);
+        Error = {error, _} ->
+            ?critical("Unable to initialize qos bounded cache due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?critical_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -86,7 +106,7 @@ ensure_exists_on_all_nodes(SpaceId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks whether cache for given space exists on current node. If cache does
-%% not exist schedules initialization of cache in fslogic_worker.
+%% not exist it will be initialized.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_exists(od_space:id()) -> ok.

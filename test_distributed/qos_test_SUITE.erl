@@ -16,7 +16,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("qos_tests_utils.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API

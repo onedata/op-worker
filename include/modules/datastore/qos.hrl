@@ -79,7 +79,8 @@
 
 
 % macros used for operations on QoS bounded cache
--define(CACHE_TABLE_NAME(SpaceId), binary_to_atom(SpaceId, utf8)).
+-define(CACHE_TABLE_NAME(SpaceId),
+    binary_to_atom(<<SpaceId/binary, "_qos_bounded_cache_table">>, utf8)).
 -define(QOS_BOUNDED_CACHE_GROUP, <<"qos_bonded_cache_group">>).
 
 
