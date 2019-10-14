@@ -18,14 +18,18 @@
 
 -behaviour(dynamic_page_behaviour).
 
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 -export([handle/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -34,10 +38,23 @@
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
-    {ok, IdentityToken} = provider_auth:get_identity_token(),
-    cowboy_req:reply(
-        ?HTTP_200_OK,
-        #{?HDR_CONTENT_TYPE => <<"text/plain">>},
-        IdentityToken,
-        Req
-    ).
+    case tokens:parse_access_token_header(Req) of
+        undefined ->
+            throw(?ERROR_UNAUTHORIZED);
+        PeerAccessToken ->
+            case token_logic:verify_identity(PeerAccessToken) of
+                {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
+                    Audience = ?AUD(?OP_WORKER, ProviderId),
+                    {ok, IdentityToken} = provider_auth:get_identity_token(Audience),
+                    cowboy_req:reply(
+                        ?HTTP_200_OK,
+                        #{?HDR_CONTENT_TYPE => <<"text/plain">>},
+                        IdentityToken,
+                        Req
+                    );
+                {ok, _} ->
+                    throw(?ERROR_TOKEN_SUBJECT_INVALID);
+                {error, _} = Error ->
+                    throw(Error)
+            end
+    end.

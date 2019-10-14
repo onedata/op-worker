@@ -32,10 +32,14 @@
 -include_lib("clproto/include/messages.hrl").
 
 -export([
+    reuse_or_create_fuse_session/4, reuse_or_create_fuse_session/5,
+
     connect_as_provider/3, connect_as_client/4,
 
     connect_via_token/1, connect_via_token/2,
     connect_via_token/3, connect_via_token/4,
+
+    connect_as_user/4,
 
     generate_msg_id/0
 ]).
@@ -90,6 +94,34 @@
 %% API
 %% ====================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates FUSE session or if session exists reuses it
+%% and registers connection for it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(Nonce :: binary(), session:identity(),
+    session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Nonce, Iden, Auth, Conn) ->
+    {ok, SessId} = session_manager:reuse_or_create_fuse_session(Nonce, Iden, Auth),
+    session_connections:register(SessId, Conn),
+    {ok, SessId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls reuse_or_create_fuse_session/4 on specified Worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(node(), Nonce :: binary(), session:identity(),
+    session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Worker, Nonce, Iden, Auth, Conn) ->
+    ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
+        reuse_or_create_fuse_session, [Nonce, Iden, Auth, Conn]
+    )).
+
+
 generate_msg_id() ->
     ID = case get(msg_id_generator) of
         undefined -> 1;
@@ -103,11 +135,11 @@ generate_msg_id() ->
 %% Connect to given node using a providerId and nonce.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_provider(Node, ProviderId, Nonce) ->
+connect_as_provider(Node, ProviderId, Token) ->
     HandshakeReqMsg = #'ClientMessage'{
         message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
             provider_id = ProviderId,
-            nonce = Nonce
+            token = Token
         }
         }},
     RawMsg = messages:encode_msg(HandshakeReqMsg),
@@ -137,13 +169,13 @@ connect_as_provider(Node, ProviderId, Nonce) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using a token, sessionId and version.
+%% Connect to given node using a token, nonce and version.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_client(Node, SessId, Token, Version) ->
+connect_as_client(Node, Nonce, Token, Version) ->
     HandshakeMessage = #'ClientMessage'{
         message_body = {client_handshake_request, #'ClientHandshakeRequest'{
-            session_id = SessId,
+            session_id = Nonce,
             macaroon = Token,
             version = Version
         }
@@ -198,8 +230,8 @@ connect_via_token(Node, SocketOpts) ->
 %% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
 %% @end
 %%--------------------------------------------------------------------
-connect_via_token(Node, SocketOpts, SessionId) ->
-    connect_via_token(Node, SocketOpts, SessionId, #token_auth{
+connect_via_token(Node, SocketOpts, Nonce) ->
+    connect_via_token(Node, SocketOpts, Nonce, #token_auth{
         token = ?TOKEN
     }).
 
@@ -208,9 +240,9 @@ connect_via_token(Node, SocketOpts, SessionId) ->
 %% Connect to given node using a token, with custom socket opts and session id.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), session:id(), #token_auth{}) ->
+-spec connect_via_token(Node :: node(), SocketOpts :: list(), Nonce :: binary(), #token_auth{}) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
+connect_via_token(Node, SocketOpts, Nonce, #token_auth{token = Token} = Auth) ->
     % given
     OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
@@ -219,7 +251,7 @@ connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
-            session_id = SessId,
+            session_id = Nonce,
             macaroon = #'Macaroon'{macaroon = Token},
             version = Version
         }
@@ -242,6 +274,11 @@ connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
     }}},
         RM
     ),
+
+    SessId = datastore_utils:gen_key(
+        <<"">>,
+        term_to_binary({fuse, Nonce, Auth#token_auth{peer_ip = initializer:local_ip_v4()}})
+    ),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
@@ -258,6 +295,26 @@ connect_and_upgrade_proto(Hostname, Port) ->
     after timer:minutes(1) ->
         exit(timeout)
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node with specified user authorization.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_as_user(Config :: term(), node(), User :: binary(),  SocketOpts :: list()) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_as_user(Config, Node, User, SocketOpts) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    Nonce = ?config({session_nonce, {User, ?GET_DOMAIN(Node)}}, Config),
+    Token = ?config({auth_token, {User, ?GET_DOMAIN(Node)}}, Config),
+    Auth = #token_auth{token = Token},
+
+    ?assertMatch(
+        {ok, {_, SessId}},
+        fuse_test_utils:connect_via_token(Node, SocketOpts, Nonce, Auth)
+    ).
+
 
 receive_server_message() ->
     receive_server_message([message_stream_reset, subscription, message_request,
