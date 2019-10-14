@@ -15,7 +15,7 @@
 -include("modules/events/definitions.hrl").
 
 %% API
--export([add_subscriber/2, get_subscribers/1, remove_subscriber/2]).
+-export([add_subscriber/2, get_subscribers/2, remove_subscriber/2]).
 
 -export_type([key/0]).
 
@@ -61,9 +61,10 @@ add_subscriber(Sub, SessId) ->
 %% Returns list of event subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type()) ->
+-spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type(),
+    RoutingBase :: fslogic_worker:file_guid() | undefined) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
-get_subscribers(<<_/binary>> = Key) ->
+get_subscribers(<<_/binary>> = Key, _RoutingBase) ->
     case file_subscription:get(Key) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
             {ok, gb_sets:to_list(SessIds)};
@@ -73,11 +74,11 @@ get_subscribers(<<_/binary>> = Key) ->
             {error, Reason}
     end;
 
-get_subscribers({aggregated, [Evt | _]}) ->
-    get_subscribers(Evt);
-get_subscribers(Evt) ->
-    case event_type:get_routing_key(Evt) of
-        {ok, Key} -> get_subscribers(Key);
+get_subscribers({aggregated, [Evt | _]}, RoutingBase) ->
+    get_subscribers(Evt, RoutingBase);
+get_subscribers(Evt, RoutingBase) ->
+    case event_type:get_routing_key(Evt, RoutingBase) of
+        {ok, Key} -> get_subscribers(Key, RoutingBase);
         {error, session_only} -> {ok, []}
     end.
 

@@ -16,7 +16,7 @@
 -include("modules/monitoring/events.hrl").
 
 %% API
--export([get_routing_key/1, get_stream_key/1, get_aggregation_key/1]).
+-export([get_routing_key/2, get_stream_key/1, get_aggregation_key/1]).
 -export([get_context/1, update_context/2]).
 
 -type aggregation_key() :: term().
@@ -34,29 +34,29 @@
 %% table for subscribers interested in receiving this event.
 %% @end
 %%--------------------------------------------------------------------
--spec get_routing_key(Evt :: event:base() | event:type()) ->
+-spec get_routing_key(Evt :: event:base() | event:type(), RoutingBase :: fslogic_worker:file_guid() | undefined) ->
     {ok, Key :: subscription_manager:key()} | {error, session_only}.
-get_routing_key(#event{type = Type}) ->
-    get_routing_key(Type);
-get_routing_key(#file_attr_changed_event{file_attr = FileAttr}) ->
-    {ok, <<"file_attr_changed.", (FileAttr#file_attr.guid)/binary>>};
-get_routing_key(#file_location_changed_event{file_location = FileLocation}) ->
+get_routing_key(#event{type = Type}, RoutingBase) ->
+    get_routing_key(Type, RoutingBase);
+get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingBase) ->
+    get_routing_key_with_parent(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingBase);
+get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingBase) ->
     FileGuid = file_id:pack_guid(
         FileLocation#file_location.uuid,
         FileLocation#file_location.space_id
     ),
     {ok, <<"file_location_changed.", FileGuid/binary>>};
-get_routing_key(#file_perm_changed_event{file_guid = FileGuid}) ->
+get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingBase) ->
     {ok, <<"file_perm_changed.", FileGuid/binary>>};
-get_routing_key(#file_removed_event{file_guid = FileGuid}) ->
-    {ok, <<"file_removed.", FileGuid/binary>>};
-get_routing_key(#file_renamed_event{top_entry = Entry}) ->
-    {ok, <<"file_renamed.", (Entry#file_renamed_entry.old_guid)/binary>>};
-get_routing_key(#quota_exceeded_event{}) ->
+get_routing_key(#file_removed_event{file_guid = FileGuid}, RoutingBase) ->
+    get_routing_key_with_parent(<<"file_removed.">>, FileGuid, RoutingBase);
+get_routing_key(#file_renamed_event{top_entry = Entry}, RoutingBase) ->
+    get_routing_key_with_parent(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingBase);
+get_routing_key(#quota_exceeded_event{}, _RoutingBase) ->
     {ok, <<"quota_exceeded">>};
-get_routing_key(#helper_params_changed_event{storage_id = StorageId}) ->
+get_routing_key(#helper_params_changed_event{storage_id = StorageId}, _RoutingBase) ->
     {ok, <<"helper_params_changed.", StorageId/binary>>};
-get_routing_key(_) ->
+get_routing_key(_, _) ->
     {error, session_only}.
 
 %%--------------------------------------------------------------------
@@ -183,3 +183,22 @@ update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
     Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
 update_context(Evt, _Ctx) ->
     Evt.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets routing key for events where it bases on file's parent guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_routing_key_with_parent(binary(), fslogic_worker:file_guid(), fslogic_worker:file_guid() | undefined) ->
+    {ok, Key :: subscription_manager:key()} | {error, session_only}.
+get_routing_key_with_parent(Base, FileGuid, undefined) ->
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
+    {ok, <<Base/binary, ParentGuid/binary>>};
+get_routing_key_with_parent(Base, _FileGuid, ParentGUID) ->
+    {ok, <<Base/binary, ParentGUID/binary>>}.

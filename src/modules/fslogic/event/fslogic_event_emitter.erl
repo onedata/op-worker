@@ -44,8 +44,9 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
         {#document{}, FileCtx2} ->
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
                 attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true),
-            event:emit(#file_attr_changed_event{file_attr = FileAttr},
-                {exclude, ExcludedSessions});
+            {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx2, undefined),
+            event:get_subscribers_and_emit(#file_attr_changed_event{file_attr = FileAttr},
+                ParentGuid, ExcludedSessions);
         Other ->
             Other
     end.
@@ -65,9 +66,10 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
                 attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
                     FileCtx2, true, false),
-            event:emit(#file_attr_changed_event{
+            {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx2, undefined),
+            event:get_subscribers_and_emit(#file_attr_changed_event{
                 file_attr = FileAttr
-            });
+            }, ParentGuid, []);
         Other ->
             Other
     end.
@@ -146,8 +148,9 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    event:emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
-        {exclude, ExcludedSessions}).
+    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, undefined),
+    event:get_subscribers_and_emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
+        ParentGuid, ExcludedSessions).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -160,12 +163,12 @@ emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),
     {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
-    event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
+    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
         new_parent_guid = ParentGuid,
         new_name = NewName
-    }}, {exclude, [SessionId]}).
+    }}, ParentGuid, [SessionId]).
 
 %%--------------------------------------------------------------------
 %% @doc
