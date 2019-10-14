@@ -28,7 +28,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -record(file_ctx, {
@@ -980,14 +980,20 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file Active Permissions Type.
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_active_perms_type(ctx()) -> {file_meta:permissions_type(), ctx()}.
 get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
-    value = #file_meta{active_permissions_type = ActivePermsType}
+    value = #file_meta{acl = []}
 }}) ->
-    {ActivePermsType, FileCtx};
+    {posix, FileCtx};
+get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{}
+}}) ->
+    {acl, FileCtx};
 get_active_perms_type(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_active_perms_type(FileCtx2).

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([save/2, delete/0]).
@@ -52,13 +52,13 @@
 -define(NOW(), provider_logic:zone_time_seconds()).
 
 -define(FILE_COMMENT,
-    "% Below is the provider root token "
-    "carrying its identity and full authorization.\n"
-    "% It can be used to authorize operations in Onezone's "
-    "REST API on behalf of the provider when sent in the "
-    "\"X-Auth-Token\" or \"Authorization: Bearer\" header.\n"
-    "% The root token is highly confidential and must be "
-    "kept secret.\n\n").
+    <<"This file holds the Oneprovider root token "
+    "carrying its identity and full authorization. "
+    "It can be used to authorize operations in Onezone's "
+    "REST API on behalf of the Oneprovider when sent in the "
+    "\"X-Auth-Token\" or \"Authorization: Bearer\" header. "
+    "The root token is highly confidential and must be "
+    "kept secret.">>).
 
 %%%===================================================================
 %%% API
@@ -85,7 +85,7 @@ save(ProviderId, RootToken) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns provider Id, or ?ERROR_UNREGISTERED_PROVIDER if it is not yet
+%% Returns provider Id, or ?ERROR_UNREGISTERED_ONEPROVIDER if it is not yet
 %% registered. Upon success, the ProviderId is cached in env variable to be
 %% accessible quickly.
 %% @end
@@ -95,7 +95,7 @@ get_provider_id() ->
     simple_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
-                ?ERROR_UNREGISTERED_PROVIDER;
+                ?ERROR_UNREGISTERED_ONEPROVIDER;
             {error, _} = Error ->
                 Error;
             {ok, #document{value = #provider_auth{provider_id = Id}}} ->
@@ -159,7 +159,7 @@ get_identity_token() ->
 -spec get_root_token_file_path() -> string().
 get_root_token_file_path() ->
     {ok, ProviderRootMacaroonFile} = application:get_env(?APP_NAME,
-        root_macaroon_path),
+        root_token_path),
     filename:absname(ProviderRootMacaroonFile).
 
 
@@ -235,12 +235,14 @@ get_record_struct(3) ->
 upgrade_record(1, ProviderAuth) ->
     % Versions 1 and 2 are the same, but upgrade is triggered to force overwrite
     % of the root token file, which has changed.
-    {ProviderId, RootToken, _, _} = ProviderAuth,
+    {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
     write_to_file(ProviderId, RootToken),
     {2, ProviderAuth};
 upgrade_record(2, ProviderAuth) ->
     % rename the occurrences of macaroon -> token
-    {ProviderId, RootToken, _, _} = ProviderAuth,
+    {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
+    % file format is also changed to use 'token' rather than 'macaroon'
+    write_to_file(ProviderId, RootToken),
     {3, #provider_auth{provider_id = ProviderId, root_token = RootToken}}.
 
 
@@ -257,13 +259,14 @@ upgrade_record(2, ProviderAuth) ->
 -spec write_to_file(od_provider:id(), tokens:serialized()) -> ok.
 write_to_file(ProviderId, RootToken) ->
     ProviderRootTokenFile = get_root_token_file_path(),
-    Map = #{provider_id => ProviderId, root_macaroon => RootToken},
-    Formatted = io_lib:fwrite("~s~n~p.", [?FILE_COMMENT, Map]),
+    Map = #{<<"_comment">> => ?FILE_COMMENT,
+        <<"provider_id">> => ProviderId, <<"root_token">> => RootToken},
+    Formatted = json_utils:encode(Map, [pretty]),
 
     {ok, Nodes} = node_manager:get_cluster_nodes(),
     {Results, BadNodes} = rpc:multicall(Nodes, file, write_file,
         [ProviderRootTokenFile, Formatted]),
-    case lists:filter(fun(ok) -> false; (Error) -> Error end, Results ++ BadNodes) of
+    case lists:filter(fun(Result) -> Result /= ok end, Results ++ BadNodes) of
         [] -> ok;
         Errors ->
             ?alert("Errors when writing provider root token to file: ~p", [Errors]),
@@ -275,7 +278,7 @@ write_to_file(ProviderId, RootToken) ->
 get_token(Type) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
-            ?ERROR_UNREGISTERED_PROVIDER;
+            ?ERROR_UNREGISTERED_ONEPROVIDER;
         {error, _} = Error ->
             Error;
         {ok, #document{value = ProviderAuth}} ->

@@ -93,7 +93,8 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -record(state, {
     socket :: ssl:sslsocket(),
@@ -449,16 +450,16 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
     try connection_utils:process_protocol_upgrade_request(Req) of
         ok ->
             Headers = cowboy_req:response_headers(#{
-                <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
+                ?HDR_CONNECTION => <<"Upgrade">>,
+                ?HDR_UPGRADE => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             #{pid := Pid, streamid := StreamID} = Req,
             Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, HandlerOpts}},
             {ok, Req, Env};
         {error, upgrade_required} ->
             NewReq = cowboy_req:reply(?HTTP_426_UPGRADE_REQUIRED, #{
-                <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
+                ?HDR_CONNECTION => <<"Upgrade">>,
+                ?HDR_UPGRADE => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->

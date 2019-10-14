@@ -6,18 +6,24 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model implements functions handling gs rpc for files.
+%%% This module handles gs rpc concerning file entities.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_rpc).
+-module(file_gs_rpc).
 -author("Bartosz Walkowicz").
 
 -include("op_logic.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([handle/3]).
+-export([
+    ls/2,
+    move/2, copy/2,
+
+    register_file_upload/2, deregister_file_upload/2,
+    get_file_download_url/2
+]).
 
 
 %%%===================================================================
@@ -25,46 +31,6 @@
 %%%===================================================================
 
 
--spec handle(aai:auth(), gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-handle(Auth, RpcFun, Data) ->
-    try
-        handle_internal(Auth, RpcFun, Data)
-    catch
-        throw:Error = {error, _} ->
-            Error;
-        Type:Reason ->
-            ?error_stacktrace("Unexpected error while processing gs file rpc "
-                              "request - ~p:~p", [Type, Reason]),
-            ?ERROR_INTERNAL_SERVER_ERROR
-    end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec handle_internal(aai:auth(), gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-handle_internal(Auth, <<"getDirChildren">>, Data) ->
-    ls(Auth, Data);
-handle_internal(Auth, <<"initializeFileUpload">>, Data) ->
-    register_file_upload(Auth, Data);
-handle_internal(Auth, <<"finalizeFileUpload">>, Data) ->
-    deregister_file_upload(Auth, Data);
-handle_internal(Auth, <<"getFileDownloadUrl">>, Data) ->
-    get_file_download_url(Auth, Data);
-handle_internal(Auth, <<"moveFile">>, Data) ->
-    move(Auth, Data);
-handle_internal(Auth, <<"copyFile">>, Data) ->
-    copy(Auth, Data);
-handle_internal(_, _, _) ->
-    ?ERROR_RPC_UNDEFINED.
-
-
-%% @private
 -spec ls(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
 ls(?USER(_UserId, SessionId) = Auth, Data) ->
     SanitizedData = op_sanitizer:sanitize_data(Data, #{
@@ -110,62 +76,6 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
     end.
 
 
-%% @private
--spec register_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-register_file_upload(?USER(UserId, SessionId), Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-
-    case lfm:stat(SessionId, {guid, FileGuid}) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
-            ok = file_upload_manager:register_upload(UserId, FileGuid),
-            {ok, #{}};
-        {ok, _} ->
-            ?ERROR_BAD_DATA(<<"guid">>);
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
-
-
-%% @private
--spec deregister_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-deregister_file_upload(?USER(UserId), Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    file_upload_manager:deregister_upload(UserId, FileGuid),
-    {ok, #{}}.
-
-
-%% @private
--spec get_file_download_url(aai:auth(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    assert_space_membership_and_local_support(Auth, FileGuid),
-
-    case page_file_download:get_file_download_url(SessId, FileGuid) of
-        {ok, URL} ->
-            {ok, #{<<"fileUrl">> => URL}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?debug("Cannot resolve file download url for file ~p - ~p", [
-                FileGuid, Errno
-            ]),
-            ?ERROR_POSIX(Errno)
-    end.
-
-
-%% @private
 -spec move(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
 move(?USER(_UserId, SessionId) = Auth, Data) ->
     SanitizedData = op_sanitizer:sanitize_data(Data, #{
@@ -195,7 +105,6 @@ move(?USER(_UserId, SessionId) = Auth, Data) ->
     end.
 
 
-%% @private
 -spec copy(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
 copy(?USER(_UserId, SessionId) = Auth, Data) ->
     SanitizedData = op_sanitizer:sanitize_data(Data, #{
@@ -223,6 +132,63 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
+
+
+-spec register_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
+    gs_protocol:rpc_result().
+register_file_upload(?USER(UserId, SessionId), Data) ->
+    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+        required => #{<<"guid">> => {binary, non_empty}}
+    }),
+    FileGuid = maps:get(<<"guid">>, SanitizedData),
+
+    case lfm:stat(SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
+            ok = file_upload_manager:register_upload(UserId, FileGuid),
+            {ok, #{}};
+        {ok, _} ->
+            ?ERROR_BAD_DATA(<<"guid">>);
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end.
+
+
+-spec deregister_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
+    gs_protocol:rpc_result().
+deregister_file_upload(?USER(UserId), Data) ->
+    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+        required => #{<<"guid">> => {binary, non_empty}}
+    }),
+    FileGuid = maps:get(<<"guid">>, SanitizedData),
+    file_upload_manager:deregister_upload(UserId, FileGuid),
+    {ok, #{}}.
+
+
+-spec get_file_download_url(aai:auth(), gs_protocol:rpc_args()) ->
+    gs_protocol:rpc_result().
+get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
+    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+        required => #{<<"guid">> => {binary, non_empty}}
+    }),
+    FileGuid = maps:get(<<"guid">>, SanitizedData),
+    assert_space_membership_and_local_support(Auth, FileGuid),
+
+    case page_file_download:get_file_download_url(SessId, FileGuid) of
+        {ok, URL} ->
+            {ok, #{<<"fileUrl">> => URL}};
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN;
+        {error, Errno} ->
+            ?debug("Cannot resolve file download url for file ~p - ~p", [
+                FileGuid, Errno
+            ]),
+            ?ERROR_POSIX(Errno)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 %% @private

@@ -19,7 +19,7 @@
 -include("op_logic.hrl").
 -include("global_definitions.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
 -export([gather_configuration/0]).
@@ -103,6 +103,7 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
+operation_supported(get, instance, protected) -> true;
 operation_supported(get, configuration, private) -> true;
 operation_supported(get, test_image, private) -> true;
 
@@ -115,6 +116,8 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
@@ -128,6 +131,17 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
     {ok, op_logic:versioned_entity()} | op_logic:error().
+fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri = #gri{
+    id = ProviderId,
+    aspect = instance,
+    scope = protected
+}}) ->
+    case provider_logic:get_protected_data(SessionId, ProviderId, AuthHint) of
+        {ok, #document{value = Provider}} ->
+            {ok, {Provider, 1}};
+        {error, _} = Error ->
+            Error
+    end;
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
@@ -148,6 +162,9 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+    % authorization was checked by oz in `fetch_entity`
+    true;
 authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     true;
 authorize(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
@@ -160,6 +177,9 @@ authorize(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+    % validation was checked by oz in `fetch_entity`
+    ok;
 validate(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     ok;
 validate(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
@@ -182,6 +202,8 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+get(#op_req{gri = #gri{aspect = instance, scope = protected}}, Provider) ->
+    {ok, Provider};
 get(#op_req{gri = #gri{aspect = configuration}}, _) ->
     {ok, gather_configuration()};
 get(#op_req{gri = #gri{aspect = test_image}}, _) ->

@@ -38,7 +38,7 @@
     list_children/2, list_children/3, list_children/4,
     list_children/5, list_children/6
 ]).
--export([get_active_perms_type/1, update_perms/4]).
+-export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -117,16 +117,26 @@ save(Doc, GeneratedKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new #file_meta and links it as a new child of given as first argument
-%% existing #file_meta.
+%% @equiv create(Parent, FileDoc, all)
 %% @end
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc()) ->
     {ok, uuid()} | {error, term()}.
+create(Parent, FileDoc) ->
+    create(Parent, FileDoc, all).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #file_meta and links it as a new child of given as first argument
+%% existing #file_meta.
+%% @end
+%%--------------------------------------------------------------------
+-spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
+    {ok, uuid()} | {error, term()}.
 create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
     name = FileName,
     is_scope = IsScope
-}}) ->
+}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
@@ -150,53 +160,50 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 
         LocalTreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => ParentDoc#document.scope},
-
-        FileExists = case datastore_model:get_links(Ctx, ParentUuid, all, FileName) of
-            {ok, Links} ->
-                lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
-                    Deleted = case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
-                        {ok, #document{deleted = true}} ->
-                            true;
-                        {ok, #document{value = #file_meta{deleted = true}}} ->
-                            true;
-                        _ ->
-                            false
-                    end,
-                    case {Deleted, TreeId} of
-                        {true, LocalTreeId} ->
-                            datastore_model:delete_links(
-                                Ctx, ParentUuid,
-                                LocalTreeId, FileName
-                            ),
-                            false;
-                        _ ->
-                            not Deleted
-                    end
-                end, Links);
-            {error, not_found} ->
-                false;
-            {error, _} = Err ->
-                Err
-        end,
-
-        case FileExists of
-            false ->
-                Link = {FileName, FileUuid},
-                case datastore_model:add_links(Ctx, ParentUuid, LocalTreeId, Link) of
-                    {ok, #link{}} ->
-                        case file_meta:save(FileDoc3) of
-                            {ok, FileUuid} -> {ok, FileUuid};
-                            Error -> Error
-                        end;
-                    {error, already_exists} ->
-                        create({uuid, ParentUuid}, FileDoc);
-                    {error, Reason} ->
-                        {error, Reason}
+        Link = {FileName, FileUuid},
+        case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
+            {ok, #link{}} ->
+                case file_meta:save(FileDoc3) of
+                    {ok, FileUuid} -> {ok, FileUuid};
+                    Error -> Error
                 end;
-            true ->
-                {error, already_exists};
-            Error ->
-                Error
+            {error, already_exists} = Eexists ->
+                case datastore_model:get_links(Ctx, ParentUuid, CheckTrees, FileName) of
+                    {ok, Links} ->
+                        FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
+                            Deleted = case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
+                                {ok, #document{deleted = true}} ->
+                                    true;
+                                {ok, #document{value = #file_meta{deleted = true}}} ->
+                                    true;
+                                _ ->
+                                    false
+                            end,
+                            case {Deleted, TreeId} of
+                                {true, LocalTreeId} ->
+                                    datastore_model:delete_links(
+                                        Ctx, ParentUuid,
+                                        LocalTreeId, FileName
+                                    ),
+                                    false;
+                                _ ->
+                                    not Deleted
+                            end
+                        end, Links),
+
+                        case FileExists of
+                            false ->
+                                create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
+                            _ ->
+                                Eexists
+                        end;
+                    {error, not_found} ->
+                        create({uuid, ParentUuid}, FileDoc, CheckTrees);
+                    _ ->
+                        Eexists
+                end;
+            {error, Reason} ->
+                {error, Reason}
         end
     end).
 
@@ -236,7 +243,6 @@ get_including_deleted(?ROOT_DIR_UUID) ->
             name = ?ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
-            active_permissions_type = posix,
             owner = ?ROOT_USER_ID,
             parent_uuid = ?ROOT_DIR_UUID
         }
@@ -659,7 +665,6 @@ setup_onedata_user(UserId, EffSpaces) ->
                     value = #file_meta{
                         name = UserId, type = ?DIRECTORY_TYPE,
                         mode = 8#1755,
-                        active_permissions_type = posix,
                         owner = ?ROOT_USER_ID, is_scope = true,
                         parent_uuid = ?ROOT_DIR_UUID
                     }
@@ -723,7 +728,6 @@ make_space_exist(SpaceId) ->
         value = #file_meta{
             name = SpaceId, type = ?DIRECTORY_TYPE,
             mode = ?DEFAULT_SPACE_DIR_MODE,
-            active_permissions_type = posix,
             owner = ?ROOT_USER_ID, is_scope = true,
             parent_uuid = ?ROOT_DIR_UUID
         }
@@ -760,7 +764,6 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
             name = FileName,
             type = FileType,
             mode = Mode,
-            active_permissions_type = posix,
             owner = Owner,
             group_owner = GroupOwner,
             parent_uuid = ParentUuid,
@@ -827,39 +830,35 @@ is_child_of_hidden_dir(Path) ->
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
+%% @end
+%%--------------------------------------------------------------------
 -spec get_active_perms_type(file_meta:uuid()) ->
     {ok, file_meta:permissions_type()} | {error, term()}.
 get_active_perms_type(FileUuid) ->
     case file_meta:get({uuid, FileUuid}) of
-        {ok, #document{value = #file_meta{active_permissions_type = PermsType}}} ->
-            {ok, PermsType};
+        {ok, #document{value = #file_meta{acl = []}}} ->
+            {ok, posix};
+        {ok, _} ->
+            {ok, acl};
         {error, _} = Error ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates posix/acl permissions and active permissions type. To keep old
-%% value of any of the mentioned fields undefined should be given as
-%% new value for it.
-%% @end
-%%--------------------------------------------------------------------
--spec update_perms(uuid(), undefined | posix_permissions(),
-    undefined | acl:acl(), undefined | permissions_type()) ->
-    ok | {error, term()}.
-update_perms(FileUuid, PosixMode, Acl, ActivePermsType) ->
-    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{
-        mode = OldMode,
-        acl = OldAcl,
-        active_permissions_type = OldActivePermsType
-    } = FileMeta) ->
-        {ok, FileMeta#file_meta{
-            mode = utils:ensure_defined(PosixMode, undefined, OldMode),
-            acl = utils:ensure_defined(Acl, undefined, OldAcl),
-            active_permissions_type = utils:ensure_defined(
-                ActivePermsType, undefined, OldActivePermsType
-            )
-        }}
+-spec update_mode(uuid(), posix_permissions()) -> ok | {error, term()}.
+update_mode(FileUuid, NewMode) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{mode = NewMode}}
+    end)).
+
+-spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
+update_acl(FileUuid, NewAcl) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{acl = NewAcl}}
     end)).
 
 %%%===================================================================
@@ -1188,7 +1187,7 @@ get_record_struct(8) ->
         {name, string},
         {type, atom},
         {mode, integer},
-        % acl and active_permissions_type has been added in this version
+        % acl has been added in this version
         {acl, [{record, [
             {acetype, integer},
             {aceflags, integer},
@@ -1196,7 +1195,6 @@ get_record_struct(8) ->
             {name, string},
             {acemask, integer}
         ]}]},
-        {active_permissions_type, atom},
         {owner, string},
         {group_owner, string},
         {is_scope, boolean},
@@ -1252,7 +1250,7 @@ upgrade_record(7, {
     ?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
     Scope, ProviderId, Shares, Deleted, ParentUuid
 }) ->
-    {8, {?MODULE, Name, Type, Mode, [], posix,
+    {8, {?MODULE, Name, Type, Mode, [],
         Owner, GroupOwner, IsScope, Scope,
         ProviderId, Shares, Deleted, ParentUuid
     }}.

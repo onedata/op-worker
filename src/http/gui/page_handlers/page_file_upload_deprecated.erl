@@ -18,8 +18,9 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 % Key of in-memory mapping of uploads kept in session.
 -define(UPLOAD_MAP, upload_map).
@@ -33,7 +34,7 @@
 % Interval between retries to resolve file handle.
 -define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).
 
--define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
+-define(CONN_CLOSE_HEADERS, #{?HDR_CONNECTION => <<"close">>}).
 
 %% Cowboy API
 -export([handle/2]).
@@ -59,7 +60,7 @@ handle(<<"OPTIONS">>, Req) ->
     gui_cors:options_response(
         oneprovider:get_oz_url(),
         [<<"POST">>],
-        [<<"x-auth-token">>, <<"content-type">>],
+        [?HDR_X_AUTH_TOKEN, ?HDR_CONTENT_TYPE],
         Req
     );
 handle(<<"POST">>, InitialReq) ->

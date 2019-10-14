@@ -133,7 +133,7 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
 %% @equiv chmod_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(user_ctx:ctx(), file_ctx:ctx(), undefined | fslogic_worker:posix_permissions()) ->
+-spec chmod(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod(UserCtx, FileCtx, Mode) ->
     check_permissions:execute(
@@ -189,18 +189,13 @@ ensure_proper_file_name(FuseResponse, _Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets active permissions type to posix and changes file mode. If given
-%% mode is `undefined` then previous mode (stored in file_meta) is left
-%% intact.
+%% Changes file posix mode.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), undefined | fslogic_worker:posix_permissions()) ->
+-spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
-    ok = case Mode of
-        undefined -> ok;
-        _ -> sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode)
-    end,
+    sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
     chmod_attrs_only_insecure(FileCtx, Mode),
     fslogic_times:update_ctime(FileCtx),
 
@@ -215,7 +210,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_meta:update_perms(FileUuid, Mode, undefined, posix),
+    ok = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 

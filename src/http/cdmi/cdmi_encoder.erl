@@ -12,7 +12,7 @@
 -module(cdmi_encoder).
 -author("Tomasz Lichon").
 
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([encode/2, decode/2, decode/3]).

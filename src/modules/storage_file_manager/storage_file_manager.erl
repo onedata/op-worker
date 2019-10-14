@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").

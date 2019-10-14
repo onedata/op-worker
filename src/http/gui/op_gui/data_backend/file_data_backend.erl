@@ -24,7 +24,7 @@
 -include("http/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).

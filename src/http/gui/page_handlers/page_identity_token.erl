@@ -19,6 +19,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([handle/2]).
 
@@ -36,7 +37,7 @@ handle(<<"GET">>, Req) ->
     {ok, IdentityToken} = provider_auth:get_identity_token(),
     cowboy_req:reply(
         ?HTTP_200_OK,
-        #{<<"content-type">> => <<"text/plain">>},
+        #{?HDR_CONTENT_TYPE => <<"text/plain">>},
         IdentityToken,
         Req
     ).

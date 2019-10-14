@@ -131,7 +131,7 @@ get(TargetProvider, SpaceId, TransferType, StatsType) ->
 -spec get_active_links(SpaceId :: od_space:id()) ->
     {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
 get_active_links(SpaceId) ->
-    case get(undefined, SpaceId, ?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE) of
+    case get(undefined, SpaceId, ?JOB_TRANSFERS_TYPE, ?MINUTE_PERIOD) of
         #space_transfer_stats_cache{active_links = ActiveLinks} ->
             {ok, ActiveLinks};
         Error ->
@@ -268,11 +268,11 @@ prepare_aggregated_stats(TargetProvider, SpaceId, ?ALL_TRANSFERS_TYPE,
     AllStats;
 
 prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
-    ?MINUTE_STAT_TYPE, TransferStatsPerType, CurrentTime
+    ?MINUTE_PERIOD, TransferStatsPerType, CurrentTime
 ) ->
     TransferStats = maps:get(TransferType, TransferStatsPerType),
     [MinStats] = aggregate_stats(
-        TargetProvider, TransferStats, [?MINUTE_STAT_TYPE], CurrentTime
+        TargetProvider, TransferStats, [?MINUTE_PERIOD], CurrentTime
     ),
 
     #space_transfer_stats_cache{
@@ -293,7 +293,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
         stats_out = maps:filter(Pred, TrimmedStatsOut)
     },
 
-    update(TargetProvider, SpaceId, TransferType, ?MINUTE_STAT_TYPE, NewMinStats),
+    update(TargetProvider, SpaceId, TransferType, ?MINUTE_PERIOD, NewMinStats),
     NewMinStats;
 
 prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
@@ -301,7 +301,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
 ) ->
     TransferStats = maps:get(TransferType, TransferStatsMap),
     [MinStats, RequestedStats] = aggregate_stats(TargetProvider,
-        TransferStats, [?MINUTE_STAT_TYPE, RequestedStatsType], CurrentTime
+        TransferStats, [?MINUTE_PERIOD, RequestedStatsType], CurrentTime
     ),
 
     #space_transfer_stats_cache{
@@ -315,7 +315,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
         stats_out = StatsOut
     } = RequestedStats,
 
-    TimeWindow = transfer_histograms:type_to_time_window(RequestedStatsType),
+    TimeWindow = transfer_histograms:period_to_time_window(RequestedStatsType),
     {NewMinStatsIn, NewStatsIn, NewTimestamp} =
         transfer_histograms:trim_histograms(
             MinStatsIn, StatsIn, TimeWindow, Timestamp),
@@ -336,7 +336,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
         active_links = undefined
     },
 
-    update(TargetProvider, SpaceId, TransferType, ?MINUTE_STAT_TYPE, NewMinStats),
+    update(TargetProvider, SpaceId, TransferType, ?MINUTE_PERIOD, NewMinStats),
     update(TargetProvider, SpaceId, TransferType, RequestedStatsType, NewRequestedStats),
     NewRequestedStats.
 
@@ -396,8 +396,8 @@ update_stats(undefined, OldStats, StatsType,
 
     Histograms = get_histograms(StatsType, TransferStats),
     LastUpdates = TransferStats#space_transfer_stats.last_update,
-    TimeWindow = transfer_histograms:type_to_time_window(StatsType),
-    ZeroedHist = histogram:new(transfer_histograms:type_to_hist_length(StatsType)),
+    TimeWindow = transfer_histograms:period_to_time_window(StatsType),
+    ZeroedHist = histogram:new(transfer_histograms:period_to_hist_length(StatsType)),
 
     {HistIn, NewStatsOut, NewActiveLinks} = maps:fold(fun(SrcProvider, Hist, Acc) ->
         {OldHistIn, OldStatsOut, OldActiveLinks} = Acc,
@@ -432,7 +432,7 @@ update_stats(TargetProvider, OldStats, StatsType,
 ) ->
     Histograms = get_histograms(StatsType, TransferStats),
     LastUpdates = TransferStats#space_transfer_stats.last_update,
-    Window = transfer_histograms:type_to_time_window(StatsType),
+    Window = transfer_histograms:period_to_time_window(StatsType),
     OldStats#space_transfer_stats_cache{
         stats_in = transfer_histograms:pad_with_zeroes(
             Histograms, Window, LastUpdates, CurrentTime)
@@ -446,7 +446,7 @@ update_stats(TargetProvider, OldStats, StatsType,
         {ok, Histogram} ->
             LastUpdate = maps:get(TargetProvider,
                 TransferStats#space_transfer_stats.last_update),
-            Window = transfer_histograms:type_to_time_window(StatsType),
+            Window = transfer_histograms:period_to_time_window(StatsType),
             ShiftSize = max(0, (CurrentTime div Window) - (LastUpdate div Window)),
             PaddedHistogram = histogram:shift(Histogram, ShiftSize),
 
@@ -491,21 +491,21 @@ merge_stats(Stats1, Stats2) ->
 
 
 -spec stats_type_to_expiration_timeout(binary()) -> non_neg_integer().
-stats_type_to_expiration_timeout(?MINUTE_STAT_TYPE) -> ?MINUTE_STAT_EXPIRATION;
-stats_type_to_expiration_timeout(?HOUR_STAT_TYPE) -> ?HOUR_STAT_EXPIRATION;
-stats_type_to_expiration_timeout(?DAY_STAT_TYPE) -> ?DAY_STAT_EXPIRATION;
-stats_type_to_expiration_timeout(?MONTH_STAT_TYPE) -> ?MONTH_STAT_EXPIRATION.
+stats_type_to_expiration_timeout(?MINUTE_PERIOD) -> ?MINUTE_STAT_EXPIRATION;
+stats_type_to_expiration_timeout(?HOUR_PERIOD)   -> ?HOUR_STAT_EXPIRATION;
+stats_type_to_expiration_timeout(?DAY_PERIOD)    -> ?DAY_STAT_EXPIRATION;
+stats_type_to_expiration_timeout(?MONTH_PERIOD)  -> ?MONTH_STAT_EXPIRATION.
 
 
--spec get_histograms(HistogramsType :: binary(), #space_transfer_stats{}) ->
+-spec get_histograms(Period :: binary(), #space_transfer_stats{}) ->
     transfer_histograms:histograms().
-get_histograms(?MINUTE_STAT_TYPE, #space_transfer_stats{min_hist = Histograms}) ->
+get_histograms(?MINUTE_PERIOD, #space_transfer_stats{min_hist = Histograms}) ->
     Histograms;
-get_histograms(?HOUR_STAT_TYPE, #space_transfer_stats{hr_hist = Histograms}) ->
+get_histograms(?HOUR_PERIOD, #space_transfer_stats{hr_hist = Histograms}) ->
     Histograms;
-get_histograms(?DAY_STAT_TYPE, #space_transfer_stats{dy_hist = Histograms}) ->
+get_histograms(?DAY_PERIOD, #space_transfer_stats{dy_hist = Histograms}) ->
     Histograms;
-get_histograms(?MONTH_STAT_TYPE, #space_transfer_stats{mth_hist = Histograms}) ->
+get_histograms(?MONTH_PERIOD, #space_transfer_stats{mth_hist = Histograms}) ->
     Histograms.
 
 

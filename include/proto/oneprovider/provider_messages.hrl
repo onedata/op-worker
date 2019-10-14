@@ -28,7 +28,7 @@
 }).
 
 -record(set_acl, {
-    acl :: undefined | #acl{}
+    acl :: #acl{}
 }).
 
 -record(remove_acl, {

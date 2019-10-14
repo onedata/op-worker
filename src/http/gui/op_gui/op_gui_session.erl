@@ -16,7 +16,8 @@
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("gui/include/gui_session.hrl").
 
 -export([
@@ -241,7 +242,7 @@ update_session(SessionId, MemoryUpdateFun) ->
 %%--------------------------------------------------------------------
 -spec resolve_auth(cowboy_req:req()) -> undefined | binary().
 resolve_auth(Req) ->
-    case cowboy_req:header(<<"x-auth-token">>, Req, undefined) of
+    case cowboy_req:header(?HDR_X_AUTH_TOKEN, Req, undefined) of
         undefined ->
             QueryParams = cowboy_req:parse_qs(Req),
             proplists:get_value(<<"token">>, QueryParams, undefined);

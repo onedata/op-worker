@@ -12,9 +12,11 @@
 -module(rest_test_utils).
 -author("Jakub Kudzia").
 
+-include("op_logic.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
@@ -49,10 +51,10 @@ request(Node, URL, Method, Headers, Body, Opts) ->
 user_token_header(Config, User) ->
     #token_auth{token = Token} = ?config({auth, User}, Config),
     case rand:uniform(3) of
-        1 -> {<<"X-Auth-Token">>, Token};
-        2 -> {<<"Authorization">>, <<"Bearer ", Token/binary>>};
+        1 -> {?HDR_X_AUTH_TOKEN, Token};
+        2 -> {?HDR_AUTHORIZATION, <<"Bearer ", Token/binary>>};
         %% @todo VFS-5554 Deprecated, included for backward compatibility
-        3 -> {<<"Macaroon">>, Token}
+        3 -> {?HDR_MACAROON, Token}
     end.
 
 assert_request_error(ExpectedError = {error, _}, RequestParams) ->

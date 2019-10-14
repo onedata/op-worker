@@ -18,7 +18,7 @@
 -include("op_logic.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 %% API
@@ -42,7 +42,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
-    {ok, aai:auth()} | gs_protocol:error().
+    {ok, aai:auth()} | errors:error().
 verify_handshake_auth(undefined, _) ->
     {ok, ?NOBODY};
 verify_handshake_auth(nobody, _) ->
@@ -89,7 +89,7 @@ client_disconnected(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_auth_override(aai:auth(), gs_protocol:auth_override()) ->
-    {ok, aai:auth()} | gs_protocol:error().
+    {ok, aai:auth()} | errors:error().
 verify_auth_override(_, _) ->
     ?ERROR_UNAUTHORIZED.
 
@@ -121,7 +121,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
     gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 handle_rpc(_, Auth, RpcFun, Data) ->
-    file_rpc:handle(Auth, RpcFun, Data).
+    gs_rpc:handle(Auth, RpcFun, Data).
 
 
 %%--------------------------------------------------------------------
@@ -161,7 +161,11 @@ is_subscribable(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_type_supported(gri:gri()) -> boolean().
-is_type_supported(#gri{type = op_file}) -> true;
+is_type_supported(#gri{type = op_provider}) -> true;
 is_type_supported(#gri{type = op_space}) -> true;
 is_type_supported(#gri{type = op_user}) -> true;
+is_type_supported(#gri{type = op_group}) -> true;
+is_type_supported(#gri{type = op_file}) -> true;
+is_type_supported(#gri{type = op_replica}) -> true;
+is_type_supported(#gri{type = op_transfer}) -> true;
 is_type_supported(#gri{type = _}) -> false.

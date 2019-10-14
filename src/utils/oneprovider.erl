@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% Id of this provider (assigned by Onezone)
 -type id() :: binary().
@@ -91,7 +91,7 @@ get_rest_endpoint(Path) ->
 -spec get_id() -> od_provider:id() | no_return().
 get_id() ->
     case provider_auth:get_provider_id() of
-        {error, _} -> throw(?ERROR_UNREGISTERED_PROVIDER);
+        {error, _} -> throw(?ERROR_UNREGISTERED_ONEPROVIDER);
         {ok, ProviderId} -> ProviderId
     end.
 
