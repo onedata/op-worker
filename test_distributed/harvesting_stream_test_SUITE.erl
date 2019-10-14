@@ -124,10 +124,10 @@ all() -> ?ALL([
                 ?HARVEST_METADATA_CALLED(
                     __SpaceId,
                     __Destination,
-                    __ReceivedChanges,
+                    __ReceivedBatch,
                     __HarvestingStreamPid
                 ) ->
-                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                     AssertFun(__SpaceId, __Destination, sequential_subtract(__Seqs, __ReceivedSeqs),
                         __HarvestingStreamPid, __Timeout)
             after
@@ -153,10 +153,10 @@ all() -> ?ALL([
             ?HARVEST_METADATA_CALLED(
                 __SpaceId,
                 __Destination,
-                __ReceivedChanges,
+                __ReceivedBatch,
                 __HarvestingStreamPid
             ) ->
-                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                 case sequential_subtract(__Seqs, __ReceivedSeqs) of
                     __Seqs -> ok;
                     _ ->
