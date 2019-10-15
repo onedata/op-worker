@@ -795,7 +795,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     end, lists:seq(1, DirsNumber)),
     SyncedStorage = get_synced_storage(Config, W1),
     enable_import(Config, ?SPACE_ID, SyncedStorage),
-    assertImportTimes(W1, ?SPACE_ID),
+    assertImportTimes(W1, ?SPACE_ID, 60),
 
     parallel_assert(?MODULE, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
 
@@ -871,7 +871,6 @@ cancel_scan(Config, MountSpaceInRoot) ->
     SyncedStorage = get_synced_storage(Config, W1),
     Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
 
-    enable_import(Config, ?SPACE_ID, SyncedStorage),
     TestProc = self(),
     test_utils:mock_new(W1, storage_sync_engine, [passthrough]),
     test_utils:mock_expect(W1, storage_sync_engine, import_file_unsafe,
@@ -880,7 +879,9 @@ cancel_scan(Config, MountSpaceInRoot) ->
             meck:passthrough([StorageFileCtx, FileUuid, Info])
         end),
 
+    enable_import(Config, ?SPACE_ID, SyncedStorage),
     receive start -> ok end,
+
     cancel(W1, ?SPACE_ID, SyncedStorage),
     assertImportTimes(W1, ?SPACE_ID),
 
@@ -2040,7 +2041,7 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
 
     ok = sfm_test_utils:recursive_rm(W1, SFMHandle),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    assertUpdateTimes(W1, ?SPACE_ID),
+    assertUpdateTimes(W1, ?SPACE_ID, Timeout),
     parallel_assert(?MODULE, verify_file_deleted, [W1, SessId, Timeout], [?SPACE_TEST_DIR_PATH | Files], Timeout),
 
     ?assertMonitoring(W1, #{

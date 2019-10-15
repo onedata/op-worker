@@ -265,7 +265,6 @@ cancel_scan(Config, MountSpaceInRoot) ->
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
     Files = storage_sync_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
 
-    storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
     TestProc = self(),
     test_utils:mock_new(W1, storage_sync_engine, [passthrough]),
     test_utils:mock_expect(W1, storage_sync_engine, import_file_unsafe,
@@ -274,6 +273,7 @@ cancel_scan(Config, MountSpaceInRoot) ->
             meck:passthrough([StorageFileCtx, FileUuid, Info])
         end),
 
+    storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
     receive start -> ok end,
     storage_sync_test_base:cancel(W1, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
