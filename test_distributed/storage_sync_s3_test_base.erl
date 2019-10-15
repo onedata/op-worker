@@ -843,8 +843,8 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
 
     ok = sfm_test_utils:recursive_rm(W1, SFMHandle),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file_deleted, [W1, SessId, Timeout], [?SPACE_TEST_DIR_PATH | Files], Timeout),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    ?assertEqual({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,

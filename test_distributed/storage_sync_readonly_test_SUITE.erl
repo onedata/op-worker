@@ -660,7 +660,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
     storage_sync_test_base:assert_num_results(History, ?assertHashChangedFun(
         StorageTestDirPath, ?SPACE_ID, true), 1),
     storage_sync_test_base:assert_num_results(History2, ?assertMtimeChangedFun(
-        StorageTestDirPath2, ?SPACE_ID, {false, _}), 1),
+        StorageTestDirPath2, ?SPACE_ID, false), 1),
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
@@ -1275,6 +1275,8 @@ chmod_file_update2_test(Config) ->
     end, [?SPACE_TEST_FILE_IN_DIR_PATH, ?SPACE_TEST_FILE_IN_DIR_PATH2, ?SPACE_TEST_FILE_IN_DIR_PATH3]),
 
     test_utils:mock_new(W1, storage_sync_hash, [passthrough]),
+    test_utils:mock_new(W1, storage_sync_traverse, [passthrough]),
+
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
         <<"toProcess">> => 8,
@@ -1310,6 +1312,7 @@ chmod_file_update2_test(Config) ->
     History2 = rpc:call(W1, meck, history, [storage_sync_traverse]),
 
     test_utils:mock_unload(W1, storage_sync_hash),
+    test_utils:mock_unload(W1, storage_sync_traverse),
 
     storage_sync_test_base:assert_num_results_gte(History, ?assertHashChangedFun(
         StorageTestDirPath, ?SPACE_ID, true), 1),

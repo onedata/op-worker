@@ -486,24 +486,28 @@ generate_posix_identifier(Id, {Low, High}) ->
 -spec select_posix_compatible_storage(od_space:id()) ->
     {ok, storage:doc(), helper:name()} | {error, Reason :: term()}.
 select_posix_compatible_storage(SpaceId) ->
-    {ok, StorageIds} = space_storage:get_storage_ids(SpaceId),
-    StorageDoc = lists:foldl(fun
-        (StorageId, undefined) ->
-            case storage:get(StorageId) of
-                {ok, StorageDoc} ->
-                    Helper = storage:get_helper(StorageDoc),
-                    HelperName = helper:get_name(Helper),
-                    case lists:member(HelperName, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]) of
-                        true ->
-                            StorageDoc;
-                        false ->
-                            undefined
-                    end
+    case space_storage:get_storage_ids(SpaceId) of
+        {ok, StorageIds} ->
+            StorageDoc = lists:foldl(fun
+                (StorageId, undefined) ->
+                    case storage:get(StorageId) of
+                        {ok, StorageDoc} ->
+                            Helper = storage:get_helper(StorageDoc),
+                            HelperName = helper:get_name(Helper),
+                            case lists:member(HelperName, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]) of
+                                true ->
+                                    StorageDoc;
+                                false ->
+                                    undefined
+                            end
+                    end;
+                (_, PosixCompatibleStorageDoc) ->
+                    PosixCompatibleStorageDoc
+            end, undefined, StorageIds),
+            case StorageDoc =:= undefined of
+                true -> {error, not_found};
+                false -> {ok, StorageDoc}
             end;
-        (_, PosixCompatibleStorageDoc) ->
-            PosixCompatibleStorageDoc
-    end, undefined, StorageIds),
-    case StorageDoc =:= undefined of
-        true -> {error, not_found};
-        false -> {ok, StorageDoc}
+        Error = {error, _} ->
+            Error
     end.
