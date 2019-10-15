@@ -351,8 +351,10 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
             State2 = State1#state{status = ready},
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
-        {error, Reason} ->
-            {stop, Reason, State}
+        {error, _Reason} ->
+            % Silence handshake errors since they are caught and logged
+            % in `handle_handshake`
+            {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
