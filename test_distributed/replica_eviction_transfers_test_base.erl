@@ -746,7 +746,7 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [
@@ -791,7 +791,7 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [

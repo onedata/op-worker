@@ -1002,7 +1002,7 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
@@ -1047,7 +1047,7 @@ cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
