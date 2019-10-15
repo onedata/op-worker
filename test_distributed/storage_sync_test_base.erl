@@ -1509,8 +1509,10 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle3, 0, ?TEST_DATA),
     {ok, _} = sfm_test_utils:write_file(W1, FileSFMHandle4, 0, ?TEST_DATA),
     SyncedStorage = get_synced_storage(Config, W1),
-    enable_import(Config, ?SPACE_ID, SyncedStorage),
 
+    timer:sleep(timer:seconds(1)),
+
+    enable_import(Config, ?SPACE_ID, SyncedStorage),
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if files were imported on W1
