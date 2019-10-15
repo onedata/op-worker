@@ -986,7 +986,7 @@ submit_entry_failure(Config) ->
         <<"payload">> => #{
             <<"json">> => EncodedJSON3
         }
-    }], ProviderId),
+    }], ProviderId, 60),
 
     % previously sent change should not be submitted
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
@@ -1041,7 +1041,7 @@ delete_entry_failure(Config) ->
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"operation">> => <<"delete">>
-    }], ProviderId),
+    }], ProviderId, 60),
 
     % previously sent change should not be submitted
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
