@@ -797,10 +797,10 @@ cancel_replication_on_target_nodes_by_scheduling_user(Config, Type) ->
                 expected_transfer = #{
                     replication_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 111,
-                    files_processed => 111,
+                    files_to_process => 1111,
+                    files_processed => 1111,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 111 end
+                    files_replicated => fun(X) -> X < 1111 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
@@ -839,10 +839,10 @@ cancel_replication_on_target_nodes_by_other_user(Config, Type) ->
                 expected_transfer = #{
                     replication_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 111,
-                    files_processed => 111,
+                    files_to_process => 1111,
+                    files_processed => 1111,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 111 end
+                    files_replicated => fun(X) -> X < 1111 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
