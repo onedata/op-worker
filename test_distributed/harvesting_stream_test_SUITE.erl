@@ -897,7 +897,7 @@ error_mix_test2(Config) ->
     % ensure that it is not first custom_metadata seq in the batch as it is handled
     % another way and it is checked in another test
     [_ | RestRelevantChanges] = relevant_changes(Changes, true),
-    FailedSeq = get_seq(lists:last(RestRelevantChanges)),
+    FailedSeq = random_custom_metadata_seq(RestRelevantChanges),
     RetriedSeqsMain = get_seqs(strip_after(RelevantChanges1, FailedSeq)),
     RetriedSeqsAux = get_seqs(strip_before(RelevantChanges1, FailedSeq)),
 
@@ -1089,7 +1089,7 @@ error_mix_test4(Config) ->
 
     ?assertHarvestMetadataCalled(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        get_seqs(RetriedSeqsMain), MainStreamPid
+        RetriedSeqsMain, MainStreamPid
     ),
 
     mock_harvest_metadata(Nodes, fun(_SpaceId, Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
