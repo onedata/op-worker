@@ -897,8 +897,8 @@ cancel_scan(Config, MountSpaceInRoot) ->
         <<"imported">> := Imported
     } = SSM,
 
-    ?assert(ToProcess < 1111),
-    ?assert((OtherProcessed + Updated + Imported) < 1111),
+    ?assert(ToProcess =< 1111),
+    ?assert((OtherProcessed + Updated + Imported) =< 1111),
 
     Timeout = 600,
     enable_update(Config, ?SPACE_ID, SyncedStorage),
@@ -2038,8 +2038,8 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
 
     ok = sfm_test_utils:recursive_rm(W1, SFMHandle),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    parallel_assert(?MODULE, verify_file_deleted, [W1, SessId, Timeout], [?SPACE_TEST_DIR_PATH | Files], Timeout),
     assertUpdateTimes(W1, ?SPACE_ID),
+    parallel_assert(?MODULE, verify_file_deleted, [W1, SessId, Timeout], [?SPACE_TEST_DIR_PATH | Files], Timeout),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -3611,7 +3611,7 @@ is_empty(Worker, SFMHandle = #sfm_handle{storage_id = StorageId}) ->
             sfm_test_utils:listobjects(Worker, SFMHandle, <<"/">>, 0, 1)
     end.
 
-    cancel(Worker, SpaceId, #document{key = StorageId}) ->
+cancel(Worker, SpaceId, #document{key = StorageId}) ->
     cancel(Worker, SpaceId, StorageId);
 cancel(Worker, SpaceId, StorageId) ->
     ?assertMatch(ok, rpc:call(Worker, storage_sync, cancel, [SpaceId, StorageId])).

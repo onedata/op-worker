@@ -816,7 +816,7 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
     Files = storage_sync_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_TEST_DIR_PATH),
 
-    Timeout = 600,
+    Timeout = 900,
     storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, Timeout),
 
@@ -843,7 +843,7 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
 
     ok = sfm_test_utils:recursive_rm(W1, SFMHandle),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, Timeout),
     ?assertEqual({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
 
     ?assertMonitoring(W1, #{
