@@ -676,8 +676,10 @@ check_ended(Worker, Tasks) ->
     ?assertEqual([], Tasks -- Ans).
 
 save_callback(Callback, TaskID) ->
-    List = application:get_env(?APP_NAME, Callback, []),
-    application:set_env(?APP_NAME, Callback, [{TaskID, os:timestamp()} | List]),
+    critical_section:run(save_callback, fun() ->
+        List = application:get_env(?APP_NAME, Callback, []),
+        application:set_env(?APP_NAME, Callback, [{TaskID, os:timestamp()} | List])
+    end),
     ok.
 
 clear_callbacks(Workers) ->
