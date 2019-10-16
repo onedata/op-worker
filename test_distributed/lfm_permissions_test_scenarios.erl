@@ -50,8 +50,8 @@ run_scenarios(#perms_test_spec{
     ),
 
     run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_posix_tests(ScenariosRootDirPath, Spec, Config),
-    run_acl_tests(ScenariosRootDirPath, Spec, Config).
+    run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
 
 
 %%%===================================================================
@@ -240,7 +240,7 @@ space_privs_test(
 %% combination consisting of only required perms succeeds.
 %% @end
 %%--------------------------------------------------------------------
-run_posix_tests(RootDirPath, #perms_test_spec{
+run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     owner_user = Owner,
     space_user = User,
@@ -253,15 +253,22 @@ run_posix_tests(RootDirPath, #perms_test_spec{
     GroupUserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
     OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
 
-    TestCaseRootDirPerms = case RequiresTraverseAncestors of
-        true -> [?traverse_container];
-        false -> []
-    end,
-    lists:foreach(fun({SessId, Type, TestCaseRootDirName}) ->
+    lists:foreach(fun({ScenarioType, SessId}) ->
+        ScenarioName = ?SCENARIO_NAME("posix_", ScenarioType),
+        ScenarioRootDirPath = <<
+            ScenariosRootDirPath/binary,
+            "/",
+            ScenarioName/binary
+        >>,
+
+        % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, OwnerUserSessId, RootDirPath, #dir{
-                name = TestCaseRootDirName,
-                perms = TestCaseRootDirPerms,
+            Node, OwnerUserSessId, ScenariosRootDirPath, #dir{
+                name = ScenarioName,
+                perms = case RequiresTraverseAncestors of
+                    true -> [?traverse_container];
+                    false -> []
+                end,
                 children = Files
             }
         ),
@@ -271,19 +278,18 @@ run_posix_tests(RootDirPath, #perms_test_spec{
             ))
         end, PermsPerFile),
 
-        run_posix_tests(
-            Node, OwnerUserSessId, SessId,
-            <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
-            Operation, PosixPermsPerFile, ExtraData, Type
+        run_posix_perms_scenario(
+            Node, OwnerUserSessId, SessId, ScenarioRootDirPath,
+            Operation, PosixPermsPerFile, ExtraData, ScenarioType
         )
     end, [
-        {OwnerUserSessId, owner, <<"owner_posix">>},
-        {GroupUserSessId, group, <<"group_posix">>},
-        {OtherUserSessId, other, <<"other_posix">>}
+        {owner, OwnerUserSessId},
+        {group, GroupUserSessId},
+        {other, OtherUserSessId}
     ]).
 
 
-run_posix_tests(
+run_posix_perms_scenario(
     Node, OwnerSessId, SessId, TestCaseRootDirPath,
     Operation, PosixPermsPerFile, ExtraData, Type
 ) ->
@@ -449,7 +455,7 @@ run_standard_posix_tests(
 %% perms fails and that combination consisting of only required perms succeeds.
 %% @end
 %%--------------------------------------------------------------------
-run_acl_tests(RootDirPath, #perms_test_spec{
+run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     owner_user = OwnerUser,
     space_user = SpaceUser,
@@ -461,22 +467,27 @@ run_acl_tests(RootDirPath, #perms_test_spec{
     OwnerSessId = ?config({session_id, {OwnerUser, ?GET_DOMAIN(Node)}}, Config),
     UserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
 
-    TestCaseRootDirPerms = case RequiresTraverseAncestors of
-        true -> [?traverse_container];
-        false -> []
-    end,
-    lists:foreach(fun({SessId, Type, TestCaseRootDirName, AceWho, AceFlags}) ->
+    lists:foreach(fun({SessId, ScenarioType, ScenarioName, AceWho, AceFlags}) ->
+        ScenarioRootDirPath = <<
+            ScenariosRootDirPath/binary,
+            "/",
+            ScenarioName/binary
+        >>,
+
+        % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, OwnerSessId, RootDirPath, #dir{
-                name = TestCaseRootDirName,
-                perms = TestCaseRootDirPerms,
+            Node, OwnerSessId, ScenariosRootDirPath, #dir{
+                name = ScenarioName,
+                perms = case RequiresTraverseAncestors of
+                    true -> [?traverse_container];
+                    false -> []
+                end,
                 children = Files
             }
         ),
-        run_acl_tests(
-            Node, OwnerSessId, SessId,
-            <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
-            Operation, PermsPerFile, ExtraData, AceWho, AceFlags, Type
+        run_acl_perms_scenario(
+            Node, OwnerSessId, SessId, ScenarioRootDirPath,
+            Operation, PermsPerFile, ExtraData, AceWho, AceFlags, ScenarioType
         )
     end, [
         {OwnerSessId, allow, <<"owner_acl_allow">>, ?owner, ?no_flags_mask},
@@ -491,7 +502,7 @@ run_acl_tests(RootDirPath, #perms_test_spec{
     ]).
 
 
-run_acl_tests(
+run_acl_perms_scenario(
     Node, OwnerSessId, SessId, TestCaseRootDirPath,
     Operation, RequiredPermsPerFile, ExtraData, AceWho, AceFlags, Type
 ) ->
