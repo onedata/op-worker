@@ -19,8 +19,9 @@
 -include("http/cdmi.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 
@@ -70,7 +71,7 @@ get_binary(Req, #cdmi_req{
     % prepare response
     Ranges = cdmi_parser:parse_range_header(Req, Size),
     MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
-    Req1 = cowboy_req:set_resp_header(<<"content-type">>, MimeType, Req),
+    Req1 = cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, MimeType, Req),
     HttpStatus = case Ranges of
         undefined -> ?HTTP_200_OK;
         _ -> ?HTTP_206_PARTIAL_CONTENT

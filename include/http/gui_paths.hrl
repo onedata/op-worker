@@ -34,13 +34,7 @@
 -define(FILE_DOWNLOAD_PATH, "/download").
 
 %% Endpoint used to get provider's identity token
-%% @todo VFS-5554 Deprecated, included for backward compatibility
-%% Must be supported in the 19.09.* line, later the counterpart in the
-%% configuration endpoint can be used.
--define(IDENTITY_TOKEN_PATH, "/get_identity_macaroon").
-
-%% Endpoint used to verify authorization nonces issued by this provider
--define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
+-define(IDENTITY_TOKEN_PATH, "/identity_token").
 
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").

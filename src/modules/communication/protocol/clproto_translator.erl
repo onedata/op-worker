@@ -266,23 +266,23 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 %% HANDSHAKE
 translate_from_protobuf(#'ClientHandshakeRequest'{
     macaroon = Macaroon,
-    session_id = SessionId,
+    session_id = Nonce,
     version = Version,
     compatible_oneprovider_versions = CompOpVersions
 }) ->
     #client_handshake_request{
         auth = translate_from_protobuf(Macaroon),
-        session_id = SessionId,
+        nonce = Nonce,
         version = Version,
         compatible_oneprovider_versions = CompOpVersions
     };
 translate_from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
-    nonce = Nonce
+    token = Token
 }) ->
     #provider_handshake_request{
         provider_id = ProviderId,
-        nonce = Nonce
+        token = Token
     };
 translate_from_protobuf(#'Macaroon'{
     macaroon = Macaroon
@@ -1309,11 +1309,11 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 %% HANDSHAKE
 translate_to_protobuf(#provider_handshake_request{
     provider_id = ProviderId,
-    nonce = Nonce
+    token = Token
 }) ->
     {provider_handshake_request, #'ProviderHandshakeRequest'{
         provider_id = ProviderId,
-        nonce = Nonce
+        token = Token
     }};
 translate_to_protobuf(#handshake_response{
     status = Status
