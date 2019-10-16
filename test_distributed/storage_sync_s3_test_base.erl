@@ -184,7 +184,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
     Start = time_utils:system_time_millis(),
     storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, 60),
     End = time_utils:system_time_millis(),
     ct:print("Import took ~p", [(End - Start) / 1000]),
 
@@ -260,6 +260,7 @@ cancel_scan(Config, MountSpaceInRoot) ->
     RootPath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, MountSpaceInRoot),
     DirStructure = [10, 10, 10],
     RootSFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
+    Timeout = 600,
 
     storage_sync_test_base:create_nested_directory_tree(W1, DirStructure, RootSFMHandle),
     SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
@@ -276,7 +277,7 @@ cancel_scan(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
     receive start -> ok end,
     storage_sync_test_base:cancel(W1, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, Timeout),
 
     SSM = ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -294,9 +295,10 @@ cancel_scan(Config, MountSpaceInRoot) ->
     ?assert(ToProcess < 1000),
     ?assert((OtherProcessed + Updated + Imported) < 1000),
 
-    Timeout = 600,
+    % check whether next scan will import missing files
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, Timeout),
+    storage_sync_test_base:disable_update(Config),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,

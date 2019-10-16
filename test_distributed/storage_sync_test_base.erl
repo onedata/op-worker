@@ -870,7 +870,7 @@ cancel_scan(Config, MountSpaceInRoot) ->
     create_nested_directory_tree(W1, DirStructure, RootSFMHandle),
     SyncedStorage = get_synced_storage(Config, W1),
     Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
-
+    Timeout = 600,
     TestProc = self(),
     test_utils:mock_new(W1, storage_sync_engine, [passthrough]),
     test_utils:mock_expect(W1, storage_sync_engine, import_file_unsafe,
@@ -883,7 +883,7 @@ cancel_scan(Config, MountSpaceInRoot) ->
     receive start -> ok end,
 
     cancel(W1, ?SPACE_ID, SyncedStorage),
-    assertImportTimes(W1, ?SPACE_ID),
+    assertImportTimes(W1, ?SPACE_ID, Timeout),
 
     SSM = ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -901,9 +901,10 @@ cancel_scan(Config, MountSpaceInRoot) ->
     ?assert(ToProcess =< 1111),
     ?assert((OtherProcessed + Updated + Imported) =< 1111),
 
-    Timeout = 600,
+    % check whether next scan will import missing files
     enable_update(Config, ?SPACE_ID, SyncedStorage),
     assertUpdateTimes(W1, ?SPACE_ID, Timeout),
+    storage_sync_test_base:disable_update(Config),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -3652,7 +3653,7 @@ disable_import(Config) ->
     StorageId = sfm_test_utils:get_storage_id(W1, ?SPACE_ID),
     ok = rpc:call(W1, storage_sync, disable_import, [?SPACE_ID, StorageId]),
     ?assertMatch({false, _}, get_import_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
-    assertNoImportInProgress(W1, ?SPACE_ID, ?ATTEMPTS),
+    assertNoImportInProgress(W1, ?SPACE_ID, 600),
     ok.
 
 cleanup_storage_sync_monitoring_model(Worker, SpaceId) ->
@@ -3670,7 +3671,7 @@ disable_update(Config) ->
     StorageId = sfm_test_utils:get_storage_id(W1, ?SPACE_ID),
     rpc:call(W1, storage_sync, disable_update, [?SPACE_ID, StorageId]),
     ?assertMatch({false, _}, get_update_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
-    assertNoUpdateInProgress(W1, ?SPACE_ID, ?ATTEMPTS),
+    assertNoUpdateInProgress(W1, ?SPACE_ID, 600),
     ok.
 
 disable_storage_sync(Config) ->
