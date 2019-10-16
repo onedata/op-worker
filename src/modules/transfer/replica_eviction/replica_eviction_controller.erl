@@ -187,9 +187,7 @@ handle_cast({replica_eviction_aborting, Reason}, State = #state{
     status = active
 }) ->
     {ok, _} = replica_eviction_status:handle_aborting(TransferId),
-    ?error_stacktrace("Could not evict file replica ~p due to ~p", [
-        FileGuid, Reason
-    ]),
+    ?error("Could not evict file replica ~p due to ~p", [FileGuid, Reason]),
     {noreply, State#state{status = aborting}};
 
 % Due to asynchronous nature of transfer_changes, aborting msg can be

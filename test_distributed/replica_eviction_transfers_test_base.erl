@@ -746,7 +746,7 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [
@@ -766,15 +766,13 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
                 expected_transfer = #{
                     eviction_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => fun(X) -> X =< 1111 end,
-                    files_processed => fun(X) -> X =< 1111 end,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_evicted => fun(X) -> X  < 1000 end
+                    files_evicted => fun(X) -> X  < 100 end
                 },
                 distribution = undefined,
-                assertion_nodes = [WorkerP1, WorkerP2],
-                timeout = timer:minutes(6),
-                attempts = 600
+                assertion_nodes = [WorkerP1, WorkerP2]
             }
         }
     ).
@@ -791,7 +789,7 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [
@@ -813,15 +811,13 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
                 expected_transfer = #{
                     eviction_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => fun(X) -> X =< 1111 end,
-                    files_processed => fun(X) -> X =< 1111 end,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_evicted => fun(X) -> X < 1000 end
+                    files_evicted => fun(X) -> X < 100 end
                 },
                 distribution = undefined,
-                assertion_nodes = [WorkerP1, WorkerP2],
-                timeout = timer:minutes(6),
-                attempts = 600
+                assertion_nodes = [WorkerP1, WorkerP2]
             }
         }
     ).
@@ -1673,20 +1669,13 @@ init_per_suite(Config) ->
         | Config
     ].
 
-init_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    OldMaxActiveReplicaEvictionTasks = rpc:call(WorkerP2, application, get_env, [
-        ?APP_NAME, max_active_deletion_tasks, 2000
-    ]),
-    ok = rpc:call(WorkerP2, application, set_env, [
-        ?APP_NAME, max_active_deletion_tasks, 10
-    ]),
-    transfers_test_utils:mock_prolonged_replica_eviction(WorkerP2, 0.5, 15),
-
-    init_per_testcase(all, [
-        {max_active_replica_eviction_tasks, OldMaxActiveReplicaEvictionTasks}
-        | Config
-    ]);
+init_per_testcase(Case, Config)
+    when Case =:= cancel_replica_eviction_on_target_nodes_by_other_user
+    orelse Case =:= cancel_replica_eviction_on_target_nodes_by_scheduling_user
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replica_eviction(Workers, 1, 10),
+    init_per_testcase(all, Config);
 
 init_per_testcase(quota_decreased_after_eviction, Config) ->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space3">>} | Config]);
@@ -1713,13 +1702,12 @@ init_per_testcase(_Case, Config) ->
             Config
     end.
 
-end_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    OldMaxActiveReplicaEvictionTasks = ?config(max_active_replica_eviction_tasks, Config),
-    ok = rpc:call(WorkerP2, application, set_env, [
-        ?APP_NAME, max_active_deletion_tasks, OldMaxActiveReplicaEvictionTasks
-    ]),
-    transfers_test_utils:unmock_prolonged_replica_eviction(WorkerP2),
+end_per_testcase(Case, Config)
+    when Case =:= cancel_replica_eviction_on_target_nodes_by_other_user
+    orelse Case =:= cancel_replica_eviction_on_target_nodes_by_scheduling_user
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_prolonged_replica_eviction(Workers),
     end_per_testcase(all, Config);
 
 end_per_testcase(eviction_should_fail_when_evicting_provider_modified_file_replica, Config) ->

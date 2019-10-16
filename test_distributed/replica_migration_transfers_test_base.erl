@@ -547,8 +547,8 @@ schedule_migration_of_regular_file_by_view_with_reduce(Config, Type) ->
     {ok, ObjectId1} = file_id:guid_to_objectid(Guid1),
     {ok, ObjectId6} = file_id:guid_to_objectid(Guid6),
 
-    ?assertViewQuery([ObjectId1, ObjectId6], WorkerP1, SpaceId, ViewName,  [{key, XattrValue11}]),
-    ?assertViewQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, ViewName,  [{key, XattrValue11}]),
+    ?assertViewQuery([ObjectId1, ObjectId6], WorkerP1, SpaceId, ViewName, [{key, XattrValue11}]),
+    ?assertViewQuery([ObjectId1, ObjectId6], WorkerP2, SpaceId, ViewName, [{key, XattrValue11}]),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -672,15 +672,15 @@ scheduling_replica_migration_by_view_with_function_returning_wrong_value_should_
     %functions does not emit file id in values
     MapFunction = <<
         "function (id, type, meta, ctx) {
-            if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
+            if(type == 'custom_metadata' && meta['", XattrName/binary, "']) {
                 return [meta['", XattrName/binary, "'], '", WrongValue/binary, "'];
             }
         return null;
     }">>,
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
-    ?assertViewQuery([WrongValue], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
-    ?assertViewQuery([WrongValue], WorkerP1, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewQuery([WrongValue], WorkerP2, SpaceId, ViewName, [{key, XattrValue}]),
+    ?assertViewQuery([WrongValue], WorkerP1, SpaceId, ViewName, [{key, XattrValue}]),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -752,15 +752,15 @@ scheduling_replica_migration_by_view_returning_not_existing_file_should_not_fail
     %functions emits not existing file id
     MapFunction = <<
         "function (id, type, meta, ctx) {
-            if(type == 'custom_metadata' && meta['", XattrName/binary,"']) {
+            if(type == 'custom_metadata' && meta['", XattrName/binary, "']) {
                 return [meta['", XattrName/binary, "'], '", NotExistingFileId/binary, "'];
             }
         return null;
     }">>,
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
-    ?assertViewQuery([NotExistingFileId], WorkerP2, SpaceId, ViewName,  [{key, XattrValue}]),
-    ?assertViewQuery([NotExistingFileId], WorkerP1, SpaceId, ViewName,  [{key, XattrValue}]),
+    ?assertViewQuery([NotExistingFileId], WorkerP2, SpaceId, ViewName, [{key, XattrValue}]),
+    ?assertViewQuery([NotExistingFileId], WorkerP1, SpaceId, ViewName, [{key, XattrValue}]),
 
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
@@ -994,7 +994,6 @@ schedule_migration_of_100_regular_files_by_view(Config, Type) ->
 
 cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
 
     transfers_test_mechanism:run_test(
@@ -1002,7 +1001,7 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
@@ -1024,10 +1023,11 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP1),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => fun(X) -> X =< 1111 end,
-                    files_processed => fun(X) -> X =< 1111 end,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 1000 end
+                    files_replicated => fun(X) -> X < 100 end,
+                    files_evicted => fun(X) -> X < 100 end
                 },
                 attempts = 120,
                 distribution = undefined,
@@ -1038,7 +1038,6 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
 
 cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     User1 = <<"user1">>,
     User2 = <<"user2">>,
@@ -1048,7 +1047,7 @@ cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{10, 0}, {10, 0}, {0, 10}],
+                files_structure = [{10, 0}, {0, 10}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
@@ -1072,10 +1071,11 @@ cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP1),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => fun(X) -> X =< 1111 end,
-                    files_processed => fun(X) -> X =< 1111 end,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 1000 end
+                    files_replicated => fun(X) -> X < 100 end,
+                    files_evicted => fun(X) -> X < 100 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
@@ -1323,6 +1323,14 @@ init_per_testcase(schedule_migration_of_100_regular_files_by_view_with_batch_10,
         {replica_eviction_by_view_batch, OldEvictionBatch} | Config
     ]);
 
+init_per_testcase(Case, Config)
+    when Case =:= cancel_migration_on_target_nodes_by_other_user
+    orelse Case =:= cancel_migration_on_target_nodes_by_scheduling_user
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replication(Workers, 1, 10),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(10)),
     lfm_proxy:init(Config),
@@ -1337,6 +1345,14 @@ end_per_testcase(Case, Config) when
     OldEvictionBatch = ?config(replica_eviction_by_view_batch, Config),
     test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldReplicationBatch),
     test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, OldEvictionBatch),
+    end_per_testcase(all, Config);
+
+end_per_testcase(Case, Config)
+    when Case =:= cancel_migration_on_target_nodes_by_other_user
+    orelse Case =:= cancel_migration_on_target_nodes_by_scheduling_user
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_prolonged_replication(Workers),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->

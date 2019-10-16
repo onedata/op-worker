@@ -19,6 +19,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
@@ -32,7 +33,7 @@
     mock_replica_eviction_failure/1, unmock_replica_eviction_failure/1,
     unmock_replica_synchronizer_failure/1, remove_all_views/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
-    create_view/7, create_view/6, random_view_name/1]).
+    create_view/7, create_view/6, random_view_name/1, unmock_prolonged_replication/1]).
 
 -define(RANDOM_NAMESPACE_SIZE, 1073741824). % 1024 ^ 3
 
@@ -144,44 +145,47 @@ mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
     ok = test_utils:mock_new(Worker, replication_worker),
     ok = test_utils:mock_expect(Worker, replication_worker, transfer_regular_file,
         fun(FileCtx, TransferParams) ->
+            Result = meck:passthrough([FileCtx, TransferParams]),
             case rand:uniform() < ProlongationProbability of
-                true ->
-                    timer:sleep(timer:seconds(ProlongationTime));
-                false ->
-                    ok
+                true -> timer:sleep(timer:seconds(ProlongationTime));
+                false -> ok
             end,
-            meck:passthrough([FileCtx, TransferParams])
+            Result
         end).
+
+unmock_prolonged_replication(Worker) ->
+    ok = test_utils:mock_unload(Worker, replication_worker).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Prolongs call to replica_deletion_req:delete_blocks/3 function for
+%% Prolongs call to replica_eviction_worker:transfer_regular_file/2 function for
 %% ProlongationTime seconds with probability ProlongationProbability.
 %% This function should be used to prolong duration time of replica eviction transfers.
 %% @end
 %%-------------------------------------------------------------------
 -spec mock_prolonged_replica_eviction(node(), non_neg_integer(), non_neg_integer()) -> ok.
 mock_prolonged_replica_eviction(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replica_deletion_req),
-    ok = test_utils:mock_expect(Worker, replica_deletion_req, delete_blocks,
-        fun(FileCtx, Blocks, AllowedVV) ->
-            case rand:uniform() < ProlongationProbability of
-                true ->
-                    timer:sleep(timer:seconds(ProlongationTime));
-                false ->
-                    ok
-            end,
-            meck:passthrough([FileCtx, Blocks, AllowedVV])
+    ok = test_utils:mock_new(Worker, replica_eviction_worker),
+    ok = test_utils:mock_expect(Worker, replica_eviction_worker, transfer_regular_file,
+        fun
+            (FileCtx, TransferParams) ->
+                Result = meck:passthrough([FileCtx, TransferParams]),
+                case rand:uniform() < ProlongationProbability of
+                    true -> timer:sleep(timer:seconds(ProlongationTime));
+                    false -> ok
+                end,
+                Result
         end
     ).
 
 unmock_prolonged_replica_eviction(Worker) ->
-    ok = test_utils:mock_unload(Worker, replica_deletion_req).
+    ok = test_utils:mock_unload(Worker, replica_eviction_worker).
 
 mock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_new(Node, replica_synchronizer),
     ok = test_utils:mock_expect(Node, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) -> throw(test_error) end
+        fun(_, _, _, _, _, _) ->
+            throw(test_error) end
     ).
 
 unmock_replica_synchronizer_failure(Node) ->

@@ -860,6 +860,10 @@ disassociate_froms(Froms, State = #state{
 
     FinishedTransfers = maps:values(maps:with(Froms, FTT)),
 
+    lists:foreach(fun(TransferId) ->
+        gproc:unreg({c, l, TransferId})
+    end, FinishedTransfers),
+
     {FinishedBlocks, FinishedSessions, FinishedTransfers, State#state{
         requested_blocks = RB2,
         from_requests_types = RT2,
