@@ -147,7 +147,8 @@ all() ->
 mkdir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -164,7 +165,8 @@ mkdir_test(Config) ->
 ls_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -183,7 +185,8 @@ ls_test(Config) ->
 readdir_plus_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -202,7 +205,8 @@ readdir_plus_test(Config) ->
 get_child_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -220,7 +224,8 @@ get_child_attr_test(Config) ->
 mv_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [
             #dir{
@@ -253,7 +258,8 @@ mv_dir_test(Config) ->
 rm_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [
             #dir{
@@ -280,7 +286,8 @@ rm_dir_test(Config) ->
 create_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -299,7 +306,8 @@ create_file_test(Config) ->
 open_for_read_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -324,7 +332,8 @@ open_for_read_test(Config) ->
 open_for_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -349,7 +358,8 @@ open_for_write_test(Config) ->
 open_for_rdwr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -374,7 +384,8 @@ open_for_rdwr_test(Config) ->
 create_and_open_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -393,7 +404,8 @@ create_and_open_test(Config) ->
 truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -412,7 +424,8 @@ truncate_test(Config) ->
 mv_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [
             #dir{
@@ -445,7 +458,8 @@ mv_file_test(Config) ->
 rm_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [
             #dir{
@@ -472,7 +486,8 @@ rm_file_test(Config) ->
 get_parent_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
@@ -486,7 +501,8 @@ get_parent_test(Config) ->
 get_file_path_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
@@ -500,7 +516,8 @@ get_file_path_test(Config) ->
 get_file_guid_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
@@ -513,7 +530,8 @@ get_file_guid_test(Config) ->
 get_file_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
@@ -527,7 +545,8 @@ get_file_attr_test(Config) ->
 get_file_distribution_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -630,7 +649,8 @@ set_perms_test(Config) ->
 check_read_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -649,7 +669,8 @@ check_read_perms_test(Config) ->
 check_write_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -668,7 +689,8 @@ check_write_perms_test(Config) ->
 check_rdwr_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -687,7 +709,8 @@ check_rdwr_perms_test(Config) ->
 create_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
@@ -703,7 +726,8 @@ create_share_test(Config) ->
 remove_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#dir{
             name = <<"dir1">>,
@@ -727,7 +751,8 @@ remove_share_test(Config) ->
 get_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -744,7 +769,8 @@ get_acl_test(Config) ->
 set_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -769,7 +795,8 @@ set_acl_test(Config) ->
 remove_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -788,7 +815,8 @@ remove_acl_test(Config) ->
 get_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -809,7 +837,8 @@ get_transfer_encoding_test(Config) ->
 set_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -828,7 +857,8 @@ set_transfer_encoding_test(Config) ->
 get_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -849,7 +879,8 @@ get_cdmi_completion_status_test(Config) ->
 set_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -868,7 +899,8 @@ set_cdmi_completion_status_test(Config) ->
 get_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -889,7 +921,8 @@ get_mimetype_test(Config) ->
 set_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -908,7 +941,8 @@ set_mimetype_test(Config) ->
 get_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -931,7 +965,8 @@ get_metadata_test(Config) ->
 set_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -950,7 +985,8 @@ set_metadata_test(Config) ->
 remove_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -973,7 +1009,8 @@ remove_metadata_test(Config) ->
 get_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -997,7 +1034,8 @@ get_xattr_test(Config) ->
 list_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -1018,7 +1056,8 @@ list_xattr_test(Config) ->
 set_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,
@@ -1040,7 +1079,8 @@ set_xattr_test(Config) ->
 remove_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(W, #perms_test_spec{
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
         root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
         files = [#file{
             name = <<"file1">>,

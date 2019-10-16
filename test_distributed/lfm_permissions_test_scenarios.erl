@@ -6,8 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Runs various test scenarios (e.g. space, posix, acl) using specified
-%%% #perms_test_spec.
+%%% Runs various permissions test scenarios (e.g. space, posix, acl)
+%%% using specified #perms_test_spec.
+%%% Scenarios asserts that combinations not having all required perms
+%%% (specified in #perms_test_spec) fails and that combination
+%%% consisting of only required perms succeeds.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_permissions_test_scenarios).
@@ -15,15 +18,15 @@
 
 -include("lfm_permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
--export([run_scenarios/3]).
+-export([run_scenarios/2]).
+
+-define(SCENARIO_NAME(__PREFIX, __TYPE),
+    <<__PREFIX, (atom_to_binary(__TYPE, utf8))/binary>>
+).
 
 
 %%%===================================================================
@@ -31,7 +34,8 @@
 %%%===================================================================
 
 
-run_scenarios(Node, #perms_test_spec{
+run_scenarios(#perms_test_spec{
+    test_node = Node,
     space_id = SpaceId,
     owner_user = Owner,
     root_dir = RootDir
@@ -39,16 +43,19 @@ run_scenarios(Node, #perms_test_spec{
     OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
 
     {ok, SpaceName} = rpc:call(Node, space_logic, get_name, [?ROOT_SESS_ID, SpaceId]),
-    RootDirPath = <<"/", SpaceName/binary, "/", RootDir/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, RootDirPath, 8#777)),
+    ScenariosRootDirPath = <<"/", SpaceName/binary, "/", RootDir/binary>>,
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:mkdir(Node, OwnerSessId, ScenariosRootDirPath, 8#777)
+    ),
 
-    run_space_priv_tests(Node, RootDirPath, Spec, Config),
-    run_posix_tests(Node, RootDirPath, Spec, Config),
-    run_acl_tests(Node, RootDirPath, Spec, Config).
+    run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_posix_tests(ScenariosRootDirPath, Spec, Config),
+    run_acl_tests(ScenariosRootDirPath, Spec, Config).
 
 
 %%%===================================================================
-%%% POSIX TESTS MECHANISM
+%%% SPACE PRIVILEGES TESTS SCENARIOS MECHANISM
 %%%===================================================================
 
 
@@ -56,11 +63,12 @@ run_scenarios(Node, #perms_test_spec{
 %% @doc
 %% Tests space permissions needed to perform #perms_test_spec.operation.
 %% It will setup environment, add full posix or acl permissions and
-%% assert that without space priv operation cannot be performed and
+%% assert that without space privs operation cannot be performed and
 %% with it it succeeds.
 %% @end
 %%--------------------------------------------------------------------
-run_space_priv_tests(Node, RootDirPath, #perms_test_spec{
+run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
     space_id = SpaceId,
     owner_user = Owner,
     space_user = User,
@@ -68,81 +76,68 @@ run_space_priv_tests(Node, RootDirPath, #perms_test_spec{
     posix_requires_space_privs = PosixSpacePrivs,
     acl_requires_space_privs = AclSpacePrivs,
     files = Files,
-    operation = Fun
+    operation = Operation
 }, Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
 
-    TestCaseRootDirPerms = case RequiresTraverseAncestors of
-        true -> [?traverse_container];
-        false -> []
-    end,
-    lists:foreach(fun({RequiredPriv, Type, TestCaseRootDirName}) ->
+    lists:foreach(fun({ScenarioType, RequiredPrivs}) ->
+        ScenarioName = ?SCENARIO_NAME("space_privs_", ScenarioType),
+        ScenarioRootDirPath = <<
+            ScenariosRootDirPath/binary,
+            "/",
+            ScenarioName/binary
+        >>,
+
+        % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, OwnerUserSessId, RootDirPath, #dir{
-                name = TestCaseRootDirName,
-                perms = TestCaseRootDirPerms,
+            Node, OwnerUserSessId, ScenariosRootDirPath, #dir{
+                name = ScenarioName,
+                perms = case RequiresTraverseAncestors of
+                    true -> [?traverse_container];
+                    false -> []
+                end,
                 children = Files
             }
         ),
-        run_space_priv_test(
-            Node, SpaceId, Owner, User, PermsPerFile, Type, Fun,
-            <<RootDirPath/binary, "/", TestCaseRootDirName/binary>>,
-            ExtraData, RequiredPriv, Config
+
+        % Set all posix or acl (depending on scenario) perms to files
+        set_all_perms(ScenarioType, Node, maps:keys(PermsPerFile)),
+
+        % Assert that even with all perms set operation cannot be performed
+        % without space privileges
+        run_space_privs_scenario(
+            Node, SpaceId, Owner, User, Operation, ScenarioName,
+            ScenarioRootDirPath, ExtraData, RequiredPrivs, Config
         )
     end, [
-        {PosixSpacePrivs, posix, <<"space_priv_posix">>},
-        {AclSpacePrivs, acl, <<"space_priv_acl">>}
+        {posix, PosixSpacePrivs},
+        {acl, AclSpacePrivs}
     ]).
 
 
-run_space_priv_test(
-    Node, SpaceId, Owner, SpaceUser, PermsPerFile, posix,
-    Operation, TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
-) ->
-    AllPosixPermsGranted = maps:map(fun(_, _) -> 8#777 end, PermsPerFile),
-    lfm_permissions_test_utils:set_modes(Node, AllPosixPermsGranted),
-
-    run_space_priv_test(
-        Node, SpaceId, Owner, SpaceUser, posix, Operation,
-        TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
-    );
-
-run_space_priv_test(
-    Node, SpaceId, Owner, SpaceUser, PermsPerFile, acl,
-    Operation, TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
-) ->
-    AllAclPermsGranted = maps:map(fun(Guid, _) ->
-        lfm_permissions_test_utils:all_perms(Node, Guid)
-    end, PermsPerFile),
-    lfm_permissions_test_utils:set_acls(Node, AllAclPermsGranted, #{}, ?everyone, ?no_flags_mask),
-
-    run_space_priv_test(
-        Node, SpaceId, Owner, SpaceUser, acl, Operation,
-        TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
-    ).
-
-
-run_space_priv_test(
-    Node, SpaceId, Owner, SpaceUser, TestType, Operation,
-    TestCaseRootDirPath, ExtraData, RequiredPrivs, Config
+run_space_privs_scenario(
+    Node, SpaceId, Owner, SpaceUser, Operation, ScenarioName,
+    ScenarioRootDirPath, ExtraData, RequiredPrivs, Config
 ) ->
     try
-        check_space_priv_requirement(
+        space_privs_test(
             Node, SpaceId, Owner, SpaceUser,
-            Operation, TestCaseRootDirPath, ExtraData,
+            Operation, ScenarioRootDirPath, ExtraData,
             RequiredPrivs, Config
         )
     catch T:R ->
         ct:pal(
-            "SPACE PRIV TEST FAILURE~n"
-            "   Type: ~p~n"
+            "SPACE PRIVS TEST FAILURE~n"
+            "   Scenario: ~p~n"
+            "   Owner: ~p~n"
             "   User: ~p~n"
             "   Root path: ~p~n"
             "   Required space priv: ~p~n"
             "   Stacktrace: ~p~n",
             [
-                TestType, SpaceUser,
-                TestCaseRootDirPath,
+                ScenarioName,
+                Owner, SpaceUser,
+                ScenarioRootDirPath,
                 RequiredPrivs,
                 erlang:get_stacktrace()
             ]
@@ -158,36 +153,51 @@ run_space_priv_test(
     end.
 
 
-check_space_priv_requirement(
-    Node, SpaceId, OwnerId, _, Operation,
+% Some operations can be performed only by owner which doesn't need any space privs.
+space_privs_test(
+    Node, SpaceId, OwnerId, UserId, Operation,
     RootDirPath, ExtraData, owner, Config
 ) ->
+    % invalidate permission cache as it is not done due to initializer mocks
+    invalidate_perms_cache(Node),
+
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
 
-    % invalidate permission cache as it is not done due to initializer mocks
-    rpc:call(Node, permissions_cache, invalidate, []),
-    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, OwnerId, []),
+    initializer:testmaster_mock_space_user_privileges(
+        [Node], SpaceId, UserId, privileges:space_privileges()
+    ),
+    ?assertMatch(
+        {error, _},
+        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+    ),
 
+    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, OwnerId, []),
     ?assertNotMatch(
         {error, _},
         Operation(OwnerSessId, OwnerSessId, RootDirPath, ExtraData)
     );
-check_space_priv_requirement(
+
+% When no space privs are required operation should succeed even with
+% no space privs set for user.
+space_privs_test(
     Node, SpaceId, OwnerId, UserId, Operation,
     RootDirPath, ExtraData, [], Config
 ) ->
+    % invalidate permission cache as it is not done due to initializer mocks
+    invalidate_perms_cache(Node),
+    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, []),
+
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
-
-    % invalidate permission cache as it is not done due to initializer mocks
-    rpc:call(Node, permissions_cache, invalidate, []),
-
-    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, []),
     ?assertNotMatch(
         {error, _},
         Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
     );
-check_space_priv_requirement(
+
+% When specific space privs are required, the operation should fail if
+% all privs but them are set and will succeed only with them.
+space_privs_test(
     Node, SpaceId, OwnerId, UserId, Operation,
     RootDirPath, ExtraData, RequiredPrivs, Config
 ) ->
@@ -205,7 +215,7 @@ check_space_priv_requirement(
     ),
 
     % invalidate permission cache as it is not done due to initializer mocks
-    rpc:call(Node, permissions_cache, invalidate, []),
+    invalidate_perms_cache(Node),
 
     initializer:testmaster_mock_space_user_privileges(
         [Node], SpaceId, UserId, RequiredPrivs
@@ -217,7 +227,7 @@ check_space_priv_requirement(
 
 
 %%%===================================================================
-%%% POSIX TESTS MECHANISM
+%%% POSIX TESTS SCENARIOS MECHANISM
 %%%===================================================================
 
 
@@ -230,7 +240,8 @@ check_space_priv_requirement(
 %% combination consisting of only required perms succeeds.
 %% @end
 %%--------------------------------------------------------------------
-run_posix_tests(Node, RootDirPath, #perms_test_spec{
+run_posix_tests(RootDirPath, #perms_test_spec{
+    test_node = Node,
     owner_user = Owner,
     space_user = User,
     other_user = OtherUser,
@@ -255,7 +266,9 @@ run_posix_tests(Node, RootDirPath, #perms_test_spec{
             }
         ),
         PosixPermsPerFile = maps:map(fun(_, Perms) ->
-            lists:usort(lists:flatmap(fun perm_to_posix_perms/1, Perms))
+            lists:usort(lists:flatmap(
+                fun lfm_permissions_test_utils:perm_to_posix_perms/1, Perms
+            ))
         end, PermsPerFile),
 
         run_posix_tests(
@@ -423,7 +436,7 @@ run_standard_posix_tests(
 
 
 %%%===================================================================
-%%% ACL TESTS MECHANISM
+%%% ACL TESTS SCENARIOS SCENARIOS
 %%%===================================================================
 
 
@@ -436,7 +449,8 @@ run_standard_posix_tests(
 %% perms fails and that combination consisting of only required perms succeeds.
 %% @end
 %%--------------------------------------------------------------------
-run_acl_tests(Node, RootDirPath, #perms_test_spec{
+run_acl_tests(RootDirPath, #perms_test_spec{
+    test_node = Node,
     owner_user = OwnerUser,
     space_user = SpaceUser,
     space_user_group = SpaceUserGroup,
@@ -484,7 +498,7 @@ run_acl_tests(
     {ComplementaryPermsPerFile, AllRequiredPerms} = maps:fold(
         fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
             {
-                BasePermsPerFileAcc#{FileGuid => complementary_perms(
+                BasePermsPerFileAcc#{FileGuid => lfm_permissions_test_utils:complementary_perms(
                     Node, FileGuid, FileRequiredPerms
                 )},
                 [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
@@ -630,34 +644,19 @@ create_files(Node, OwnerSessId, ParentDirPath, #dir{
     {PermsPerFile0#{DirGuid => DirPerms}, ExtraData1}.
 
 
--spec complementary_perms(node(), file_id:file_guid(), Perms :: [binary()]) ->
-    ComplementaryPerms :: [binary()].
-complementary_perms(Node, Guid, Perms) ->
-    ComplementaryPerms = lfm_permissions_test_utils:all_perms(Node, Guid) -- Perms,
-    % Special case: because ?delete_object and ?delete_subcontainer translates
-    % to the same bitmask if even one of them is present other must also be removed
-    case lists:member(?delete_object, Perms) or lists:member(?delete_subcontainer, Perms) of
-        true -> ComplementaryPerms -- [?delete_object, ?delete_subcontainer];
-        false -> ComplementaryPerms
-    end.
-
-
--spec perm_to_posix_perms(Perm :: binary()) -> PosixPerms :: [atom()].
-perm_to_posix_perms(?read_object) -> [read];
-perm_to_posix_perms(?list_container) -> [read];
-perm_to_posix_perms(?write_object) -> [write];
-perm_to_posix_perms(?add_object) -> [write, exec];
-perm_to_posix_perms(?add_subcontainer) -> [write];
-perm_to_posix_perms(?read_metadata) -> [read];
-perm_to_posix_perms(?write_metadata) -> [write];
-perm_to_posix_perms(?traverse_container) -> [exec];
-perm_to_posix_perms(?delete_object) -> [write, exec];
-perm_to_posix_perms(?delete_subcontainer) -> [write, exec];
-perm_to_posix_perms(?read_attributes) -> [];
-perm_to_posix_perms(?write_attributes) -> [write];
-perm_to_posix_perms(?delete) -> [owner_if_parent_sticky];
-perm_to_posix_perms(?read_acl) -> [];
-perm_to_posix_perms(?write_acl) -> [owner].
+-spec set_all_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
+set_all_perms(posix, Node, Files) ->
+    AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+        Acc#{Guid => 8#777}
+    end, #{}, Files),
+    lfm_permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
+set_all_perms(acl, Node, Files) ->
+    AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+        Acc#{Guid => lfm_permissions_test_utils:all_perms(Node, Guid)}
+    end, #{}, Files),
+    lfm_permissions_test_utils:set_acls(
+        Node, AllAclPermsPerFile, #{}, ?everyone, ?no_flags_mask
+    ).
 
 
 -spec posix_perm_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
@@ -677,3 +676,8 @@ combinations([]) ->
 combinations([Item | Items]) ->
     Combinations = combinations(Items),
     [[Item | Comb] || Comb <- Combinations] ++ Combinations.
+
+
+-spec invalidate_perms_cache(node()) -> ok.
+invalidate_perms_cache(Node) ->
+    rpc:call(Node, permissions_cache, invalidate, []).

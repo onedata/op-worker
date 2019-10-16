@@ -17,8 +17,9 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    all_perms/2,
+    all_perms/2, complementary_perms/3,
     perms_to_bitmask/1, perm_to_bitmask/1,
+    perm_to_posix_perms/1,
 
     set_modes/2,
     set_acls/5
@@ -35,6 +36,18 @@ all_perms(Node, Guid) ->
     case is_dir(Node, Guid) of
         true -> ?ALL_DIR_PERMS;
         false -> ?ALL_FILE_PERMS
+    end.
+
+
+-spec complementary_perms(node(), file_id:file_guid(), Perms :: [binary()]) ->
+    ComplementaryPerms :: [binary()].
+complementary_perms(Node, Guid, Perms) ->
+    ComplementaryPerms = all_perms(Node, Guid) -- Perms,
+    % Special case: because ?delete_object and ?delete_subcontainer translates
+    % to the same bitmask if even one of them is present other must also be removed
+    case lists:member(?delete_object, Perms) or lists:member(?delete_subcontainer, Perms) of
+        true -> ComplementaryPerms -- [?delete_object, ?delete_subcontainer];
+        false -> ComplementaryPerms
     end.
 
 
@@ -61,6 +74,24 @@ perm_to_bitmask(?write_attributes) -> ?write_attributes_mask;
 perm_to_bitmask(?delete) -> ?delete_mask;
 perm_to_bitmask(?read_acl) -> ?read_acl_mask;
 perm_to_bitmask(?write_acl) -> ?write_acl_mask.
+
+
+-spec perm_to_posix_perms(Perm :: binary()) -> PosixPerms :: [atom()].
+perm_to_posix_perms(?read_object) -> [read];
+perm_to_posix_perms(?list_container) -> [read];
+perm_to_posix_perms(?write_object) -> [write];
+perm_to_posix_perms(?add_object) -> [write, exec];
+perm_to_posix_perms(?add_subcontainer) -> [write];
+perm_to_posix_perms(?read_metadata) -> [read];
+perm_to_posix_perms(?write_metadata) -> [write];
+perm_to_posix_perms(?traverse_container) -> [exec];
+perm_to_posix_perms(?delete_object) -> [write, exec];
+perm_to_posix_perms(?delete_subcontainer) -> [write, exec];
+perm_to_posix_perms(?read_attributes) -> [];
+perm_to_posix_perms(?write_attributes) -> [write];
+perm_to_posix_perms(?delete) -> [owner_if_parent_sticky];
+perm_to_posix_perms(?read_acl) -> [];
+perm_to_posix_perms(?write_acl) -> [owner].
 
 
 -spec set_modes(node(), #{file_id:file_guid() => file_meta:mode()}) ->

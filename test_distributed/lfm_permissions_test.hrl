@@ -87,6 +87,8 @@
 }).
 
 -record(perms_test_spec, {
+    test_node :: node(),
+
     % Id of space within which test will be carried
     space_id = <<"space1">> :: binary(),
 
