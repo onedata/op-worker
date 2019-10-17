@@ -105,7 +105,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
-        NewConfig
+        initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
@@ -186,7 +186,7 @@ rest_endpoint(Node) ->
 
 mock_provider_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, provider_logic, []),
+    test_utils:mock_new(Workers, provider_logic, [passthrough]),
     test_utils:mock_expect(Workers, provider_logic, has_eff_user,
         fun(UserId) ->
             UserId =:= ?USER_ID
@@ -210,6 +210,15 @@ mock_space_logic(Config) ->
     test_utils:mock_expect(Workers, space_logic, get_name,
         fun(_, ?SPACE_ID) ->
             {ok, ?SPACE_NAME}
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_storage_ids,
+        fun (_SpaceId) ->
+            {ok, lists:foldl(fun(Worker, Acc) ->
+                case ?config({storage_id, ?GET_DOMAIN(Worker)}, Config) of
+                    undefined -> Acc;
+                    StorageId -> [StorageId | Acc]
+                end
+            end, [], Workers)}
         end).
 
 unmock_space_logic(Config) ->

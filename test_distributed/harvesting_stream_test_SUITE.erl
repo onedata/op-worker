@@ -1243,7 +1243,8 @@ main_stream_test_base(Config, HarvestersConfig, SpacesConfig) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, couchbase_changes_stream_mock,
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, couchbase_changes_stream_mock,
         couchbase_changes_stream_mock_registry]} | Config].
 
 init_per_testcase(harvesting_stream_batch_test, Config) ->

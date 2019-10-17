@@ -512,7 +512,7 @@ read_should_synchronize_file(Config) ->
         end
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     % when
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
@@ -1120,7 +1120,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, lfm, [passthrough]),
     test_utils:mock_expect(Workers, lfm, schedule_file_replication,
@@ -1181,7 +1181,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, lfm, [passthrough]),
     test_utils:mock_expect(Workers, lfm, schedule_file_replication,
@@ -1263,7 +1263,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation2]))
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, lfm, [passthrough]),
     test_utils:mock_expect(Workers, lfm, schedule_file_replication,
@@ -1337,7 +1337,7 @@ get_storage_file_id_by_uuid(Worker, FileUuid) ->
 % setup, modify this mock so that user's space has more providers.
 % Given that this just overrides the mock from initializer, no need to unmock
 % (this will be done in test cleanup).
-override_space_providers_mock(Workers, SpaceId, Providers) ->
+override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
     test_utils:mock_unload(Workers, [space_logic]),
     test_utils:mock_new(Workers, space_logic, []),
     test_utils:mock_expect(Workers, space_logic, has_eff_user,
@@ -1355,4 +1355,14 @@ override_space_providers_mock(Workers, SpaceId, Providers) ->
     test_utils:mock_expect(Workers, space_logic, is_supported,
         fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
             lists:member(ProvId, Providers)
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_storage_ids,
+        fun(SpId) when SpId =:= SpaceId ->
+            {ok, lists:foldl(fun(Worker, Acc) ->
+                case ?config({storage_id, ?GET_DOMAIN(Worker)}, Config) of
+                    undefined -> Acc;
+                    StorageId -> [StorageId | Acc]
+                end
+            end, [], Workers)}
         end).
+

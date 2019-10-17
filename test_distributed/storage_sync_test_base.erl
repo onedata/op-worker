@@ -3566,7 +3566,7 @@ clean_dir(Name) ->
 
 enable_storage_import(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage, list, []),
+    {ok, [#document{key = StorageId} | _]} = rpc:call(W1, storage_config, list, []),
     ?assertMatch({ok, _}, rpc:call(W1, storage_sync, start_simple_scan_import,
         [?SPACE_ID, StorageId, ?MAX_DEPTH, ?SYNC_ACL])).
 
@@ -3601,7 +3601,7 @@ get_storage_update_details(Worker, SpaceId, StorageId) ->
     rpc:call(Worker, space_strategies, get_storage_update_details, [SpaceId, StorageId]).
 
 get_storage_id(Worker) ->
-    {ok, [#document{key = StorageId} | _]} = rpc:call(Worker, storage, list, []),
+    {ok, [#document{key = StorageId} | _]} = rpc:call(Worker, storage_config, list, []),
     StorageId.
 
 disable_storage_update(Config) ->
@@ -3705,7 +3705,7 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
     end.
 
 clean_reverse_luma_cache(Worker) ->
-    {ok, Storages} = rpc:call(Worker, storage, list, []),
+    {ok, Storages} = rpc:call(Worker, storage_config, list, []),
     lists:foreach(fun(#document{key = StorageId}) ->
         ok = rpc:call(Worker, luma_cache, invalidate, [StorageId])
     end, Storages).
@@ -3723,8 +3723,8 @@ add_workers_storage_mount_points(Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
     MountPoints = lists:foldl(fun(W, AccIn) ->
-        {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-        #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+        {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+        #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
         #{<<"mountPoint">> := DockerMountPath} = helper:get_args(Helpers),
         HostMountPath = get_storage_path(Config, binary_to_atom(DockerMountPath, latin1)),
 
@@ -3891,8 +3891,7 @@ assertImportTimes(Worker, SpaceId) ->
     assertImportTimes(Worker, SpaceId, ?ATTEMPTS).
 
 assertImportTimes(Worker, SpaceId, Attempts) ->
-    {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
-        = rpc:call(Worker, space_storage, get, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -3906,8 +3905,7 @@ assertUpdateTimes(Worker, SpaceId) ->
     assertUpdateTimes(Worker, SpaceId, ?ATTEMPTS).
 
 assertUpdateTimes(Worker, SpaceId, Attempts) ->
-    {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
-        = rpc:call(Worker, space_storage, get, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -3918,8 +3916,7 @@ assertUpdateTimes(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertNoImportInProgress(Worker, SpaceId, Attempts) ->
-    {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
-        = rpc:call(Worker, space_storage, get, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -3931,8 +3928,7 @@ assertNoImportInProgress(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertNoUpdateInProgress(Worker, SpaceId, Attempts) ->
-    {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
-        = rpc:call(Worker, space_storage, get, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
