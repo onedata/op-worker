@@ -80,6 +80,9 @@
     list_xattr, fsync]).
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
+% This macro is used to disable automatic rerun of transfers in tests
+-define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -641,21 +644,26 @@ periodical_spaces_autocleaning_check() ->
 
 -spec rerun_transfers() -> ok.
 rerun_transfers() ->
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                Restarted = transfer:rerun_not_ended_transfers(SpaceId),
-                ?debug("Restarted following transfers: ~p", [Restarted])
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            schedule_rerun_transfers();
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            schedule_rerun_transfers();
-        Error = {error, _} ->
-            ?error("Unable to rerun transfers due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+    case ?SHOULD_RERUN_TRANSFERS of
+        true ->
+            try provider_logic:get_spaces() of
+                {ok, SpaceIds} ->
+                    lists:foreach(fun(SpaceId) ->
+                        Restarted = transfer:rerun_not_ended_transfers(SpaceId),
+                        ?debug("Restarted following transfers: ~p", [Restarted])
+                    end, SpaceIds);
+                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                    schedule_rerun_transfers();
+                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                    schedule_rerun_transfers();
+                Error = {error, _} ->
+                    ?error("Unable to rerun transfers due to: ~p", [Error])
+            catch
+                Error2:Reason ->
+                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+            end;
+        false ->
+            ok
     end.
 
 -spec restart_autocleaning_runs() -> ok.

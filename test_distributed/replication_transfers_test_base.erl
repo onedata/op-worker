@@ -724,7 +724,6 @@ transfer_continues_on_modified_storage(Config, Type, FileKeyType) ->
     TotalTransferredBytes = FilesNum * ?DEFAULT_SIZE,
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
-    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
 
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
@@ -771,7 +770,6 @@ transfer_continues_on_modified_storage(Config, Type, FileKeyType) ->
 
 cancel_replication_on_target_nodes_by_scheduling_user(Config, Type) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    transfers_test_utils:mock_prolonged_replication(WorkerP2, 0.5, 15),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
 
     transfers_test_mechanism:run_test(
@@ -797,10 +795,10 @@ cancel_replication_on_target_nodes_by_scheduling_user(Config, Type) ->
                 expected_transfer = #{
                     replication_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 111,
-                    files_processed => 111,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 111 end
+                    files_replicated => fun(X) -> X < 100 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
@@ -839,10 +837,10 @@ cancel_replication_on_target_nodes_by_other_user(Config, Type) ->
                 expected_transfer = #{
                     replication_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 111,
-                    files_processed => 111,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 111 end
+                    files_replicated => fun(X) -> X < 100 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
@@ -2079,7 +2077,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
+            test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
         end, ?config(op_worker_nodes, NewConfig2)),
 
         application:start(ssl),
@@ -2129,6 +2128,15 @@ init_per_testcase(rtransfer_works_between_providers_with_different_ports, Config
     
     init_per_testcase(all, Config);
 
+init_per_testcase(Case, Config)
+    when Case =:= cancel_replication_on_target_nodes_by_scheduling_user
+    orelse Case =:= cancel_replication_on_target_nodes_by_other_user
+    orelse Case =:= transfer_continues_on_modified_storage
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replication(Workers, 1, 10),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
@@ -2154,6 +2162,15 @@ end_per_testcase(Case, Config) when
     Nodes = ?config(op_worker_nodes, Config),
     OldValue = ?config(replication_by_view_batch, Config),
     test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldValue),
+    end_per_testcase(all, Config);
+
+end_per_testcase(Case, Config)
+    when Case =:= cancel_replication_on_target_nodes_by_scheduling_user
+    orelse Case =:= cancel_replication_on_target_nodes_by_other_user
+    orelse Case =:= transfer_continues_on_modified_storage
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_prolonged_replication(Workers),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->

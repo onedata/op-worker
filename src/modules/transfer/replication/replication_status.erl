@@ -178,7 +178,13 @@ mark_active(#transfer{replication_status = Status}) ->
 mark_aborting(Transfer) ->
     case transfer:is_replication_ongoing(Transfer) of
         true ->
-            {ok, Transfer#transfer{replication_status = aborting}};
+            {ok, Transfer#transfer{
+                replication_status = aborting,
+                eviction_status = case transfer:is_migration(Transfer) of
+                    true -> aborting;
+                    false -> Transfer#transfer.eviction_status
+                end
+            }};
         false ->
             {error, already_ended}
     end.
