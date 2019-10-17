@@ -19,7 +19,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
