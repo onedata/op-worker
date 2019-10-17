@@ -161,7 +161,10 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec renamed_models() -> #{{record_version(), model()} => model()}.
 renamed_models() ->
-    #{{1, open_file} => file_handles}.
+    #{
+        {1, open_file} => file_handles,
+        {5, storage} => storage_config
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc

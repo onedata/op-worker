@@ -105,6 +105,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             direct_groups = privileges_to_atoms(maps:get(<<"groups">>, Result)),
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
+            storages = maps:get(<<"storages">>, Result),
+
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
             harvesters = maps:get(<<"harvesters">>, Result)
@@ -147,6 +149,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             latitude = maps:get(<<"latitude">>, Result),
             online = maps:get(<<"online">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
+            storages = maps:get(<<"storages">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)
         }
@@ -220,6 +223,16 @@ translate(#gri{type = od_harvester, id = Id, aspect = instance, scope = private}
             spaces = maps:get(<<"spaces">>, Result)
         }
     };
+
+translate(#gri{type = od_storage, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_storage{
+            provider = maps:get(<<"provider">>, Result),
+            qos_parameters = maps:get(<<"qos_parameters">>, Result)
+        }
+    };
+
 
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [

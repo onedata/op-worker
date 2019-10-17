@@ -96,6 +96,8 @@
     direct_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
     eff_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
 
+    storages = #{} :: #{od_storage:id() => Size :: integer()},
+
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
     shares = [] :: [od_share:id()],
@@ -130,9 +132,10 @@
     online = false :: boolean(),
 
     % Direct relations to other entities
-    spaces = #{} :: #{od_space:id() => Size :: integer()},
+    storages = [] :: [od_storage:id()],
 
     % Effective relations to other entities
+    spaces = #{} :: #{od_space:id() => Size :: integer()},
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
 
@@ -171,6 +174,12 @@
 -record(od_harvester, {
     indices = [] :: [od_harvester:index()],
     spaces = [] :: [od_space:id()],
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_storage, {
+    provider :: od_provider:id(),
+    qos_parameters = #{} :: od_storage:qos_parameters(),
     cache_state = #{} :: cache_state()
 }).
 
@@ -239,8 +248,8 @@
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    storage :: undefined | storage:doc(),
-    storage_id :: undefined | storage:id(),
+    storage :: undefined | storage_config:doc(),
+    storage_id :: undefined | od_storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
     file_size :: undefined | non_neg_integer(),
@@ -268,11 +277,12 @@
     parent_uuid :: undefined | file_meta:uuid()
 }).
 
--record(storage, {
-    name = <<>> :: storage:name(),
-    helpers = [] :: [storage:helper()],
+-record(storage_config, {
+    name = <<>> :: storage_config:name(),
+    helpers = [] :: [storage_config:helper()],
     readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config()
+    luma_config = undefined :: undefined | luma_config:config(),
+    mount_in_root = false :: boolean()
 }).
 
 -record(luma_config, {
@@ -282,8 +292,8 @@
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
+    storage_ids = [] :: [od_storage:id()],
+    mounted_in_root = [] :: [od_storage:id()]
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -385,7 +395,7 @@
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: undefined | oneprovider:id(),
-    storage_id :: undefined | storage:id(),
+    storage_id :: undefined | od_storage:id(),
     file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
     version_vector = #{},

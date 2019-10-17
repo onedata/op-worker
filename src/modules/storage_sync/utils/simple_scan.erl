@@ -940,8 +940,8 @@ delegate(Module, Function, Args, Arity) ->
 get_owner_id(StorageFileCtx) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{st_uid = Uid} = StatBuf,
-    {StorageDoc, StorageFileCtx3} = storage_file_ctx:get_storage_doc(StorageFileCtx2),
-    {ok, OwnerId} = reverse_luma:get_user_id(Uid, StorageDoc),
+    {StorageConfig, StorageFileCtx3} = storage_file_ctx:get_storage_doc(StorageFileCtx2),
+    {ok, OwnerId} = reverse_luma:get_user_id(Uid, StorageConfig),
     {OwnerId, StorageFileCtx3}.
 
 %%-------------------------------------------------------------------
@@ -955,10 +955,10 @@ get_owner_id(StorageFileCtx) ->
 get_group_owner_id(StorageFileCtx) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     #statbuf{st_gid = Gid} = StatBuf,
-    {StorageDoc, StorageFileCtx3} = storage_file_ctx:get_storage_doc(StorageFileCtx2),
+    {StorageConfig, StorageFileCtx3} = storage_file_ctx:get_storage_doc(StorageFileCtx2),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx3),
     try
-        {ok, GroupId} = reverse_luma:get_group_id(Gid, SpaceId, StorageDoc),
+        {ok, GroupId} = reverse_luma:get_group_id(Gid, SpaceId, StorageConfig),
         {GroupId, StorageFileCtx3}
     catch
         _:Reason ->

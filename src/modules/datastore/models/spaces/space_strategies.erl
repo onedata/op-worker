@@ -21,7 +21,7 @@
 -export([new/1, add_storage/2]).
 -export([set_strategy/4, set_strategy/5,
     get_storage_import_details/2, get_storage_update_details/2, is_import_on/1]).
--export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
+-export([save/1, get/1, exists/1, delete/2, update/2, create/1]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -78,12 +78,9 @@ get(Key) ->
 %% Deletes space strategies.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(key()) -> ok | {error, term()}.
-delete(Key) ->
-    StorageIds = space_storage:get_storage_ids(Key),
-    lists:foreach(fun(StorageId) ->
-        storage_sync_monitoring:delete(Key, StorageId)
-    end, StorageIds),
+-spec delete(key(), od_storage:id()) -> ok | {error, term()}.
+delete(Key, StorageId) ->
+    storage_sync_monitoring:delete(Key, StorageId),
     datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
@@ -107,8 +104,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec is_import_on(od_space:id()) -> boolean().
 is_import_on(SpaceId) ->
-    {ok, Doc} = space_storage:get(SpaceId),
-    StorageIds = space_storage:get_storage_ids(Doc),
+    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
     lists:foldl(fun
         (_StorageId, true) ->
             true;
@@ -133,7 +129,7 @@ new(SpaceId) ->
 %% Adds default strategies for new storage in this space.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(od_space:id(), storage:id()) -> ok | no_return().
+-spec add_storage(od_space:id(), od_storage:id()) -> ok | no_return().
 add_storage(SpaceId, StorageId) ->
     #document{value = Value = #space_strategies{
         storage_strategies = StorageStrategies
@@ -168,7 +164,7 @@ set_strategy(SpaceId, _StrategyType, StrategyName, StrategyArgs) ->
 %% Sets strategy of given type for the storage in this space.
 %% @end
 %%--------------------------------------------------------------------
--spec set_strategy(od_space:id(), storage:id(), space_strategy:type(),
+-spec set_strategy(od_space:id(), od_storage:id(), space_strategy:type(),
     space_strategy:name(), space_strategy:arguments()) ->
     {ok, key()} | {error, term()}.
 set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
@@ -190,7 +186,7 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
 %% Returns current configuration of storage_ import.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_import_details(od_space:id(), storage:id()) -> space_strategy:config().
+-spec get_storage_import_details(od_space:id(), od_storage:id()) -> space_strategy:config().
 get_storage_import_details(SpaceId, StorageId) ->
     {ok, Doc} = space_strategies:get(SpaceId),
     get_storage_strategy_config(Doc, storage_import, StorageId).
@@ -200,7 +196,7 @@ get_storage_import_details(SpaceId, StorageId) ->
 %% Returns current configuration of storage_update.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_update_details(od_space:id(), storage:id()) -> space_strategy:config().
+-spec get_storage_update_details(od_space:id(), od_storage:id()) -> space_strategy:config().
 get_storage_update_details(SpaceId, StorageId) ->
     {ok, Doc} = space_strategies:get(SpaceId),
     get_storage_strategy_config(Doc, storage_update, StorageId).
@@ -216,7 +212,7 @@ get_storage_update_details(SpaceId, StorageId) ->
 %%% @end
 %%%-------------------------------------------------------------------
 -spec get_storage_strategy_config(#space_strategies{} | doc(),
-    space_strategy:type(), storage:id()) -> space_strategy:config().
+    space_strategy:type(), od_storage:id()) -> space_strategy:config().
 get_storage_strategy_config(#space_strategies{
     storage_strategies = Strategies
 }, storage_import, StorageId

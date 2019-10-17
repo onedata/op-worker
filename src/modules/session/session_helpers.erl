@@ -38,10 +38,10 @@
 %% with the session if it doesn't exist.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper(session:id(), od_space:id(), storage:doc()) ->
+-spec get_helper(session:id(), od_space:id(), storage_config:doc()) ->
     {ok, helpers:helper_handle()} | {error, term()}.
-get_helper(SessId, SpaceId, StorageDoc) ->
-    get_helper(SessId, SpaceId, StorageDoc, false).
+get_helper(SessId, SpaceId, StorageConfig) ->
+    get_helper(SessId, SpaceId, StorageConfig, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,7 +62,7 @@ delete_helpers(SessId) ->
 %% on the local node.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_handles_by_storage(session:id(), storage:id()) -> Result when
+-spec get_local_handles_by_storage(session:id(), od_storage:id()) -> Result when
     HandleAndSpaceIds :: {helper_handle:id(), od_space:id()},
     Result :: {ok, [HandleAndSpaceIds]} | {error, term()}.
 get_local_handles_by_storage(SessId, StorageId) ->
@@ -113,11 +113,11 @@ delete_helpers_on_node(SessId) ->
 %% instantiating unnecessary helper handles.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper(session:id(), od_space:id(), storage:doc(),
+-spec get_helper(session:id(), od_space:id(), storage_config:doc(),
     InCriticalSection :: boolean()) ->
     {ok, helpers:helper_handle()} | {error, term()}.
-get_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
-    StorageId = storage:get_id(StorageDoc),
+get_helper(SessId, SpaceId, StorageConfig, InCriticalSection) ->
+    StorageId = storage_config:get_id(StorageConfig),
     LinkName = make_link_name(StorageId, SpaceId),
     FetchResult = case session:get_local_link(SessId,
         ?HELPER_HANDLES_TREE_ID, LinkName) of
@@ -134,21 +134,21 @@ get_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
 
         {{error, link_not_found}, false} ->
             critical_section:run({SessId, SpaceId, StorageId}, fun() ->
-                get_helper(SessId, SpaceId, StorageDoc, true)
+                get_helper(SessId, SpaceId, StorageConfig, true)
             end);
 
         {{error, link_not_found}, true} ->
-            add_missing_helper(SessId, SpaceId, StorageDoc);
+            add_missing_helper(SessId, SpaceId, StorageConfig);
 
         {{error, not_found}, false} ->
             critical_section:run({SessId, SpaceId, StorageId}, fun() ->
-                get_helper(SessId, SpaceId, StorageDoc, true)
+                get_helper(SessId, SpaceId, StorageConfig, true)
             end);
 
         {{error, not_found}, true} ->
             %todo this is just temporary fix, VFS-4301
             session:delete_local_links(SessId, ?HELPER_HANDLES_TREE_ID, LinkName),
-            add_missing_helper(SessId, SpaceId, StorageDoc);
+            add_missing_helper(SessId, SpaceId, StorageConfig);
 
         {Error2, _} ->
             {error, Error2}
@@ -161,14 +161,14 @@ get_helper(SessId, SpaceId, StorageDoc, InCriticalSection) ->
 %% it with current session.
 %% @end
 %%--------------------------------------------------------------------
--spec add_missing_helper(session:id(), od_space:id(), storage:doc()) ->
+-spec add_missing_helper(session:id(), od_space:id(), storage_config:doc()) ->
     {ok, helpers:helper_handle()} | {error, term()}.
-add_missing_helper(SessId, SpaceId, StorageDoc) ->
-    StorageId = storage:get_id(StorageDoc),
+add_missing_helper(SessId, SpaceId, StorageConfig) ->
+    StorageId = storage_config:get_id(StorageConfig),
     {ok, UserId} = session:get_user_id(SessId),
 
     {ok, #document{key = HandleId, value = HelperHandle}} =
-        helper_handle:create(SessId, UserId, SpaceId, StorageDoc),
+        helper_handle:create(SessId, UserId, SpaceId, StorageConfig),
 
     case session:add_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
         make_link_name(StorageId, SpaceId), HandleId
@@ -187,7 +187,7 @@ add_missing_helper(SessId, SpaceId, StorageDoc) ->
 %% link targets.
 %% @end
 %%--------------------------------------------------------------------
--spec make_link_name(storage:id(), od_space:id()) -> handle_link_name().
+-spec make_link_name(od_storage:id(), od_space:id()) -> handle_link_name().
 make_link_name(StorageId, SpaceId) ->
     <<StorageId/binary, ?LINK_NAME_SEPARATOR, SpaceId/binary>>.
 
@@ -197,7 +197,7 @@ make_link_name(StorageId, SpaceId) ->
 %% Decodes link name created by {@link link_key/2}.
 %% @end
 %%--------------------------------------------------------------------
--spec unpack_link_name(handle_link_name()) -> {storage:id(), od_space:id()}.
+-spec unpack_link_name(handle_link_name()) -> {od_storage:id(), od_space:id()}.
 unpack_link_name(LinkKey) ->
     [StorageId, SpaceId] = binary:split(LinkKey, <<?LINK_NAME_SEPARATOR>>),
     {StorageId, SpaceId}.

@@ -312,6 +312,7 @@ on_deregister() ->
     provider_auth:delete(),
     % kill the connection to prevent 'unauthorized' errors due
     % to older authorization when immediately registering anew
+    storage_config:delete_all(),
     terminate_oz_connection().
 
 

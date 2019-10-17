@@ -109,7 +109,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -170,6 +170,24 @@ get_record_struct(3) ->
         {providers, #{string => integer}},
         {shares, [string]},
         {harvesters, [string]}, % new field
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {name, string},
+
+        {direct_users, #{string => [atom]}},
+        {eff_users, #{string => [atom]}},
+
+        {direct_groups, #{string => [atom]}},
+        {eff_groups, #{string => [atom]}},
+
+        {storages, #{string => integer}}, % new field
+
+        {providers, #{string => integer}},
+        {shares, [string]},
+        {harvesters, [string]},
 
         {cache_state, #{atom => term}}
     ]}.
@@ -236,6 +254,38 @@ upgrade_record(2, Space) ->
         direct_groups = DirectGroups,
         eff_groups = EffGroups,
 
+        providers = Providers,
+        shares = Shares,
+        harvesters = [],
+
+        cache_state = CacheState
+    }};
+upgrade_record(3, Space) ->
+    {
+        od_space,
+        Name,
+
+        DirectUsers,
+        EffUsers,
+
+        DirectGroups,
+        EffGroups,
+
+        Providers,
+        Shares,
+
+        CacheState
+    } = Space,
+    {4, #od_space{
+        name = Name,
+
+        direct_users = DirectUsers,
+        eff_users = EffUsers,
+
+        direct_groups = DirectGroups,
+        eff_groups = EffGroups,
+
+        storages = #{},
         providers = Providers,
         shares = Shares,
         harvesters = [],

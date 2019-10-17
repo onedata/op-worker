@@ -32,9 +32,8 @@
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
+-export([get_storage_ids/0, get_storage_ids/1, get_storage_ids/2]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
--export([support_space/2, support_space/3]).
--export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([get_support_size/1]).
 -export([map_idp_group_to_onedata/2]).
@@ -52,6 +51,7 @@
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1]).
+
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
@@ -244,6 +244,41 @@ get_spaces(SessionId, ProviderId) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage_ids of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_ids() -> {ok, [od_storage:id()]} | errors:error().
+get_storage_ids() ->
+    get_storage_ids(?ROOT_SESS_ID, ?SELF).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage_ids of provider by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_ids(od_provider:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_storage_ids(ProviderId) ->
+    get_storage_ids(?ROOT_SESS_ID, ProviderId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storages of provider by given ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_ids(gs_client_worker:client(), od_provider:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_storage_ids(SessionId, ProviderId) ->
+    case get(SessionId, ProviderId) of
+        {ok, #document{value = #od_provider{storages = Storages}}} ->
+            {ok, Storages};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 -spec has_eff_user(od_user:id()) -> boolean().
 has_eff_user(UserId) ->
     has_eff_user(?ROOT_SESS_ID, ?SELF, UserId).
@@ -261,33 +296,6 @@ has_eff_user(SessionId, ProviderId, UserId) ->
         _ ->
             false
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Supports a space based on support_space_token and support size.
-%% @end
-%%--------------------------------------------------------------------
--spec support_space(tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(Token, SupportSize) ->
-    support_space(?ROOT_SESS_ID, Token, SupportSize).
-
--spec support_space(SessionId :: gs_client_worker:client(),
-    tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(SessionId, Token, SupportSize) ->
-    Data = #{<<"token">> => Token, <<"size">> => SupportSize},
-    Result = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = support},
-        data = Data
-    }),
-
-    ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end)).
-
 
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
@@ -321,40 +329,6 @@ get_support_size(SpaceId) ->
         {error, _} = Error ->
             Error
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Changes support size of this provider towards given space,
-%% given that data stored on this provider is not larger than
-%% the intended size.
-%% @end
-%%--------------------------------------------------------------------
--spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer()) ->
-    ok | errors:error().
-update_space_support_size(SpaceId, NewSupportSize) ->
-    OccupiedSize = space_quota:current_size(SpaceId),
-    update_space_support_size(SpaceId, NewSupportSize, OccupiedSize).
-
-
-%% @private
--spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer(),
-    CurrentOccupiedSize :: non_neg_integer()) ->
-    ok | errors:error().
-update_space_support_size(_SpaceId, NewSupportSize, CurrentOccupiedSize)
-    when NewSupportSize < CurrentOccupiedSize ->
-    ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
-
-update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
-    Data = #{<<"size">> => NewSupportSize},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = {space, SpaceId}}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
 
 
 %%--------------------------------------------------------------------

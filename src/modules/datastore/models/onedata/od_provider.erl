@@ -84,7 +84,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,6 +126,25 @@ get_record_struct(3) ->
         {longitude, float},
         {online, boolean},
 
+        {spaces, #{string => integer}},
+
+        {eff_users, [string]},
+        {eff_groups, [string]},
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {name, string},
+        {admin_email, string},
+        {subdomain_delegation, boolean},
+        {domain, string},
+        {subdomain, string},
+        {latitude, float},
+        {longitude, float},
+        {online, boolean},
+
+        {storages, [string]}, % new field
         {spaces, #{string => integer}},
 
         {eff_users, [string]},
@@ -186,6 +205,43 @@ upgrade_record(2, Provider) ->
         0.0,
         false,
 
+        #{},
+
+        [],
+        [],
+
+        #{}
+    }};
+upgrade_record(3, Provider) ->
+    {
+        od_provider,
+        Name,
+        undefined,
+        false,
+        Domain,
+        undefined,
+        0.0,
+        0.0,
+        false,
+
+        #{},
+
+        [],
+        [],
+
+        #{}
+    } = Provider,
+    {4, {od_provider,
+        Name,
+        undefined,
+        false,
+        Domain,
+        undefined,
+        0.0,
+        0.0,
+        false,
+
+        [],
         #{},
 
         [],

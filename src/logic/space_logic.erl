@@ -29,7 +29,7 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
--export([get_eff_groups/2, get_shares/2]).
+-export([get_eff_groups/2, get_shares/2, get_storage_ids/1]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
@@ -159,6 +159,22 @@ get_shares(SessionId, SpaceId) ->
             {ok, Shares};
         {error, _} = Error ->
             Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage ids supporting given space under this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_ids(od_space:id()) -> {ok, [od_storage:id()]}.
+get_storage_ids(SpaceId) ->
+    {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{storages = AllStorageIds}}} ->
+            {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(AllStorageIds), X==Y]};
+        _ ->
+            {ok, []}
     end.
 
 

@@ -71,7 +71,7 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 %% Renames file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_storage_file(session:id(), od_space:id(), storage:doc(),
+-spec rename_storage_file(session:id(), od_space:id(), storage_config:doc(),
     file_meta:uuid(), helpers:file_id(), helpers:file_id()) -> ok | {error, term()}.
 rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFileId) ->
     %create target dir
@@ -180,7 +180,7 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         {error, ?EEXIST} ->
             handle_eexists(VerifyDeletionLink, SFMHandle, Mode, FileCtx3, UserCtx);
-         {error, ?EACCES} ->
+        {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
@@ -321,7 +321,7 @@ create_parent_dirs(FileCtx) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(),
-    storage:doc()) -> ok.
+    storage_config:doc()) -> ok.
 create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
@@ -341,7 +341,7 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, Storage) ->
 %% Creates directory on storage with suitable mode and owner.
 %% @end
 %%-------------------------------------------------------------------
--spec create_dir(file_ctx:ctx(), od_space:id(), storage:doc()) -> file_ctx:ctx().
+-spec create_dir(file_ctx:ctx(), od_space:id(), storage_config:doc()) -> file_ctx:ctx().
 create_dir(FileCtx, SpaceId, Storage) ->
     {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
