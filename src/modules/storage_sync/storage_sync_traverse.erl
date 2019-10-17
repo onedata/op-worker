@@ -106,7 +106,8 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage:type(StorageId)
+        storage_type => storage:type(StorageId),
+        space_dir_path => filename_mapping:space_dir_path(SpaceId, StorageId)
     },
     RunOpts = #{
         execute_slave_on_dir => false,
@@ -581,7 +582,7 @@ get_storage_sync_info_doc(#storage_traverse{
     SSIDoc.
 
 -spec maybe_add_deletion_detection_link(storage_file_ctx:ctx(), info()) -> ok.
-maybe_add_deletion_detection_link(StorageFileCtx, Info) ->
+maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_dir_path := SpaceDirPath}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -592,7 +593,7 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info) ->
             %% When storage_sync is run on object storages we set MarkLeaves parameter to true
             %% in the below call which allows to determine when link is associated with
             %% a regular file which is necessary for storage_sync_deletion on object storages
-            {filename_mapping:space_dir_path(SpaceId, StorageId), true};
+            {SpaceDirPath, true};
         ?BLOCK_STORAGE ->
             %% On the other hand, on block storages MarkLeaves = false.
             %% storage_sync_deletion on block storages processes only direct children of a directory

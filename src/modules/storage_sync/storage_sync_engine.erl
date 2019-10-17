@@ -59,13 +59,11 @@
 %%--------------------------------------------------------------------
 -spec process_file(storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
-process_file(StorageFileCtx, Info) ->
+process_file(StorageFileCtx, Info = #{space_dir_path := SpaceStorageFileId}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx2),
     FileType = file_meta:type(Mode),
-    SpaceStorageFileId = filename_mapping:space_dir_path(SpaceId, StorageId),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     Info2 =  #{parent_ctx := ParentCtx2} = case

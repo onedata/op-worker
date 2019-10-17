@@ -473,8 +473,11 @@ get_metric(SpaceId, Type, Window) ->
     case ?MODULE:get(SpaceId, StorageId) of
         {ok, #document{value = SSM}} ->
             return_histogram_and_timestamp(SSM, Type, Window);
+        {error, not_found} ->
+            ?debug("Failed to fetch storage sync metrics for space ~p SpaceId due to not_found", [SpaceId]),
+                return_empty_histogram_and_timestamp();
         Error ->
-            ?error_stacktrace("Failed to fetch storage sync metrics for space ~p SpaceId due to ~p",
+            ?error("Failed to fetch storage sync metrics for space ~p SpaceId due to ~p",
                 [SpaceId, Error]),
             return_empty_histogram_and_timestamp()
     end.
@@ -656,10 +659,12 @@ maybe_mark_finished_import_scan(SSM = #storage_sync_monitoring{
     scans = Scans,
     import_finish_time = undefined
 }) ->
-    SSM#storage_sync_monitoring{
+    Timestamp = time_utils:cluster_time_seconds(),
+    SSM2 = SSM#storage_sync_monitoring{
         scans = Scans + 1,
-        import_finish_time = time_utils:cluster_time_seconds()
-    }.
+        import_finish_time = Timestamp
+    },
+    reset_queue_length_histograms(SSM2, Timestamp).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -672,10 +677,12 @@ maybe_mark_finished_import_scan(SSM = #storage_sync_monitoring{
 maybe_mark_finished_update_scan(SSM = #storage_sync_monitoring{
     scans = Scans
 }) ->
-    SSM#storage_sync_monitoring{
+    Timestamp = time_utils:cluster_time_seconds(),
+    SSM2 = SSM#storage_sync_monitoring{
         scans = Scans + 1,
-        last_update_finish_time = time_utils:cluster_time_seconds()
-    }.
+        last_update_finish_time = Timestamp
+    },
+    reset_queue_length_histograms(SSM2, Timestamp).
 
 -spec is_scan_in_progress(doc() | record()) -> boolean().
 is_scan_in_progress(#document{value = SSM = #storage_sync_monitoring{}}) ->

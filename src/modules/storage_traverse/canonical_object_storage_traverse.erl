@@ -91,27 +91,13 @@ generate_master_and_slave_jobs(TraverseJob = #storage_traverse{
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     FileTokens = filename:split(StorageFileId),
     ResetInfo = storage_traverse:reset_info(TraverseJob),
-    {SlaveJobsRev, LastChildId, ComputeResult} = lists:foldl(fun(ChildStorageFileId, {SlaveJobsIn, _LastChildId, ComputeAcc}) ->
-        ChildTokens = filename:split(ChildStorageFileId),
-        ChildName = filename:basename(ChildStorageFileId),
-        case {length(ChildTokens) - length(FileTokens) > MaxDepth, file_meta:is_hidden(ChildName)} of
-            {false, false} ->
-                ChildCtx = storage_file_ctx:new(ChildStorageFileId, SpaceId, StorageId),
-                {ComputePartialResult, ChildCtx2} = compute(ComputeFun, ChildCtx, Info, ComputeAcc, ComputeEnabled),
-                {[{ChildCtx2, ResetInfo} | SlaveJobsIn], ChildStorageFileId, ComputePartialResult};
-            _ ->
-                {SlaveJobsIn, ChildStorageFileId, ComputeAcc}
-        end
-    end, {[], undefined, ComputeInit}, ChildrenIds),
-
-
     MasterJobs = case length(ChildrenIds) < BatchSize of
         true -> [];
         false ->
             % it is not the last batch
             NextBatchTraverseJob = TraverseJob#storage_traverse{
                 offset = Offset + length(ChildrenIds),
-                marker = LastChildId
+                marker = lists:last(ChildrenIds)
             },
             AsyncNextBatchJobPrehook(NextBatchTraverseJob),
             case AsyncNextBatchJob of
@@ -124,6 +110,19 @@ generate_master_and_slave_jobs(TraverseJob = #storage_traverse{
                     [NextBatchTraverseJob]
             end
     end,
+    {SlaveJobsRev, ComputeResult} = lists:foldl(fun(ChildStorageFileId, {SlaveJobsIn, ComputeAcc}) ->
+        ChildTokens = filename:split(ChildStorageFileId),
+        ChildName = filename:basename(ChildStorageFileId),
+        case {length(ChildTokens) - length(FileTokens) > MaxDepth, file_meta:is_hidden(ChildName)} of
+            {false, false} ->
+                ChildCtx = storage_file_ctx:new(ChildStorageFileId, SpaceId, StorageId),
+                {ComputePartialResult, ChildCtx2} = compute(ComputeFun, ChildCtx, Info, ComputeAcc, ComputeEnabled),
+                {[{ChildCtx2, ResetInfo} | SlaveJobsIn], ComputePartialResult};
+            _ ->
+                {SlaveJobsIn, ComputeAcc}
+        end
+    end, {[], ComputeInit}, ChildrenIds),
+
     SeqSlaveJobs = case {OnDir, Offset} of
         {true, 0} -> [{StorageFileCtx, Info}]; %execute slave job only once per directory
         _ -> []
