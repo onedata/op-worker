@@ -123,7 +123,7 @@ all() -> ?ALL([
 ]).
 
 -define(SPACES, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space1">>, <<"space4">>]).
--define(TIMEOUT, timer:seconds(30)).
+-define(TIMEOUT, timer:seconds(60)).
 -define(INF_MAX_DEPTH, 99999999999999999999999999999999999999999).
 
 %%%===================================================================
