@@ -14,7 +14,24 @@
 -include("global_definitions.hrl").
 
 %% API
--export([log_import/2, log_update/2, log_deletion/2]).
+-export([log_scan_started/2, log_scan_finished/2, log_scan_cancelled/2,
+    log_import/2, log_update/2, log_deletion/2]).
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+-spec log_scan_started(od_space:id(), non_neg_integer()) -> ok.
+log_scan_started(SpaceId, ScanNum) ->
+    log("Storage sync scan no. ~p started.", [ScanNum], SpaceId).
+
+-spec log_scan_finished(od_space:id(), non_neg_integer()) -> ok.
+log_scan_finished(SpaceId, ScanNum) ->
+    log("Storage sync scan no. ~p finished.", [ScanNum], SpaceId).
+
+-spec log_scan_cancelled(od_space:id(), non_neg_integer()) -> ok.
+log_scan_cancelled(SpaceId, ScanNum) ->
+    log("Storage sync scan no. ~p cancelled.", [ScanNum], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc

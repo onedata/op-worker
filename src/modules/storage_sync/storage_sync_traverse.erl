@@ -166,23 +166,27 @@ get_job(DocOrID) ->
 
 -spec task_started(traverse:id()) -> ok.
 task_started(TaskId) ->
-    ?debug("Storage sync scan ~p started", [TaskId]).
+    {SpaceId, _StorageId, ScanNum} = decode_task_id(TaskId),
+    ?debug("Storage sync scan ~p started", [TaskId]),
+    storage_sync_logger:log_scan_started(SpaceId, ScanNum).
 
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
-    {SpaceId, StorageId, _} = decode_task_id(TaskId),
+    {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
     SpaceStorageFileId = filename_mapping:space_dir_path(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
     storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
-    ?debug("Storage sync scan ~p finished", [TaskId]).
+    ?debug("Storage sync scan ~p finished", [TaskId]),
+    storage_sync_logger:log_scan_finished(SpaceId, ScanNum).
 
 -spec task_canceled(traverse:id()) -> ok.
 task_canceled(TaskId) ->
-    {SpaceId, StorageId, _} = decode_task_id(TaskId),
+    {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
     SpaceStorageFileId = filename_mapping:space_dir_path(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
     storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
-    ?debug("Storage sync scan ~p canceled", [TaskId]).
+    ?debug("Storage sync scan ~p canceled", [TaskId]),
+    storage_sync_logger:log_scan_cancelled(SpaceId, ScanNum).
 
 -spec to_string({storage_file_ctx:ctx(), info()} | job()) -> {ok, binary()}.
 to_string({StorageFileCtx, #{scan_num := ScanNum}}) ->
