@@ -19,9 +19,11 @@
 %% API
 -export([truncate/3, truncate_insecure/4]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv truncate_insecure/3 with permission checks
@@ -29,11 +31,13 @@
 %%--------------------------------------------------------------------
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
-truncate(UserCtx, FileCtx, Size) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size, true],
-        fun truncate_insecure/4).
+truncate(UserCtx, FileCtx0, Size) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_object]
+    ),
+    truncate_insecure(UserCtx, FileCtx1, Size, true).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,9 +87,11 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     end,
     #fuse_response{status = #status{code = ?OK}}.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -99,6 +105,7 @@ update_quota(FileCtx, Size) ->
     {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
     FileCtx2.
+
 
 -spec log_warning(atom(), atom(), {error, term()}, file_ctx:ctx()) -> ok.
 log_warning(Module, Function, Error, FileCtx) ->

@@ -597,10 +597,9 @@ fsync(SFMHandle = #sfm_handle{file_handle = FileHandle}, DataOnly) ->
 %%--------------------------------------------------------------------
 -spec open_for_read(handle()) -> {ok, handle()} | error_reply().
 open_for_read(SFMHandle) ->
-    check_permissions:execute(
-        [?read_object],
-        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read],
-        fun open_insecure/2
+    open_with_permissions_check(
+        SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID},
+        [?read_object], read
     ).
 
 %%--------------------------------------------------------------------
@@ -611,10 +610,9 @@ open_for_read(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_for_write(handle()) -> {ok, handle()} | error_reply().
 open_for_write(SFMHandle) ->
-    check_permissions:execute(
-        [?write_object],
-        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write],
-        fun open_insecure/2
+    open_with_permissions_check(
+        SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID},
+        [?write_object], write
     ).
 
 %%--------------------------------------------------------------------
@@ -625,11 +623,30 @@ open_for_write(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_for_rdwr(handle()) -> {ok, handle()} | error_reply().
 open_for_rdwr(SFMHandle) ->
-    check_permissions:execute(
-        [?read_object, ?write_object],
-        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr],
-        fun open_insecure/2
+    open_with_permissions_check(
+        SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID},
+        [?read_object, ?write_object], rdwr
     ).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @equiv open/2, but with permission control
+%% @end
+%%--------------------------------------------------------------------
+-spec open_with_permissions_check(handle(), [permissions:access_definition()],
+    helpers:open_flag()) -> {ok, handle()} | error_reply().
+open_with_permissions_check(#sfm_handle{
+    session_id = SessionId,
+    space_id = SpaceId,
+    file_uuid = FileUuid,
+    share_id = ShareId
+} = SFMHandle, Permissions, OpenFlag) ->
+    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    UserCtx = user_ctx:new(SessionId),
+
+    permissions:check(UserCtx, FileCtx, Permissions),
+    open_insecure(SFMHandle, OpenFlag).
 
 %%--------------------------------------------------------------------
 %% @private

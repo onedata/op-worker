@@ -129,11 +129,12 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
-get_file_distribution(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [UserCtx, FileCtx],
-        fun get_file_distribution_insecure/2).
+get_file_distribution(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    get_file_distribution_insecure(UserCtx, FileCtx1).
 
 %%--------------------------------------------------------------------
 %% @doc

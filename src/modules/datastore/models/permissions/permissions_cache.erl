@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model used for caching permissions to files (used by check_permissions module).
+%%% Model used for caching permissions to files (used by permissions module).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_cache).

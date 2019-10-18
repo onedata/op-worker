@@ -18,13 +18,17 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_transfer_encoding/2, set_transfer_encoding/5,
-    get_cdmi_completion_status/2, set_cdmi_completion_status/5, get_mimetype/2,
-    set_mimetype/5]).
+-export([
+    get_transfer_encoding/2, set_transfer_encoding/5,
+    get_cdmi_completion_status/2, set_cdmi_completion_status/5,
+    get_mimetype/2, set_mimetype/5
+]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_transfer_encoding_insecure/2 with permission checks
@@ -32,11 +36,13 @@
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_transfer_encoding(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_attributes],
-        [_UserCtx, FileCtx],
-        fun get_transfer_encoding_insecure/2).
+get_transfer_encoding(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_attributes]
+    ),
+    get_transfer_encoding_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv set_transfer_encoding_insecure/3 with permission checks
@@ -45,11 +51,16 @@ get_transfer_encoding(_UserCtx, FileCtx) ->
 -spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
     xattr:transfer_encoding(), Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
-set_transfer_encoding(_UserCtx, FileCtx, Encoding, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_attributes],
-        [_UserCtx, FileCtx, Encoding, Create, Replace],
-        fun set_transfer_encoding_insecure/5).
+set_transfer_encoding(UserCtx, FileCtx0, Encoding, Create, Replace) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_attributes]
+    ),
+    set_transfer_encoding_insecure(
+        UserCtx, FileCtx1,
+        Encoding, Create, Replace
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_cdmi_completion_status_insecure/2 with permission checks
@@ -57,11 +68,13 @@ set_transfer_encoding(_UserCtx, FileCtx, Encoding, Create, Replace) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_cdmi_completion_status(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_attributes],
-        [_UserCtx, FileCtx],
-        fun get_cdmi_completion_status_insecure/2).
+get_cdmi_completion_status(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_attributes]
+    ),
+    get_cdmi_completion_status_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv set_cdmi_completion_status_insecure/3 with permission checks
@@ -70,11 +83,16 @@ get_cdmi_completion_status(_UserCtx, FileCtx) ->
 -spec set_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx(),
     xattr:cdmi_completion_status(), Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
-set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_attributes],
-        [_UserCtx, FileCtx, CompletionStatus, Create, Replace],
-        fun set_cdmi_completion_status_insecure/5).
+set_cdmi_completion_status(UserCtx, FileCtx0, CompletionStatus, Create, Replace) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_attributes]
+    ),
+    set_cdmi_completion_status_insecure(
+        UserCtx, FileCtx1,
+        CompletionStatus, Create, Replace
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_mimetype_insecure/2 with permission checks
@@ -82,11 +100,13 @@ set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus, Create, Replace)
 %%--------------------------------------------------------------------
 -spec get_mimetype(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_mimetype(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_attributes],
-        [_UserCtx, FileCtx],
-        fun get_mimetype_insecure/2).
+get_mimetype(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_attributes]
+    ),
+    get_mimetype_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv set_mimetype_insecure/3 with permission checks
@@ -95,15 +115,18 @@ get_mimetype(_UserCtx, FileCtx) ->
 -spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
     xattr:mimetype(), Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
-set_mimetype(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_attributes],
-        [_UserCtx, FileCtx, Mimetype, Create, Replace],
-        fun set_mimetype_insecure/5).
+set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_attributes]
+    ),
+    set_mimetype_insecure(UserCtx, FileCtx1, Mimetype, Create, Replace).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,6 +142,7 @@ get_transfer_encoding_insecure(_UserCtx, FileCtx) ->
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -136,6 +160,7 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -156,6 +181,7 @@ get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets completion status, which tells if the file is under modification by
@@ -173,6 +199,7 @@ set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create,
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns mimetype of file.
@@ -187,6 +214,7 @@ get_mimetype_insecure(_UserCtx, FileCtx) ->
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

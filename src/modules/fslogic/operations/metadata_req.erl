@@ -18,9 +18,11 @@
 %% API
 -export([get_metadata/5, set_metadata/7, remove_metadata/3]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_metadata_insecure/5 with permission checks
@@ -29,11 +31,13 @@
 -spec get_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
     custom_metadata:filter(), Inherited :: boolean()) ->
     fslogic_worker:provider_response().
-get_metadata(_UserCtx, FileCtx, MetadataType, Names, Inherited) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [_UserCtx, FileCtx, MetadataType, Names, Inherited],
-        fun get_metadata_insecure/5).
+get_metadata(UserCtx, FileCtx0, MetadataType, Names, Inherited) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    get_metadata_insecure(UserCtx, FileCtx1, MetadataType, Names, Inherited).
+
 
 %%--------------------------------------------------------------------
 %% @equiv set_metadata_insecure/5 with permission checks
@@ -42,11 +46,16 @@ get_metadata(_UserCtx, FileCtx, MetadataType, Names, Inherited) ->
 -spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
     custom_metadata:value(), custom_metadata:filter(), Create :: boolean(),
     Replace :: boolean()) -> fslogic_worker:provider_response().
-set_metadata(_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace],
-        fun set_metadata_insecure/7).
+set_metadata(UserCtx, FileCtx0, MetadataType, Value, Names, Create, Replace) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    set_metadata_insecure(
+        UserCtx, FileCtx1,
+        MetadataType, Value, Names, Create, Replace
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_metadata_insecure/4 with permission checks
@@ -54,15 +63,18 @@ set_metadata(_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace) ->
 %%--------------------------------------------------------------------
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
-remove_metadata(_UserCtx, FileCtx, MetadataType) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, MetadataType],
-        fun remove_metadata_insecure/3).
+remove_metadata(UserCtx, FileCtx0, MetadataType) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    remove_metadata_insecure(UserCtx, FileCtx1, MetadataType).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,6 +105,7 @@ get_metadata_insecure(_UserCtx, FileCtx, rdf, _, Inherited) ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets metadata linked with file.
@@ -108,6 +121,7 @@ set_metadata_insecure(_UserCtx, FileCtx, json, Value, Names, Create, Replace) ->
 set_metadata_insecure(_UserCtx, FileCtx, rdf, Value, _, Create, Replace) ->
     {ok, _} = rdf_metadata:set(FileCtx, Value, Create, Replace),
     #provider_response{status = #status{code = ?OK}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc

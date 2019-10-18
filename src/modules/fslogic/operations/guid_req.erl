@@ -22,17 +22,17 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @equiv resolve_guid_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_guid(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-resolve_guid(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun resolve_guid_insecure/2).
+resolve_guid(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    resolve_guid_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_parent_insecure/2 with permission checks
@@ -40,11 +40,10 @@ resolve_guid(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_parent(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_parent(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun get_parent_insecure/2).
+get_parent(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    get_parent_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_file_path_insecure/2 with permission checks
@@ -52,15 +51,15 @@ get_parent(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_file_path(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_file_path(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun get_file_path_insecure/2).
+get_file_path(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    get_file_path_insecure(UserCtx, FileCtx1).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,6 +74,7 @@ resolve_guid_insecure(_UserCtx, FileCtx) ->
         fuse_response = #guid{guid = Guid}
     }.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets parent of file.
@@ -88,6 +88,7 @@ get_parent_insecure(UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         provider_response = #dir{guid = ParentGuid}
     }.
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -20,9 +20,11 @@
 %% API
 -export([mkdir/4, read_dir/5, read_dir/6, read_dir_plus/5]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv mkdir_insecure/4 with permission checks
@@ -31,11 +33,13 @@
 -spec mkdir(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
-mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?traverse_container, ?add_subcontainer],
-        [UserCtx, ParentFileCtx, Name, Mode],
-        fun mkdir_insecure/4).
+mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
+    ParentFileCtx1 = permissions:check(
+        UserCtx, ParentFileCtx0,
+        [traverse_ancestors, ?traverse_container, ?add_subcontainer]
+    ),
+    mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,6 +54,7 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
 read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
     read_dir(UserCtx, FileCtx, Offset, Limit, Token, undefined).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv read_dir_insecure/6 with permission checks
@@ -61,11 +66,13 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
-read_dir(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?list_container],
-        [UserCtx, FileCtx, Offset, Limit, Token, StartId],
-        fun read_dir_insecure/6).
+read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?list_container]
+    ),
+    read_dir_insecure(UserCtx, FileCtx1, Offset, Limit, Token, StartId).
+
 
 %%--------------------------------------------------------------------
 %% @equiv read_dir_plus_insecure/5 with permission checks
@@ -74,15 +81,18 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
 -spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
-read_dir_plus(UserCtx, FileCtx, Offset, Limit, Token) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?traverse_container, ?list_container],
-        [UserCtx, FileCtx, Offset, Limit, Token],
-        fun read_dir_plus_insecure/5).
+read_dir_plus(UserCtx, FileCtx0, Offset, Limit, Token) ->
+    FileCtx1 = permissions:check(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?traverse_container, ?list_container]
+    ),
+    read_dir_plus_insecure(UserCtx, FileCtx1, Offset, Limit, Token).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,6 +123,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
     }.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -157,6 +168,7 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
             is_last = IsLast
         }
     }.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -212,6 +224,7 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
         }
     }.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -237,6 +250,7 @@ get_cached_token(Token) ->
         _ ->
             {binary_to_term(Token), undefined}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -265,6 +279,7 @@ cache_token(NT, CachePid) ->
             cache_token(NT, undefined)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -286,6 +301,7 @@ cache_proc(Token) ->
             ok
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -305,6 +321,7 @@ filtermap(Map, Filter, L, MaxProcs, Length) ->
         _ ->
             filtermap(Map, Filter, L)
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private

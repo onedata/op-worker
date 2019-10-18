@@ -34,13 +34,8 @@
 %% Returns updated default file context record.
 %% @end
 %%--------------------------------------------------------------------
--spec check_normal_or_default_def(check_permissions:access_definition(), user_ctx:ctx(),
+-spec check_normal_or_default_def(permissions:access_definition(), user_ctx:ctx(),
     file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-check_normal_or_default_def({Type, FileCtx}, UserCtx, FileCtx) ->
-    {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx);
-check_normal_or_default_def({Type, SubjectCtx}, UserCtx, FileCtx) ->
-    {ok, _} = check_normal_def({Type, SubjectCtx}, UserCtx, FileCtx),
-    {ok, FileCtx};
 check_normal_or_default_def(Type, UserCtx, FileCtx) ->
     {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx).
 
@@ -53,8 +48,8 @@ check_normal_or_default_def(Type, UserCtx, FileCtx) ->
 %% 'share_id'.
 %% @end
 %%--------------------------------------------------------------------
--spec check_normal_def(check_permissions:access_definition(),  user_ctx:ctx(),
-    file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
+-spec check_normal_def({permissions:access_definition(), file_ctx:ctx()},
+    user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
     case file_ctx:is_root_dir_const(SubjectCtx) of
         true ->
@@ -69,7 +64,7 @@ check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
                     {ok, SubjectCtx2};
                 false ->
                     {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, UserCtx),
-                    rules_cache:check_and_cache_results([{share, ParentCtx}], UserCtx, DefaultFileCtx),
+                    permissions:check_permission(share, UserCtx, ParentCtx),
                     {ok, SubjectCtx3}
             end
     end;
@@ -86,8 +81,8 @@ check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
                     SubjectCtx
             end,
             {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, UserCtx),
-            rules_cache:check_and_cache_results([{?traverse_container, ParentCtx}], UserCtx, _DefaultFileCtx),
-            rules_cache:check_and_cache_results([{traverse_ancestors, ParentCtx}], UserCtx, _DefaultFileCtx),
+            permissions:check_permission(?traverse_container, UserCtx, ParentCtx),
+            permissions:check_permission(traverse_ancestors, UserCtx, ParentCtx),
             {ok, SubjectCtx3}
     end;
 check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
@@ -112,7 +107,7 @@ check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
 %% Check if given access_definition is granted to given user.
 %% @end
 %%--------------------------------------------------------------------
--spec check(check_permissions:access_definition(), file_meta:doc(), user_ctx:ctx(),
+-spec check(permissions:access_definition(), file_meta:doc(), user_ctx:ctx(),
     od_share:id() | undefined, acl:acl() | undefined, file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 % standard posix checks
 check(root, _, _, _, _, _) ->
@@ -380,7 +375,7 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 %% SPACE_READ_DATA privilege.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_scope_privs(check_permissions:access_definition(), file_ctx:ctx(),
+-spec validate_scope_privs(permissions:access_definition(), file_ctx:ctx(),
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_scope_privs(read, FileCtx, UserCtx, undefined) ->

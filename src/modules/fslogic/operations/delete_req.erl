@@ -18,9 +18,11 @@
 %% API
 -export([delete/3]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -31,21 +33,18 @@
 -spec delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 delete(UserCtx, FileCtx, Silent) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx, Silent],
-        fun(UserCtx_, FileCtx_, Silent_) ->
-            case file_ctx:is_dir(FileCtx_) of
-                {true, FileCtx2} ->
-                    delete_dir(UserCtx_, FileCtx2, Silent_);
-                {false, FileCtx2} ->
-                    delete_file(UserCtx_, FileCtx2, Silent_)
-            end
-        end).
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            delete_dir(UserCtx, FileCtx2, Silent);
+        {false, FileCtx2} ->
+            delete_file(UserCtx, FileCtx2, Silent)
+    end.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -54,11 +53,18 @@ delete(UserCtx, FileCtx, Silent) ->
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
-delete_dir(UserCtx, FileCtx, Silent) ->
-    check_permissions:execute(
-        [{?delete_subcontainer, parent}, ?delete, ?list_container],
-        [UserCtx, FileCtx, Silent],
-        fun check_if_empty_and_delete/3).
+delete_dir(UserCtx, FileCtx0, Silent) ->
+    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    permissions:check(
+        UserCtx, FileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
+    ),
+    FileCtx2 = permissions:check(
+        UserCtx, FileCtx1,
+        [traverse_ancestors, ?delete, ?list_container]
+    ),
+    check_if_empty_and_delete(UserCtx, FileCtx2, Silent).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -67,11 +73,18 @@ delete_dir(UserCtx, FileCtx, Silent) ->
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
-delete_file(UserCtx, FileCtx, Silent) ->
-    check_permissions:execute(
-        [{?delete_object, parent}, ?delete],
-        [UserCtx, FileCtx, Silent],
-        fun delete_insecure/3).
+delete_file(UserCtx, FileCtx0, Silent) ->
+    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    permissions:check(
+        UserCtx, FileParentCtx,
+        [traverse_ancestors, ?delete_object]
+    ),
+    FileCtx2 = permissions:check(
+        UserCtx, FileCtx1,
+        [traverse_ancestors, ?delete]
+    ),
+    delete_insecure(UserCtx, FileCtx2, Silent).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -88,6 +101,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
         {_, _FileCtx2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private

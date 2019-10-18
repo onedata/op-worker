@@ -29,9 +29,11 @@ end).
 %% API
 -export([create_share/3, remove_share/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv create_share_insecure/3 with permission checks
@@ -39,11 +41,10 @@ end).
 %%--------------------------------------------------------------------
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
-create_share(UserCtx, FileCtx, Name) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx, Name],
-        fun create_share_internal/3).
+create_share(UserCtx, FileCtx0, Name) ->
+    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    create_share_internal(UserCtx, FileCtx1, Name).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_share_insecure/2 with permission checks
@@ -51,15 +52,15 @@ create_share(UserCtx, FileCtx, Name) ->
 %%--------------------------------------------------------------------
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-remove_share(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun remove_share_internal/2).
+remove_share(UserCtx, FileCtx0) ->
+    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    remove_share_internal(UserCtx, FileCtx1).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -72,6 +73,7 @@ remove_share(UserCtx, FileCtx) ->
 create_share_internal(UserCtx, FileCtx, Name) ->
     ?CATCH_ERRORS(create_share_insecure(UserCtx, FileCtx, Name)).
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -82,6 +84,7 @@ create_share_internal(UserCtx, FileCtx, Name) ->
     fslogic_worker:provider_response().
 remove_share_internal(UserCtx, FileCtx) ->
     ?CATCH_ERRORS(remove_share_insecure(UserCtx, FileCtx)).
+
 
 %% @private
 -spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
@@ -116,6 +119,7 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
             ?ERROR(?EAGAIN)
     end.
 
+
 %% @private
 -spec remove_share_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
@@ -137,6 +141,7 @@ remove_share_insecure(UserCtx, FileCtx) ->
             #provider_response{status = #status{code = ?OK}}
     end.
 
+
 %% @private
 -spec check_is_dir(file_ctx:ctx()) -> ok | no_return().
 check_is_dir(FileCtx) ->
@@ -144,6 +149,7 @@ check_is_dir(FileCtx) ->
         {false, _} -> ?ERROR(?ENOTDIR);
         _ -> ok
     end.
+
 
 %% @private
 -spec assert_has_space_privilege(od_space:id(), od_user:id(),
