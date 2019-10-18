@@ -223,7 +223,6 @@
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory
     memory = #{} :: map(),
-    open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 

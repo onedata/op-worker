@@ -31,7 +31,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--define(CTX, #{model => ?MODULE}).
+-define(CTX, #{model => ?MODULE, memory_copies => all}).
 
 %%%===================================================================
 %%% API

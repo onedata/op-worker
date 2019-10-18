@@ -22,6 +22,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/api_errors.hrl").
 
+-export([init_cannonical_paths_cache/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
@@ -54,6 +55,7 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
+-define(INIT_CANNONICAL_PATHS_CACHE(Space), {init_cannonical_paths_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
@@ -81,6 +83,21 @@
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 %%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes cache on all nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_cannonical_paths_cache(od_space:id() | all) -> ok.
+init_cannonical_paths_cache(Space) ->
+    lists:foreach(fun(Node) ->
+        rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_CANNONICAL_PATHS_CACHE(Space)}])
+    end, consistent_hashing:get_all_nodes()).
+
+%%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
 
@@ -92,6 +109,9 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    location_and_link_utils:init_cannonical_paths_cache_group(),
+    erlang:send_after(0, self(), {sync_timer, ?INIT_CANNONICAL_PATHS_CACHE(all)}),
+
     transfer:init(),
     clproto_serializer:load_msg_defs(),
 
@@ -170,6 +190,10 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
     ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
+handle({bounded_cache_timer, Msg}) ->
+    bounded_cache:check_cache_size(Msg);
+handle(?INIT_CANNONICAL_PATHS_CACHE(Space)) ->
+    location_and_link_utils:init_cannonical_paths_cache(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -618,7 +642,7 @@ schedule(Request, Timeout) ->
 -spec invalidate_permissions_cache() -> ok.
 invalidate_permissions_cache() ->
     try
-        permissions_cache:invalidate()
+        permissions_cache:invalidate_on_node()
     catch
         _:Reason ->
             ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
@@ -628,8 +652,12 @@ invalidate_permissions_cache() ->
 periodical_spaces_autocleaning_check() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
+            MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                autocleaning_api:maybe_check_and_start_autocleaning(SpaceId)
+                case consistent_hashing:get_node(SpaceId) of
+                    MyNode -> autocleaning_api:maybe_check_and_start_autocleaning(SpaceId);
+                    _ -> ok
+                end
             end, SpaceIds);
         ?ERROR_UNREGISTERED_PROVIDER ->
             ?debug("Skipping spaces cleanup due to unregistered provider");
