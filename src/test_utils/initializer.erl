@@ -716,6 +716,11 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports),
+
+    lists:foreach(fun(DomainWorker) ->
+        rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
+    end, get_different_domain_workers(Config)),
+
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
