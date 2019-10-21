@@ -16,7 +16,7 @@
 
 -define(DEFAULT_DELETE_ENABLE, false).
 -define(DEFAULT_WRITE_ONCE, false).
--define(DEFAULT_SCAN_INTERVAL, 10).
+-define(DEFAULT_SCAN_INTERVAL, 10). % in seconds
 -define(DEFAULT_SYNC_ACL, false).
 -define(DEFAULT_SYNC_MAX_DEPTH, 65535).
 -define(SYNC_DIR_BATCH_SIZE, application:get_env(?APP_NAME, storage_sync_dir_batch_size, 1000)).

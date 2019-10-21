@@ -10,6 +10,7 @@
 %%% Every ?STORAGE_SYNC_CHECK_INTERVAL seconds it lists all locally
 %%% supported spaces, checks whether storage_sync mechanism is configured
 %%% for this spaces and decides whether scans should be started.
+%%% For more info on storage_sync please see storage_sync_traverse.erl.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_worker).

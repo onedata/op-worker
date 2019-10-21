@@ -23,7 +23,7 @@
 -export_type([hash/0]).
 
 %% API
--export([children_attrs_hash_has_changed/3, hash/1, compute_file_attrs_hash/2]).
+-export([children_attrs_hash_has_changed/4, hash/1, compute_file_attrs_hash/2]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -31,14 +31,12 @@
 %% synchronization.
 %% @end
 %%-------------------------------------------------------------------
--spec children_attrs_hash_has_changed(storage_sync_info:doc() | undefined, hash(), non_neg_integer()) ->
+-spec children_attrs_hash_has_changed(hash(), non_neg_integer(), non_neg_integer(), storage_sync_info:doc() | undefined) ->
     boolean().
-children_attrs_hash_has_changed(undefined, _CurrentChildrenAttrsHash, _Key) ->
+children_attrs_hash_has_changed(_CurrentChildrenAttrsHash, _Offset, _BatchSize, undefined) ->
     true;
-children_attrs_hash_has_changed(#document{
-    value = #storage_sync_info{children_attrs_hashes = PreviousHashes}
-}, CurrentChildrenAttrsHash, Key) ->
-    PreviousHash = maps:get(Key, PreviousHashes, undefined),
+children_attrs_hash_has_changed(CurrentChildrenAttrsHash, Offset, BatchSize, SSIDoc) ->
+    PreviousHash = storage_sync_info:get_batch_hash(Offset, BatchSize, SSIDoc),
     case {PreviousHash, CurrentChildrenAttrsHash} of
         {Hash, Hash} -> false;
         {undefined, <<"">>} -> false;

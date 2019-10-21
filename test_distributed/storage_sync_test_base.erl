@@ -371,12 +371,12 @@ create_directory_import_many_test(Config, MountSpaceInRoot) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 203,
+        <<"toProcess">> => 201,
         <<"imported">> => 200,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
+        <<"otherProcessed">> => 0,
         <<"importedSum">> => 200,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -801,12 +801,12 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 403,
+        <<"toProcess">> => 401,
         <<"imported">> => 400,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
+        <<"otherProcessed">> => 0,
         <<"importedSum">> => 400,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,

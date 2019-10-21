@@ -31,8 +31,6 @@
 %% Traverse callbacks
 -export([do_master_job/2, get_job/1, update_job_progress/6]).
 
-%% Util functions
--export([]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TASK_ID, <<(?POOL_NAME)/binary, "_", (datastore_utils:gen_key())/binary>>).
@@ -53,28 +51,28 @@
 
 % opts that can be passed from calling method
 -type run_opts() :: #{
-    execute_slave_on_dir => boolean(),
-    async_master_jobs => boolean(),
-    async_next_batch_job => boolean(),
-    next_batch_job_prehook => next_batch_job_prehook(),
-    children_master_job_prehook => children_batch_job_prehook(),
     offset => non_neg_integer(),
     batch_size => non_neg_integer(),
     marker => undefined | helpers:marker(),
     max_depth => non_neg_integer(),
+    % flag that informs whether slave_job should be scheduled on directories
+    execute_slave_on_dir => boolean(),
+    % flag that informs whether children master jobs should be scheduled asynchronously
+    async_master_jobs => boolean(),
+    % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
+    async_next_batch_job => boolean(),
+    % prehook executed before scheduling job for processing next batch of given directory
+    next_batch_job_prehook => next_batch_job_prehook(),
+    % prehook executed before scheduling job for processing children directory
+    children_master_job_prehook => children_batch_job_prehook(),
     % custom function that is called on each listed child
     compute_fun => undefined | compute(),
+    % initial argument for compute function
     compute_init => term(),
     % allows to disable compute for specific batch, by default its enabled, but compute_fun must be defined
     compute_enabled => boolean()
 }.
 
--type opts() :: #{
-    offset := non_neg_integer(),
-    batch_size := non_neg_integer(),
-    marker => helpers:marker(),
-    max_depth := non_neg_integer()
-}.
 %% @formatter:on
 
 -export_type([run_opts/0, opts/0, info/0, job/0, next_batch_job_prehook/0, compute/0,

@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO UPDATE !!!!
+%%% This module is responsible for syncing a single file found on storage
+%%% to Onedata filesystem.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_engine).

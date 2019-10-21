@@ -248,14 +248,20 @@
 }).
 
 -record(storage_sync_info, {
-    children_attrs_hashes = #{} :: storage_sync_info:hashes(),
-    delayed_children_attrs_hashes = #{} :: storage_sync_info:hashes(),
+    children_hashes = #{} :: storage_sync_info:hashes(),
     mtime :: undefined | non_neg_integer(),
     last_stat :: undefined | non_neg_integer(),
+    % below counters are used to check whether all batches of given directory
+    % were processed, as they are processed in parallel
     batches_to_process = 0 :: non_neg_integer(),
-    batches_processed = 0:: non_neg_integer()
+    batches_processed = 0:: non_neg_integer(),
+    % below map contains new hashes, that will be used to update values in children_hashes
+    % when counters batches_to_process == batches_processed
+    hashes_to_update = #{} :: storage_sync_info:hashes()
 }).
 
+% An empty model used for creating storage_sync_links
+% For more information see storage_sync_links.erl
 -record(storage_sync_links, {}).
 
 -record(file_meta, {
@@ -503,10 +509,15 @@
     batch_size :: non_neg_integer(),
     marker :: undefined | helpers:marker(),
     max_depth :: non_neg_integer(),
+    % flag that informs whether slave_job should be scheduled on directories
     execute_slave_on_dir :: boolean(),
+    % flag that informs whether children master jobs should be scheduled asynchronously
     async_master_jobs :: boolean(),
+    % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
     async_next_batch_job :: boolean(),
+    % initial argument for compute function (see storage_traverse.erl for more info)
     compute_init :: term(),
+    % flag that informs whether compute function should be executed (see storage_traverse.erl for more info)
     compute_enabled :: boolean(),
     info :: storage_traverse:info()
 }).

@@ -88,7 +88,7 @@
     fun
         ({_, {storage_sync_hash, children_attrs_hash_has_changed, Args}, ExpectedResult0}) ->
             Id = storage_sync_info:id(StorageFileId, SpaceId),
-            case hd(Args) of
+            case lists:nth(4, Args) of
                 #document{key = Id} -> 1;
                 _ -> 0
             end;

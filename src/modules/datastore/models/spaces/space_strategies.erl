@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model for storing storage_sync configurations.
-%%% Each document stores map of configurations of storage_sync on  each
+%%% Each document stores map of configurations of storage_sync on each
 %%% storage supporting given space.
 %%% TODO VFS-5717 rename to space_sync_config
 %%% @end
@@ -32,7 +32,8 @@
 ]).
 
 %% datastore_model callbacks
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, get_ctx/0]).
+-export([decode/1, encode/1]).
 
 -type key() :: datastore:key().
 -type record() :: #space_strategies{}.
@@ -168,7 +169,7 @@ get_update_details(#storage_sync_config{
     {UpdateEnabled, UpdateConfig}.
 
 -spec get_sync_configs(od_space:id()) -> {ok, sync_configs()}.
-get_sync_configs(SpaceId)  ->
+get_sync_configs(SpaceId) ->
     case space_strategies:get(SpaceId) of
         {error, not_found} ->
             {ok, #{}};
@@ -222,6 +223,15 @@ default_update_sync_config(Enabled, Config) ->
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -307,8 +317,8 @@ get_record_struct(6) ->
         {sync_configs, #{string => {record, [
             {import_enabled, boolean},
             {update_enabled, boolean},
-            {import_config, {custom, json, {json_utils, encode, decode}}},
-            {update_config, {custom, json, {json_utils, encode, decode}}}
+            {import_config, {custom, json, {?MODULE, encode, decode}}},
+            {update_config, {custom, json, {?MODULE, encode, decode}}}
         ]}}}
     ]}.
 %%--------------------------------------------------------------------
@@ -408,3 +418,14 @@ upgrade_record(5, {?MODULE, SyncConfigs, _, _, _}) ->
         }
     end, SyncConfigs),
     {6, #space_strategies{sync_configs = NewSyncConfigs}}.
+
+-spec encode(config()) -> binary().
+encode(Config) ->
+    json_utils:encode(Config).
+
+-spec decode(binary()) -> config().
+decode(Config) ->
+    DecodedConfig = json_utils:decode(Config),
+    maps:fold(fun(K, V, AccIn) ->
+        AccIn#{binary_to_atom(K, utf8) => V}
+    end, DecodedConfig, DecodedConfig).

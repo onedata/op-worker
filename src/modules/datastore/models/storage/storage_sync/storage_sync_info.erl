@@ -6,7 +6,21 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module contains implementation of helper model used by
-%%% storage_sync.
+%%% storage_sync. It is used to store information required by sync
+%%%%% to determine whether there were changes introduced to file
+%%%%% or children files on storage since last scan.
+%%% It stores last synchronized mtime and timestamp
+%%% of stat operation which was performed to read the synced mtime.
+%%% For directories it also stores map of hashes computes from children
+%%% attributes.
+%%% Each batch (where batch is identified by an integer BatchKey = Offset div BatchSize)
+%%% is associated with hash computed out of attributes of the directory's children
+%%% from batch identified by Offset and BatchSize.
+%%% As consequent batches of the directory can be processed in parallel,
+%%% there are 2 counters introduced: batches_to_process and batches_processed.
+%%% children_hashes map and mtime fields are updated for directory only after
+%%% batches_processed counter reaches batches_to_process value.
+%%% Until then, hashes are stored in hashes_to_update map.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_info).
@@ -28,9 +42,8 @@
 -export_type([key/0, doc/0, record/0, hashes/0]).
 
 %% API
--export([get/2, get_mtime/1, delete/2, init_new_scan/2,
-    update_mtime/4, increase_batches_to_process/2,
-    mark_processed_batch/6, all_batches_processed/1, mark_processed_batch/7]).
+-export([get/2, get_mtime/1, get_batch_hash/3, are_all_batches_processed/1, delete/2, init_batch_counters/2,
+    update_mtime/4, increase_batches_to_process/2, mark_processed_batch/3, mark_processed_batch/6, update_hashes/3]).
 
 % exported for CT tests
 -export([create_or_update/3]).
@@ -57,28 +70,38 @@ get_mtime(#document{value = SSI}) ->
 get_mtime(#storage_sync_info{mtime = Mtime}) ->
     Mtime.
 
+-spec get_batch_hash(non_neg_integer(), non_neg_integer(), doc()) -> hash() | undefined.
+get_batch_hash(Offset, BatchSize, #document{value = #storage_sync_info{children_hashes = Hashes}}) ->
+    maps:get(batch_key(Offset, BatchSize), Hashes, undefined).
 
 -spec delete(helpers:file_id(), od_space:id()) -> ok | error().
 delete(StorageFileId, SpaceId) ->
     datastore_model:delete(?CTX, id(StorageFileId, SpaceId)).
 
--spec all_batches_processed(record() | doc()) -> boolean().
-all_batches_processed(#document{value = SSI}) ->
-    all_batches_processed(SSI);
-all_batches_processed(#storage_sync_info{
+-spec are_all_batches_processed(record() | doc()) -> boolean().
+are_all_batches_processed(#document{value = SSI}) ->
+    are_all_batches_processed(SSI);
+are_all_batches_processed(#storage_sync_info{
     batches_to_process = BatchesToProcess,
     batches_processed = BatchesProcessed
 }) ->
     BatchesToProcess =:= BatchesProcessed.
 
--spec init_new_scan(helpers:file_id(), od_space:id()) -> ok.
-init_new_scan(StorageFileId, SpaceId) ->
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is called before scheduling job for processing first
+%% batch of directory's children. It resets counters which are responsible
+%% for determining when jobs for all batches were finished.
+%% @end
+%%-------------------------------------------------------------------
+-spec init_batch_counters(helpers:file_id(), od_space:id()) -> ok.
+init_batch_counters(StorageFileId, SpaceId) ->
     ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
         fun(SSI) ->
             {ok, SSI#storage_sync_info{
                 batches_to_process = 1,
                 batches_processed = 0,
-                delayed_children_attrs_hashes = #{}
+                hashes_to_update = #{}
             }}
         end
     )).
@@ -100,48 +123,81 @@ increase_batches_to_process(StorageFileId, SpaceId) ->
         end
     )).
 
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(),
-    undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
-mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate) ->
-    mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate, true).
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), non_neg_integer()) -> {ok, doc()}.
+mark_processed_batch(StorageFileId, SpaceId, Mtime) ->
+    mark_processed_batch(StorageFileId, SpaceId, Mtime, undefined, undefined, undefined, true).
 
 -spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(),
-    undefined | non_neg_integer(), undefined | hash(), boolean(), boolean()) -> {ok, doc()}.
-mark_processed_batch(StorageFileId, SpaceId, Mtime, BatchKey, BatchHash, DelayHashUpdate,
-    UpdateDelayedHashesWhenFinished
-) ->
-    update(StorageFileId, SpaceId, fun(SSI0 = #storage_sync_info{
+    undefined | non_neg_integer(), undefined | non_neg_integer(), undefined | hash()) -> {ok, doc()}.
+mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash) ->
+    mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash, true).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function is called after processing batch starting from
+%% Offset of length BatchSize has been finished.
+%% It increases batches_processed counter and checks whether it reached
+%% batches_to_process counter.
+%% If counters become equal it merges children_hashes map with
+%% hashes_to_update and updates mtime.
+%% It is possible to delay update of children_to_hashes and mtime by
+%% setting UpdateHashesOnFinish flag to false.
+%% WARNING!!!
+%% After passing UpdateHashesOnFinishes = false, it is necessary to call
+%% update_hashes/3 function to enforce update of children_to_hashes and
+%% mtime fields.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), non_neg_integer(), undefined | non_neg_integer(),
+    undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
+mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash, UpdateHashesOnFinish) ->
+    update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
         batches_processed = BatchesProcessed,
         batches_to_process = BatchesToProcess,
-        children_attrs_hashes = CAH,
-        delayed_children_attrs_hashes = DCAH
+        children_hashes = ChildrenHashes,
+        hashes_to_update = HashesToUpdate
     }) ->
-        SSI1 = case DelayHashUpdate of
+        BatchesProcessed2 = BatchesProcessed + 1,
+        HashesToUpdate2 = update_hashes_map(Offset, BatchSize, BatchHash, HashesToUpdate),
+        case UpdateHashesOnFinish and (BatchesProcessed2 =:= BatchesToProcess) of
             true ->
-                SSI0#storage_sync_info{delayed_children_attrs_hashes = update_hashes_map(BatchKey, BatchHash, DCAH)};
-            false ->
-                SSI0#storage_sync_info{children_attrs_hashes = update_hashes_map(BatchKey, BatchHash, CAH)}
-        end,
-        SSI2 = case BatchesProcessed + 1 =:= BatchesToProcess of
-            true ->
-                SSI1#storage_sync_info{
-                    batches_to_process = 0,
-                    batches_processed = 0,
+                {ok, SSI#storage_sync_info{
+                    batches_processed = BatchesProcessed2,
+                    hashes_to_update = #{},
+                    children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
                     mtime = Mtime
-                };
+                }};
             false ->
-                SSI1#storage_sync_info{batches_processed = BatchesProcessed + 1}
-        end,
-        SSI3 = case UpdateDelayedHashesWhenFinished of
-            true ->
-                SSI2#storage_sync_info{
-                    children_attrs_hashes = maps:merge(CAH, DCAH),
-                    delayed_children_attrs_hashes = #{}
-                };
-            false ->
-                SSI2
-        end,
-        {ok, SSI3}
+                {ok, SSI#storage_sync_info{
+                    batches_processed = BatchesProcessed2,
+                    hashes_to_update = HashesToUpdate2
+                }}
+        end
+    end).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function might be called only after batches_processed counter
+%% reached batched_to_process.
+%% It is used to update children_hashes map according to values stored
+%% in hashes_to_update.
+%% It also update mtime field.
+%% @end
+%%-------------------------------------------------------------------
+-spec update_hashes(helpers:file_id(), od_space:id(), non_neg_integer()) -> {ok, storage_sync_info:record()}.
+update_hashes(StorageFileId, SpaceId, Mtime) ->
+    update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
+        % this function might be called only when counters are equal
+        batches_processed = _BatchesToProcess,
+        batches_to_process = _BatchesToProcess,
+        children_hashes = ChildrenHashes,
+        hashes_to_update = HashesToUpdate
+    }) ->
+        {ok, SSI#storage_sync_info{
+           mtime = Mtime,
+            children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
+            hashes_to_update = #{}
+        }}
     end).
 
 %%===================================================================
@@ -175,6 +231,21 @@ default_doc(Key, Diff, SpaceId) ->
 update(StorageFileId, SpaceId, Diff) ->
     Id = id(StorageFileId, SpaceId),
     datastore_model:update(?CTX, Id, Diff).
+
+-spec update_hashes_map(non_neg_integer() | undefined, non_neg_integer() | undefined, hash() | undefined, hashes()) ->
+    hashes().
+update_hashes_map(Offset, BatchSize, Value, Map) ->
+    update_hashes_map(batch_key(Offset, BatchSize), Value, Map).
+
+-spec update_hashes_map(non_neg_integer() | undefined, hash() | undefined, hashes()) -> hashes().
+update_hashes_map(undefined, _Value, Map) -> Map;
+update_hashes_map(_Key, undefined, Map) -> Map;
+update_hashes_map(Key, Value, Map) -> Map#{Key => Value}.
+
+-spec batch_key(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
+batch_key(undefined, _Length) -> undefined;
+batch_key(_Offset, undefined) -> undefined;
+batch_key(Offset, Length) -> Offset div Length.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -223,12 +294,12 @@ get_record_struct(3) ->
     ]};
 get_record_struct(4) ->
     {record, [
-        {children_attrs_hashes, #{integer => binary}},
-        {delayed_children_attrs_hashes, #{integer => binary}},
+        {children_hashes, #{integer => binary}},
         {mtime, integer},
         {last_stat, integer},
         {batches_to_process, integer},
-        {batches_processed, integer}
+        {batches_processed, integer},
+        {hashes_to_update, #{integer => binary}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -244,15 +315,10 @@ upgrade_record(2, {?MODULE, ChildrenAttrsHash, MTime}) ->
     {3, {?MODULE, ChildrenAttrsHash, MTime, MTime + 1}};
 upgrade_record(3, {?MODULE, ChildrenAttrsHash, MTime, LastSTat}) ->
     {4, #storage_sync_info{
-        children_attrs_hashes = ChildrenAttrsHash,
-        delayed_children_attrs_hashes = #{},
+        children_hashes = ChildrenAttrsHash,
         mtime = MTime,
         last_stat = LastSTat,
         batches_to_process = 0,
-        batches_processed = 0
+        batches_processed = 0,
+        hashes_to_update = #{}
     }}.
-
--spec update_hashes_map(non_neg_integer() | undefined, hash() | undefined, map()) -> map().
-update_hashes_map(undefined, _Value, Map) -> Map;
-update_hashes_map(_Key, undefined, Map) -> Map;
-update_hashes_map(Key, Value, Map) -> Map#{Key => Value}.

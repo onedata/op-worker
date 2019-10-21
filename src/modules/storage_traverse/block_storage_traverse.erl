@@ -32,7 +32,7 @@
 %%% storage_traverse callbacks
 %%%===================================================================
 
--spec init_type_specific_opts(storage_traverse:job(), storage_traverse:opts()) -> storage_traverse:job().
+-spec init_type_specific_opts(storage_traverse:job(), storage_traverse:run_opts()) -> storage_traverse:job().
 init_type_specific_opts(StorageTraverse = #storage_traverse{}, _Opts) ->
     StorageTraverse.
 
