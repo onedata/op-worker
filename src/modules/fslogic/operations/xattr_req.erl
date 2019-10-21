@@ -204,7 +204,10 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 -spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
     ShowInternal :: boolean()) -> fslogic_worker:fuse_response().
 list_xattr(UserCtx, FileCtx0, Inherited, ShowInternal) ->
-    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    FileCtx1 = fslogic_authz:authorize(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
     list_xattr_insecure(UserCtx, FileCtx1, Inherited, ShowInternal).
 
 %%%===================================================================
@@ -270,7 +273,7 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 -spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
     Inherited :: boolean()) -> fslogic_worker:fuse_response().
 get_custom_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_metadata]
     ),
@@ -285,7 +288,7 @@ get_custom_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:fuse_response().
 set_custom_xattr(UserCtx, FileCtx0, Xattr, Create, Replace) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
@@ -299,7 +302,7 @@ set_custom_xattr(UserCtx, FileCtx0, Xattr, Create, Replace) ->
 -spec remove_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:fuse_response().
 remove_custom_xattr(UserCtx, FileCtx0, XattrName) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),

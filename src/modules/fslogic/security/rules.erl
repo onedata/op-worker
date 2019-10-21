@@ -20,24 +20,11 @@
 -include_lib("ctool/include/privileges.hrl").
 
 %% API
--export([check_normal_or_default_def/3]).
+-export([check_normal_def/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given access_definition is granted to given user.
-%% Accepts default defs (that use default file context).
-%% Returns updated default file context record.
-%% @end
-%%--------------------------------------------------------------------
--spec check_normal_or_default_def(permissions:access_definition(), user_ctx:ctx(),
-    file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-check_normal_or_default_def(Type, UserCtx, FileCtx) ->
-    {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx).
 
 
 %%--------------------------------------------------------------------
@@ -48,52 +35,53 @@ check_normal_or_default_def(Type, UserCtx, FileCtx) ->
 %% 'share_id'.
 %% @end
 %%--------------------------------------------------------------------
--spec check_normal_def({permissions:access_definition(), file_ctx:ctx()},
-    user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
-check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
-    case file_ctx:is_root_dir_const(SubjectCtx) of
+-spec check_normal_def(fslogic_authz:access_definition(), user_ctx:ctx(),
+    file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
+check_normal_def(share, UserCtx, FileCtx) ->
+    case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             throw(?EACCES);
         false ->
-            {#document{value = #file_meta{shares = Shares}}, SubjectCtx2} =
-                file_ctx:get_file_doc_including_deleted(SubjectCtx),
-            ShareId = file_ctx:get_share_id_const(DefaultFileCtx),
+            {#document{value = #file_meta{
+                shares = Shares
+            }}, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+            ShareId = file_ctx:get_share_id_const(FileCtx2),
 
             case lists:member(ShareId, Shares) of
                 true ->
-                    {ok, SubjectCtx2};
+                    {ok, FileCtx2};
                 false ->
-                    {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, UserCtx),
-                    permissions:check_permission(share, UserCtx, ParentCtx),
-                    {ok, SubjectCtx3}
+                    {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+                    fslogic_authz:check_access(UserCtx, ParentCtx, share),
+                    {ok, FileCtx3}
             end
     end;
-check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
-    case file_ctx:is_root_dir_const(SubjectCtx) of
+check_normal_def(traverse_ancestors, UserCtx, FileCtx) ->
+    case file_ctx:is_root_dir_const(FileCtx) of
         true ->
-            {ok, SubjectCtx};
+            {ok, FileCtx};
         false ->
-            SubjectCtx2 = case file_ctx:is_space_dir_const(SubjectCtx) of
+            FileCtx2 = case file_ctx:is_space_dir_const(FileCtx) of
                 true ->
-                    {ok, SubjectCtx2_} = check_normal_def({?traverse_container, SubjectCtx}, UserCtx, _DefaultFileCtx),
-                    SubjectCtx2_;
+                    {ok, FileCtx2_} = check_normal_def(?traverse_container, UserCtx, FileCtx),
+                    FileCtx2_;
                 false ->
-                    SubjectCtx
+                    FileCtx
             end,
-            {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, UserCtx),
-            permissions:check_permission(?traverse_container, UserCtx, ParentCtx),
-            permissions:check_permission(traverse_ancestors, UserCtx, ParentCtx),
-            {ok, SubjectCtx3}
+            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+            fslogic_authz:check_access(UserCtx, ParentCtx, ?traverse_container),
+            fslogic_authz:check_access(UserCtx, ParentCtx, traverse_ancestors),
+            {ok, FileCtx3}
     end;
-check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
-    {FileDoc, SubjectCtx2} = file_ctx:get_file_doc_including_deleted(SubjectCtx),
-    ShareId = file_ctx:get_share_id_const(SubjectCtx2),
-    case file_ctx:get_active_perms_type(SubjectCtx2) of
-        {posix, SubjectCtx3} ->
-            check(Type, FileDoc, UserCtx, ShareId, undefined, SubjectCtx3);
-        {acl, SubjectCtx3} ->
-            {Acl, _} = file_ctx:get_acl(SubjectCtx3),
-            check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx3)
+check_normal_def(Type, UserCtx, FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    ShareId = file_ctx:get_share_id_const(FileCtx2),
+    case file_ctx:get_active_perms_type(FileCtx2) of
+        {posix, FileCtx3} ->
+            check(Type, FileDoc, UserCtx, ShareId, undefined, FileCtx3);
+        {acl, FileCtx3} ->
+            {Acl, _} = file_ctx:get_acl(FileCtx3),
+            check(Type, FileDoc, UserCtx, ShareId, Acl, FileCtx3)
     end.
 
 
@@ -107,7 +95,7 @@ check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
 %% Check if given access_definition is granted to given user.
 %% @end
 %%--------------------------------------------------------------------
--spec check(permissions:access_definition(), file_meta:doc(), user_ctx:ctx(),
+-spec check(fslogic_authz:access_definition(), file_meta:doc(), user_ctx:ctx(),
     od_share:id() | undefined, acl:acl() | undefined, file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 % standard posix checks
 check(root, _, _, _, _, _) ->
@@ -375,7 +363,7 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 %% SPACE_READ_DATA privilege.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_scope_privs(permissions:access_definition(), file_ctx:ctx(),
+-spec validate_scope_privs(fslogic_authz:access_definition(), file_ctx:ctx(),
     user_ctx:ctx(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_scope_privs(read, FileCtx, UserCtx, undefined) ->

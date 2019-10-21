@@ -130,7 +130,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 %%--------------------------------------------------------------------
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
 get_file_distribution(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_metadata]
     ),

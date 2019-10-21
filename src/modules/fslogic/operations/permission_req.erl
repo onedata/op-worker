@@ -32,7 +32,7 @@
 -spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
     fslogic_worker:provider_response().
 check_perms(UserCtx, FileCtx, OpenFlag) ->
-    permissions:check(UserCtx, FileCtx, required_perms(OpenFlag)),
+    fslogic_authz:authorize(UserCtx, FileCtx, required_perms(OpenFlag)),
     #provider_response{status = #status{code = ?OK}}.
 
 

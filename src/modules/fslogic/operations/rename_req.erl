@@ -270,15 +270,15 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targe
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    permissions:check(
+    fslogic_authz:authorize(
         UserCtx, SourceFileParentCtx,
         [traverse_ancestors, ?delete_subcontainer]
     ),
-    SourceFileCtx2 = permissions:check(
+    SourceFileCtx2 = fslogic_authz:authorize(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    TargetParentFileCtx1 = permissions:check(
+    TargetParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, TargetParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_subcontainer]
     ),
@@ -390,15 +390,15 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    permissions:check(
+    fslogic_authz:authorize(
         UserCtx, SourceFileParentCtx,
         [traverse_ancestors, ?delete_object]
     ),
-    SourceFileCtx2 = permissions:check(
+    SourceFileCtx2 = fslogic_authz:authorize(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    TargetParentFileCtx1 = permissions:check(
+    TargetParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, TargetParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]
     ),
@@ -420,15 +420,15 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    permissions:check(
+    fslogic_authz:authorize(
         UserCtx, SourceFileParentCtx,
         [traverse_ancestors, ?delete_subcontainer]
     ),
-    SourceFileCtx2 = permissions:check(
+    SourceFileCtx2 = fslogic_authz:authorize(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    TargetParentFileCtx1 = permissions:check(
+    TargetParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, TargetParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_subcontainer]
     ),

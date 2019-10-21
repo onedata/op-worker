@@ -34,7 +34,7 @@
 -spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response() | no_return().
 get_acl(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_acl]
     ),
@@ -48,7 +48,7 @@ get_acl(UserCtx, FileCtx0) ->
 -spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
 set_acl(UserCtx, FileCtx0, Acl) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_acl]
     ),
@@ -62,7 +62,7 @@ set_acl(UserCtx, FileCtx0, Acl) ->
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_acl]
     ),

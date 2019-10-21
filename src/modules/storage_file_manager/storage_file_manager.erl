@@ -633,19 +633,19 @@ open_for_rdwr(SFMHandle) ->
 %% @equiv open/2, but with permission control
 %% @end
 %%--------------------------------------------------------------------
--spec open_with_permissions_check(handle(), [permissions:access_definition()],
+-spec open_with_permissions_check(handle(), [fslogic_authz:access_definition()],
     helpers:open_flag()) -> {ok, handle()} | error_reply().
 open_with_permissions_check(#sfm_handle{
     session_id = SessionId,
     space_id = SpaceId,
     file_uuid = FileUuid,
     share_id = ShareId
-} = SFMHandle, Permissions, OpenFlag) ->
+} = SFMHandle, AccessDefinitions, OpenFlag) ->
     FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(SessionId),
 
-    permissions:check(UserCtx, FileCtx, Permissions),
+    fslogic_authz:authorize(UserCtx, FileCtx, AccessDefinitions),
     open_insecure(SFMHandle, OpenFlag).
 
 %%--------------------------------------------------------------------

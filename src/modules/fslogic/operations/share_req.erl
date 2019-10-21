@@ -42,7 +42,10 @@ end).
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
 create_share(UserCtx, FileCtx0, Name) ->
-    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    FileCtx1 = fslogic_authz:authorize(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
     create_share_internal(UserCtx, FileCtx1, Name).
 
 
@@ -53,7 +56,10 @@ create_share(UserCtx, FileCtx0, Name) ->
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_share(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    FileCtx1 = fslogic_authz:authorize(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
     remove_share_internal(UserCtx, FileCtx1).
 
 

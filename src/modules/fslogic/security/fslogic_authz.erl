@@ -6,29 +6,31 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME.
+%%% This module is responsible for authorization of fslogic operations.
 %%% @end
 %%%-------------------------------------------------------------------
--module(permissions).
+-module(fslogic_authz).
 -author("Bartosz Walkowicz").
 
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([check_permission/3, check/3]).
+-export([authorize/3, check_access/3]).
 
--type check_type() ::
+-type access_type() ::
     owner % Check whether user owns the item
     | traverse_ancestors % validates ancestors' exec permission.
     | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
     | share % Check if the file (or its ancestor) is shared
-    | write | read | exec | rdwr
-    | acl_access_mask().
--type acl_access_mask() :: binary().
+    | write | read | exec | rdwr % posix perms
+    | binary(). % acl perms
 
--type access_definition() :: root | check_type() | {check_type(), 'or', check_type()}.
+-type access_definition() ::
+    root
+    | access_type()
+    | {access_type(), 'or', access_type()}.
 
--export_type([check_type/0, access_definition/0]).
+-export_type([access_definition/0]).
 
 
 %%%===================================================================
@@ -36,9 +38,9 @@
 %%%===================================================================
 
 
--spec check(user_ctx:ctx(), file_ctx:ctx(), [access_definition()]) ->
+-spec authorize(user_ctx:ctx(), file_ctx:ctx(), [access_definition()]) ->
     file_ctx:ctx() | no_return().
-check(UserCtx, FileCtx0, AccessDefinitions0) ->
+authorize(UserCtx, FileCtx0, AccessDefinitions0) ->
     AccessDefinitions1 = case user_ctx:is_root(UserCtx) of
         true ->
             [];
@@ -48,28 +50,29 @@ check(UserCtx, FileCtx0, AccessDefinitions0) ->
                 false -> AccessDefinitions0
             end
     end,
-    check_permissions(UserCtx, FileCtx0, AccessDefinitions1).
+    check_access_defs(UserCtx, FileCtx0, AccessDefinitions1).
 
 
--spec check_permission(access_definition(), user_ctx:ctx(), file_ctx:ctx()) ->
+-spec check_access(user_ctx:ctx(), file_ctx:ctx(), access_definition()) ->
     file_ctx:ctx() | no_return().
-check_permission(Perm, UserCtx, FileCtx0) ->
+check_access(UserCtx, FileCtx0, AccessDef) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
-    case permissions_cache:check_permission({Perm, UserId, Guid}) of
+    CacheKey = {AccessDef, UserId, Guid},
+    case permissions_cache:check_permission(CacheKey) of
         {ok, ok} ->
             FileCtx0;
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
             try
-                {ok, FileCtx1} = rules:check_normal_or_default_def(
-                    Perm, UserCtx, FileCtx0
+                {ok, FileCtx1} = rules:check_normal_def(
+                    AccessDef, UserCtx, FileCtx0
                 ),
-                permissions_cache:cache_permission({Perm, UserId, Guid}, ok),
+                permissions_cache:cache_permission(CacheKey, ok),
                 FileCtx1
             catch _:?EACCES ->
-                permissions_cache:cache_permission({Perm, UserId, Guid}, ?EACCES),
+                permissions_cache:cache_permission(CacheKey, ?EACCES),
                 throw(?EACCES)
             end
     end.
@@ -81,10 +84,10 @@ check_permission(Perm, UserCtx, FileCtx0) ->
 
 
 %% @private
--spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), [access_definition()]) ->
+-spec check_access_defs(user_ctx:ctx(), file_ctx:ctx(), [access_definition()]) ->
     file_ctx:ctx().
-check_permissions(_UserCtx, FileCtx, []) ->
+check_access_defs(_UserCtx, FileCtx, []) ->
     FileCtx;
-check_permissions(UserCtx, FileCtx0, [AccessDefinition | Rest]) ->
-    FileCtx1 = check_permission(AccessDefinition, UserCtx, FileCtx0),
-    check_permissions(UserCtx, FileCtx1, Rest).
+check_access_defs(UserCtx, FileCtx0, [AccessDefinition | Rest]) ->
+    FileCtx1 = check_access(UserCtx, FileCtx0, AccessDefinition),
+    check_access_defs(UserCtx, FileCtx1, Rest).

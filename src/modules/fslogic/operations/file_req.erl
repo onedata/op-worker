@@ -47,7 +47,7 @@
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
-    ParentFileCtx1 = permissions:check(
+    ParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]
     ),
@@ -61,7 +61,7 @@ create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
 -spec storage_file_created(user_ctx:ctx(), FileCtx :: file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 storage_file_created(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]
     ),
@@ -75,7 +75,7 @@ storage_file_created(UserCtx, FileCtx0) ->
 -spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
-    ParentFileCtx1 = permissions:check(
+    ParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]
     ),
@@ -89,7 +89,10 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
 -spec get_file_location(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_location(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    FileCtx1 = fslogic_authz:authorize(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
     get_file_location_insecure(UserCtx, FileCtx1).
 
 
@@ -141,7 +144,10 @@ open_file_with_extended_info(UserCtx, FileCtx, rdwr) ->
 -spec fsync(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     boolean(), binary()) -> no_return() | #fuse_response{}.
 fsync(UserCtx, FileCtx0, DataOnly, HandleId) ->
-    FileCtx1 = permissions:check(UserCtx, FileCtx0, [traverse_ancestors]),
+    FileCtx1 = fslogic_authz:authorize(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
     fsync_insecure(UserCtx, FileCtx1, DataOnly, HandleId).
 
 
@@ -545,7 +551,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 -spec open_file_for_read(user_ctx:ctx(), file_ctx:ctx(), handle_id()) ->
     no_return() | #fuse_response{}.
 open_file_for_read(UserCtx, FileCtx0, HandleId) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_object]
     ),
@@ -560,7 +566,7 @@ open_file_for_read(UserCtx, FileCtx0, HandleId) ->
 -spec open_file_for_write(user_ctx:ctx(), file_ctx:ctx(), handle_id()) ->
     no_return() | #fuse_response{}.
 open_file_for_write(UserCtx, FileCtx0, HandleId) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_object]
     ),
@@ -575,7 +581,7 @@ open_file_for_write(UserCtx, FileCtx0, HandleId) ->
 -spec open_file_for_rdwr(user_ctx:ctx(), file_ctx:ctx(), handle_id()) ->
     no_return() | #fuse_response{}.
 open_file_for_rdwr(UserCtx, FileCtx0, HandleId) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_object, ?write_object]
     ),
@@ -590,7 +596,7 @@ open_file_for_rdwr(UserCtx, FileCtx0, HandleId) ->
 -spec open_file_with_extended_info_for_read(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
 open_file_with_extended_info_for_read(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_object]
     ),
@@ -605,7 +611,7 @@ open_file_with_extended_info_for_read(UserCtx, FileCtx0) ->
 -spec open_file_with_extended_info_for_write(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
 open_file_with_extended_info_for_write(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_object]
     ),
@@ -620,7 +626,7 @@ open_file_with_extended_info_for_write(UserCtx, FileCtx0) ->
 -spec open_file_with_extended_info_for_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
 open_file_with_extended_info_for_rdwr(UserCtx, FileCtx0) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_object, ?write_object]
     ),

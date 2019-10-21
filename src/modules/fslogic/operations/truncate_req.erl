@@ -32,7 +32,7 @@
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
 truncate(UserCtx, FileCtx0, Size) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_object]
     ),

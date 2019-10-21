@@ -58,7 +58,7 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %% {@link transfer_worker_behaviour} callback required_permissions/0.
 %% @end
 %%--------------------------------------------------------------------
--spec required_permissions() -> [permissions:access_definition()].
+-spec required_permissions() -> [fslogic_authz:access_definition()].
 required_permissions() ->
     [traverse_ancestors, ?write_object].
 

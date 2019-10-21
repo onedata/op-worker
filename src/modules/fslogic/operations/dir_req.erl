@@ -34,7 +34,7 @@
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
 mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
-    ParentFileCtx1 = permissions:check(
+    ParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_subcontainer]
     ),
@@ -67,7 +67,7 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
 ) ->
     fslogic_worker:fuse_response().
 read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?list_container]
     ),
@@ -82,7 +82,7 @@ read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
 read_dir_plus(UserCtx, FileCtx0, Offset, Limit, Token) ->
-    FileCtx1 = permissions:check(
+    FileCtx1 = fslogic_authz:authorize(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?traverse_container, ?list_container]
     ),

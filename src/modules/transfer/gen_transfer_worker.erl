@@ -48,7 +48,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [permissions:access_definition()].
+-callback required_permissions() -> [fslogic_authz:access_definition()].
 
 
 %%--------------------------------------------------------------------
@@ -241,10 +241,10 @@ should_start(NextRetryTimestamp) ->
     ok | {retry, file_ctx:ctx()} | {error, term()}.
 transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
     UserCtx = Params#transfer_params.user_ctx,
-    RequiredPerms = Mod:required_permissions(),
+    AccessDefinitions = Mod:required_permissions(),
 
     try
-        FileCtx1 = permissions:check(UserCtx, FileCtx0, RequiredPerms),
+        FileCtx1 = fslogic_authz:authorize(UserCtx, FileCtx0, AccessDefinitions),
         transfer_data_insecure(UserCtx, FileCtx1, State, Params)
     of
         ok ->
