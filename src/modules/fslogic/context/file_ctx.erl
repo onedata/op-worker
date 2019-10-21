@@ -70,7 +70,8 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
+    get_file_doc_including_deleted/1, get_parent/2, get_ancestors_guids/1,
+    get_storage_file_id/1, get_storage_file_id/2,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6,
@@ -445,6 +446,22 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's ancestors.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ancestors_guids(ctx()) -> {[file_id:file_guid()], ctx()}.
+get_ancestors_guids(FileCtx0) ->
+    case is_root_dir_const(FileCtx0) of
+        true ->
+            {[], FileCtx0};
+        false ->
+            {ParentCtx0, FileCtx1} = file_ctx:get_parent(FileCtx0, undefined),
+            {AncestorsGuids, ParentCtx1} = get_ancestors_guids(ParentCtx0),
+            FileCtx2 = FileCtx1#file_ctx{parent = ParentCtx1},
+            {[get_guid_const(ParentCtx1) | AncestorsGuids], FileCtx2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

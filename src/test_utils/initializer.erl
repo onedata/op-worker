@@ -687,7 +687,13 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Token = ?DUMMY_USER_TOKEN(UserId),
+        {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
+            onezone_domain = <<"zone">>,
+            subject = ?SUB(user, UserId),
+            nonce = UserId,
+            type = ?ACCESS_TOKEN,
+            persistent = false
+        }, UserId, []))),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{UserId, #user_config{
