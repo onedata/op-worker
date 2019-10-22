@@ -270,13 +270,13 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targe
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    fslogic_authz:authorize(
-        UserCtx, SourceFileParentCtx,
-        [traverse_ancestors, ?delete_subcontainer]
-    ),
     SourceFileCtx2 = fslogic_authz:authorize(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:authorize(
+        UserCtx, SourceFileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
     ),
     TargetParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, TargetParentFileCtx0,
@@ -390,13 +390,13 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    fslogic_authz:authorize(
-        UserCtx, SourceFileParentCtx,
-        [traverse_ancestors, ?delete_object]
-    ),
     SourceFileCtx2 = fslogic_authz:authorize(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:authorize(
+        UserCtx, SourceFileParentCtx,
+        [traverse_ancestors, ?delete_object]
     ),
     TargetParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, TargetParentFileCtx0,
@@ -420,13 +420,13 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    fslogic_authz:authorize(
-        UserCtx, SourceFileParentCtx,
-        [traverse_ancestors, ?delete_subcontainer]
-    ),
     SourceFileCtx2 = fslogic_authz:authorize(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:authorize(
+        UserCtx, SourceFileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
     ),
     TargetParentFileCtx1 = fslogic_authz:authorize(
         UserCtx, TargetParentFileCtx0,
