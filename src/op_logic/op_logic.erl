@@ -289,7 +289,13 @@ ensure_authorized(#req_ctx{req = #op_req{auth = ?ROOT}}) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     ok;
-ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
+ensure_authorized(#req_ctx{
+    plugin = Plugin,
+    req = OpReq,
+    versioned_entity = {Entity, _}
+} = ReqCtx) ->
+    check_api_caveats(ReqCtx),
+
     Result = try
         Plugin:authorize(OpReq, Entity)
     catch _:_ ->
@@ -311,6 +317,21 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Ent
                     throw(?ERROR_FORBIDDEN)
             end
     end.
+
+
+%% @private
+-spec check_api_caveats(req_ctx()) -> ok | no_return().
+check_api_caveats(#req_ctx{req = #op_req{
+    operation = Operation,
+    gri = GRI,
+    auth = Auth
+}}) ->
+    lists:foreach(fun(ApiCaveat) ->
+        case cv_api:verify(ApiCaveat, ?OP_WORKER, Operation, GRI) of
+            true -> ok;
+            false -> throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(ApiCaveat))
+        end
+    end, caveats:filter([cv_api], Auth#auth.caveats)).
 
 
 %%--------------------------------------------------------------------

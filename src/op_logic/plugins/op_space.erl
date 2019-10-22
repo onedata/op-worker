@@ -241,16 +241,18 @@ exists(_, _) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {view_reduce_function, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
@@ -261,27 +263,31 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
     aspect = instance
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = views
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_VIEWS);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_VIEWS);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {query_view, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_QUERY_VIEWS);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = As
 }}, _) when
@@ -289,36 +295,42 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     As =:= eff_groups;
     As =:= providers
 ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = transfers
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {transfers_throughput_charts, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = update, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {view_reduce_function, _}
 }}, _) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS).
 
 

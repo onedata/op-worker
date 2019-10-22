@@ -57,7 +57,6 @@ op_logic_plugin() ->
 %%--------------------------------------------------------------------
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
-operation_supported(create, instance, private) -> true;
 operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;
@@ -75,27 +74,6 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
-data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
-    required => #{
-        <<"dataSourceType">> => {binary, [<<"file">>, <<"dir">>]},
-        <<"dataSourceId">> => {binary, non_empty}
-    },
-    at_least_one => #{
-        <<"replicatingProvider">> => {gri, fun
-            (#gri{type = op_provider, id = ProviderId, aspect = instance}) ->
-                {true, ProviderId};
-            (_) ->
-                throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"replicatingProvider">>))
-        end},
-        <<"evictingProvider">> => {gri, fun
-            (#gri{type = op_provider, id = ProviderId, aspect = instance}) ->
-                {true, ProviderId};
-            (_) ->
-                throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"evictingProvider">>))
-        end}
-    }
-};
-
 data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
     undefined;
 
@@ -149,22 +127,14 @@ exists(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
-authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
-    aspect = instance
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(maps:get(<<"dataSourceId">>, Data)),
-    ReplicatingProvider = maps:get(<<"replicatingProvider">>, Data, undefined),
-    EvictingProvider = maps:get(<<"evictingProvider">>, Data, undefined),
-    TransferType = transfer_type(ReplicatingProvider, EvictingProvider),
-
-    transfer_utils:authorize_creation(SpaceId, UserId, TransferType, true);
-
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
+
     ViewPrivileges = case Transfer#transfer.index_name of
         undefined -> [];
         _ -> [?SPACE_QUERY_VIEWS]
@@ -176,18 +146,21 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     end,
     space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     aspect = As
 }}, #transfer{space_id = SpaceId}) when
     As =:= instance;
     As =:= progress;
     As =:= throughput_charts
 ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId) = Auth, gri = #gri{
     aspect = instance
 }} = Req, #transfer{space_id = SpaceId} = Transfer) ->
+    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
+
     case Transfer#transfer.user_id of
         UserId ->
             % User doesn't need cancel privileges to cancel his transfer but
@@ -217,19 +190,6 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{
-    aspect = instance
-}}, _) ->
-    FileGuid = maps:get(<<"dataSourceId">>, Data),
-
-    transfer_utils:validate_creation(
-        Auth,
-        file_id:guid_to_space_id(FileGuid),
-        maps:get(<<"replicatingProvider">>, Data, undefined),
-        maps:get(<<"evictingProvider">>, Data, undefined),
-        {guid, FileGuid}
-    );
-
 validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
     ok;
 
@@ -250,33 +210,6 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
-create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
-    SessionId = Auth#auth.session_id,
-    FileGuid = maps:get(<<"dataSourceId">>, Data),
-    ReplicatingProvider = maps:get(<<"replicatingProvider">>, Data, undefined),
-    EvictingProvider = maps:get(<<"evictingProvider">>, Data, undefined),
-    TransferType = transfer_type(ReplicatingProvider, EvictingProvider),
-
-    Result = case TransferType of
-        replication ->
-            lfm:schedule_file_replication(
-                SessionId, {guid, FileGuid}, ReplicatingProvider, undefined
-            );
-        _ ->
-            lfm:schedule_replica_eviction(
-                SessionId, {guid, FileGuid},
-                EvictingProvider, ReplicatingProvider
-            )
-    end,
-
-    case Result of
-        {ok, TransferId} ->
-            {ok, #document{value = Transfer}} = transfer:get(TransferId),
-            {ok, resource, {GRI#gri{id = TransferId}, Transfer}};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
-
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of
         {ok, NewTransferId} ->
@@ -368,17 +301,6 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec transfer_type(
-    ReplicatingProviderId :: undefined | od_provider:id(),
-    EvictingProviderId :: undefined | od_provider:id()
-) ->
-    transfer:type().
-transfer_type(undefined, ProviderId) when is_binary(ProviderId) -> eviction;
-transfer_type(ProviderId, undefined) when is_binary(ProviderId) -> replication;
-transfer_type(_, _) -> migration.
 
 
 %%--------------------------------------------------------------------
