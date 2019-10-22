@@ -21,6 +21,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("test_utils/initializer.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -665,7 +666,11 @@ mock_user_identity(Workers) ->
         fun
             (#token_auth{token = ?TOKEN}) ->
                 {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-            (#token_auth{token = ?DUMMY_USER_TOKEN(UserId)}) ->
+            (#token_auth{token = SerializedToken}) ->
+                {ok, #token{
+                    subject = ?SUB(user, UserId)
+                }} = tokens:deserialize(SerializedToken),
+
                 {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ).
