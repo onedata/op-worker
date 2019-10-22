@@ -328,7 +328,7 @@ remove_file_on_ceph_using_client(Config0) ->
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker, [{active, true}], SessionId(Worker)),
+    {ok, {Sock, _}} = fuse_test_utils:connect_as_user(Config, Worker, <<"user2">>, [{active, true}]),
 
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
