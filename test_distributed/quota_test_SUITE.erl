@@ -15,6 +15,7 @@
 -include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -622,9 +623,12 @@ init_per_testcase(Case, Config) when
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?TOKEN}) ->
-                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-           (Auth) -> meck:passthrough([Auth])
+        fun(#token_auth{token = SerializedToken}) ->
+            {ok, #token{
+                subject = ?SUB(user, UserId)
+            }} = tokens:deserialize(SerializedToken),
+
+            {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ),
     init_per_testcase(default, Config);

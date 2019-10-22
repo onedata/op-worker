@@ -219,15 +219,12 @@ init_per_testcase(Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun
-            (#token_auth{token = ?TOKEN}) ->
-                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-            (#token_auth{token = SerializedToken}) ->
-                {ok, #token{
-                    subject = ?SUB(user, UserId)
-                }} = tokens:deserialize(SerializedToken),
+        fun(#token_auth{token = SerializedToken}) ->
+            {ok, #token{
+                subject = ?SUB(user, UserId)
+            }} = tokens:deserialize(SerializedToken),
 
-                {ok, #document{value = #user_identity{user_id = UserId}}}
+            {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"),

@@ -39,8 +39,6 @@ all() -> ?ALL([
     custom_error_when_handler_throws_error
 ]).
 
--define(TOKEN, <<"DUMMY-TOKEN">>).
-
 -define(USER_ID, <<"test_id">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
@@ -58,12 +56,23 @@ token_auth(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
+    {ok, SerializedToken} = ?assertMatch(
+        {ok, _},
+        tokens:serialize(tokens:construct(#token{
+            onezone_domain = <<"zone">>,
+            subject = ?SUB(user, ?USER_ID),
+            nonce = ?USER_ID,
+            type = ?ACCESS_TOKEN,
+            persistent = false
+        }, ?USER_ID, []))
+    ),
+
     % when
     AuthFail = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>}),
-    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => ?TOKEN}),
-    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", (?TOKEN)/binary>>}),
+    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedToken}),
+    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", SerializedToken/binary>>}),
     %% @todo VFS-5554 Deprecated, included for backward compatibility
-    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => ?TOKEN}),
+    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => SerializedToken}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
@@ -226,8 +235,13 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#token_auth{token = ?TOKEN}, ?USER_ID) ->
-            UserDoc;
+        (#token_auth{token = SerializedToken}, ?USER_ID) ->
+            case tokens:deserialize(SerializedToken) of
+                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
+                    UserDoc;
+                {error, _} = Error ->
+                    Error
+            end;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
         (UserSessId, ?USER_ID) ->

@@ -23,6 +23,7 @@
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -231,8 +232,19 @@ connect_via_token(Node, SocketOpts) ->
 %% @end
 %%--------------------------------------------------------------------
 connect_via_token(Node, SocketOpts, Nonce) ->
+    UserId = <<"user">>,
+    {ok, SerializedToken} = ?assertMatch(
+        {ok, _},
+        tokens:serialize(tokens:construct(#token{
+            onezone_domain = <<"zone">>,
+            subject = ?SUB(user, UserId),
+            nonce = UserId,
+            type = ?ACCESS_TOKEN,
+            persistent = false
+        }, UserId, []))
+    ),
     connect_via_token(Node, SocketOpts, Nonce, #token_auth{
-        token = ?TOKEN
+        token = SerializedToken
     }).
 
 %%--------------------------------------------------------------------

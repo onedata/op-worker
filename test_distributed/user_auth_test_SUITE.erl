@@ -28,7 +28,6 @@
 
 -export([token_authentication/1]).
 
--define(TOKEN, <<"DUMMY-TOKEN">>).
 -define(USER_ID, <<"test_id">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
@@ -42,16 +41,27 @@ token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Nonce = <<"nonce">>,
+    {ok, SerializedToken} = ?assertMatch(
+        {ok, _},
+        tokens:serialize(tokens:construct(#token{
+            onezone_domain = <<"zone">>,
+            subject = ?SUB(user, ?USER_ID),
+            nonce = ?USER_ID,
+            type = ?ACCESS_TOKEN,
+            persistent = false
+        }, ?USER_ID, []))
+    ),
+
     SessionId = datastore_utils:gen_key(
         <<"">>,
         term_to_binary({fuse, Nonce, #token_auth{
-            token = ?TOKEN,
+            token = SerializedToken,
             peer_ip = initializer:local_ip_v4()
         }})
     ),
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?TOKEN, Nonce),
+    {ok, Sock} = connect_via_token(Worker1, SerializedToken, Nonce),
 
     % then
     ?assertMatch(
@@ -61,7 +71,7 @@ token_authentication(Config) ->
     ?assertMatch(
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
         rpc:call(Worker1, user_identity, get_or_fetch, [#token_auth{
-            token = ?TOKEN
+            token = SerializedToken
         }])
     ),
     ok = ssl:close(Sock).
@@ -183,13 +193,24 @@ mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get, fun
-        (#token_auth{token = ?TOKEN}, ?USER_ID) ->
-            {ok, #document{key = ?USER_ID, value = #od_user{}}};
+        (#token_auth{token = SerializedToken}, ?USER_ID) ->
+            case tokens:deserialize(SerializedToken) of
+                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
+                    {ok, #document{key = ?USER_ID, value = #od_user{}}};
+                {error, _} = Error ->
+                    Error
+            end;
         (_, _) ->
             {error, not_found}
     end),
-    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(#token_auth{token = ?TOKEN}) ->
-        {ok, ?USER(?USER_ID)}
+    test_utils:mock_expect(Workers, token_logic, preauthorize, fun
+        (#token_auth{token = SerializedToken}) ->
+            case tokens:deserialize(SerializedToken) of
+                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
+                    {ok, ?USER(?USER_ID)};
+                {error, _} = Error ->
+                    Error
+            end
     end).
 
 unmock_user_logic(Config) ->
