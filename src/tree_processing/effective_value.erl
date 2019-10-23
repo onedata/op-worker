@@ -118,7 +118,7 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
             case fslogic_uuid:space_dir_uuid_to_spaceid_no_error(Key) of % is space?
                 <<>> -> % not a space
                     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-                    case file_meta:get(ParentUuid) of
+                    case file_meta:get_including_deleted(ParentUuid) of
                         {ok, ParentDoc} ->
                             InCriticalSection2 = case InCriticalSection of
                                 parent -> true;
