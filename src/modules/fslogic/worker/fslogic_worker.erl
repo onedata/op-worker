@@ -55,7 +55,6 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_QOS_CACHE_GROUP, init_qos_cache_group).
 -define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
 -define(CHECK_QOS_CACHE, bounded_cache_timer).
 
@@ -99,6 +98,7 @@ init(_Args) ->
     transfer:init(),
     qos_traverse:init_pool(),
     qos_bounded_cache:init_group(),
+    %% jka to zadzaiala przy restarcie - czy dostanie spacy od zone'a
     qos_bounded_cache:ensure_exists_for_all_spaces(),
 
     clproto_serializer:load_msg_defs(),
@@ -166,7 +166,7 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
     init_qos_cache_for_space_internal(SpaceId);
-handle({?CHECK_QOS_CACHE, Msg = #{name := ?QOS_BOUNDED_CACHE_GROUP}}) ->
+handle({?CHECK_QOS_CACHE, Msg}) ->
     ?debug("Cleaning QoS bounded cache if needed"),
     bounded_cache:check_cache_size(Msg);
 handle({fuse_request, SessId, FuseRequest}) ->
@@ -529,16 +529,16 @@ handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
 handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
     share_req:remove_share(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #add_qos{expression = Expression, replicas_num = ReplicasNum}, FileCtx) ->
-    qos_req:add_qos(UserCtx, FileCtx, Expression, ReplicasNum);
+handle_provider_request(UserCtx, #add_qos_entry{expression = Expression, replicas_num = ReplicasNum}, FileCtx) ->
+    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
-    qos_req:get_file_qos(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_qos{id = QosId}, FileCtx) ->
-    qos_req:get_qos_details(UserCtx, FileCtx, QosId);
-handle_provider_request(UserCtx, #remove_qos{id = QosId}, FileCtx) ->
-    qos_req:remove_qos(UserCtx, FileCtx, QosId);
-handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosId}, FileCtx) ->
-    qos_req:check_fulfillment(UserCtx, FileCtx, QosId).
+    qos_req:get_effective_file_qos(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
+    qos_req:get_qos_entry(UserCtx, FileCtx, QosEntryId);
+handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
+    qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
+handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosEntryId}, FileCtx) ->
+    qos_req:check_fulfillment(UserCtx, FileCtx, QosEntryId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -715,9 +715,13 @@ init_qos_cache_for_space_internal(SpaceId) ->
     try qos_bounded_cache:init(SpaceId) of
         ok ->
             ok;
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize qos bounded cache due to: ~p", [Error])
+            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.

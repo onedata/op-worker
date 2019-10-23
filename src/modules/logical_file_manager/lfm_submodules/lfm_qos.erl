@@ -13,12 +13,12 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
--include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 %% API
--export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2,
+-export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
     check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
@@ -27,27 +27,27 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds new qos for file or directory, returns QoS ID.
+%% Adds new qos_entry for file or directory, returns qos_entry ID.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(session:id(), lfm:file_key(), binary(), qos_entry:replicas_num()) ->
-    {ok, qos_entry:id()} | lfm:error_reply().
-add_qos(SessId, FileKey, Expression, ReplicasNum) ->
+-spec add_qos_entry(session:id(), lfm:file_key(), qos_expression:raw(),
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
-        #add_qos{expression = Expression, replicas_num = ReplicasNum},
-        fun(#qos_id{id = QosId}) ->
-            {ok, QosId}
+        #add_qos_entry{expression = Expression, replicas_num = ReplicasNum},
+        fun(#qos_entry_id{id = QosEntryId}) ->
+            {ok, QosEntryId}
         end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets information about QoS defined for file.
+%% Gets effective QoS for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_qos(session:id(), lfm:file_key()) ->
+-spec get_effective_file_qos(session:id(), lfm:file_key()) ->
     {ok, {[qos_entry:id()], file_qos:target_storages()}} | lfm:error_reply().
-get_file_qos(SessId, FileKey) ->
+get_effective_file_qos(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_effective_file_qos{},
         fun(#effective_file_qos{qos_entries = QosEntries, target_storages = TargetStorages}) ->
@@ -56,23 +56,16 @@ get_file_qos(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get details of specific qos.
+%% Get details of specified qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_details(session:id(), qos_entry:id()) ->
+-spec get_qos_entry(session:id(), qos_entry:id()) ->
     {ok, qos_entry:record()} | lfm:error_reply().
-get_qos_details(SessId, QosId) ->
-    case qos_entry:get_file_guid(QosId) of
+get_qos_entry(SessId, QosEntryId) ->
+    case qos_entry:get_file_guid(QosEntryId) of
         {ok, FileGuid} ->
-            remote_utils:call_fslogic(SessId, provider_request, FileGuid, #get_qos{id = QosId},
-                fun(Resp) ->
-                    {ok, #qos_entry{
-                        file_uuid = file_id:guid_to_uuid(FileGuid),
-                        expression = Resp#get_qos_resp.expression,
-                        replicas_num = Resp#get_qos_resp.replicas_num,
-                        is_possible = Resp#get_qos_resp.is_possible
-                    }}
-                end);
+            remote_utils:call_fslogic(SessId, provider_request, FileGuid, #get_qos_entry{id = QosEntryId},
+                fun(QosEntry) -> {ok, QosEntry} end);
         {error, _} = Error ->
             Error
     end.
@@ -80,14 +73,14 @@ get_qos_details(SessId, QosId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove single qos.
+%% Remove qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(session:id(), qos_entry:id()) -> ok | lfm:error_reply().
-remove_qos(SessId, QosId) ->
-    case qos_entry:get_file_guid(QosId) of
+-spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | lfm:error_reply().
+remove_qos_entry(SessId, QosEntryId) ->
+    case qos_entry:get_file_guid(QosEntryId) of
         {ok, FileGuid} ->
-            remote_utils:call_fslogic(SessId, provider_request, FileGuid, #remove_qos{id = QosId},
+            remote_utils:call_fslogic(SessId, provider_request, FileGuid, #remove_qos_entry{id = QosEntryId},
                 fun(_) -> ok end);
         {error, _} = Error ->
             Error
@@ -95,31 +88,35 @@ remove_qos(SessId, QosId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if given qos is fulfilled.
+%% @equiv
+%% check_qos_fulfilled(SessId, QosEntries, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()]) -> boolean().
+-spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()]) -> {ok, boolean()}.
 check_qos_fulfilled(SessId, QosEntries) ->
     check_qos_fulfilled(SessId, QosEntries, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if given qos is fulfilled for given file.
+%% Check if QoS requirements defined in qos_entry document/documents are fulfilled.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
-    lfm:file_key() | undefined) -> boolean() | lfm:error_reply().
+    lfm:file_key() | undefined) -> {ok, boolean()} | lfm:error_reply().
 check_qos_fulfilled(SessId, QosEntries, FileKey) when is_list(QosEntries) ->
-    lists:all(fun(QosId) -> true == check_qos_fulfilled(SessId, QosId, FileKey) end, QosEntries);
-check_qos_fulfilled(SessId, QosId, undefined) ->
-    case qos_entry:get_file_guid(QosId) of
+    FulfillmentStatus = lists:all(fun(QosEntryId) ->
+        {ok, true} == check_qos_fulfilled(SessId, QosEntryId, FileKey)
+    end, QosEntries),
+    {ok, FulfillmentStatus};
+check_qos_fulfilled(SessId, QosEntryId, undefined) ->
+    case qos_entry:get_file_guid(QosEntryId) of
         {error, _} = Error ->
             Error;
         {ok, QosOriginFileGuid} ->
-            check_qos_fulfilled(SessId, QosId, {guid, QosOriginFileGuid})
+            check_qos_fulfilled(SessId, QosEntryId, {guid, QosOriginFileGuid})
     end;
-check_qos_fulfilled(SessId, QosId, FileKey) ->
+check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #check_qos_fulfillment{qos_id = QosId},
-        fun(#qos_fulfillment{fulfilled = FulfillmentStatus}) -> FulfillmentStatus end).
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #check_qos_fulfillment{qos_id = QosEntryId},
+        fun(#qos_fulfillment{fulfilled = FulfillmentStatus}) -> {ok, FulfillmentStatus} end).
 

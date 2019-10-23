@@ -18,9 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([transform_to_rpn/1, calculate_target_storages/4]).
+-export([raw_to_rpn/1, calculate_target_storages/4]).
 
--type expression() :: [binary()].
+% the raw type stores expression as single binary. It is used to store inupt
+% from user. In the process of adding new qos_entry raw expression is
+% parsed to rpn form (list of key-value binaries separated by operators)
+-type raw() :: binary(). % e.g. <<"country=FR&type=disk">>
+-type rpn() :: [binary()]. % e.g. [<<"country=FR">>, <<"&">>, <<"type=disk">>]
 
 -type operator_stack() :: [operator_or_paren()].
 -type operand_stack() :: [binary()].
@@ -28,7 +32,7 @@
 -type paren() :: binary().
 -type operator() :: binary().
 
--export_type([expression/0]).
+-export_type([rpn/0, raw/0]).
 
 %%%===================================================================
 %%% API
@@ -40,13 +44,13 @@
 %% % TODO: VFS-5569 improve handling invalid QoS expressions
 %% @end
 %%--------------------------------------------------------------------
--spec transform_to_rpn(binary()) -> {ok, expression()} | {error, term()}.
-transform_to_rpn(Expression) ->
+-spec raw_to_rpn(raw()) -> {ok, rpn()} | ?ERROR_INVALID_QOS_EXPRESSION.
+raw_to_rpn(Expression) ->
     OperatorsBin = <<?UNION/binary, ?INTERSECTION/binary, ?COMPLEMENT/binary>>,
     ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
-    SplitExpression = re:split(Expression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
+    Tokens = re:split(Expression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
     try
-        {ok, transform_to_rpn_internal(SplitExpression, [], [])}
+        {ok, transform_to_rpn_internal(Tokens, [], [])}
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION
@@ -59,14 +63,14 @@ transform_to_rpn(Expression) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_target_storages(expression(), pos_integer(), [storage:id()], [#file_location{}]) ->
-    {ok, [storage:id()]} | {error, term()}.
+-spec calculate_target_storages(rpn(), pos_integer(), [storage:id()], [#file_location{}]) ->
+    {ture, [storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
 calculate_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
-    {error, cannot_fulfill_qos};
-calculate_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) ->
+    false;
+calculate_target_storages(Expression, ReplicasNum, SpaceStorages, FileLocations) ->
     % TODO: VFS-5734 choose storages for dirs according to current files distribution
     try
-        StorageList = eval_rpn(Expression, SpaceStorage),
+        StorageList = eval_rpn(Expression, SpaceStorages),
         select(StorageList, ReplicasNum, FileLocations)
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
@@ -83,7 +87,7 @@ calculate_target_storages(Expression, ReplicasNum, SpaceStorage, FileLocations) 
 %% internal version of transform_to_rpn/2
 %% @end
 %%--------------------------------------------------------------------
--spec transform_to_rpn_internal([binary()], operator_stack(), expression()) -> expression().
+-spec transform_to_rpn_internal([binary()], operator_stack(), rpn()) -> rpn().
 transform_to_rpn_internal([<<>>], [], []) ->
     [];
 transform_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
@@ -120,7 +124,7 @@ transform_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
 %% Popped left paren should be removed.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_right_paren(operator_stack(), expression()) -> {operator_stack(), expression()}.
+-spec handle_right_paren(operator_stack(), rpn()) -> {operator_stack(), rpn()}.
 handle_right_paren([?L_PAREN | Stack], RPNExpression) ->
     {Stack, RPNExpression};
 handle_right_paren([Op | Stack], RPNExpression) ->
@@ -140,7 +144,7 @@ handle_right_paren([], _RPNExpression) ->
 %% Then scanned operator should be pushed to the operator stack.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_operator(operator(), operator_stack(), expression()) -> {operator_stack(), expression()}.
+-spec handle_operator(operator(), operator_stack(), rpn()) -> {operator_stack(), rpn()}.
 handle_operator(ParsedOp, [StackOperator | Stack], RPNExpression) when
         StackOperator =:= ?INTERSECTION orelse
         StackOperator =:= ?UNION orelse
@@ -156,7 +160,7 @@ handle_operator(ParsedOperator, Stack, RPNExpression) ->
 %% fulfilling QoS left.
 %% @end
 %%--------------------------------------------------------------------
--spec eval_rpn(expression(), [storage:id()]) -> [storage:id()].
+-spec eval_rpn(rpn(), [storage:id()]) -> [storage:id()].
 eval_rpn(RPNExpression, StorageList) ->
     StorageSet = sets:from_list(StorageList),
     [ResSet] = lists:foldl(
@@ -185,7 +189,7 @@ eval_rpn(Operand, Stack, AvailableStorage) ->
 %% @doc
 %% @private
 %% Filters given storage list so that only storage with key equal
-%% to value left.
+%% to value are left.
 %% @end
 %%--------------------------------------------------------------------
 -spec filter_storage(binary(), binary(), sets:set(storage:id())) -> sets:set(storage:id()).
@@ -205,12 +209,14 @@ filter_storage(Key, Val, StorageSet) ->
 %% @private
 %% Selects required number of storage from list of storage.
 %% Storage with higher current blocks size are preferred.
+%% If there are no enough storages on list returns false otherwise returns
+%% {true, StorageList}.
 %% @end
 %%--------------------------------------------------------------------
 -spec select([storage:id()], pos_integer(), [#file_location{}]) ->
-    {ok, [storage:id()]} | {error, cannot_fulfill_qos}.
+    {true, [storage:id()]} | false.
 select([], _ReplicasNum, _FileLocations) ->
-    {error, cannot_fulfill_qos};
+    false;
 select(StorageList, ReplicasNum, FileLocations) ->
     StorageListWithBlocksSize = lists:map(fun (StorageId) ->
         {get_storage_blocks_size(StorageId, FileLocations), StorageId}
@@ -221,9 +227,9 @@ select(StorageList, ReplicasNum, FileLocations) ->
         {_, StorageId} <- lists:sublist(SortedStorageListWithBlocksSize, ReplicasNum)],
     case length(StorageSublist) of
         ReplicasNum ->
-            {ok, StorageSublist};
+            {true, StorageSublist};
         _ ->
-            {error, cannot_fulfill_qos}
+            false
     end.
 
 %%--------------------------------------------------------------------

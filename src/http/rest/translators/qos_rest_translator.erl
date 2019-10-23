@@ -31,9 +31,9 @@
 -spec create_response(op_logic:gri(), op_logic:auth_hint(),
     op_logic:data_format(), Result :: term() | {op_logic:gri(), term()} |
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = instance}, _, value, QosId) ->
-    PathTokens = [<<"qos-id">>, QosId],
-    ?CREATED_REPLY(PathTokens, #{<<"qosId">> => QosId}).
+create_response(#gri{aspect = instance}, _, value, QosEntryId) ->
+    PathTokens = [<<"qos-id">>, QosEntryId],
+    ?CREATED_REPLY(PathTokens, #{<<"QosEntryId">> => QosEntryId}).
 
 
 %%--------------------------------------------------------------------

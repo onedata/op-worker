@@ -8,53 +8,9 @@
 %%% This file contains definitions of macros used by qos module.
 %%%
 %%% QoS management is based on two types of documents synchronized within space:
-%%% qos_entry and file_qos.
+%%% qos_entry and file_qos. See qos_entry.erl or file_qos.erl for more
+%%% information.
 %%%
-%%% The qos_entry document contains information about single QoS requirement
-%%% including QoS expression, number of required replicas, UUID of file or
-%%% directory for which requirement has been added, information of QoS
-%%% requirement can be satisfied, information about traverse requests and
-%%% active traverses.
-%%% Such document is created when user adds QoS requirement for file or directory.
-%%% Requirement added for directory is inherited by whole directory structure.
-%%% Each QoS requirement is evaluated separately. It means that it is not
-%%% possible to define inconsistent requirements. For example if one requirement
-%%% says that file should be present on storage in Poland and other requirement
-%%% says that file should be present on storage in any country but Poland,
-%%% two different replicas will be created. On the other hand the same file
-%%% replica can fulfill multiple different QoS requirements. For example if
-%%% there is storage of type disk in Poland, then replica on such storage can
-%%% fulfill requirements that demands replica on storage in Poland and requirements
-%%% that demands replica on storage of type disk.
-%%% Multiple qos_entry documents can be created for the same file or directory.
-%%% Adding two identical QoS requirements for the same file results in two
-%%% different qos_entry documents.
-%%% QoS requirement is considered as fulfilled when:
-%%%     - there is no information that QoS requirement cannot be
-%%%       satisfied (is_possible field in qos_entry)
-%%%     - there are no pending traverse requests
-%%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
-%%%
-%%%
-%%% The file_qos item contains aggregated information about QoS defined
-%%% for file or directory. It contains:
-%%%     - qos_entries - holds IDs of all qos_entries defined for this file (
-%%%       including qos_entries which demands cannot be satisfied),
-%%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
-%%%       When new QoS is added for file or directory, storages on which replicas
-%%%       should be stored are calculated using QoS expression. Then traverse
-%%%       requests are added to qos_entry document. When provider notice change
-%%%       in qos_entry, it checks whether there is traverse request defined
-%%%       its storage. If yes, provider updates target_storages and
-%%%       starts traverse.
-%%% Each file or directory can be associated with at most one such document.
-%%% Getting full information about QoS defined for file or directory requires
-%%% calculating effective file_qos as it is inherited from all parents.
-%%%
-%%%
-%%% NOTE!!!
-%%% If you introduce any changes in this module, please ensure that
-%%% docs in file_qos.erl and qos_entry.erl are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -88,10 +44,24 @@
 
 
 % Request to remote providers to start QoS traverse.
+% This record is used as an element of datastore document (qos_entry).
+% Traverse is started in response to change of qos_entry document. (see qos_hooks.erl)
 -record(qos_traverse_req, {
     % uuid of file that travers should start from
+    % TODO: This field will be necessary after resolving VFS-5567. For now all
+    % traverses starts from file/directory for which QoS has been added.
     start_file_uuid :: file_meta:uuid(),
     target_storage :: storage:id()
+}).
+
+% This record has the same fields as file_qos record (see file_qos.erl).
+% The difference between this two is that file_qos stores information
+% (in database) assigned to given file, whereas effective_file_qos is
+% calculated using effective value mechanism and file_qos documents
+% of the file and all its parents.
+-record(effective_file_qos, {
+    qos_entries = [] :: [qos_entry:id()],
+    target_storages = #{} :: file_qos:target_storages()
 }).
 
 -endif.

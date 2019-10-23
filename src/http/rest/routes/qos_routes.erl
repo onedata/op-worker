@@ -27,27 +27,27 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Add QoS entry
+    %% Add QoS entry (by path)
     {<<"/qos/[...]">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{type = op_qos, id = ?PATH_BINDING, aspect = instance}
     }},
-    %% Get effective QoS
+    %% Get QoS summary (by path)
     {<<"/qos/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_qos, id = ?PATH_BINDING, aspect = effective_qos}
     }},
-    %% Add QoS entry by id
+    %% Add QoS entry (by id)
     {<<"/qos-id/:id">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{type = op_qos, id = ?OBJECTID_BINDING(id), aspect = instance}
     }},
-    %% Get effective QoS by id
+    %% Get QoS summary (by id)
     {<<"/qos-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

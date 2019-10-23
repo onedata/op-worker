@@ -74,7 +74,7 @@ get_models() -> [
     tree_traverse_job,
     file_qos,
     qos_entry,
-    delayed_hooks
+    file_meta_posthooks
 ].
 
 %%--------------------------------------------------------------------

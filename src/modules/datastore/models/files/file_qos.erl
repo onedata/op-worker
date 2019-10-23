@@ -5,24 +5,21 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc The file_qos item contains aggregated information about QoS defined
+%%% @doc The file_qos document contains aggregated information about QoS defined
 %%% for file or directory. It contains:
 %%%     - qos_entries - holds IDs of all qos_entries defined for this file (
 %%%       including qos_entries which demands cannot be satisfied),
 %%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
 %%%       should be stored are calculated using QoS expression. Then traverse
-%%%       requests are added to qos_entry document. When provider notice change
-%%%       in qos_entry, it checks whether there is traverse request defined
+%%%       requests are added to qos_entry document. When provider notices change
+%%%       in qos_entry, it checks whether there is traverse request defining
 %%%       its storage. If yes, provider updates target_storages and
 %%%       starts traverse.
 %%% Each file or directory can be associated with at most one such document.
 %%% Getting full information about QoS defined for file or directory requires
 %%% calculating effective file_qos as it is inherited from all parents.
 %%%
-%%% NOTE!!!
-%%% If you introduce any changes in this module, please ensure that
-%%% docs in qos.hrl are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_qos).
@@ -31,20 +28,25 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("proto/oneprovider/provider_messages.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include("modules/datastore/qos.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([create_or_update/2, delete/1]).
+-export([delete/1]).
 
-%% higher-level functions operating on file_qos record.
--export([get_effective/1, get_effective/2, remove_qos_id/2,
-    add_qos/3, add_qos/4, is_replica_protected/2, get_qos_to_update/2,
-    get_qos_entries/1, get_target_storages/1
+%% higher-level functions operating on file_qos document
+-export([
+    get_effective/1, remove_qos_entry_id/2,
+    add_qos_entry_id/3, add_qos_entry_id/4, is_replica_protected/2
+]).
+
+%% higher-level functions operating on effective_file_qos record.
+-export([
+    get_qos_to_update/2, get_qos_entries/1, get_target_storages/1
 ]).
 
 %% datastore_model callbacks
@@ -56,8 +58,7 @@
 
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
--type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
+-type effective_file_qos() :: #effective_file_qos{}.
 -type target_storages() :: #{storage:id() => [qos_entry:id()]}.
 
 -export_type([target_storages/0]).
@@ -71,21 +72,9 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(Key, Diff) ->
-    datastore_model:update(?CTX, Key, Diff).
-
-
--spec create_or_update(doc(), diff()) ->
-    {ok, key()} | {error, term()}.
-create_or_update(#document{key = Key} = Doc, Diff) ->
-    datastore_model:update(?CTX, Key, Diff, Doc).
-
-
--spec get(key()) -> {ok, doc()} | {error, term()}.
+-spec get(key()) -> {ok, datastore:doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
-
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
@@ -96,12 +85,8 @@ delete(Key) ->
     end.
 
 %%%===================================================================
-%%% Higher-level functions operating on file_qos record.
+%%% Higher-level functions operating on file_qos document.
 %%%===================================================================
-
--spec get_effective(file_meta:doc() | file_meta:uuid()) -> record() | undefined.
-get_effective(FileUuidOrDoc) ->
-    get_effective(FileUuidOrDoc, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -109,51 +94,28 @@ get_effective(FileUuidOrDoc) ->
 %% because of file_meta documents not being synchronized yet, ErrorCallback is executed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective(file_meta:doc() | file_meta:uuid(), effective_value:error_callback()) ->
-    record() | undefined.
-get_effective(FileMeta = #document{value = #file_meta{}, scope = SpaceId}, ErrorCallback) ->
-    Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
-        case {file_qos:get(Uuid), ParentEffQos} of
-            {{error, not_found}, _} ->
-                {ok, ParentEffQos, CalculationInfo};
-            {{ok, #document{value = FileQos}}, undefined} ->
-                {ok, FileQos, CalculationInfo};
-            {{ok, #document{value = FileQos}}, _} ->
-                EffQos = merge_file_qos(ParentEffQos, FileQos),
-                {ok, EffQos, CalculationInfo}
-        end
-    end,
-
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], [], ErrorCallback) of
-        {ok, EffQos, _} -> EffQos;
-        _ -> undefined % documents are not synchronized yet
-    end;
-
-get_effective(FileUuid, ErrorCallback) ->
+-spec get_effective(file_meta:uuid()) -> {ok, effective_file_qos()} | {error, term()} | undefined.
+get_effective(FileUuid) ->
     case file_meta:get(FileUuid) of
-        {ok, FileMeta} ->
-            get_effective(FileMeta, ErrorCallback);
+        {ok, #document{scope = SpaceId} = FileMeta} ->
+            get_effective_internal(FileMeta, SpaceId);
+        {error, not_found} ->
+            {error, {file_meta_missing, FileUuid}};
         _ ->
-            case ErrorCallback of
-                undefined -> ok;
-                _ -> ErrorCallback(FileUuid, [])
-            end,
             undefined
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes given Qos ID from both qos_entries and target_storages in file_qos doc.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
-remove_qos_id(FileUuid, QosId) ->
+-spec remove_qos_entry_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
+remove_qos_entry_id(FileUuid, QosEntryId) ->
     Diff = fun(FileQos = #file_qos{qos_entries = QosEntries, target_storages = TS}) ->
-        UpdatedQosEntries = lists:delete(QosId, QosEntries),
+        UpdatedQosEntries = lists:delete(QosEntryId, QosEntries),
         UpdatedTS = maps:fold(fun(StorageId, QosEntries, UpdatedTSPartial) ->
-            case lists:delete(QosId, QosEntries) of
+            case lists:delete(QosEntryId, QosEntries) of
                 [] ->
                     UpdatedTSPartial;
                 List ->
@@ -163,41 +125,36 @@ remove_qos_id(FileUuid, QosId) ->
         {ok, FileQos#file_qos{qos_entries = UpdatedQosEntries, target_storages = UpdatedTS}}
     end,
 
-    case update(FileUuid, Diff) of
-        {ok, _} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff)).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv
-%% add_qos(FileUuid, SpaceId, QosId, undefined)
+%% add_qos(FileUuid, SpaceId, QosEntryId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(file_meta:uuid(), od_space:id(), qos_entry:id()) -> ok.
-add_qos(FileUuid, SpaceId, QosId) ->
-    add_qos(FileUuid, SpaceId, QosId, undefined).
+-spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id()) -> ok.
+add_qos_entry_id(FileUuid, SpaceId, QosEntryId) ->
+    add_qos_entry_id(FileUuid, SpaceId, QosEntryId, undefined).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Calls file_qos:create_or_update/2 fun. Document and diff function are
-%% created using QoS ID and storage ID for that QoS.
+%% Creates or updates file_qos document. Document and diff function are
+%% created using QoS entry ID and storage ID for that QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id()) -> ok.
-add_qos(FileUuid, SpaceId, QosId, TargetStorage) ->
+-spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id()) -> ok.
+add_qos_entry_id(FileUuid, SpaceId, QosEntryId, TargetStorage) ->
     NewDoc = #document{
         key = FileUuid,
         scope = SpaceId,
         value = #file_qos{
-            qos_entries = [QosId],
+            qos_entries = [QosEntryId],
             target_storages = case TargetStorage of
                 undefined -> #{};
-                _ -> #{TargetStorage => [QosId]}
+                _ -> #{TargetStorage => [QosEntryId]}
             end
         }
     },
@@ -207,19 +164,14 @@ add_qos(FileUuid, SpaceId, QosId, TargetStorage) ->
             undefined ->
                 CurrTS;
             _ ->
-                maps:update_with(
-                    TargetStorage, fun(QosEntries) ->  [QosId | QosEntries] end, [QosId], CurrTS
-                )
+                maps:update_with(TargetStorage, fun(QosEntries) ->
+                    lists:usort([QosEntryId | QosEntries])
+                end, [QosEntryId], CurrTS)
         end,
-        {ok, #file_qos{qos_entries = lists:usort([QosId | CurrQosEntries]), target_storages = UpdatedTS}}
+        {ok, #file_qos{qos_entries = lists:usort([QosEntryId | CurrQosEntries]), target_storages = UpdatedTS}}
     end,
 
-    case create_or_update(NewDoc, Diff) of
-        {ok, _} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, NewDoc)).
 
 
 %%--------------------------------------------------------------------
@@ -229,24 +181,30 @@ add_qos(FileUuid, SpaceId, QosId, TargetStorage) ->
 %%--------------------------------------------------------------------
 -spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
 is_replica_protected(FileUuid, StorageId) ->
-    QosStorages = case file_qos:get_effective(FileUuid) of
-        undefined -> #{};
-        #file_qos{target_storages = TS} -> TS
+    QosStorages = case get_effective(FileUuid) of
+        {ok, #effective_file_qos{target_storages = TS}} -> TS;
+        _ -> #{}
     end,
     maps:is_key(StorageId, QosStorages).
 
 
--spec get_qos_entries(record()) -> [qos_entry:id()].
+%%%===================================================================
+%%% Functions operating on effective_file_qos record.
+%%%===================================================================
+
+-spec get_qos_entries(effective_file_qos()) -> [qos_entry:id()].
 get_qos_entries(FileQos) ->
-    FileQos#file_qos.qos_entries.
+    FileQos#effective_file_qos.qos_entries.
 
--spec get_target_storages(record()) -> target_storages().
+
+-spec get_target_storages(effective_file_qos()) -> target_storages().
 get_target_storages(FileQos) ->
-    FileQos#file_qos.target_storages.
+    FileQos#effective_file_qos.target_storages.
 
--spec get_qos_to_update(storage:id(), record()) -> [qos_entry:id()].
+
+-spec get_qos_to_update(storage:id(), effective_file_qos()) -> [qos_entry:id()].
 get_qos_to_update(StorageId, EffectiveFileQos) ->
-    maps:get(StorageId, EffectiveFileQos#file_qos.target_storages, []).
+    maps:get(StorageId, EffectiveFileQos#effective_file_qos.target_storages, []).
 
 
 %%%===================================================================
@@ -261,42 +219,53 @@ get_qos_to_update(StorageId, EffectiveFileQos) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec merge_file_qos(record(), record()) -> record().
-merge_file_qos(#file_qos{qos_entries = ParentQosEntries, target_storages = ParentStorages},
-    #file_qos{qos_entries = ChildQosEntries, target_storages = ChildStorages}) ->
-    MergedQosEntries = lists:usort(ParentQosEntries ++ ChildQosEntries),
-    MergedStorages = merge_target_storages(ParentStorages, ChildStorages),
-    #file_qos{qos_entries = MergedQosEntries, target_storages = MergedStorages}.
+merge_file_qos(ParentQos, ChildQos) ->
+    #file_qos{
+        qos_entries = lists:usort(
+            ParentQos#file_qos.qos_entries ++ ChildQos#file_qos.qos_entries
+        ),
+        target_storages = merge_target_storages(
+            ParentQos#file_qos.target_storages,
+            ChildQos#file_qos.target_storages
+        )
+    }.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Merges parent's target_storages with child's target_storages. If qos_entry
-%% ID is present in both parent's and child's target storages, only that from
-%% child's document should be preserved.
-%% @end
-%%--------------------------------------------------------------------
 -spec merge_target_storages(target_storages(), target_storages()) -> target_storages().
-merge_target_storages(ParentStorages, ChildStorages) when map_size(ChildStorages) == 0 ->
-    ParentStorages;
-merge_target_storages(ParentStorages, ChildStorages) ->
-    ChildQosEntrySet = sets:from_list(lists:flatten(maps:values(ChildStorages))),
+merge_target_storages(ParentTargetStorages, ChildTargetStorages) ->
+    maps:fold(fun(StorageId, StorageQosEntries, Acc) ->
+        maps:update_with(StorageId, fun(ParentStorageQosEntries) ->
+            ParentStorageQosEntries ++ StorageQosEntries
+        end, StorageQosEntries, Acc)
+    end, ParentTargetStorages, ChildTargetStorages).
 
-    ParentStoragesWithoutCommonQos = maps:fold(fun(StorageId, QosEntries, Acc) ->
-        NewQosEntries = sets:to_list(sets:subtract(sets:from_list(QosEntries), ChildQosEntrySet)),
-        case NewQosEntries of
-            [] -> Acc;
-            _ -> Acc#{StorageId => NewQosEntries}
+-spec get_effective_internal(file_meta:doc(), od_space:id()) ->
+    {ok, effective_file_qos()} | {error, term()}| undefined.
+get_effective_internal(FileMeta, SpaceId) ->
+    Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
+        case {datastore_model:get(?CTX, Uuid), ParentEffQos} of
+            {{error, not_found}, _} ->
+                {ok, ParentEffQos, CalculationInfo};
+            {{ok, #document{value = FileQos}}, undefined} ->
+                {ok, FileQos, CalculationInfo};
+            {{ok, #document{value = FileQos}}, _} ->
+                EffQos = merge_file_qos(ParentEffQos, FileQos),
+                {ok, EffQos, CalculationInfo}
         end
-    end, #{}, ParentStorages),
+    end,
 
-    maps:fold(fun(StorageId, ChildQosEntries, Acc) ->
-        maps:update_with(StorageId,
-            fun(ExistingQosEntries) ->
-                ExistingQosEntries ++ ChildQosEntries
-            end, ChildQosEntries, Acc)
-    end, ParentStoragesWithoutCommonQos, ChildStorages).
-
+    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
+    case effective_value:get_or_calculate(CacheTableName, FileMeta, Callback, [], []) of
+        {ok, undefined, _} ->
+            undefined;
+        {ok, EffQosAsFileQos, _} ->
+            {ok, #effective_file_qos{
+                qos_entries = EffQosAsFileQos#file_qos.qos_entries,
+                target_storages = EffQosAsFileQos#file_qos.target_storages
+            }};
+        {error, {file_meta_missing, _MissingUuid}} = Error ->
+            % documents are not synchronized yet
+            Error
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks

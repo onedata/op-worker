@@ -13,7 +13,7 @@
 %%%
 %%% Active transfers are stored as links where value is transfer id and key is
 %%% expressed as combined:
-%%%     * relative path to QoS entry origin file(file that QoS entry was added to)
+%%%     * relative path to QoS entry origin file (file that QoS entry was added to)
 %%%     * storage id where file is transferred to
 %%%     * traverse task id that started this transfer
 %%%
@@ -26,18 +26,18 @@
 -module(qos_status).
 -author("Michal Stanisz").
 
--include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/qos.hrl").
 
 %% API
--export([add_link/5, delete_link/5, check_fulfilment/2]).
+-export([report_file_changed/4, report_file_reconciled/4, check_fulfilment/2]).
 
 -type path() :: binary().
 
--define(QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId),
-    <<RelativePath/binary, "###", TaskId/binary, "###", StorageId/binary>>).
+-define(QOS_STATUS_LINK_NAME(RelativePath, TaskId),
+    <<RelativePath/binary, "###", TaskId/binary>>).
 
--define(QOS_STATUS_LINKS_KEY(QosId), <<"qos_status", QosId/binary>>).
+-define(QOS_STATUS_LINKS_KEY(QosEntryId), <<"qos_status", QosEntryId/binary>>).
 
 %%%===================================================================
 %%% API
@@ -45,32 +45,34 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds new status link for given qos.
+%% Creates new link indicating that requirements for given qos_entry are not
+%% fulfilled as file has been changed.
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(qos_entry:id(), datastore_doc:scope(), file_meta:uuid(), traverse:id(),
-    storage:id()) ->  ok | {error, term()}.
-add_link(QosId, SpaceId, FileUuid, TaskId, StorageId) ->
-    {ok, OriginFileGuid} = qos_entry:get_file_guid(QosId),
+-spec report_file_changed(qos_entry:id(), datastore_doc:scope(), file_meta:uuid(), traverse:id()) ->
+    ok | {error, term()}.
+report_file_changed(QosEntryId, SpaceId, FileUuid, TaskId) ->
+    {ok, OriginFileGuid} = qos_entry:get_file_guid(QosEntryId),
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = get_relative_path(OriginFileGuid, FileGuid),
-    Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId), TaskId},
-    {ok, _} = qos_entry:add_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(), Link),
+    Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId), TaskId},
+    {ok, _} = qos_entry:add_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link),
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes given status link from given qos.
+%% Removes link indicating that requirements for given qos_entry are not
+%% fulfilled.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_link(qos_entry:id(), datastore_doc:scope(), file_meta:uuid(), traverse:id(),
-    storage:id()) -> ok | {error, term()}.
-delete_link(QosId, SpaceId, FileUuid, TaskId, StorageId) ->
-    {ok, OriginFileGuid} = qos_entry:get_file_guid(QosId),
+-spec report_file_reconciled(qos_entry:id(), datastore_doc:scope(), file_meta:uuid(), traverse:id()) ->
+    ok | {error, term()}.
+report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId) ->
+    {ok, OriginFileGuid} = qos_entry:get_file_guid(QosEntryId),
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = get_relative_path(OriginFileGuid, FileGuid),
-    ok = qos_entry:delete_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosId), oneprovider:get_id(),
-        ?QOS_STATUS_LINK_NAME(RelativePath, TaskId, StorageId)).
+    ok = qos_entry:delete_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(),
+        ?QOS_STATUS_LINK_NAME(RelativePath, TaskId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -79,21 +81,17 @@ delete_link(QosId, SpaceId, FileUuid, TaskId, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
-check_fulfilment(QosId, FileGuid) ->
-    {ok, #document{value = QosEntry, scope = SpaceId}} = qos_entry:get(QosId),
-    #qos_entry{
-        file_uuid = OriginUuid,
-        traverse_reqs = TraverseReqs
-    } = QosEntry,
-    case QosEntry#qos_entry.is_possible of
+check_fulfilment(QosEntryId, FileGuid) ->
+    {ok, QosDoc} = qos_entry:get(QosEntryId),
+
+    case qos_entry:is_possible(QosDoc) of
         false -> false;
         true ->
-            % are all traverses finished?
-            case maps:size(TraverseReqs) == 0 of
+            case qos_entry:are_all_traverses_finished(QosDoc) of
                 true ->
-                    OriginGuid = file_id:pack_guid(OriginUuid, SpaceId),
+                    {ok, OriginGuid} = qos_entry:get_file_guid(QosDoc),
                     RelativePath = get_relative_path(OriginGuid, FileGuid),
-                    case get_next_status_link(QosId, RelativePath) of
+                    case get_next_status_link(QosEntryId, RelativePath) of
                         {ok, empty} ->
                             true;
                         {ok, Path} ->
@@ -134,8 +132,8 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.
-get_next_status_link(QosId, PrevName) ->
-    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosId),
+get_next_status_link(QosEntryId, PrevName) ->
+    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosEntryId),
         fun(#link{name = N}, _Acc) -> {ok, N} end,
         empty,
         #{prev_link_name => PrevName, size => 1}

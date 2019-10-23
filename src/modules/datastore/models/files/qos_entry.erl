@@ -7,9 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc The qos_entry document contains information about single QoS requirement
 %%% including QoS expression, number of required replicas, UUID of file or
-%%% directory for which requirement has been added, information of QoS
-%%% requirement can be satisfied, information about traverse requests and
-%%% active traverses.
+%%% directory for which requirement has been added, information whether QoS
+%%% requirement can be satisfied and information about traverse requests.
 %%% Such document is created when user adds QoS requirement for file or directory.
 %%% Requirement added for directory is inherited by whole directory structure.
 %%% Each QoS requirement is evaluated separately. It means that it is not
@@ -26,13 +25,15 @@
 %%% different qos_entry documents.
 %%% QoS requirement is considered as fulfilled when:
 %%%     - there is no information that QoS requirement cannot be
-%%%       satisfied (is_possible field in qos_entry)
-%%%     - there are no pending traverse requests
+%%%       satisfied (this information is stored in is_possible field
+%%%       in qos_entry document. It is set to true if during evaluation of
+%%%       QoS expression it was not possible to calculate list of storages
+%%%       that would fulfill QoS requirements)
+%%%     - there are no traverse requests in qos_entry document. Traverse requests
+%%%       are added to qos_entry document on its creation and removed from document
+%%%       when traverse task for this request is completed
 %%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
 %%%
-%%% NOTE!!!
-%%% If you introduce any changes in this module, please ensure that
-%%% docs in qos.hrl are up to date.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -45,7 +46,7 @@
 
 %% functions operating on document using datastore model API
 -export([
-    get/1, delete/1, create/6, create/7, update/2,
+    get/1, delete/1, create/6, create/7,
     add_links/4, delete_links/4, fold_links/4
 ]).
 
@@ -56,13 +57,19 @@
 ]).
 
 %% functions operating on qos_entry record
--export([get_file_guid/1, get_expression/1, get_replicas_num/1]).
+-export([
+    get_file_guid/1, get_expression/1, get_replicas_num/1,
+    get_file_uuid/1, get_traverse_map/1, are_all_traverses_finished/1
+]).
 
 %% functions responsible for traverses under given QoS entry.
 -export([remove_traverse_req/2]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
+-export([
+    get_ctx/0, get_record_struct/1, get_record_version/0,
+    resolve_conflict/3
+]).
 
 
 -type id() :: datastore_doc:key().
@@ -83,23 +90,23 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
--define(QOS_TRAVERSE_LIST(QosId), <<"qos_traverses", QosId/binary>>).
+-define(QOS_TRAVERSE_LIST(QosEntryId), <<"qos_traverses", QosEntryId/binary>>).
 
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
--spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
+-spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
     replicas_num(), boolean()) -> {ok, doc()} | {error, term()}.
-create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible) ->
-    create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, #{}).
+create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible) ->
+    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, #{}).
 
 
--spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:expression(),
+-spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
     replicas_num(), boolean(), traverse_map()) -> {ok, doc()} | {error, term()}.
-create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
-    datastore_model:create(?CTX, #document{key = QosId, scope = SpaceId,
+create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
+    datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
         value = #qos_entry{
             file_uuid = FileUuid,
             expression = Expression,
@@ -110,19 +117,19 @@ create(SpaceId, QosId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs
     }).
 
 
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+    datastore_model:update(?CTX, Key, Diff).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
-get(QosId) ->
-    datastore_model:get(?CTX, QosId).
+get(QosEntryId) ->
+    datastore_model:get(?CTX, QosEntryId).
 
 
 -spec delete(id()) -> ok | {error, term()}.
-delete(QosId) ->
-    datastore_model:delete(?CTX, QosId).
+delete(QosEntryId) ->
+    datastore_model:delete(?CTX, QosEntryId).
 
 
 -spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
@@ -149,9 +156,12 @@ fold_links(Key, Fun, Acc, Opts) ->
 %%% Higher-level functions operating on qos_entry document.
 %%%===================================================================
 
--spec get_file_guid(id()) -> {ok, file_id:file_guid()} | {error, term()}.
-get_file_guid(QosId) ->
-    case qos_entry:get(QosId) of
+-spec get_file_guid(id() | doc()) -> {ok, file_id:file_guid()} | {error, term()}.
+get_file_guid(#document{scope = SpaceId, value = #qos_entry{file_uuid = FileUuid}})  ->
+    {ok, file_id:pack_guid(FileUuid, SpaceId)};
+
+get_file_guid(QosEntryId) ->
+    case qos_entry:get(QosEntryId) of
         {ok, #document{value = QosEntry, scope = SpaceId}} ->
             {ok, file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId)};
         {error, _} = Error ->
@@ -160,8 +170,8 @@ get_file_guid(QosId) ->
 
 
 -spec get_space_id(id()) -> {ok, od_space:id()} | {error, term()}.
-get_space_id(QosId) ->
-    case qos_entry:get(QosId) of
+get_space_id(QosEntryId) ->
+    case qos_entry:get(QosEntryId) of
         {ok, #document{scope = SpaceId}} ->
             {ok, SpaceId};
         {error, _} = Error ->
@@ -169,14 +179,17 @@ get_space_id(QosId) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds QoS that cannot be fulfilled to links tree storing ID of all
+%% qos_entry documents that cannot be fulfilled at the moment.
+%% @end
+%%--------------------------------------------------------------------
 -spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok.
-add_impossible_qos(QosId, Scope) ->
-    case add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosId, QosId}) of
-        {ok, _} ->
-            ok;
-        {error, Error} = Error ->
-            Error
-    end.
+add_impossible_qos(QosEntryId, Scope) ->
+    ?extract_ok(
+        add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosEntryId, QosEntryId})
+    ).
 
 
 -spec list_impossible_qos() ->  {ok, [id()]} | {error, term()}.
@@ -192,20 +205,22 @@ list_impossible_qos() ->
 %% Removes given traverse from traverse reqs map.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_traverse_req(id(), traverse:id()) ->  {ok, id()}.
-remove_traverse_req(QosId, TraverseId) ->
-    update(QosId, fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
+-spec remove_traverse_req(id(), traverse:id()) -> ok.
+remove_traverse_req(QosEntryId, TraverseId) ->
+    Diff = fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
             traverse_reqs = maps:remove(TraverseId, TR)
         }}
-    end).
+    end,
+
+    ?extract_ok(update(QosEntryId, Diff)).
 
 
 %%%===================================================================
 %%% Functions operating on qos_entry record.
 %%%===================================================================
 
--spec get_expression(record()) -> qos_expression:expression().
+-spec get_expression(record()) -> qos_expression:rpn().
 get_expression(QosEntry) ->
     QosEntry#qos_entry.expression.
 
@@ -215,9 +230,30 @@ get_replicas_num(QosEntry) ->
     QosEntry#qos_entry.replicas_num.
 
 
--spec is_possible(record()) -> boolean().
+-spec get_file_uuid(record()) -> file_meta:uuid().
+get_file_uuid(QosEntry) ->
+    QosEntry#qos_entry.file_uuid.
+
+
+-spec get_traverse_map(record()) -> traverse_map().
+get_traverse_map(QosEntry) ->
+    QosEntry#qos_entry.traverse_reqs.
+
+
+-spec is_possible(record() | doc()) -> boolean().
+is_possible(#document{value = QosEntry}) ->
+    is_possible(QosEntry);
+
 is_possible(QosEntry) ->
     QosEntry#qos_entry.is_possible.
+
+
+-spec are_all_traverses_finished(record() | doc()) -> boolean().
+are_all_traverses_finished(#document{value = QosEntry}) ->
+    are_all_traverses_finished(QosEntry);
+
+are_all_traverses_finished(QosEntry) ->
+    maps:size(QosEntry#qos_entry.traverse_reqs) == 0.
 
 
 %%%===================================================================
@@ -255,6 +291,8 @@ get_record_struct(1) ->
 %% responsible for given traverse (target storage is one of its storages).
 %% This means that only remote changes of remote providers traverses and
 %% local changes of current provider traverses are taken into account.
+%% (The only changes done to this document are removals of traverse_reqs or
+%% removal of document).
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
@@ -268,6 +306,9 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, PrevDoc) ->
         false ->
             {LocalTraverses, _} = split_traverses(LocalReqs),
             {_, RemoteTraverses} = split_traverses(RemoteReqs),
+
+            % for now always take the remote document. This has to be changed
+            % when it will be necessary to use revision history.
             {true, RemoteDoc#document{
                 value = RemoteValue#qos_entry{
                     traverse_reqs = maps:with(LocalTraverses ++ RemoteTraverses, LocalReqs)

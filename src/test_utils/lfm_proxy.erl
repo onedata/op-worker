@@ -495,35 +495,35 @@ schedule_replica_eviction_by_view(Worker, SessId, ProviderId, MigrationProviderI
 get_file_distribution(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_distribution(SessId, FileKey)).
 
--spec add_qos(node(), session:id(), lfm:file_key(), binary(),
+-spec add_qos(node(), session:id(), lfm:file_key(), qos_expression:raw(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
 add_qos(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos(SessId, FileKey, Expression, ReplicasNum)).
+    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
 
 -spec get_file_qos(node(), session:id(), lfm:file_key()) ->
     {ok, {[qos_entry:id()], file_qos:target_storages()}} | lfm:error_reply().
 get_file_qos(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_file_qos(SessId, FileKey)).
+    ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 
 -spec get_qos_details(node(), session:id(), qos_entry:id()) ->
-    {ok, #qos_entry{}} | lfm:error_reply().
-get_qos_details(Worker, SessId, QosId) ->
-    ?EXEC(Worker, lfm:get_qos_details(SessId, QosId)).
+    {ok, qos_entry:record()} | lfm:error_reply().
+get_qos_details(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:get_qos_entry(SessId, QosEntryId)).
 
 -spec remove_qos(node(), session:id(), qos_entry:id()) ->
     ok | lfm:error_reply().
-remove_qos(Worker, SessId, QosId) ->
-    ?EXEC(Worker, lfm:remove_qos(SessId, QosId)).
+remove_qos(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:remove_qos_entry(SessId, QosEntryId)).
 
 -spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
     boolean() | lfm:error_reply().
-check_qos_fulfilled(Worker, SessId, QosId) ->
-    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId)).
+check_qos_fulfilled(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId)).
 
 -spec check_qos_fulfilled(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
     boolean() | lfm:error_reply().
-check_qos_fulfilled(Worker, SessId, QosId, FileKey) ->
-    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosId, FileKey)).
+check_qos_fulfilled(Worker, SessId, QosEntryId, FileKey) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId, FileKey)).
 
 
 %%%===================================================================

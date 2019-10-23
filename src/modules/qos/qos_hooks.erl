@@ -19,8 +19,7 @@
 %% API
 -export([
     handle_qos_entry_change/2,
-    maybe_update_file_on_storage/2,
-    maybe_update_file_on_storage/3,
+    reconcile_qos_on_storage/2,
     maybe_start_traverse/4
 ]).
 
@@ -32,37 +31,23 @@
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
 handle_qos_entry_change(_SpaceId, #document{
     deleted = true,
-    key = QosId,
-    value = #qos_entry{
-        file_uuid = FileUuid
-    }
+    key = QosEntryId,
+    value = QosEntry
 }) ->
-    ok = file_qos:remove_qos_id(FileUuid, QosId),
-    ok;
+    FileUuid = qos_entry:get_file_uuid(QosEntry),
+    ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId);
 handle_qos_entry_change(SpaceId, #document{
-    key = QosId,
-    value = #qos_entry{
-        file_uuid = FileUuid,
-        traverse_reqs = TR
-    }
+    key = QosEntryId,
+    value = QosEntry
 }) ->
-    file_qos:add_qos(FileUuid, SpaceId, QosId),
+    FileUuid = qos_entry:get_file_uuid(QosEntry),
+    TraverseMap = qos_entry:get_traverse_map(QosEntry),
+    file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     maps:fold(fun(TaskId, #qos_traverse_req{start_file_uuid = StartFileUuid, target_storage = TS}, _) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
-        ok = maybe_start_traverse(FileCtx, QosId, TS, TaskId)
-    end, ok, TR).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv maybe_update_file_on_storage(file_ctx:new_by_guid(FileGuid), StorageId).
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_update_file_on_storage(od_space:id(), file_meta:uuid(), storage:id()) -> ok.
-maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    maybe_update_file_on_storage(file_ctx:new_by_guid(FileGuid), StorageId).
+        ok = maybe_start_traverse(FileCtx, QosEntryId, TS, TaskId)
+    end, ok, TraverseMap).
 
 
 %%--------------------------------------------------------------------
@@ -71,24 +56,20 @@ maybe_update_file_on_storage(SpaceId, FileUuid, StorageId) ->
 %% Uses QoS traverse pool.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_update_file_on_storage(file_ctx:ctx(), storage:id()) -> ok.
-maybe_update_file_on_storage(FileCtx, StorageId) ->
+-spec reconcile_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
+reconcile_qos_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    EffFileQos = file_qos:get_effective(FileUuid,
-        fun(MissingUuid, _Args) ->
-            % new file_ctx has to be created as hook can be executed
-            % after a considerable amount of time
-            delayed_hooks:add_hook(MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                ?MODULE, ?FUNCTION_NAME, [file_ctx:get_space_id_const(FileCtx), FileUuid, StorageId])
-        end),
-    case EffFileQos of
-        undefined ->
-            ok;
-        _ ->
+    case file_qos:get_effective(FileUuid) of
+        {error, {file_meta_missing, MissingUuid}} ->
+            file_meta_posthooks:add_hook(MissingUuid, <<"check_qos_", FileUuid/binary>>,
+                ?MODULE, ?FUNCTION_NAME, [file_ctx:get_space_id_const(FileCtx), FileUuid, StorageId]);
+        {ok, EffFileQos} ->
             QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
-            lists:foreach(fun(QosId) ->
-                ok = qos_traverse:restore_qos(FileCtx, QosId, StorageId)
-            end, QosToUpdate)
+            lists:foreach(fun(QosEntryId) ->
+                ok = qos_traverse:reconcile_qos_for_entry(FileCtx, QosEntryId)
+            end, QosToUpdate);
+        undefined ->
+            ok
     end.
 
 
@@ -99,24 +80,39 @@ maybe_update_file_on_storage(FileCtx, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
-maybe_start_traverse(FileCtx, QosId, Storage, TaskId) ->
+maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     % TODO VFS-5573 use storage id instead of provider
     case oneprovider:get_id() of
         Storage ->
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, Storage),
+            ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            case file_ctx:get_file_doc_allow_not_existing(FileCtx) of
-                {ok, _FileDoc, FileCtx1} ->
-                    ok = qos_traverse:start_initial_traverse(FileCtx1, QosId, Storage, TaskId);
-                error ->
+            case lookup_file_doc(FileCtx) of
+                {ok, FileCtx1} ->
+                    ok = qos_traverse:start_initial_traverse(FileCtx1, QosEntryId, TaskId);
+                {error, not_found} ->
                     % There is no need to start traverse as appropriate transfers will be started
                     % when file is finally synced. If this is directory, then each child registered
-                    % delayed hook that will fulfill QoS after all its ancestors are synced.
-                    {ok, _} = qos_entry:remove_traverse_req(QosId, TaskId),
-                    ok
+                    % file meta posthook that will fulfill QoS after all its ancestors are synced.
+                    ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
             end;
         _ ->
             ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's file_meta document.
+%% Returns error if there is no such file doc (it is not synced yet).
+%% @end
+%%--------------------------------------------------------------------
+-spec lookup_file_doc(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, not_found}.
+lookup_file_doc(FileCtx) ->
+    try
+        {_Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+        {ok, FileCtx2}
+    catch
+        _:{badmatch, {error, not_found} = Error}->
+            Error
     end.

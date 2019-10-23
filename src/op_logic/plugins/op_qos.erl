@@ -93,19 +93,19 @@ fetch_entity(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
-    id = QosId,
+    id = QosEntryId,
     aspect = instance
 }}) ->
-    fetch_qos_entry(Auth, QosId);
+    fetch_qos_entry(Auth, QosEntryId);
 
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = effective_qos}}) ->
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
-    id = QosId,
+    id = QosEntryId,
     aspect = instance
 }}) ->
-    fetch_qos_entry(Auth, QosId).
+    fetch_qos_entry(Auth, QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -136,10 +136,10 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance, id = QosEntryId}},
     _QosEntry
 ) ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
@@ -149,10 +149,10 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     SpaceId = file_id:guid_to_space_id(FileGuid),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance, id = QosId}},
+authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance, id = QosEntryId}},
     _QosEntry
 ) ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     op_logic_utils:is_eff_space_member(Auth, SpaceId).
 
 
@@ -166,16 +166,16 @@ validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}}, 
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
+validate(#op_req{operation = get, gri = #gri{aspect = instance, id = QosEntryId}}, _QosEntry) ->
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = delete, gri = #gri{aspect = instance, id = QosId}}, #qos_entry{}) ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosId)),
+validate(#op_req{operation = delete, gri = #gri{aspect = instance, id = QosEntryId}}, _QosEntry) ->
+    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     op_logic_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -190,9 +190,9 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req)
     QosExpression = maps:get(<<"expression">>, Req#op_req.data),
     ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data, 1),
 
-    case lfm:add_qos(SessionId, {guid, FileGuid}, QosExpression, ReplicasNum) of
-        {ok, QosId} ->
-            {ok, value, QosId};
+    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, QosExpression, ReplicasNum) of
+        {ok, QosEntryId} ->
+            {ok, value, QosEntryId};
         ?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION;
         {error, Errno} ->
@@ -207,29 +207,26 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req)
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) ->
     SessionId = Auth#auth.session_id,
-
-    case lfm:get_file_qos(SessionId, {guid, FileGuid}) of
+    case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
         {ok, {QosEntries, TargetStorages}} ->
+            {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntries, {guid, FileGuid})),
             {ok, #{
                 <<"qosEntries">> => QosEntries,
                 <<"targetStorages">> => TargetStorages,
-                <<"fulfilled">> => ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntries, {guid, FileGuid}))
+                <<"fulfilled">> => Fulfilled
             }};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
     end;
 
-get(#op_req{auth = Auth, gri = #gri{id = QosId, aspect = instance}}, #qos_entry{
-    expression = Expression,
-    replicas_num = ReplicasNum
-}) ->
-
+get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEntry) ->
     SessionId = Auth#auth.session_id,
+    {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntryId)),
     {ok, #{
-        <<"qosId">> => QosId,
-        <<"expression">> => Expression,
-        <<"replicasNum">> => ReplicasNum,
-        <<"fulfilled">> => ?check(lfm_qos:check_qos_fulfilled(SessionId, QosId))
+        <<"qosEntryId">> => QosEntryId,
+        <<"expression">> => qos_entry:get_expression(QosEntry),
+        <<"replicasNum">> => qos_entry:get_replicas_num(QosEntry),
+        <<"fulfilled">> => Fulfilled
     }}.
 
 
@@ -249,8 +246,8 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
-delete(#op_req{auth = Auth, gri = #gri{id = QosId, aspect = instance}}) ->
-    case lfm:remove_qos(Auth#auth.session_id, QosId) of
+delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
+    case lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId) of
         ok -> ok;
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
@@ -263,9 +260,9 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosId, aspect = instance}}) ->
 
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
-    {ok, {#qos_entry{}, op_logic:revision()}} | ?ERROR_NOT_FOUND.
-fetch_qos_entry(?USER(_UserId, SessionId), QosId) ->
-    case lfm:get_qos_details(SessionId, QosId) of
+    {ok, {qos_entry:record(), op_logic:revision()}} | ?ERROR_NOT_FOUND.
+fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
+    case lfm:get_qos_entry(SessionId, QosEntryId) of
         {ok, QosEntry} ->
             {ok, {QosEntry, 1}};
         _ ->

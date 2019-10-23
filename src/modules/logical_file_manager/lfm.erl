@@ -69,7 +69,7 @@
 %% Utility functions
 -export([check_result/1]).
 %% Functions concerning qos
--export([add_qos/4, get_qos_details/2, remove_qos/2, get_file_qos/2,
+-export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
     check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
@@ -731,9 +731,8 @@ remove_metadata(SessId, FileKey, Type) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_result(OK | {error, term()}) -> OK | no_return() when
-    OK :: ok | boolean() | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}.
+    OK :: ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}.
 check_result(ok) -> ok;
-check_result(Boolean) when is_boolean(Boolean)-> Boolean;
 check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
@@ -741,58 +740,59 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add new QoS for file or directory.
+%% Adds new qos_entry for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos(session:id(), file_key(), binary(), qos_entry:replicas_num()) ->
-    {ok, qos_entry:id()} | error_reply().
-add_qos(SessId, FileKey, Expression, ReplicasNum) ->
-    ?run(fun() -> lfm_qos:add_qos(SessId, FileKey, Expression, ReplicasNum) end).
+-spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get effective QoS for file or directory.
+%% Gets effective QoS for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_qos(session:id(), file_key()) ->
+-spec get_effective_file_qos(session:id(), file_key()) ->
     {ok, {[qos_entry:id()], file_qos:target_storages()}} | error_reply().
-get_file_qos(SessId, FileKey) ->
-    ?run(fun() -> lfm_qos:get_file_qos(SessId, FileKey) end).
+get_effective_file_qos(SessId, FileKey) ->
+    ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get details of specific QoS.
+%% Get details of specified qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_details(session:id(), qos_entry:id()) ->
+-spec get_qos_entry(session:id(), qos_entry:id()) ->
     {ok, qos_entry:record()} | error_reply().
-get_qos_details(SessId, QosId) ->
-    ?run(fun() -> lfm_qos:get_qos_details(SessId, QosId) end).
+get_qos_entry(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:get_qos_entry(SessId, QosEntryId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove single QoS.
+%% Remove qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos(session:id(), qos_entry:id()) -> ok | error_reply().
-remove_qos(SessId, QosId) ->
-    ?run(fun() -> lfm_qos:remove_qos(SessId, QosId) end).
+-spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
+remove_qos_entry(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check QoS fulfilled.
+%% Check if QoS requirements defined in qos_entry document are fulfilled.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id()) -> boolean() | error_reply().
-check_qos_fulfilled(SessId, QosId) ->
-    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosId) end).
+-spec check_qos_fulfilled(session:id(), qos_entry:id()) -> {ok, boolean()} | error_reply().
+check_qos_fulfilled(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check QoS fulfilled for given file.
+%% Check if QoS requirements defined in qos_entry document/documents
+%% are fulfilled for given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id(), file_key()) ->
-    ok | error_reply().
-check_qos_fulfilled(SessId, QosId, FileKey) ->
-    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosId, FileKey) end).
+    {ok, boolean} | error_reply().
+check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId, FileKey) end).

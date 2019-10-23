@@ -19,10 +19,10 @@
 
 parse_to_rpn_test() ->
     % test empty
-    ?assertEqual({ok, []}, qos_expression:transform_to_rpn(<<"">>)),
+    ?assertEqual({ok, []}, qos_expression:raw_to_rpn(<<"">>)),
 
     % test simple equality
-    ?assertEqual({ok, [<<"country=PL">>]}, qos_expression:transform_to_rpn(<<"country=PL">>)),
+    ?assertEqual({ok, [<<"country=PL">>]}, qos_expression:raw_to_rpn(<<"country=PL">>)),
 
     % test operators precedence
     Operators = [<<"|">>, <<"&">>, <<"-">>],
@@ -31,7 +31,7 @@ parse_to_rpn_test() ->
         fun({Op1, Op2}) ->
             ?assertEqual(
                 {ok, [<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2]},
-                qos_expression:transform_to_rpn(<<"country=PL", Op1/binary,
+                qos_expression:raw_to_rpn(<<"country=PL", Op1/binary,
                     "type=disk", Op2/binary, "country=FR">>)
             )
         end, OperatorPairs),
@@ -40,39 +40,39 @@ parse_to_rpn_test() ->
     Expr1 = <<"country=PL&type=disk|country=FR">>,
     ?assertEqual(
         {ok, [<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>]},
-        qos_expression:transform_to_rpn(Expr1)
+        qos_expression:raw_to_rpn(Expr1)
     ),
 
     Expr2 = <<"(country=PL&type=disk)|country=FR">>,
     ?assertEqual(
         {ok, [<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>]},
-        qos_expression:transform_to_rpn(Expr2)
+        qos_expression:raw_to_rpn(Expr2)
     ),
 
     Expr3 = <<"country=PL&(type=disk|country=FR)">>,
     ?assertEqual(
         {ok, [<<"country=PL">>, <<"type=disk">>, <<"country=FR">>, <<"|">>, <<"&">>]},
-        qos_expression:transform_to_rpn(Expr3)
+        qos_expression:raw_to_rpn(Expr3)
     ),
 
     Expr4 = <<"(country=PL&type=tape)|(type=disk&country=FR)">>,
     ?assertEqual(
         {ok, [<<"country=PL">>, <<"type=tape">>, <<"&">>,
          <<"type=disk">>, <<"country=FR">>, <<"&">>, <<"|">>]},
-        qos_expression:transform_to_rpn(Expr4)
+        qos_expression:raw_to_rpn(Expr4)
     ),
 
     % test invalid
     Expr5 = <<"country">>,
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:transform_to_rpn(Expr5)
+        qos_expression:raw_to_rpn(Expr5)
     ),
 
     Expr6 = <<"country|type">>,
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:transform_to_rpn(Expr6)
+        qos_expression:raw_to_rpn(Expr6)
     ),
 
 %% TODO: VFS-5569 improve handling invalid QoS expressions
@@ -85,12 +85,12 @@ parse_to_rpn_test() ->
     Expr8 = <<"type=disk)">>,
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:transform_to_rpn(Expr8)
+        qos_expression:raw_to_rpn(Expr8)
     ),
 
     Expr9 = <<")(country=PL">>,
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:transform_to_rpn(Expr9)
+        qos_expression:raw_to_rpn(Expr9)
     ).
 

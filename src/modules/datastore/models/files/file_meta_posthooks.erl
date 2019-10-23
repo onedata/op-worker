@@ -7,12 +7,12 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This model holds information about hooks registered for given file.
-%%% All hooks will be executed once for next change of given file's file_meta
-%%% document, then hooks list will be cleared.
+%%% All hooks will be executed once upon the next change of file_meta
+%%% document associated with given file, then hooks list will be cleared.
 %%% Any exported function can be used as a hook.
 %%% @end
 %%%-------------------------------------------------------------------
--module(delayed_hooks).
+-module(file_meta_posthooks).
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -58,31 +58,34 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
         function = Function,
         args = EncodedArgs
     },
-    datastore_model:update(?CTX, FileUuid, fun(#delayed_hooks{hooks = Hooks} = DelayedHooks) ->
-        {ok, DelayedHooks#delayed_hooks{hooks = Hooks#{Identifier => Hook}}}
-    end, #delayed_hooks{hooks = #{Identifier => Hook}}).
+    datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{Identifier => Hook}}}
+    end, #file_meta_posthooks{hooks = #{Identifier => Hook}}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Executes all hooks registered for given file, then clears hook list.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_hooks(datastore:doc()) -> ok | {error, term()}.
-execute_hooks(#document{key = Key}) ->
-    Hooks = case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #delayed_hooks{hooks = H}}} -> H;
+-spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
+execute_hooks(FileUuid) ->
+    Hooks = case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #file_meta_posthooks{hooks = H}}} -> H;
         _ -> #{}
     end,
-    lists:foreach(fun(#hook{module = Module, function = Function, args = Args}) ->
+    maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, _) ->
         try
             ok = erlang:apply(Module, Function, binary_to_term(Args))
         catch Error:Type  ->
-            ?debug_stacktrace("Error during execution of delayed hook for file ~p ~p:~p", [Key, Error,Type]),
+            ?debug_stacktrace(
+                "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
+                [Identifier, FileUuid, Error, Type]
+            ),
             ok
         end
-    end, maps:values(Hooks)),
+    end, ok, Hooks),
 
-    delete(Key).
+    delete(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc

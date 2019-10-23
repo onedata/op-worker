@@ -12,8 +12,8 @@
 -ifndef(DATASTORE_SPECIFIC_MODELS_HRL).
 -define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
--include("modules/events/subscriptions.hrl").
 -include("modules/datastore/qos.hrl").
+-include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
@@ -255,23 +255,26 @@
     last_stat :: undefined | non_neg_integer()
 }).
 
-% This model can be associated with file and holds information
-% about hooks for given file. All hooks will be executed for
-% change of given file's file_meta document.
--record(delayed_hooks, {
-    hooks = #{} :: #{binary() => delayed_hooks:hook()}
+% This model can be associated with file and holds information about hooks
+% for given file. Hooks will be executed on future change of given
+% file's file_meta document.
+-record(file_meta_posthooks, {
+    hooks = #{} :: #{file_meta_posthooks:hook_identifier() => file_meta_posthooks:hook()}
 }).
 
 % This model holds information about QoS defined for given file. Each file
-% can be associated with at most one such record. The value of file_qos for
+% can be associated with zero or one such record. The value of file_qos for
 % particular file should be calculated using effective value (see file_qos.erl)
 -record(file_qos, {
     % List containing qos_entry IDs defined for given file.
     qos_entries = [] :: [qos_entry:id()],
     % Mapping storage ID -> list containing qos_entry IDs.
-    % When new QoS is added for file or directory, storages on which replicas
-    % should be stored are calculated using QoS expression. Then this mapping
-    % is appropriately updated with the calculated storages.
+    % When new QoS is added for file or directory storages on which replicas
+    % should be stored are calculated using QoS expression. Calculated storages
+    % are used to create traverse requests in qos_entry document. When provider
+    % notices change in qos_entry document, it checks whether traverse request
+    % for his storage is present. If yes provider updates entry in target_storages
+    % map for his local storage.
     target_storages = #{} :: file_qos:target_storages()
 }).
 
@@ -282,10 +285,10 @@
 % multiple qos_entry can be defined.
 -record(qos_entry, {
     file_uuid :: file_meta:uuid(),
-    expression = [] :: qos_expression:expression(), % QoS expression in RPN form.
+    expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     is_possible = false :: boolean(),
-    % Those are requests to remote providers to start QoS traverse.
+    % These are requests to remote providers to start QoS traverse.
     traverse_reqs = #{} :: qos_entry:traverse_map()
 }).
 

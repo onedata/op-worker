@@ -14,8 +14,9 @@
 -module(qos_bounded_cache).
 -author("Michal Cwiertnia").
 
--include("modules/datastore/qos.hrl").
 -include("global_definitions.hrl").
+-include("modules/datastore/qos.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -59,17 +60,22 @@ init(SpaceId) ->
     bounded_cache:init_cache(?CACHE_TABLE_NAME(SpaceId), #{group => ?QOS_BOUNDED_CACHE_GROUP}).
 
 
+-spec ensure_exists_for_all_spaces() -> ok.
 ensure_exists_for_all_spaces() ->
     % TODO: VFS-5744 potential race condition:
     % user may perform operations associated with QoS before cache initialization
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(SpaceId) -> ensure_exists_on_all_nodes(SpaceId) end, SpaceIds);
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize qos bounded cache due to: ~p", [Error])
+            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.
 
 
@@ -83,22 +89,22 @@ ensure_exists_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
     {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
 
-    case length(BadNodes) > 0 of
-        true ->
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
             ?error(
-                "Error when ensuring QoS bounded cache on following nodes,
-                as they are not exists: ~p ~n", [BadNodes]
-            );
-        false ->
-            ok
+                "Could not ensure that QoS bounded cache for space ~p exists on
+                nodes ~p. Nodes not exist. ~n", [SpaceId, BadNodes]
+            )
     end,
 
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
-            ?critical(
-                "Failed to ensure QoS bounded cache exists for space: ~p.
-                Error: ~p~n", [SpaceId, Error]
+            ?error(
+                "Could not ensure that QoS bounded cache for space: ~p exists.
+                Reason: ~p~n", [SpaceId, Error]
             )
     end, Res).
 
@@ -131,31 +137,37 @@ invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
     {Res, BadNodes} = rpc:multicall(Nodes, effective_value, invalidate, [?CACHE_TABLE_NAME(SpaceId)]),
 
-    case length(BadNodes) > 0 of
-        true ->
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
             ?error(
-                "Error when invalidating QoS bounded cache on following nodes,
-                as they are not exists: ~p ~n", [BadNodes]
-            );
-        false ->
-            ok
+                "Invalidation of QoS bounded cache for space ~p on nodes ~p failed.
+                Nodes not exist. ~n", [BadNodes]
+            )
     end,
 
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Failed to invalidate QoS bounded cache for space: ~p.
-                Error: ~p~n", [SpaceId, Error]
+                "Invalidation of QoS bounded cache for space ~p failed.
+                Reason: ~p~n", [SpaceId, Error]
             )
     end, Res).
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec get_param(atom(), non_neg_integer()) -> non_neg_integer().
 get_param(ParamName, DefaultVal) ->
     Value = application:get_env(?APP_NAME, ParamName, DefaultVal),
     ensure_non_neg_integer(Value, ParamName, DefaultVal).
 
 
+-spec ensure_non_neg_integer(non_neg_integer(), atom(), non_neg_integer()) -> non_neg_integer().
 ensure_non_neg_integer(Value, _, _) when is_integer(Value) andalso Value >= 0 ->
     Value;
 

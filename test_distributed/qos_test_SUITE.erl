@@ -125,18 +125,19 @@ all() -> [
 % record for specification of tests that adds QoS expression and checks QoS docs
 % all fields are associated with matching records defined in qos_tests_utils.hrl
 -record(add_qos_and_check_docs_test_spec, {
-    qos_to_add,
-    expected_qos_entries,
-    expected_file_qos
+    qos_to_add :: [#qos_to_add{}],
+    expected_qos_entries :: [#expected_qos_entry{}],
+    expected_file_qos :: [#expected_file_qos{}]
 }).
 
 
-% mock qos for test storages
+% qos for test providers
 -define(P1_TEST_QOS, #{
     <<"country">> => <<"PL">>,
     <<"city">> => <<"Krakow">>,
     <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t3">>
+    <<"tier">> => <<"t3">>,
+    <<"param">> => <<"paramv1">>
 }).
 
 -define(P2_TEST_QOS, #{
@@ -148,21 +149,24 @@ all() -> [
 -define(P3_TEST_QOS, #{
     <<"country">> => <<"PT">>,
     <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t2">>
-}).
-
--define(P4_TEST_QOS, #{
-    <<"country">> => <<"GB">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t3">>
+    <<"tier">> => <<"t2">>,
+    <<"param">> => <<"paramv1">>
 }).
 
 -define(TEST_PROVIDERS_QOS, #{
     ?P1 => ?P1_TEST_QOS,
     ?P2 => ?P2_TEST_QOS,
-    ?P3 => ?P3_TEST_QOS,
-    ?P4 => ?P4_TEST_QOS
+    ?P3 => ?P3_TEST_QOS
 }).
+
+
+-define(PROVIDERS_MAP, #{
+    ?P1 => ?P1,
+    ?P2 => ?P2,
+    ?P3 => ?P3,
+    ?P4 => ?P4
+}).
+
 
 
 -define(GET_CACHE_TABLE_SIZE(SPACE_ID),
@@ -192,10 +196,6 @@ all() -> [
     ]}
 ]}).
 
-
-%%%===================================================================
-%%% Test functions
-%%%===================================================================
 
 %%%===================================================================
 %%% QoS bounded cache tests.
@@ -388,381 +388,87 @@ mismatching_nested_parens(Config) ->
 
 simple_key_val_qos(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=FR">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=FR">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{?P2 => [?QOS1]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:simple_key_val_qos_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_intersection(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=disk&tier=t2">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t2">>, <<"&">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{?P3 => [?QOS1]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_intersection_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_complement(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"tier=t3-country=GB">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"tier=t3">>, <<"country=GB">>, <<"-">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{?P1 => [?QOS1]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_complement_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_union(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression =  <<"country=PL|city=Krakow">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=PL">>, <<"city=Krakow">>, <<"|">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{?P1 => [?QOS1]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_union_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_multiple_replicas(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=disk">>,
-                    replicas_num = 3
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=disk">>],
-                    replicas_num = 3
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{
-                        ?P1 => [?QOS1],
-                        ?P3 => [?QOS1],
-                        ?P4 => [?QOS1]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_multiple_replicas_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_intersection_and_union(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=disk&tier=t2|country=FR">>,
-                    replicas_num = 2
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t2">>, <<"&">>, <<"country=FR">>, <<"|">>],
-                    replicas_num = 2
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{
-                        ?P2 => [?QOS1],
-                        ?P3 => [?QOS1]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_intersection_and_union_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_union_and_complement(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=PL|country=FR-type=tape">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"type=tape">>, <<"-">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{
-                        ?P1 => [?QOS1]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_union_and_complement_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 qos_with_intersection_and_complement(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=disk&tier=t3-country=PL">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t3">>, <<"&">>, <<"country=PL">>, <<"-">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{
-                        ?P4 => [?QOS1]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_intersection_and_complement_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-qos_with_multiple_replicas_and_union(Config) -> 
+qos_with_multiple_replicas_and_union(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=PL|country=FR|country=PT">>,
-                    replicas_num = 3
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"country=PT">>, <<"|">>],
-                    replicas_num = 3
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{
-                        ?P1 => [?QOS1],
-                        ?P2 => [?QOS1],
-                        ?P3 => [?QOS1]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_multiple_replicas_and_union_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-key_val_qos_that_cannot_be_fulfilled(Config) -> 
+
+key_val_qos_that_cannot_be_fulfilled(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=IT">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=IT">>],
-                    replicas_num = 1,
-                    is_possible = false
-    
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:key_val_qos_that_cannot_be_fulfilled_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-qos_that_cannot_be_fulfilled(Config) -> 
+
+qos_that_cannot_be_fulfilled(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=PL|country=PT-type=disk">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"-">>],
-                    replicas_num = 1,
-                    is_possible = false
-    
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_that_cannot_be_fulfilled_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-qos_with_parens(Config) -> 
+qos_with_parens(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=PL|(country=PT-type=disk)">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=PL">>, <<"country=PT">>, <<"type=disk">>, <<"-">>, <<"|">>],
-                    replicas_num = 1
-    
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1],
-                    target_storages = #{?P1 => [?QOS1]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:qos_with_parens_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
@@ -774,278 +480,43 @@ qos_with_parens(Config) ->
 
 multi_qos_resulting_in_different_storages(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=disk&tier=t2">>,
-                    replicas_num = 1
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS2,
-                    expression = <<"country=FR">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t2">>, <<"&">>],
-                    replicas_num = 1
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS2,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=FR">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1, ?QOS2],
-                    target_storages = #{
-                        ?P2 => [?QOS2],
-                        ?P3 => [?QOS1]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:multi_qos_resulting_in_different_storages_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-multi_qos_resulting_in_the_same_storages(Config) -> 
+multi_qos_resulting_in_the_same_storages(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=tape">>,
-                    replicas_num = 1
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS2,
-                    expression = <<"country=FR">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=tape">>],
-                    replicas_num = 1
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS2,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=FR">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1, ?QOS2],
-                    target_storages = #{
-                        ?P2 => [?QOS1, ?QOS2]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:multi_qos_resulting_in_the_same_storages_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-same_qos_multiple_times(Config) -> 
+same_qos_multiple_times(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=tape">>,
-                    replicas_num = 1
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS2,
-                    expression = <<"type=tape">>,
-                    replicas_num = 1
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS3,
-                    expression = <<"type=tape">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=tape">>],
-                    replicas_num = 1
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS2,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=tape">>],
-                    replicas_num = 1
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS3,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=tape">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1, ?QOS2, ?QOS3],
-                    target_storages = #{?P2 => [?QOS1, ?QOS2, ?QOS3]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:same_qos_multiple_times_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
-contrary_qos(Config) -> 
+contrary_qos(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=PL">>,
-                    replicas_num = 1
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS2,
-                    expression = <<"type=tape-country=PL">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=PL">>],
-                    replicas_num = 1
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS2,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=tape">>, <<"country=PL">>, <<"-">>],
-                    replicas_num = 1
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1, ?QOS2],
-                    target_storages = #{
-                        ?P1 => [?QOS1],
-                        ?P2 => [?QOS2]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:contrary_qos_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 multi_qos_where_one_cannot_be_satisfied(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"country=FR">>,
-                    replicas_num = 1
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS2,
-                    expression =  <<"country=IT">>,
-                    replicas_num = 1
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=FR">>],
-                    replicas_num = 1
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS2,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"country=IT">>],
-                    replicas_num = 1,
-                    is_possible = false
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1, ?QOS2],
-                    target_storages = #{?P2 => [?QOS1]}
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:multi_qos_where_one_cannot_be_satisfied_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
 multi_qos_that_overlaps(Config) ->
     run_tests(Config, [file, dir], fun(Path) ->
-        #add_qos_and_check_docs_test_spec{
-            qos_to_add = [
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS1,
-                    expression = <<"type=disk">>,
-                    replicas_num = 3
-                },
-                #qos_to_add{
-                    path = Path,
-                    qos_name = ?QOS2,
-                    expression = <<"tier=t3">>,
-                    replicas_num = 2
-                }
-            ],
-            expected_qos_entries = [
-                #expected_qos_entry{
-                    qos_name = ?QOS1,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"type=disk">>],
-                    replicas_num = 3
-                },
-                #expected_qos_entry{
-                    qos_name = ?QOS2,
-                    file_key = {path, Path},
-                    qos_expression_in_rpn = [<<"tier=t3">>],
-                    replicas_num = 2
-                }
-            ],
-            expected_file_qos = [
-                #expected_file_qos{
-                    path = Path,
-                    qos_entries = [?QOS1, ?QOS2],
-                    target_storages = #{
-                        ?P1 => [?QOS1, ?QOS2],
-                        ?P3 => [?QOS1],
-                        ?P4 => [?QOS1, ?QOS2]
-                    }
-                }
-            ]
-        }
+        [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
+        qos_test_base:multi_qos_that_overlaps_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
     end).
 
 
@@ -1057,7 +528,10 @@ multi_qos_that_overlaps(Config) ->
 effective_qos_for_file_in_directory(Config) ->
     DirPath = filename:join(?SPACE1, <<"dir1">>),
     FilePath = filename:join(DirPath, <<"file1">>),
+    [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
 
+    QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(DirPath,
+        FilePath, Worker, [Worker], ?PROVIDERS_MAP),
     TestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             dir_structure = {?SPACE1, [
@@ -1066,29 +540,9 @@ effective_qos_for_file_in_directory(Config) ->
                 ]}
             ]}
         },
-        qos_to_add = [
-            #qos_to_add{
-                path = DirPath,
-                qos_name = ?QOS1,
-                expression = <<"country=FR">>,
-                replicas_num = 1
-            }
-        ],
-        expected_qos_entries = [
-            #expected_qos_entry{
-                qos_name = ?QOS1,
-                qos_expression_in_rpn = [<<"country=FR">>],
-                replicas_num = 1,
-                file_key = {path, DirPath}
-            }
-        ],
-        expected_effective_qos = [
-            #expected_file_qos{
-                path = FilePath,
-                qos_entries = [?QOS1],
-                target_storages = #{?P2 => [?QOS1]}
-            }
-        ]
+        qos_to_add = QosSpec#qos_spec.qos_to_add,
+        expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
+        expected_effective_qos = QosSpec#qos_spec.expected_effective_qos
     },
 
     add_qos_for_dir_and_check_effective_qos(Config, TestSpec).
@@ -1100,70 +554,17 @@ effective_qos_for_file_in_nested_directories(Config) ->
     Dir4Path = filename:join(Dir3Path, <<"dir4">>),
     File31Path = filename:join(Dir3Path, <<"file31">>),
     File41Path = filename:join(Dir4Path, <<"file41">>),
+    [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
 
+    QosSpec = qos_test_base:effective_qos_for_file_in_nested_directories_spec([Dir2Path, Dir3Path, Dir4Path],
+        [File31Path, File41Path], Worker, [Worker], ?PROVIDERS_MAP),
     TestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             dir_structure = ?NESTED_DIR_STRUCTURE
         },
-        qos_to_add = [
-            #qos_to_add{
-                path = Dir2Path,
-                qos_name = ?QOS1,
-                expression = <<"country=PL">>,
-                replicas_num = 1
-            },
-            #qos_to_add{
-                path = Dir3Path,
-                qos_name = ?QOS2,
-                expression = <<"country=FR">>,
-                replicas_num = 1
-            },
-            #qos_to_add{
-                path = Dir4Path,
-                qos_name = ?QOS3,
-                expression = <<"country=PT">>,
-                replicas_num = 1
-            }
-        ],
-        expected_qos_entries = [
-            #expected_qos_entry{
-                qos_name = ?QOS1,
-                qos_expression_in_rpn = [<<"country=PL">>],
-                replicas_num = 1,
-                file_key = {path, Dir2Path}
-            },
-            #expected_qos_entry{
-                qos_name = ?QOS2,
-                qos_expression_in_rpn = [<<"country=FR">>],
-                replicas_num = 1,
-                file_key = {path, Dir3Path}
-            },
-            #expected_qos_entry{
-                qos_name = ?QOS3,
-                qos_expression_in_rpn = [<<"country=PT">>],
-                replicas_num = 1,
-                file_key = {path, Dir4Path}
-            }
-        ],
-        expected_effective_qos = [
-            #expected_file_qos{
-                path = File41Path,
-                qos_entries = [?QOS1, ?QOS2, ?QOS3],
-                target_storages = #{
-                    ?P1 => [?QOS1],
-                    ?P2 => [?QOS2],
-                    ?P3 => [?QOS3]
-                }
-            },
-            #expected_file_qos{
-                path = File31Path,
-                qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
-                    ?P1 => [?QOS1],
-                    ?P2 => [?QOS2]
-                }
-            }
-        ]
+        qos_to_add = QosSpec#qos_spec.qos_to_add,
+        expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
+        expected_effective_qos = QosSpec#qos_spec.expected_effective_qos
     },
 
     add_qos_for_dir_and_check_effective_qos(Config, TestSpec).
@@ -1175,7 +576,11 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
     Dir3Path = filename:join(Dir1Path, <<"dir3">>),
     File21Path = filename:join(Dir2Path, <<"file21">>),
     File31Path = filename:join(Dir3Path, <<"file31">>),
+    [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
 
+    QosSpec = qos_test_base:effective_qos_for_files_in_different_directories_of_tree_structure_spec(
+        [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], Worker, [Worker], ?PROVIDERS_MAP
+    ),
     TestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             dir_structure = {?SPACE1, [
@@ -1185,64 +590,9 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
                 ]}
             ]}
         },
-        qos_to_add = [
-            #qos_to_add{
-                path = Dir1Path,
-                qos_name = ?QOS1,
-                expression = <<"country=PL">>,
-                replicas_num = 1
-            },
-            #qos_to_add{
-                path = Dir2Path,
-                qos_name = ?QOS2,
-                expression = <<"country=FR">>,
-                replicas_num = 1
-            },
-            #qos_to_add{
-                path = Dir3Path,
-                qos_name = ?QOS3,
-                expression = <<"country=PT">>,
-                replicas_num = 1
-            }
-        ],
-        expected_qos_entries = [
-            #expected_qos_entry{
-                qos_name = ?QOS1,
-                qos_expression_in_rpn = [<<"country=PL">>],
-                replicas_num = 1,
-                file_key = {path, Dir1Path}
-            },
-            #expected_qos_entry{
-                qos_name = ?QOS2,
-                qos_expression_in_rpn = [<<"country=FR">>],
-                replicas_num = 1,
-                file_key = {path, Dir2Path}
-            },
-            #expected_qos_entry{
-                qos_name = ?QOS3,
-                qos_expression_in_rpn = [<<"country=PT">>],
-                replicas_num = 1,
-                file_key = {path, Dir3Path}
-            }
-        ],
-        expected_effective_qos = [
-            #expected_file_qos{
-                path = File31Path,
-                qos_entries = [?QOS1, ?QOS3],
-                target_storages = #{
-                    ?P1 => [?QOS1],
-                    ?P3 => [?QOS3]
-                }
-            },
-            #expected_file_qos{
-                path = File21Path,
-                qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
-                    ?P1 => [?QOS1],
-                    ?P2 => [?QOS2]
-                }
-            }
-        ]
+        qos_to_add = QosSpec#qos_spec.qos_to_add,
+        expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
+        expected_effective_qos = QosSpec#qos_spec.expected_effective_qos
     },
 
     add_qos_for_dir_and_check_effective_qos(Config, TestSpec).
@@ -1300,13 +650,11 @@ run_tests(Config, FileTypes, TestSpecFun) ->
     end, FileTypes).
 
 
-add_qos_and_check_qos_docs(Config, TestSpec) ->
-    #add_qos_and_check_docs_test_spec{
-        qos_to_add = QosToAddList,
-        expected_qos_entries = ExpectedQosEntries,
-        expected_file_qos = ExpectedFileQos
-    } = TestSpec,
-
+add_qos_and_check_qos_docs(Config, #qos_spec{
+    qos_to_add = QosToAddList,
+    expected_qos_entries = ExpectedQosEntries,
+    expected_file_qos = ExpectedFileQos
+} ) ->
     % add QoS for file and w8 for appropriate QoS status
     QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
@@ -1316,14 +664,12 @@ add_qos_and_check_qos_docs(Config, TestSpec) ->
     qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, false).
 
 
-add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
-    #effective_qos_test_spec{
-        initial_dir_structure = InitialDirStructure,
-        qos_to_add = QosToAddList,
-        expected_qos_entries = ExpectedQosEntries,
-        expected_effective_qos = ExpectedEffectiveQos
-    } = TestSpec,
-
+add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
+    initial_dir_structure = InitialDirStructure,
+    qos_to_add = QosToAddList,
+    expected_qos_entries = ExpectedQosEntries,
+    expected_effective_qos = ExpectedEffectiveQos
+} ) ->
     % create initial dir structure
     qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
 
@@ -1355,10 +701,10 @@ mock_start_traverse(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, qos_hooks, [passthrough]),
     ok = test_utils:mock_expect(Workers, qos_hooks, maybe_start_traverse,
-        fun(FileCtx, QosId, Storage, TaskId) ->
+        fun(FileCtx, QosEntryId, Storage, TaskId) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
-            ok = file_qos:add_qos(FileUuid, SpaceId, QosId, Storage),
+            ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:start_initial_traverse(FileCtx, QosId, Storage, TaskId)
+            ok = qos_traverse:start_initial_traverse(FileCtx, QosEntryId, TaskId)
         end).

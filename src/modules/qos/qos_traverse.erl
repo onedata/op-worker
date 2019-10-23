@@ -10,33 +10,31 @@
 %%% performing actions related to QoS management.
 %%% Traverse is started for each storage that given QoS requires files
 %%% to be. Traverse is run on provider, that given storage belongs to.
+%%%
+%%% This module uses traverse_behaviour however it is not specified as
+%%% behaviour here as this module does not implement all callbacks (some
+%%% are optional)
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_traverse).
 -author("Michal Cwiertnia").
 
+-behavior(traverse_behaviour).
+
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/qos.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([restore_qos/3, start_initial_traverse/4, init_pool/0]).
+-export([reconcile_qos_for_entry/2, start_initial_traverse/3, init_pool/0]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2,
     task_finished/1, get_job/1, get_sync_info/1, update_job_progress/5]).
 
-% For test purpose
--export([synchronize_file/2]).
-
--record(add_qos_traverse_args, {
-    qos_id :: qos_entry:id(),
-    target_storage = undefined :: storage:id() | undefined
-}).
-
--type task_type() :: traverse | restore.
+-type task_type() :: traverse | reconcile.
 -export_type([task_type/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -49,20 +47,16 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates initial traverse task to fulfill QoS.
+%% Creates initial traverse task to fulfill requirements defined in qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec start_initial_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
-start_initial_traverse(FileCtx, QosId, TargetStorage, TaskId) ->
+-spec start_initial_traverse(file_ctx:ctx(), qos_entry:id(), traverse:id()) -> ok.
+start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
-        traverse_info => #add_qos_traverse_args{
-            qos_id = QosId,
-            target_storage = TargetStorage
-        },
         additional_data => #{
-            <<"qos_id">> => QosId,
+            <<"qos_entry_id">> => QosEntryId,
             <<"task_type">> => <<"traverse">>
         }
     },
@@ -71,37 +65,32 @@ start_initial_traverse(FileCtx, QosId, TargetStorage, TaskId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates traverse task to fulfill QoS for single file, after its
-%% change was synced.
+%% Creates traverse task to fulfill requirements defined in qos_entry for
+%% single file, after its change was synced.
 %% @end
 %%--------------------------------------------------------------------
--spec restore_qos(file_ctx:ctx(), qos_entry:id(), storage:id()) -> ok.
-restore_qos(FileCtx, QosId, TargetStorage) ->
+-spec reconcile_qos_for_entry(file_ctx:ctx(), qos_entry:id()) -> ok.
+reconcile_qos_for_entry(FileCtx, QosEntryId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_utils:gen_key(),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
-        traverse_info => #add_qos_traverse_args{
-            qos_id = QosId,
-            target_storage = TargetStorage
-        },
         additional_data => #{
-            <<"qos_id">> => QosId,
+            <<"qos_entry_id">> => QosEntryId,
             <<"space_id">> => SpaceId,
             <<"file_uuid">> => FileUuid,
-            <<"target_storage">> => TargetStorage,
-            <<"task_type">> => <<"restore">>
+            <<"task_type">> => <<"reconcile">>
         }
     },
-    ok = qos_status:add_link(QosId, SpaceId, FileUuid, TaskId, TargetStorage),
+    ok = qos_status:report_file_changed(QosEntryId, SpaceId, FileUuid, TaskId),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes pool for traverse tasks concerning qos management.
+%% Initializes pool for traverse tasks concerning QoS management.
 %% @end
 %%--------------------------------------------------------------------
 -spec init_pool() -> ok.
@@ -129,20 +118,18 @@ get_sync_info(Job) ->
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
     {ok, #{
-        <<"qos_id">> := QosId,
+        <<"qos_entry_id">> := QosEntryId,
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
-            {ok, _} = qos_entry:remove_traverse_req(QosId, TaskId),
-            ok;
-        <<"restore">> ->
+            ok = qos_entry:remove_traverse_req(QosEntryId, TaskId);
+        <<"reconcile">> ->
             #{
                 <<"space_id">> := SpaceId,
-                <<"file_uuid">> := FileUuid,
-                <<"target_storage">> := TargetStorage
+                <<"file_uuid">> := FileUuid
             } = AdditionalData,
-            ok = qos_status:delete_link(QosId, SpaceId, FileUuid, TaskId, TargetStorage)
+            ok = qos_status:report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId)
     end.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
@@ -155,7 +142,6 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job, TaskId) ->
     tree_traverse:do_master_job(Job, TaskId).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Performs slave job for traverse task responsible for scheduling replications
@@ -163,16 +149,14 @@ do_master_job(Job, TaskId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_slave_job(traverse:job(), traverse:id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId},
-    #add_qos_traverse_args{target_storage = _TargetStorage}}, _TaskId) ->
+do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     % TODO: add space check and optionally choose other storage
 
     % call using ?MODULE macro for mocking in tests
-    ok = ?MODULE:synchronize_file(UserCtx, FileCtx).
-
+    ok = synchronize_file(UserCtx, FileCtx).
 
 %%%===================================================================
 %%% Internal functions
@@ -187,13 +171,17 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId},
 synchronize_file(UserCtx, FileCtx) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     FileBlock = #file_block{offset = 0, size = Size},
-    case replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, false, undefined, ?QOS_SYNCHRONIZATION_PRIORITY) of
+    SyncResult = replica_synchronizer:synchronize(
+        UserCtx, FileCtx2, FileBlock, false, undefined, ?QOS_SYNCHRONIZATION_PRIORITY
+    ),
+    case SyncResult of
         {ok, _} ->
             ok;
         {error, cancelled} ->
             ?debug("QoS file synchronization failed due to cancelation");
-        {error, Reason} ->
+        {error, Reason} = Error ->
             % TODO: VFS-5737 handle failures properly
-            ?error("Error during file synchronization: ~p", [Reason])
+            ?error("Error during file synchronization: ~p", [Reason]),
+            Error
     end,
     ok.
