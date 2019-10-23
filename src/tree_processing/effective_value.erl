@@ -63,14 +63,15 @@ get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo,
-%% Args, undefined)
+%% Args, bounded_cache:get_timestamp())
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(),
     initial_calculation_info(), args()) ->
     {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args) ->
-    get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args, bounded_cache:get_timestamp()).
+    get_or_calculate(Cache, FileDoc, CalculateCallback, InitialCalculationInfo, Args,
+        bounded_cache:get_timestamp()).
 
 %%--------------------------------------------------------------------
 %% @doc
