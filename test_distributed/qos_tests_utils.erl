@@ -52,9 +52,6 @@
     file_id:guid_to_uuid(qos_tests_utils:get_guid(Worker, SessId, FilePath))
 ).
 -define(PROVIDER_ID(Worker), initializer:domain_to_provider_id(?GET_DOMAIN(Worker))).
--define(FILE_QOS_CTX, #{
-    model => ?MODULE
-}).
 
 
 %%%====================================================================

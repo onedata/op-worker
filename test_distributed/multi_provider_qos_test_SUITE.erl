@@ -52,7 +52,7 @@
 
     effective_qos_for_file_in_directory/1,
     effective_qos_for_file_in_nested_directories/1,
-    effective_qos_for_file_in_directory_tree/1,
+    effective_qos_for_files_in_different_directories_of_tree_structure/1,
 
     qos_restoration_file_test/1,
     qos_restoration_dir_test/1,
@@ -82,7 +82,7 @@ all() -> [
 
     effective_qos_for_file_in_directory,
     effective_qos_for_file_in_nested_directories,
-    effective_qos_for_file_in_directory_tree,
+    effective_qos_for_files_in_different_directories_of_tree_structure,
 
     qos_restoration_file_test,
     qos_restoration_dir_test,
@@ -102,34 +102,6 @@ all() -> [
 -define(GET_FILE_UUID(Worker, SessId, FilePath), qos_tests_utils:get_guid(Worker, SessId, FilePath)).
 
 -define(ATTEMPTS, 60).
-
-% qos for test providers
--define(P1_TEST_QOS, #{
-    <<"country">> => <<"PL">>,
-    <<"city">> => <<"Krakow">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t3">>,
-    <<"param">> => <<"paramv1">>
-}).
-
--define(P2_TEST_QOS, #{
-    <<"country">> => <<"FR">>,
-    <<"type">> => <<"tape">>,
-    <<"tier">> => <<"t2">>
-}).
-
--define(P3_TEST_QOS, #{
-    <<"country">> => <<"PT">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t2">>,
-    <<"param">> => <<"paramv1">>
-}).
-
--define(TEST_PROVIDERS_QOS, #{
-    <<"p1">> => ?P1_TEST_QOS,
-    <<"p2">> => ?P2_TEST_QOS,
-    <<"p3">> => ?P3_TEST_QOS
-}).
 
 -define(simple_dir_structure(Name, Distribution),
     {?SPACE_ID, [
@@ -447,7 +419,7 @@ multi_qos_that_overlaps(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:multi_qos_where_one_cannot_be_satisfied_spec(Path, [WorkerP2, WorkerP3], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:multi_qos_that_overlaps_spec(Path, [WorkerP2, WorkerP3], Workers, get_providers_mapping(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -523,7 +495,7 @@ effective_qos_for_file_in_nested_directories(Config) ->
         File21Path = filename:join(Dir2Path, <<"file21">>),
         File31Path = filename:join(Dir3Path, <<"file31">>),
 
-        QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(
+        QosSpec = qos_test_base:effective_qos_for_file_in_nested_directories_spec(
             [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], WorkerConf, Workers, get_providers_mapping(Config)
         ),
         add_qos_for_dir_and_check_effective_qos(Config,
@@ -563,7 +535,7 @@ effective_qos_for_file_in_nested_directories(Config) ->
     end, WorkersConfigurations).
 
 
-effective_qos_for_file_in_directory_tree(Config) ->
+effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
     Workers = [WorkerP1, WorkerP2, Worker1P3, Worker2P3, Worker3P3] = qos_tests_utils:get_op_nodes_sorted(Config),
     WorkersConfigurations = [
         [WorkerP1, WorkerP2, Worker1P3],
@@ -579,7 +551,7 @@ effective_qos_for_file_in_directory_tree(Config) ->
         Dir3Path = filename:join(Dir1Path, <<"dir3">>),
         File21Path = filename:join(Dir2Path, <<"file21">>),
         File31Path = filename:join(Dir3Path, <<"file31">>),
-        QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(
+        QosSpec = qos_test_base:effective_qos_for_files_in_different_directories_of_tree_structure_spec(
             [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], WorkerConf, Workers, get_providers_mapping(Config)
         ),
 
@@ -685,8 +657,16 @@ qos_status_test(Config) ->
         lists:foreach(fun(Worker) ->
             lists:foreach(fun({G, P}) ->
                 ct:print("Checking ~p: ~n\tfile: ~p~n\tis_ancestor: ~p", [Worker, P, IsAncestor(P, FilePath)]),
-                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
-                ?assertEqual(not IsAncestor(P, FilePath), lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}), ?ATTEMPTS)
+                ?assertEqual(
+                    {ok, not IsAncestor(P, FilePath)},
+                    lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}),
+                    ?ATTEMPTS
+                ),
+                ?assertEqual(
+                    {ok, not IsAncestor(P, FilePath)},
+                    lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}),
+                    ?ATTEMPTS
+                )
             end, FilesAndDirs)
         end, Workers),
         finish_transfers([FileGuid]),

@@ -10,7 +10,6 @@
 %%%-------------------------------------------------------------------
 -author("Michal Cwiertnia").
 
-
 -include("modules/datastore/qos.hrl").
 
 
@@ -22,7 +21,35 @@
 -define(P1, <<"p1">>).
 -define(P2, <<"p2">>).
 -define(P3, <<"p3">>).
--define(P4, <<"p4">>).
+
+
+% QoS for test providers
+-define(P1_TEST_QOS, #{
+    <<"country">> => <<"PL">>,
+    <<"type">> => <<"disk">>,
+    <<"tier">> => <<"t3">>,
+    <<"param1">> => <<"val1">>
+}).
+
+-define(P2_TEST_QOS, #{
+    <<"country">> => <<"FR">>,
+    <<"type">> => <<"tape">>,
+    <<"tier">> => <<"t2">>
+}).
+
+-define(P3_TEST_QOS, #{
+    <<"country">> => <<"PT">>,
+    <<"type">> => <<"disk">>,
+    <<"tier">> => <<"t2">>,
+    <<"param1">> => <<"val1">>
+}).
+
+-define(TEST_PROVIDERS_QOS, #{
+    <<"p1">> => ?P1_TEST_QOS,
+    <<"p2">> => ?P2_TEST_QOS,
+    <<"p3">> => ?P3_TEST_QOS
+}).
+
 
 -type qos_name() :: binary().
 
@@ -81,9 +108,7 @@
     dir_structure :: tuple()
 }).
 
-% TODO: desc
-% record for specification of tests that adds QoS expression and checks QoS docs
-% all fields are associated with matching records defined in qos_tests_utils.hrl
+% record storing QoS specification for tests
 -record(qos_spec, {
     qos_to_add :: [#qos_to_add{}],
     expected_qos_entries :: [#expected_qos_entry{}],

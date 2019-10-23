@@ -131,40 +131,10 @@ all() -> [
 }).
 
 
-% qos for test providers
--define(P1_TEST_QOS, #{
-    <<"country">> => <<"PL">>,
-    <<"city">> => <<"Krakow">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t3">>,
-    <<"param">> => <<"paramv1">>
-}).
-
--define(P2_TEST_QOS, #{
-    <<"country">> => <<"FR">>,
-    <<"type">> => <<"tape">>,
-    <<"tier">> => <<"t2">>
-}).
-
--define(P3_TEST_QOS, #{
-    <<"country">> => <<"PT">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t2">>,
-    <<"param">> => <<"paramv1">>
-}).
-
--define(TEST_PROVIDERS_QOS, #{
-    ?P1 => ?P1_TEST_QOS,
-    ?P2 => ?P2_TEST_QOS,
-    ?P3 => ?P3_TEST_QOS
-}).
-
-
 -define(PROVIDERS_MAP, #{
     ?P1 => ?P1,
     ?P2 => ?P2,
-    ?P3 => ?P3,
-    ?P4 => ?P4
+    ?P3 => ?P3
 }).
 
 

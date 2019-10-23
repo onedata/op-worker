@@ -121,7 +121,6 @@ init(_Args) ->
     transfer:init(),
     qos_traverse:init_pool(),
     qos_bounded_cache:init_group(),
-    %% jka to zadzaiala przy restarcie - czy dostanie spacy od zone'a
     qos_bounded_cache:ensure_exists_for_all_spaces(),
 
     clproto_serializer:load_msg_defs(),
@@ -751,11 +750,7 @@ init_qos_cache_for_space_internal(SpaceId) ->
     try qos_bounded_cache:init(SpaceId) of
         ok ->
             ok;
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
-        Error = {error, _} ->
+       Error = {error, _} ->
             ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
         Error2:Reason ->

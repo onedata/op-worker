@@ -123,7 +123,7 @@ qos_with_complement_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) -
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"tier=t3-country=GB">>,
+                expression = <<"type=disk-country=PT">>,
                 replicas_num = 1
             }
         ],
@@ -132,7 +132,7 @@ qos_with_complement_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) -
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"tier=t3">>, <<"country=GB">>, <<"-">>],
+                qos_expression_in_rpn = [<<"type=disk">>, <<"country=PT">>, <<"-">>],
                 replicas_num = 1
             }
         ],
@@ -154,7 +154,7 @@ qos_with_union_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"country=PL|city=Krakow">>,
+                expression = <<"country=PL|tier=t3">>,
                 replicas_num = 1
             }
         ],
@@ -163,7 +163,7 @@ qos_with_union_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>, <<"city=Krakow">>, <<"|">>],
+                qos_expression_in_rpn = [<<"country=PL">>, <<"tier=t3">>, <<"|">>],
                 replicas_num = 1
             }
         ],
@@ -284,7 +284,7 @@ qos_with_intersection_and_complement_spec(Path, WorkerAddingQos, AssertionWorker
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"type=disk&param=paramv1-country=PL">>,
+                expression = <<"type=disk&param1=val1-country=PL">>,
                 replicas_num = 1
             }
         ],
@@ -293,7 +293,7 @@ qos_with_intersection_and_complement_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>, <<"param=paramv1">>, <<"&">>, <<"country=PL">>, <<"-">>],
+                qos_expression_in_rpn = [<<"type=disk">>, <<"param1=val1">>, <<"&">>, <<"country=PL">>, <<"-">>],
                 replicas_num = 1
             }
         ],
@@ -890,19 +890,19 @@ effective_qos_for_file_in_nested_directories_spec(
         expected_effective_qos = [
             #expected_file_qos{
                 path = FileInDir2Path,
+                qos_entries = [?QOS1, ?QOS2],
+                target_storages = #{
+                    maps:get(?P1, ProviderMap) => [?QOS1],
+                    maps:get(?P2, ProviderMap) => [?QOS2]
+                }
+            },
+            #expected_file_qos{
+                path = FileInDir3Path,
                 qos_entries = [?QOS1, ?QOS2, ?QOS3],
                 target_storages = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS2],
                     maps:get(?P3, ProviderMap) => [?QOS3]
-                }
-            },
-            #expected_file_qos{
-                path = FileInDir3Path,
-                qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
-                    maps:get(?P1, ProviderMap) => [?QOS1],
-                    maps:get(?P2, ProviderMap) => [?QOS2]
                 }
             }
         ]
