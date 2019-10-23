@@ -136,9 +136,10 @@ emit_file_locations_changed(EventsList, ExcludedSessions) ->
 %%--------------------------------------------------------------------
 -spec emit_file_perm_changed(file_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_perm_changed(FileCtx) ->
-    event:emit(#file_perm_changed_event{
+    {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
+    event:get_subscribers_and_emit(#file_perm_changed_event{
         file_guid = file_ctx:get_guid_const(FileCtx)
-    }).
+    }, ParentGuid, []).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -46,8 +46,8 @@ get_routing_key(#file_location_changed_event{file_location = FileLocation}, _Rou
         FileLocation#file_location.space_id
     ),
     {ok, <<"file_location_changed.", FileGuid/binary>>};
-get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingBase) ->
-    {ok, <<"file_perm_changed.", FileGuid/binary>>};
+get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, RoutingBase) ->
+    get_routing_key_with_parent(<<"file_perm_changed.">>, FileGuid, RoutingBase);
 get_routing_key(#file_removed_event{file_guid = FileGuid}, RoutingBase) ->
     get_routing_key_with_parent(<<"file_removed.">>, FileGuid, RoutingBase);
 get_routing_key(#file_renamed_event{top_entry = Entry}, RoutingBase) ->
