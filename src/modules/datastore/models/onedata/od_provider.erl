@@ -145,8 +145,8 @@ get_record_struct(4) ->
         {online, boolean},
 
         {storages, [string]}, % new field
-        {spaces, #{string => integer}},
 
+        {eff_spaces, #{string => integer}}, % renamed field
         {eff_users, [string]},
         {eff_groups, [string]},
 
@@ -187,12 +187,12 @@ upgrade_record(2, Provider) ->
         Name,
         Urls,
 
-        #{},
+        _Spaces,
 
-        [],
-        [],
+        _EffUsers,
+        _EffGroups,
 
-        #{}
+        _CacheState
     } = Provider,
     #{host := Domain} = url_utils:parse(hd(Urls)),
     {3, {od_provider,
@@ -216,36 +216,36 @@ upgrade_record(3, Provider) ->
     {
         od_provider,
         Name,
-        undefined,
-        false,
+        AdminEmail,
+        SubdomainDelegation,
         Domain,
-        undefined,
-        0.0,
-        0.0,
-        false,
+        Subdomain,
+        Latitude,
+        Longitude,
+        _Online,
 
-        #{},
+        _Spaces,
 
-        [],
-        [],
+        _EffUsers,
+        _EffGroups,
 
-        #{}
+        _CacheState
     } = Provider,
-    {4, {od_provider,
-        Name,
-        undefined,
-        false,
-        Domain,
-        undefined,
-        0.0,
-        0.0,
-        false,
+    {4, #od_provider{
+        name = Name,
+        admin_email = AdminEmail,
+        subdomain_delegation = SubdomainDelegation,
+        domain = Domain,
+        subdomain = Subdomain,
+        latitude = Latitude,
+        longitude = Longitude,
+        online = false,
 
-        [],
-        #{},
+        storages = [],
+        eff_spaces = #{},
 
-        [],
-        [],
+        eff_users = [],
+        eff_groups = [],
 
-        #{}
+        cache_state = #{}
     }}.

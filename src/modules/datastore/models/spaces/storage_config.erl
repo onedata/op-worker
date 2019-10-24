@@ -5,7 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding storage configuration.
+%%% @doc
+%%% Model for holding storage configuration. It contains provider specific
+%%% information and private storage data. It should not be shared with other providers.
+%%% To share storage data with other providers(through onezone) od_storage model is used.
 %%%      @todo: rewrite without "ROOT_STORAGE" when implementation of persistent_store:list will be ready
 %%% @end
 %%%-------------------------------------------------------------------

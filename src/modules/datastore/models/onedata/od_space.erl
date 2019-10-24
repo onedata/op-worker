@@ -33,7 +33,8 @@
 -define(CTX, #{
     model => ?MODULE,
     fold_enabled => true,
-    memory_copies => all
+    memory_copies => all,
+    disc_driver => undefined
 }).
 
 %% API
@@ -245,20 +246,20 @@ upgrade_record(2, Space) ->
 
         CacheState
     } = Space,
-    {3, #od_space{
-        name = Name,
+    {3, {od_space,
+        Name,
 
-        direct_users = DirectUsers,
-        eff_users = EffUsers,
+        DirectUsers,
+        EffUsers,
 
-        direct_groups = DirectGroups,
-        eff_groups = EffGroups,
+        DirectGroups,
+        EffGroups,
 
-        providers = Providers,
-        shares = Shares,
-        harvesters = [],
+        Providers,
+        Shares,
+        [],
 
-        cache_state = CacheState
+        CacheState
     }};
 upgrade_record(3, Space) ->
     {
@@ -273,6 +274,7 @@ upgrade_record(3, Space) ->
 
         Providers,
         Shares,
+        Harvesters,
 
         CacheState
     } = Space,
@@ -288,7 +290,7 @@ upgrade_record(3, Space) ->
         storages = #{},
         providers = Providers,
         shares = Shares,
-        harvesters = [],
+        harvesters = Harvesters,
 
         cache_state = CacheState
     }}.
