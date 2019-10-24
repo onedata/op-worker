@@ -29,7 +29,8 @@
 select_storage(SpaceId) ->
     case space_logic:get_storage_ids(SpaceId) of
         {ok, []} -> {error, {no_storage_avaliable, SpaceId}};
-        {ok, [StorageId | _]} -> storage_config:get(StorageId)
+        {ok, [StorageId | _]} -> storage_config:get(StorageId);
+        {error, _} = Error -> Error
     end.
 
 %%--------------------------------------------------------------------

@@ -290,7 +290,7 @@
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
     storages = ?PROVIDER_STORAGES(__Provider),
-    spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
+    eff_spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
 }}).
@@ -298,7 +298,7 @@
     name = ?PROVIDER_NAME(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    spaces = #{},
+    eff_spaces = #{},
     eff_users = [],
     eff_groups = []
 }}).

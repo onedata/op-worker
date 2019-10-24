@@ -148,7 +148,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             longitude = maps:get(<<"longitude">>, Result),
             latitude = maps:get(<<"latitude">>, Result),
             online = maps:get(<<"online">>, Result),
-            spaces = maps:get(<<"spaces">>, Result),
+            eff_spaces = maps:get(<<"spaces">>, Result),
             storages = maps:get(<<"storages">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)
@@ -233,6 +233,14 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = private}, 
         }
     };
 
+translate(#gri{type = od_storage, id = Id, aspect = instance, scope = shared}, Result) ->
+    #document{
+        key = Id,
+        value = #od_storage{
+            qos_parameters = maps:get(<<"qos_parameters">>, Result)
+        }
+    };
+
 
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [
@@ -303,7 +311,7 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
             admin_email = undefined,
             subdomain_delegation = undefined,
             subdomain = undefined,
-            spaces = #{},
+            eff_spaces = #{},
             eff_users = [],
             eff_groups = []
         }
@@ -318,6 +326,13 @@ apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
 
             eff_users = #{},
             eff_groups = #{}
+        }
+    };
+
+apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
+    Doc#document{
+        value = Storage#od_storage{
+            provider = undefined
         }
     }.
 

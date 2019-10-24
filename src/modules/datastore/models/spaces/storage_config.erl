@@ -26,14 +26,13 @@
     get_helpers/1, get_luma_config_map/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, save_doc/1, list/0]).
--export([supports_any_space/1]).
 -export([on_storage_created/1]).
 -export([delete_all/0]).
 
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
-    set_readonly/2, set_mount_in_root/1, safe_remove/1, describe/1]).
+    set_readonly/2, set_mount_in_root/1, describe/1]).
 -export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
@@ -360,43 +359,6 @@ set_mount_in_root(StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes storage. Fails with an error if the storage supports
-%% any space.
-%% @end
-%%--------------------------------------------------------------------
--spec safe_remove(od_storage:id()) -> ok | {error, storage_in_use | term()}.
-safe_remove(StorageId) ->
-    critical_section:run({storage_to_space, StorageId}, fun() ->
-        case supports_any_space(StorageId) of
-            true ->
-                {error, storage_in_use};
-            false ->
-                % TODO VFS-5124 Remove from rtransfer
-                storage_logic:delete(StorageId)
-        end
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given storage supports any space.
-%% @end
-%%--------------------------------------------------------------------
--spec supports_any_space(StorageId :: od_storage:id()) -> boolean().
-supports_any_space(StorageId) ->
-    case provider_logic:get_spaces() of
-        {ok, Spaces} ->
-            lists:any(fun(SpaceId) ->
-                {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
-                lists:member(StorageId, StorageIds)
-            end, Spaces);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            false
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Selects storage by its name from the list of configured storages.
 %% @end
 %%--------------------------------------------------------------------
@@ -471,8 +433,7 @@ describe(StorageId) ->
 
 -spec on_storage_created(od_storage:id()) -> ok.
 on_storage_created(StorageId) ->
-    {ok, Doc} = ?MODULE:get(StorageId),
-    ok = rtransfer_put_storage(Doc).
+    ok = rtransfer_put_storage(StorageId).
 
 -spec delete_all() -> ok.
 delete_all() ->
@@ -608,9 +569,9 @@ get_record_struct(6) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, Name, Helpers}) ->
-    {2, #storage_config{
-        name = Name,
-        helpers = [{
+    {2, {storage_config,
+        Name,
+        [{
             helper,
             helper:translate_name(HelperName),
             maps:fold(fun(K, V, Args) ->
@@ -621,16 +582,16 @@ upgrade_record(1, {?MODULE, Name, Helpers}) ->
         } || {_, HelperName, HelperArgs} <- Helpers]
     }};
 upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
-    {3, #storage_config{
-        name = Name,
-        helpers = Helpers,
-        readonly = Readonly,
-        luma_config = undefined
+    {3, {storage_config,
+        Name,
+        Helpers,
+        Readonly,
+        undefined
     }};
 upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
-    {4, #storage_config{
-        name = Name,
-        helpers = [{
+    {4, {storage_config,
+        Name,
+        [{
             helper,
             HelperName,
             HelperArgs,
@@ -638,13 +599,13 @@ upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
             Insecure,
             false
         } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers],
-        readonly = Readonly,
-        luma_config = LumaConfig
+        Readonly,
+        LumaConfig
     }};
 upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
-    {5, #storage_config{
-        name = Name,
-        helpers = [
+    {5, {storage_config,
+        Name,
+        [
             #helper{
                 name = HelperName,
                 args = HelperArgs,
@@ -655,24 +616,14 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
             } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
                 ExtendedDirectIO} <- Helpers
         ],
-        readonly = Readonly,
-        luma_config = LumaConfig
+        Readonly,
+        LumaConfig
     }};
 %% @TODO VFS-5854 Implement upgrade procedure using cluster upgrade
 upgrade_record(5, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
     {6, #storage_config{
         name = Name,
-        helpers = [
-            #helper{
-                name = HelperName,
-                args = HelperArgs,
-                admin_ctx = AdminCtx,
-                insecure = Insecure,
-                extended_direct_io = ExtendedDirectIO,
-                storage_path_type = ?CANONICAL_STORAGE_PATH
-            } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
-                ExtendedDirectIO} <- Helpers
-        ],
+        helpers = Helpers,
         readonly = Readonly,
         luma_config = LumaConfig,
         mount_in_root = false
@@ -749,11 +700,9 @@ replace_helper(#storage_config{helpers = OldHelpers} = Storage, HelperName, NewH
 %% Adds or updates storage in rtransfer config.
 %% @end
 %%--------------------------------------------------------------------
--spec rtransfer_put_storage(doc() | od_storage:id()) -> ok.
-rtransfer_put_storage(#document{} = Doc) ->
-    rtransfer_config:add_storage(Doc),
-    ok;
-
+-spec rtransfer_put_storage(od_storage:id()) -> ok.
 rtransfer_put_storage(StorageId) ->
     {ok, Doc} = ?MODULE:get(StorageId),
-    rtransfer_put_storage(Doc).
+    rtransfer_config:add_storage(Doc),
+    ok.
+

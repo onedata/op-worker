@@ -32,7 +32,8 @@
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
--export([get_storage_ids/0, get_storage_ids/1, get_storage_ids/2]).
+-export([get_storage_ids/0, get_storage_ids/1]).
+-export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([get_support_size/1]).
@@ -237,7 +238,7 @@ get_spaces(ProviderId) ->
     {ok, [od_space:id()]} | errors:error().
 get_spaces(SessionId, ProviderId) ->
     case get(SessionId, ProviderId) of
-        {ok, #document{value = #od_provider{spaces = Spaces}}} ->
+        {ok, #document{value = #od_provider{eff_spaces = Spaces}}} ->
             {ok, maps:keys(Spaces)};
         {error, _} = Error ->
             Error
@@ -251,7 +252,7 @@ get_spaces(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_storage_ids() -> {ok, [od_storage:id()]} | errors:error().
 get_storage_ids() ->
-    get_storage_ids(?ROOT_SESS_ID, ?SELF).
+    get_storage_ids(?SELF).
 
 
 %%--------------------------------------------------------------------
@@ -261,21 +262,18 @@ get_storage_ids() ->
 %%--------------------------------------------------------------------
 -spec get_storage_ids(od_provider:id()) -> {ok, [od_storage:id()]} | errors:error().
 get_storage_ids(ProviderId) ->
-    get_storage_ids(?ROOT_SESS_ID, ProviderId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves storages of provider by given ProviderId.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_ids(gs_client_worker:client(), od_provider:id()) -> {ok, [od_storage:id()]} | errors:error().
-get_storage_ids(SessionId, ProviderId) ->
-    case get(SessionId, ProviderId) of
+    case get(?ROOT_SESS_ID, ProviderId) of
         {ok, #document{value = #od_provider{storages = Storages}}} ->
             {ok, Storages};
         {error, _} = Error ->
             Error
+    end.
+
+-spec has_storage(od_storage:id()) -> boolean().
+has_storage(StorageId) ->
+    case get_storage_ids() of
+        {ok, StorageIds} -> lists:member(StorageId, StorageIds);
+        _ -> false
     end.
 
 
@@ -304,7 +302,7 @@ supports_space(SpaceId) ->
 
 -spec supports_space(od_provider:doc(), od_space:id()) ->
     boolean().
-supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
+supports_space(#document{value = #od_provider{eff_spaces = Spaces}}, SpaceId) ->
     maps:is_key(SpaceId, Spaces).
 
 
@@ -322,7 +320,7 @@ supports_space(SessionId, ProviderId, SpaceId) ->
 -spec get_support_size(od_space:id()) -> {ok, integer()} | errors:error().
 get_support_size(SpaceId) ->
     case get(?ROOT_SESS_ID, ?SELF) of
-        {ok, #document{value = #od_provider{spaces = #{SpaceId := SupportSize}}}} ->
+        {ok, #document{value = #od_provider{eff_spaces = #{SpaceId := SupportSize}}}} ->
             {ok, SupportSize};
         {ok, #document{value = #od_provider{}}} ->
             ?ERROR_NOT_FOUND;

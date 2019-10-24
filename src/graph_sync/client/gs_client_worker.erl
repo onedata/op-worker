@@ -678,8 +678,17 @@ is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_storage, scope = private}, _) ->
-    true;
+is_authorized(?ROOT_SESS_ID, _, #gri{type = od_storage, id = StorageId, scope = private}, _) ->
+    provider_logic:has_storage(StorageId);
+
+is_authorized(?ROOT_SESS_ID, AuthHint, #gri{type = od_storage, id = StorageId, scope = shared}, _) ->
+    case AuthHint of
+        ?THROUGH_SPACE(SpaceId) ->
+            space_logic:is_supported_by_storage(SpaceId, StorageId)
+                andalso provider_logic:supports_space(SpaceId);
+        _ ->
+            false
+    end;
 
 % Provider can access shares of spaces that it supports
 is_authorized(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->

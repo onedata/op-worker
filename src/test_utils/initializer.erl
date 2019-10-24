@@ -1076,7 +1076,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
-                    spaces = maps:from_list(lists:map(fun(SpaceId) ->
+                    eff_spaces = maps:from_list(lists:map(fun(SpaceId) ->
                         Storages = proplists:get_value(SpaceId, SpacesToStorages, maps:from_list([{St, 1000000000} || St <- maps:keys(StorageMappings)])),
                         ProvidersSupp = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
                             maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
@@ -1117,7 +1117,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     end,
 
     GetSupportsFun = fun(?ROOT_SESS_ID, PID) ->
-        {ok, #document{value = #od_provider{spaces = Supports}}} = GetProviderFun(?ROOT_SESS_ID, PID),
+        {ok, #document{value = #od_provider{eff_spaces = Supports}}} = GetProviderFun(?ROOT_SESS_ID, PID),
         {ok, Supports}
     end,
 
@@ -1166,7 +1166,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                 {ok, Doc#document{value = Provider#od_provider{
                     subdomain_delegation = undefined,
                     subdomain = undefined,
-                    spaces = #{},
+                    eff_spaces = #{},
                     eff_users = [],
                     eff_groups = []
                 }}};

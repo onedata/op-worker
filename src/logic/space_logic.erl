@@ -32,6 +32,7 @@
 -export([get_eff_groups/2, get_shares/2, get_storage_ids/1]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
+-export([is_supported_by_storage/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
@@ -167,14 +168,23 @@ get_shares(SessionId, SpaceId) ->
 %% Returns list of storage ids supporting given space under this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(od_space:id()) -> {ok, [od_storage:id()]}.
+-spec get_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
 get_storage_ids(SpaceId) ->
     {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
+    case get_all_storage_ids(SpaceId) of
+        {ok, AllStorageIds} ->
+            {ok, [X || X <- ProviderStorageIds, Y <- AllStorageIds, X == Y]};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec get_all_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_all_storage_ids(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = #od_space{storages = AllStorageIds}}} ->
-            {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(AllStorageIds), X==Y]};
-        _ ->
-            {ok, []}
+            {ok, maps:keys(AllStorageIds)};
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -205,6 +215,14 @@ is_supported(SessionId, SpaceId, ProviderId) ->
             is_supported(SpaceDoc, ProviderId);
         _ ->
             false
+    end.
+
+
+-spec is_supported_by_storage(od_space:id(), od_storage:id()) -> boolean().
+is_supported_by_storage(SpaceId, StorageId) ->
+    case get_all_storage_ids(SpaceId) of
+        {ok, AllStorageIds} -> lists:member(StorageId, AllStorageIds);
+        _ -> false
     end.
 
 

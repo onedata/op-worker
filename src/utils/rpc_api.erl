@@ -90,20 +90,17 @@ storage_create(StorageConfig) ->
 
 -spec storage_safe_remove(od_storage:id()) -> ok | {error, storage_in_use | term()}.
 storage_safe_remove(StorageId) ->
-    storage_config:safe_remove(StorageId).
+    storage_logic:safe_delete(StorageId).
 
 
 -spec storage_supports_any_space(od_storage:id()) -> boolean().
 storage_supports_any_space(StorageId) ->
-    storage_config:supports_any_space(StorageId).
+    storage_logic:supports_any_space(StorageId).
 
 
 -spec storage_list_ids() -> {ok, [od_storage:id()]} | {error, term()}.
 storage_list_ids() ->
-    case storage_config:list() of
-        {ok, Docs} -> {ok, lists:map(fun storage_config:get_id/1, Docs)};
-        Error -> Error
-    end.
+    provider_logic:get_storage_ids().
 
 
 -spec storage_get_helpers(storage_config:doc()) -> [helpers:helper()].

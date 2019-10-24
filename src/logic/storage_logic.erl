@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Interface for reading and manipulating od_harvester records synchronized
+%%% Interface for reading and manipulating od_storage records synchronized
 %%% via Graph Sync. Requests are delegated to gs_client_worker, which decides
 %%% if they should be served from cache or handled by Onezone.
 %%% NOTE: This is the only valid way to interact with od_storage records, to
@@ -25,11 +25,15 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([create/1, get/1, delete/1]).
--export([support_space/3, support_space/4]).
+-export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_support/2]).
--export([set_qos_parameters/2, get_qos_parameters/1]).
+-export([set_qos_parameters/2, get_qos_parameters/2]).
 -export([describe/1]).
+-export([supports_any_space/1]).
+-export([safe_delete/1]).
+
+-compile({no_auto_import,[get/1]}).
 
 %%%===================================================================
 %%% API
@@ -37,12 +41,12 @@
 
 -spec create(storage_config:doc()) -> {ok, od_storage:id()} | errors:error().
 create(StorageConfig) ->
-    case storage_config:save_doc(StorageConfig) of
-        {ok, StorageId} ->
-            StorageName = storage_config:get_name(StorageConfig),
-            case create_in_zone(StorageId, StorageName) of
-                {ok, _} ->
-                    ok = on_storage_created(StorageId),
+    StorageName = storage_config:get_name(StorageConfig),
+    case create_in_zone(StorageName) of
+        {ok, {_, #document{key = StorageId, value = #od_storage{}}}} ->
+            case storage_config:save_doc(StorageConfig#document{key = StorageId}) of
+                {ok, StorageId} ->
+                    ok = storage_config:on_storage_created(StorageId),
                     {ok, StorageId};
                 Error ->
                     delete_in_zone(StorageId),
@@ -54,12 +58,11 @@ create(StorageConfig) ->
 
 
 %% @private
--spec create_in_zone(od_storage:id(), storage_config:name()) ->
-    {ok, od_storage:doc()} | errors:error().
-create_in_zone(StorageId, StorageName) ->
+-spec create_in_zone(storage_config:name()) -> {ok, {gri:gri(), od_storage:doc()}} | errors:error().
+create_in_zone(StorageName) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        gri = #gri{type = od_storage, id = undefined, aspect = instance},
         data = #{<<"name">> => StorageName}
     }).
 
@@ -73,6 +76,22 @@ get(StorageId) ->
     }).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves restricted storage data shared through given SpaceId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
+get_shared_data(StorageId, SpaceId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance, scope = shared},
+        subscribe = true,
+        auth_hint = ?THROUGH_SPACE(SpaceId)
+    }).
+
+
+-spec delete(od_storage:id()) -> ok | errors:error().
 delete(StorageId) ->
     case delete_in_zone(StorageId) of
         ok -> storage_config:delete(StorageId);
@@ -91,18 +110,12 @@ delete_in_zone(StorageId) ->
 
 -spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, Token, SupportSize) ->
-    support_space(?ROOT_SESS_ID, StorageId, Token, SupportSize).
-
--spec support_space(SessionId :: gs_client_worker:client(),
-    od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(SessionId, StorageId, SerializedToken, SupportSize) ->
-%% @TODO VFS-5497 Checking whether provider can support space not needed when multisupport is implemented (will be checked in zone)
-    case can_support_space(SerializedToken) of
+support_space(StorageId, SerializedToken, SupportSize) ->
+%% @TODO VFS-5497 This check not needed when multisupport is implemented (will be checked in zone)
+    case check_support_token(SerializedToken) of
         {ok, SpaceId} ->
             Data = #{<<"token">> => SerializedToken, <<"size">> => SupportSize},
-            Result = gs_client_worker:request(SessionId, #gs_req_graph{
+            Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
                 operation = create,
                 gri = #gri{type = od_storage, id = StorageId, aspect = support},
                 data = Data
@@ -120,23 +133,20 @@ support_space(SessionId, StorageId, SerializedToken, SupportSize) ->
 
 
 %% @private
--spec can_support_space(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
-can_support_space(SerializedToken) ->
+-spec check_support_token(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
+check_support_token(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
-        {ok, #token{type = TokenType}} ->
-            case TokenType of
-                ?INVITE_TOKEN(?SPACE_SUPPORT_TOKEN, SpaceId) ->
-                    case provider_logic:supports_space(SpaceId) of
-                        true ->
-                            ?ERROR_RELATION_ALREADY_EXISTS(
-                                od_space, SpaceId, od_provider, oneprovider:get_id()
-                            );
-                        false ->
-                            {ok, SpaceId}
-                    end;
-                _ ->
-                    ?ERROR_NOT_AN_INVITE_TOKEN(?SPACE_SUPPORT_TOKEN)
-                end;
+        {ok, #token{type = ?INVITE_TOKEN(?SPACE_SUPPORT_TOKEN, SpaceId)}} ->
+            case provider_logic:supports_space(SpaceId) of
+                true ->
+                    ?ERROR_RELATION_ALREADY_EXISTS(
+                        od_space, SpaceId, od_provider, oneprovider:get_id()
+                    );
+                false ->
+                    {ok, SpaceId}
+            end;
+        {ok, _} ->
+            ?ERROR_NOT_AN_INVITE_TOKEN(?SPACE_SUPPORT_TOKEN);
         {error, _} = Error ->
             Error
     end.
@@ -196,12 +206,63 @@ set_qos_parameters(StorageId, QosParameters) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get own storage QoS parameters.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_qos_parameters(od_storage:id()) -> {ok, od_storage:qos_parameters()} | errors:error().
 get_qos_parameters(StorageId) ->
-    case ?MODULE:get(StorageId) of
+    case get(StorageId) of
         {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} -> {ok, QosParameters};
         Error -> Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get QoS parameters of storage supporting given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_parameters(od_storage:id(), od_space:id()) ->
+    {ok, od_storage:qos_parameters()} | errors:error().
+get_qos_parameters(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} -> {ok, QosParameters};
+        Error -> Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes storage. Fails with an error if the storage supports
+%% any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec safe_delete(od_storage:id()) -> ok | {error, storage_in_use | term()}.
+safe_delete(StorageId) ->
+    critical_section:run({storage_to_space, StorageId}, fun() ->
+        case supports_any_space(StorageId) of
+            true ->
+                {error, storage_in_use};
+            false ->
+                % TODO VFS-5124 Remove from rtransfer
+                delete(StorageId)
+        end
+    end).
+
+
+-spec supports_any_space(StorageId :: od_storage:id()) -> boolean().
+supports_any_space(StorageId) ->
+    case provider_logic:get_spaces() of
+        {ok, Spaces} ->
+            lists:any(fun(SpaceId) ->
+                {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+                lists:member(StorageId, StorageIds)
+            end, Spaces);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            false
+    end.
+
 
 -spec describe(od_storage:id()) ->
     {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
@@ -214,12 +275,6 @@ describe(StorageId) ->
             }};
         {error, _} = Error -> Error
     end.
-
-
-%% @private
--spec on_storage_created(od_storage:id()) -> ok.
-on_storage_created(StorageId) ->
-    ok = storage_config:on_storage_created(StorageId).
 
 
 %% @private

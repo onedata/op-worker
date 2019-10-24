@@ -39,25 +39,30 @@
 % membership is possible via groups and nested groups.
 % these records are synchronized from OZ via Graph Sync.
 %
+%
 % The below ASCII visual shows possible relations in entities graph.
 %
-%  provider    share
-%      ^         ^
-%       \       /
-%        \     /
-%         space    handle_service     handle
-%         ^  ^        ^        ^       ^   ^
-%         |   \      /         |      /    |
-%         |    \    /          |     /     |
-%        user    group          user      group
-%                  ^                        ^
-%                  |                        |
-%                  |                        |
-%                group                     user
-%                ^   ^
-%               /     \
-%              /       \
-%            user     user
+%           provider
+%              ^
+%              |
+%           storage                              share
+%              ^                                   ^
+%              |                                   |
+%            space            handle_service<----handle
+%           ^ ^ ^ ^             ^         ^       ^  ^
+%          /  | |  \           /          |      /   |
+%         /   | |   \         /           |     /    |
+%        /   /   \   \       /            |    /     |
+%       /   /     \   \     /             |   /      |
+% share user harvester group             user      group
+%              ^    ^     ^                          ^
+%             /      \    |                          |
+%            /        \   |                          |
+%          user        group                        user
+%                      ^   ^
+%                     /     \
+%                    /       \
+%                  user      user
 %
 
 -record(od_user, {
@@ -135,7 +140,7 @@
     storages = [] :: [od_storage:id()],
 
     % Effective relations to other entities
-    spaces = #{} :: #{od_space:id() => Size :: integer()},
+    eff_spaces = #{} :: #{od_space:id() => Size :: integer()},
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
 
