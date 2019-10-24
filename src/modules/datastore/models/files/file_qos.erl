@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc The file_qos document contains aggregated information about QoS defined
+%%% @doc The file_qos document contains information about QoS entries defined
 %%% for file or directory. It contains:
 %%%     - qos_entries - holds IDs of all qos_entries defined for this file (
 %%%       including qos_entries which demands cannot be satisfied),
@@ -16,9 +16,10 @@
 %%%       in qos_entry, it checks whether there is traverse request defining
 %%%       its storage. If yes, provider updates target_storages and
 %%%       starts traverse.
-%%% Each file or directory can be associated with at most one such document.
-%%% Getting full information about QoS defined for file or directory requires
-%%% calculating effective file_qos as it is inherited from all parents.
+%%% Each file or directory can be associated with zero or one such document.
+%%% Getting information about all QoS entries that influences file or directory
+%%% requires calculating effective_file_qos as file_qos is inherited from all
+%%% parents.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------

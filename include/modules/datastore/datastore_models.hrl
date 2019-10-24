@@ -261,14 +261,14 @@
     hooks = #{} :: #{file_meta_posthooks:hook_identifier() => file_meta_posthooks:hook()}
 }).
 
-% This model holds information about QoS defined for given file. Each file
-% can be associated with zero or one such record. The value of file_qos for
-% particular file should be calculated using effective value (see file_qos.erl)
+% This model holds information about QoS entries defined for given file.
+% Each file can be associated with zero or one such record. It is used to
+% calculate effective_file_qos. (see file_qos.erl)
 -record(file_qos, {
     % List containing qos_entry IDs defined for given file.
     qos_entries = [] :: [qos_entry:id()],
     % Mapping storage ID -> list containing qos_entry IDs.
-    % When new QoS is added for file or directory storages on which replicas
+    % When new QoS entry is added for file or directory storages on which replicas
     % should be stored are calculated using QoS expression. Calculated storages
     % are used to create traverse requests in qos_entry document. When provider
     % notices change in qos_entry document, it checks whether traverse request

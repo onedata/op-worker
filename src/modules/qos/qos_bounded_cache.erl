@@ -161,12 +161,14 @@ invalidate_on_all_nodes(SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec get_param(atom(), non_neg_integer()) -> non_neg_integer().
 get_param(ParamName, DefaultVal) ->
     Value = application:get_env(?APP_NAME, ParamName, DefaultVal),
     ensure_non_neg_integer(Value, ParamName, DefaultVal).
 
 
+%% @private
 -spec ensure_non_neg_integer(non_neg_integer(), atom(), non_neg_integer()) -> non_neg_integer().
 ensure_non_neg_integer(Value, _, _) when is_integer(Value) andalso Value >= 0 ->
     Value;

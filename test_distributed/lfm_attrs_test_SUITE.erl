@@ -187,7 +187,7 @@ effective_value_test(Config) ->
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
-        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], [], undefined, Timestamp])),
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], [], Timestamp])),
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
