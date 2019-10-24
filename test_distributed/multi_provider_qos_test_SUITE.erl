@@ -622,9 +622,6 @@ qos_status_test(Config) ->
     {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
     QosList = maps:values(QosNameIdMapping),
 
-    % this is needed so only traverse transfers will start
-    mock_qos_restore(Config),
-
     lists:foreach(fun({Guid, Path}) ->
         lists:foreach(fun(Worker) ->
             ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
@@ -642,7 +639,6 @@ qos_status_test(Config) ->
     end, maps:get(files, GuidsAndPaths)),
 
     % check status after restoration
-    unmock_qos_restore(Config),
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
 
     IsAncestor = fun(A, F) ->
@@ -895,17 +891,6 @@ get_expected_structure_for_single_dir(ProviderIdList) ->
             ]}
         ]}
     }.
-
-
-mock_qos_restore(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, qos_hooks, [passthrough]),
-    test_utils:mock_expect(Workers, qos_hooks, reconcile_qos_on_storage, fun(_,_) -> ok end).
-
-
-unmock_qos_restore(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, qos_hooks).
 
 
 finish_transfers([]) -> ok;
