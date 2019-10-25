@@ -1,5 +1,5 @@
 %%%--------------------------------------------------------------------
-%%% @author Michal Cwiertnia
+%%% @author Michal Stanisz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -9,8 +9,8 @@
 %%% Empty test SUITE to be implemented in the future major version
 %%% @end
 %%%--------------------------------------------------------------------
--module(multi_provider_qos_test_SUITE).
--author("Michal Cwiertnia").
+-module(storage_logic_test_SUITE).
+-author("Michal Stanisz").
 
 -export([all/0]).
 
