@@ -27,7 +27,7 @@
 -spec select_storage(od_space:id()) ->
     {ok, storage_config:doc()} | {error, Reason :: term()}.
 select_storage(SpaceId) ->
-    case space_logic:get_storage_ids(SpaceId) of
+    case space_logic:get_local_storage_ids(SpaceId) of
         {ok, []} -> {error, {no_storage_avaliable, SpaceId}};
         {ok, [StorageId | _]} -> storage_config:get(StorageId);
         {error, _} = Error -> Error

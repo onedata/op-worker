@@ -221,7 +221,7 @@ check_strategies() ->
 -spec check_strategies([od_space:id()], boolean()) -> ok.
 check_strategies(SpaceIds, FirstRun) ->
     lists:foreach(fun(SpaceId) ->
-        {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+        {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
         check_strategies(SpaceId, StorageIds, FirstRun)
     end, SpaceIds).
 

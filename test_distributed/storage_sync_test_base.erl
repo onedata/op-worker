@@ -3891,7 +3891,7 @@ assertImportTimes(Worker, SpaceId) ->
     assertImportTimes(Worker, SpaceId, ?ATTEMPTS).
 
 assertImportTimes(Worker, SpaceId, Attempts) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -3905,7 +3905,7 @@ assertUpdateTimes(Worker, SpaceId) ->
     assertUpdateTimes(Worker, SpaceId, ?ATTEMPTS).
 
 assertUpdateTimes(Worker, SpaceId, Attempts) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -3916,7 +3916,7 @@ assertUpdateTimes(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertNoImportInProgress(Worker, SpaceId, Attempts) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -3928,7 +3928,7 @@ assertNoImportInProgress(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertNoUpdateInProgress(Worker, SpaceId, Attempts) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     ?assertEqual(true, begin
         {ok, #document{
             value = #storage_sync_monitoring{

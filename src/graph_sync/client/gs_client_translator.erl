@@ -148,7 +148,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             longitude = maps:get(<<"longitude">>, Result),
             latitude = maps:get(<<"latitude">>, Result),
             online = maps:get(<<"online">>, Result),
-            eff_spaces = maps:get(<<"spaces">>, Result),
+            eff_spaces = maps:get(<<"effectiveSpaces">>, Result),
             storages = maps:get(<<"storages">>, Result),
             eff_users = maps:get(<<"effectiveUsers">>, Result),
             eff_groups = maps:get(<<"effectiveGroups">>, Result)

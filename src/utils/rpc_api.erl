@@ -191,7 +191,7 @@ storage_describe(StorageId) ->
 
 -spec space_logic_get_storage_ids(od_space:id()) -> [od_storage:id()].
 space_logic_get_storage_ids(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     StorageIds.
 
 
@@ -289,7 +289,7 @@ support_space(StorageId, Token, SupportSize) ->
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
 revoke_space_support(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     StorageId = hd(StorageIds),
     storage_logic:revoke_support(StorageId, SpaceId).
 
@@ -383,7 +383,7 @@ space_quota_current_size(SpaceId) ->
 -spec update_space_support_size(od_space:id(), NewSupportSize :: integer()) ->
     ok | errors:error().
 update_space_support_size(SpaceId, NewSupportSize) ->
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     StorageId = hd(StorageIds),
     storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize).
 

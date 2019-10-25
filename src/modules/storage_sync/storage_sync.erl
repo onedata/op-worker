@@ -144,5 +144,5 @@ stop_storage_update(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_supporting_storage(od_space:id()) -> od_storage:id().
 get_supporting_storage(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     hd(StorageIds).

@@ -29,7 +29,7 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
--export([get_eff_groups/2, get_shares/2, get_storage_ids/1]).
+-export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
@@ -168,8 +168,8 @@ get_shares(SessionId, SpaceId) ->
 %% Returns list of storage ids supporting given space under this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
-get_storage_ids(SpaceId) ->
+-spec get_local_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_local_storage_ids(SpaceId) ->
     {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
     case get_all_storage_ids(SpaceId) of
         {ok, AllStorageIds} ->

@@ -256,7 +256,7 @@ supports_any_space(StorageId) ->
     case provider_logic:get_spaces() of
         {ok, Spaces} ->
             lists:any(fun(SpaceId) ->
-                {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+                {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
                 lists:member(StorageId, StorageIds)
             end, Spaces);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->

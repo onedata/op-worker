@@ -323,7 +323,7 @@ get_monitoring_id(SpaceId, UserId) ->
 %%--------------------------------------------------------------------
 -spec all_supporting_storages_are_readonly(od_space:id()) -> boolean().
 all_supporting_storages_are_readonly(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     all_storages_are_readonly(StorageIds).
 
 %%--------------------------------------------------------------------

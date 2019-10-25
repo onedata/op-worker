@@ -115,7 +115,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
         path := Path,
         ctx := CTX
     } = Data,
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
 
     MaybeAttrs = lists:map(
         fun(StorageId) ->

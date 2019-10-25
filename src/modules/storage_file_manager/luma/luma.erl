@@ -493,7 +493,7 @@ generate_posix_identifier(Id, {Low, High}) ->
 -spec select_posix_compatible_storage(od_space:id()) ->
     {ok, storage_config:doc(), helper:name()} | {error, Reason :: term()}.
 select_posix_compatible_storage(SpaceId) ->
-    StorageIds = case space_logic:get_storage_ids(SpaceId) of
+    StorageIds = case space_logic:get_local_storage_ids(SpaceId) of
         {ok, StIds} -> StIds;
         {error, _} -> []
     end,

@@ -183,7 +183,7 @@
 }).
 
 -record(od_storage, {
-    provider :: od_provider:id(),
+    provider :: od_provider:id() | undefined,
     qos_parameters = #{} :: od_storage:qos_parameters(),
     cache_state = #{} :: cache_state()
 }).

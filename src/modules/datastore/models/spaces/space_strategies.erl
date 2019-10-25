@@ -104,7 +104,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec is_import_on(od_space:id()) -> boolean().
 is_import_on(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     lists:foldl(fun
         (_StorageId, true) ->
             true;
