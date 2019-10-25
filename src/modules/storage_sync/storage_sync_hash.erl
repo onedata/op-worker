@@ -5,7 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module with helper functions for storage_sync.
+%%% In this module util functions for computing and comparing
+%%% hashes calculated basing on files' attributes.
+%%% This hashes are used to prune tree traversed by storage sync
+%%% when detecting changes on storage.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_hash).

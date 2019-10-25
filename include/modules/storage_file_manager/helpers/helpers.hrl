@@ -29,13 +29,15 @@
 -define(WEBDAV_HELPER_NAME, <<"webdav">>).
 -define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
+-define(POSIX_COMPATIBLE_HELPERS, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]).
+
 %% Storage path types
 -define(CANONICAL_STORAGE_PATH, <<"canonical">>).
 -define(FLAT_STORAGE_PATH, <<"flat">>).
 
 %% Storage types
--define(OBJECT_STORAGE, object).
--define(BLOCK_STORAGE, block).
+-define(OBJECT_STORAGE, object_storage).
+-define(BLOCK_STORAGE, block_storage).
 
 -define(DEFAULT_HELPER_TIMEOUT, 120000).
 

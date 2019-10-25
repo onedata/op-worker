@@ -28,7 +28,7 @@
     is_insecure/1, get_params/2, get_proxy_params/2, get_timeout/1,
     get_storage_path_type/1]).
 -export([get_args_with_user_ctx/2]).
--export([translate_name/1, translate_arg_name/1, type/1]).
+-export([translate_name/1, translate_arg_name/1, get_type/1]).
 
 -type name() :: binary().
 
@@ -36,7 +36,7 @@
 -type user_ctx() :: #{binary() => binary()}.
 -type group_ctx() :: #{binary() => binary()}.
 -type params() :: #helper_params{}.
--type type() :: object | block.
+-type type() :: object_storage | block_storage.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0, type/0]).
 
@@ -187,15 +187,15 @@ is_insecure(#helper{insecure = Insecure}) ->
 get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
     StoragePathType.
 
--spec type(helpers:helper()) -> helper:type().
-type(#helper{name = ?POSIX_HELPER_NAME}) -> ?BLOCK_STORAGE;
-type(#helper{name = ?WEBDAV_HELPER_NAME}) -> ?BLOCK_STORAGE;
-type(#helper{name = ?GLUSTERFS_HELPER_NAME}) -> ?BLOCK_STORAGE;
-type(#helper{name = ?NULL_DEVICE_HELPER_NAME}) -> ?BLOCK_STORAGE;
-type(#helper{name = ?CEPH_HELPER_NAME}) -> ?OBJECT_STORAGE;
-type(#helper{name = ?CEPHRADOS_HELPER_NAME}) -> ?OBJECT_STORAGE;
-type(#helper{name = ?S3_HELPER_NAME}) -> ?OBJECT_STORAGE;
-type(#helper{name = ?SWIFT_HELPER_NAME}) -> ?OBJECT_STORAGE.
+-spec get_type(helpers:helper()) -> helper:type().
+get_type(#helper{name = ?POSIX_HELPER_NAME}) -> ?BLOCK_STORAGE;
+get_type(#helper{name = ?WEBDAV_HELPER_NAME}) -> ?BLOCK_STORAGE;
+get_type(#helper{name = ?GLUSTERFS_HELPER_NAME}) -> ?BLOCK_STORAGE;
+get_type(#helper{name = ?NULL_DEVICE_HELPER_NAME}) -> ?BLOCK_STORAGE;
+get_type(#helper{name = ?CEPH_HELPER_NAME}) -> ?OBJECT_STORAGE;
+get_type(#helper{name = ?CEPHRADOS_HELPER_NAME}) -> ?OBJECT_STORAGE;
+get_type(#helper{name = ?S3_HELPER_NAME}) -> ?OBJECT_STORAGE;
+get_type(#helper{name = ?SWIFT_HELPER_NAME}) -> ?OBJECT_STORAGE.
 
 %%--------------------------------------------------------------------
 %% @doc

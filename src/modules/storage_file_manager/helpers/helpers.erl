@@ -38,6 +38,11 @@
 }).
 
 -type file_id() :: binary().
+%% Argument passed to ?MODULE:listobjects/5 function
+%% Listing objects starts from object with id == Marker.
+%% Marker may be used to list objects in batches.
+%% Each time Marker should be equal to id of the last object
+%% from the previous batch.
 -type marker() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.
@@ -101,6 +106,10 @@ readdir(Handle, FileId, Offset, Count) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Calls {@link helpers_nif:listobjects/5} function.
+%% Listing objects starts from object with id == Marker.
+%% Marker may be used to list objects in batches.
+%% Each time Marker should be equal to id of the last object
+%% from the previous batch.
 %% @end
 %%--------------------------------------------------------------------
 -spec listobjects(helper_handle(), file_id(), marker(), Offset :: non_neg_integer(),

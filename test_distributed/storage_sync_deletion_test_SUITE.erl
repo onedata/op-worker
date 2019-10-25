@@ -76,7 +76,7 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(SPACE_CTX(SpaceId), file_ctx:new_by_guid(?SPACE_GUID(SpaceId))).
 -define(SPACE_STORAGE_CTX(Worker, SpaceId, MountInRoot), begin
-    storage_file_ctx:new(space_dir_path(SpaceId, MountInRoot), SpaceId, get_storage_id(W, SpaceId))
+    storage_file_ctx:new(space_storage_file_id(SpaceId, MountInRoot), SpaceId, get_storage_id(W, SpaceId))
 end).
 -define(SESSION_ID(Config, Worker), ?config({session_id, {?USER, ?GET_DOMAIN(Worker)}}, Config)).
 
@@ -302,7 +302,7 @@ do_not_delete_child_file_basic_test_base(Config) ->
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
     Child = <<"child1">>,
     {ok, Guid} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
@@ -323,7 +323,7 @@ do_not_delete_child_file_without_location_test_base(Config) ->
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
     Child = <<"child1">>,
     {ok, _} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
@@ -342,7 +342,7 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
 
     lists:foldl(fun(N, {ToStayIn, ToDeleteIn})->
@@ -375,7 +375,7 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
 
     lists:foldl(fun(N, {ToStayIn, ToDeleteIn})->
@@ -438,9 +438,9 @@ end_per_testcase(_Case, Config) ->
 % Internal functions
 %===================================================================
 
-space_dir_path(_SpaceId, true) ->
+space_storage_file_id(_SpaceId, true) ->
     <<"/">>;
-space_dir_path(SpaceId, false) ->
+space_storage_file_id(SpaceId, false) ->
     <<"/", SpaceId/binary>>.
 
 get_storage_id(Worker, SpaceId) ->
@@ -473,8 +473,8 @@ clean_storage_sync_links(Worker) ->
 
 clean_storage_sync_links(Worker, SpaceId) ->
     StorageId = get_storage_id(Worker, SpaceId),
-    storage_sync_links_test_utils:delete_recursive(Worker, space_dir_path(SpaceId, true), SpaceId, StorageId),
-    storage_sync_links_test_utils:delete_recursive(Worker, space_dir_path(SpaceId, false), SpaceId, StorageId).
+    storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, true), SpaceId, StorageId),
+    storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, false), SpaceId, StorageId).
 
 create_file(Worker, ParentGuid, ChildName, SessionId) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, ParentGuid, ChildName, 8#664),

@@ -24,15 +24,25 @@
 -define(DEFAULT_NEXT_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).
 -define(DEFAULT_CHILDREN_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).
 
+% record defining master job executed by traverse framework
+% master jobs defined by #storage_traverse record are associated with directories found on storage
+% master jobs are used to produce next master jobs and slave jobs for traverse framework
 -record(storage_traverse, {
+    % opaque data structure storing information about file on storage, working as a cache
+    % master job defined by #storage_traverse{} is associated with file represented by StorageFileCtx
     storage_file_ctx :: storage_file_ctx:ctx(),
-    space_id :: od_space:id(),
-    storage_doc :: storage:doc(),
+    % callback module that uses storage_traverse framework
+    % the module must implement functions required by traverse.erl
     callback_module :: traverse:callback_module(),
+    % storage specific module that encapsulates details of listing files on specific storage helpers
     storage_type_module :: storage_traverse:storage_type_callback_module(),
+    % offset from which children files are listed in order to produce master and slave jobs
     offset = ?DEFAULT_OFFSET :: non_neg_integer(),
+    % size of batch used to list children files on storage
     batch_size = ?DEFAULT_BATCH_SIZE :: non_neg_integer(),
+    % marker passed to helpers:listobjects function when storage_type_module=canonical_object_storage_traverse
     marker :: undefined | helpers:marker(),
+    % max depth of directory tree structure that will be processed
     max_depth = ?DEFAULT_MAX_DEPTH :: non_neg_integer(),
     % flag that informs whether slave_job should be scheduled on directories
     execute_slave_on_dir = ?DEFAULT_EXECUTE_SLAVE_ON_DIR :: boolean(),

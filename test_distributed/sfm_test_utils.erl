@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Util functions for performing operations on storage using storage_file_manager
+%%% in tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sfm_test_utils).
@@ -17,7 +18,8 @@
 
 
 %% API
--export([get_storage_id/2, get_storage_doc/2, new_handle/4, new_child_handle/2, setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3]).
+-export([get_storage_id/2, get_storage_doc/2, new_handle/4, new_child_handle/2,
+    setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3]).
 -export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
     chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5]).
 

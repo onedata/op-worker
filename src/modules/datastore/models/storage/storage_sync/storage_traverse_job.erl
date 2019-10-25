@@ -5,8 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains implementation of helper model used by
-%%% storage_sync.
+%%% Model for persisting storage_traverse jobs.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_traverse_job).
@@ -37,10 +36,11 @@
 
 -spec save_master_job(undefined | datastore:key(), storage_traverse:job(), traverse:pool(), traverse:id(),
     traverse:callback_module()) -> {ok, key()} | {error, term()}.
-save_master_job(Key, StorageTraverseJob = #storage_traverse{space_id = SpaceId}, Pool, TaskId, CallbackModule) ->
+save_master_job(Key, StorageTraverse = #storage_traverse{storage_file_ctx = StorageFileCtx}, Pool, TaskId, CallbackModule) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     ?extract_key(datastore_model:save(?CTX, #document{
         key = Key,
-        value = create_record(Pool, TaskId, CallbackModule, StorageTraverseJob),
+        value = create_record(Pool, TaskId, CallbackModule, StorageTraverse),
         scope = SpaceId
     })).
 
@@ -68,14 +68,11 @@ get_master_job(#document{value = #storage_traverse_job{
     compute_enabled = ComputeEnabled,
     info = Info
 }}) ->
-    {ok, Doc} = storage:get(StorageId),
-    StorageType = storage:type(Doc),
+    StorageType = storage:get_type(StorageId),
     StorageTypeModule = storage_traverse:storage_type_callback_module(StorageType),
     TraverseInfo = binary_to_term(Info),
     Job = #storage_traverse{
         storage_file_ctx = storage_file_ctx:new(StorageFileId, SpaceId, StorageId),
-        space_id = SpaceId,
-        storage_doc = Doc,
         storage_type_module = StorageTypeModule,
         offset = Offset,
         batch_size = BatchSize,
@@ -144,8 +141,6 @@ get_record_struct(1) ->
     record().
 create_record(Pool, TaskId, CallbackModule, #storage_traverse{
     storage_file_ctx = StorageFileCtx,
-    space_id = SpaceId,
-    storage_doc = #document{key = StorageId},
     offset = Offset,
     batch_size = BatchSize,
     marker = Marker,
@@ -158,6 +153,8 @@ create_record(Pool, TaskId, CallbackModule, #storage_traverse{
     info = Info
 }) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     #storage_traverse_job{
         pool = Pool,
         task_id = TaskId,

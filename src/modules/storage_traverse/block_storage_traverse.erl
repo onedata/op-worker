@@ -22,18 +22,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% storage_traverse callbacks
--export([init_type_specific_opts/2, get_children_batch/1, generate_master_and_slave_jobs/3, batch_id/1]).
-
--type batch_id() :: {Offset :: non_neg_integer(), Size :: non_neg_integer()}.
-
--export_type([batch_id/0]).
+-export([init_storage_specific_opts/2, get_children_batch/1, generate_master_and_slave_jobs/3]).
 
 %%%===================================================================
 %%% storage_traverse callbacks
 %%%===================================================================
 
--spec init_type_specific_opts(storage_traverse:job(), storage_traverse:run_opts()) -> storage_traverse:job().
-init_type_specific_opts(StorageTraverse = #storage_traverse{}, _Opts) ->
+-spec init_storage_specific_opts(storage_traverse:job(), storage_traverse:run_opts()) -> storage_traverse:job().
+init_storage_specific_opts(StorageTraverse = #storage_traverse{}, _Opts) ->
     StorageTraverse.
 
 -spec get_children_batch(storage_traverse:job()) -> {ok, [helpers:file_id()]} | {error, term()}.
@@ -64,20 +60,20 @@ generate_master_and_slave_jobs(#storage_traverse{
     {ok, #{}};
 generate_master_and_slave_jobs(TraverseJob = #storage_traverse{
     storage_file_ctx = StorageFileCtx,
-    space_id = SpaceId,
-    storage_doc = #document{key = StorageId},
     execute_slave_on_dir = OnDir,
     async_master_jobs = AsyncMasterJobs,
     batch_size = BatchSize,
     async_next_batch_job = AsyncNextBatchJob,
     next_batch_job_prehook = NextBatchJobPrehook,
-    children_master_job_prehook = ChildMasterJobPrehook,
+    children_master_job_prehook = ChildrenMasterJobPrehook,
     compute_fun = ComputeFun,
     compute_init = ComputeInit,
     compute_enabled = ComputeEnabled,
     offset = Offset,
     info = Info
 }, ChildrenNames, #{master_job_starter_callback := MasterJobStarterCallback}) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     MasterJobs = case length(ChildrenNames) < BatchSize of
         false ->
             % it is not the last batch
@@ -115,7 +111,7 @@ generate_master_and_slave_jobs(TraverseJob = #storage_traverse{
                             {MasterJobsIn, [{ChildCtx3, ResetInfo} | SlaveJobsIn], ComputePartialResult};
                         ?DIRECTORY_TYPE ->
                             ChildMasterJob = get_child_master_job(ChildCtx3, TraverseJob, ResetInfo),
-                            ChildMasterJobPrehook(ChildMasterJob),
+                            ChildrenMasterJobPrehook(ChildMasterJob),
                             {[ChildMasterJob | MasterJobsIn], SlaveJobsIn, ComputePartialResult}
                     end
             end
@@ -148,10 +144,6 @@ get_child_master_job(ChildCtx, Job = #storage_traverse{max_depth = MaxDepth}, Ch
         offset = 0,
         compute_enabled = true
     }.
-
--spec batch_id(storage_traverse:job()) -> batch_id().
-batch_id(#storage_traverse{offset = Offset, batch_size = Size}) ->
-    {Offset, Size}.
 
 -spec compute(undefined | storage_traverse:compute(), storage_file_ctx:ctx(),
     storage_traverse:info(), term(), boolean()) -> term().

@@ -169,7 +169,7 @@ add_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
     ok = storage_sync_links_test_utils:add_link(
@@ -193,7 +193,7 @@ add_existing_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
     ok = storage_sync_links_test_utils:add_link(
@@ -218,7 +218,7 @@ add_children_links_test_base(Config, MountInRoot, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildrenNum = 5,
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
@@ -246,7 +246,7 @@ add_children_links_recursive_test_base(Config, MountInRoot, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName1 = <<"child1">>,
     ChildName2 = <<"child2">>,
     ChildName3 = <<"child3">>,
@@ -307,7 +307,7 @@ list_children_links_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildrenNum = 5,
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
@@ -324,7 +324,7 @@ list_children_links_token_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName1 = <<"child1">>,
     ChildName2 = <<"child2">>,
     ChildName3 = <<"child3">>,
@@ -352,7 +352,7 @@ delete_link_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
     ok = storage_sync_links_test_utils:add_link(
@@ -372,7 +372,7 @@ delete_links_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildrenNum = 5,
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
@@ -397,7 +397,7 @@ delete_links_recursive_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName1 = <<"child1">>,
     ChildName2 = <<"child2">>,
     ChildName3 = <<"child3">>,
@@ -451,7 +451,7 @@ add_many_children_links_recursive_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     FilesStructure = [10, 10, 10, 10],
     StorageFileIds = generate_storage_file_ids(RootStorageFileId, FilesStructure),
     lists:foreach(fun(StorageFileId) ->
@@ -464,7 +464,7 @@ delete_many_children_links_recursive_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_dir_path(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     FilesStructure = [10, 10, 10, 10],
     StorageFileIds = generate_storage_file_ids(RootStorageFileId, FilesStructure),
     lists:foreach(fun(StorageFileId) ->
@@ -509,9 +509,9 @@ end_per_testcase(_Case, _Config) ->
 % Internal functions
 %===================================================================
 
-space_dir_path(_SpaceId, true) ->
+space_storage_file_id(_SpaceId, true) ->
     <<"/">>;
-space_dir_path(SpaceId, false) ->
+space_storage_file_id(SpaceId, false) ->
     <<"/", SpaceId/binary>>.
 
 

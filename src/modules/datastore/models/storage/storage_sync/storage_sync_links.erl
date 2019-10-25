@@ -34,7 +34,6 @@
 -export_type([link_name/0, link_target/0]).
 
 -define(CTX, #{model => ?MODULE}).
--define(SEPARATOR, "_").
 -define(ROOT_ID(RootStorageFileId, SpaceId, StorageId),
     <<"storage_sync_links_", (base64:encode(crypto:hash(md5, [RootStorageFileId, SpaceId, StorageId])))/binary>>).
 
@@ -65,7 +64,7 @@
 -spec add_link_recursive(helpers:file_id(), od_space:id(), storage:id(), link_name(), boolean()) -> ok.
 add_link_recursive(RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves) ->
     ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(RootStorageFileId),
-    RootId = ?ROOT_ID(RootStorageFileId, SpaceId    , StorageId),
+    RootId = ?ROOT_ID(RootStorageFileId, SpaceId, StorageId),
     add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, ChildrenTokens, MarkLeaves).
 
 -spec list(helpers:file_id(), od_space:id(), storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
@@ -216,7 +215,7 @@ for_each(RootId, Callback, Acc0, Opts) ->
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
+%%--------------------  ------------------------------------------------
 %% @doc
 %% Returns model's record structure in provided version.
 %% @end

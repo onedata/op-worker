@@ -113,7 +113,7 @@ add(SpaceId, StorageId, MountInRoot) ->
             end
         end,
         #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
-        datastore_model:update(?CTX, SpaceId, Diff, Default)
+        ?extract_key(datastore_model:update(?CTX, SpaceId, Diff, Default))
     end).
 
 %%--------------------------------------------------------------------
@@ -143,7 +143,7 @@ get_storage_ids(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec get_storage_id(od_space:id()) -> storage:id() | undefined.
 get_storage_id(SpaceId) ->
-    case space_storage:get_storage_ids(SpaceId) of
+    case get_storage_ids(SpaceId) of
         {ok, []} ->
             undefined;
         {ok, StorageIds} ->

@@ -212,6 +212,8 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
+    %% Check if dir is still on storage
+    ?assertMatch({ok, []}, sfm_test_utils:ls(W1, SFMHandle, 0, 1)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -3661,10 +3663,10 @@ cleanup_storage_sync_monitoring_model(Worker, SpaceId) ->
     rpc:call(Worker, storage_sync_monitoring, delete, [SpaceId, StorageId]).
 
 get_import_details(Worker, SpaceId, StorageId) ->
-    rpc:call(Worker, space_strategies, get_import_details, [SpaceId, StorageId]).
+    rpc:call(Worker, storage_sync, get_import_details, [SpaceId, StorageId]).
 
 get_update_details(Worker, SpaceId, StorageId) ->
-    rpc:call(Worker, space_strategies, get_update_details, [SpaceId, StorageId]).
+    rpc:call(Worker, storage_sync, get_update_details, [SpaceId, StorageId]).
 
 disable_update(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),

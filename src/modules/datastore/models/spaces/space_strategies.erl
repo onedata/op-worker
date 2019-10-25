@@ -27,7 +27,7 @@
 -export([
     get_import_details/1, get_import_details/2,
     get_update_details/1, get_update_details/2, 
-    get_sync_configs/1, is_import_on/1,
+    get_sync_configs/1, is_any_storage_imported/1,
     configure_import/4, configure_update/4
 ]).
 
@@ -63,6 +63,18 @@
 -export_type([import_config/0, update_config/0, config/0, sync_config/0, sync_configs/0, sync_details/0]).
 
 -define(CTX, #{model => ?MODULE}).
+-define(DEFAULT_IMPORT_SYNC_CONFIG(Enabled, Config),
+    #storage_sync_config{
+        import_enabled = Enabled,
+        import_config = Config
+    }).
+-define(DEFAULT_UPDATE_SYNC_CONFIG(Enabled, Config),
+    #storage_sync_config{
+        update_enabled = Enabled,
+        update_config = Config
+    }).
+-define(DEFAULT_RECORD(StorageId, SyncConfig),
+    #space_strategies{sync_configs = #{StorageId => SyncConfig}}).
 
 %%%===================================================================
 %%% API
@@ -80,30 +92,21 @@ delete(Key) ->
     end, StorageIds),
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if any storage is imported for a space.
-%% @end
-%%--------------------------------------------------------------------
--spec is_import_on(od_space:id()) -> boolean().
-is_import_on(SpaceId) ->
+-spec is_any_storage_imported(od_space:id()) -> boolean().
+is_any_storage_imported(SpaceId) ->
     {ok, Doc} = space_storage:get(SpaceId),
     {ok, StorageIds} = space_storage:get_storage_ids(Doc),
-    lists:foldl(fun
-        (_StorageId, true) ->
-            true;
-        (StorageId, _) ->
-            case get_import_details(SpaceId, StorageId) of
-                {false, _} -> false;
-                {error, not_found} -> false;
-                _ -> true
-            end
-    end, false, StorageIds).
+    lists:any(fun(StorageId) ->
+        case get_import_details(SpaceId, StorageId) of
+            {false, _} -> false;
+            _ -> true
+        end
+    end, StorageIds).
 
 -spec configure_import(od_space:id(), storage:id(), boolean(), import_config()) -> ok.
 configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
     FilledConfig = fill_import_config(NewConfig),
-    DefaultSyncConfig = default_import_sync_config(Enabled, FilledConfig),
+    DefaultSyncConfig = ?DEFAULT_IMPORT_SYNC_CONFIG(Enabled, FilledConfig),
     ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
         NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{import_config = OldConfig}) ->
             UpdatedConfig = maps:merge(OldConfig, FilledConfig),
@@ -112,12 +115,12 @@ configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
             DefaultSyncConfig, SyncConfigs
         ),
         {ok, SS#space_strategies{sync_configs = NewSS}}
-    end, default_record(StorageId, DefaultSyncConfig))).
+    end, ?DEFAULT_RECORD(StorageId, DefaultSyncConfig))).
 
 -spec configure_update(od_space:id(), storage:id(), boolean(), update_config()) -> ok.
 configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
     FilledConfig = fill_update_config(NewConfig),
-    DefaultSyncConfig = default_update_sync_config(Enabled, FilledConfig),
+    DefaultSyncConfig = ?DEFAULT_UPDATE_SYNC_CONFIG(Enabled, FilledConfig),
     ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
         NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{update_config = OldConfig}) ->
             UpdatedConfig = maps:merge(OldConfig, FilledConfig),
@@ -126,14 +129,14 @@ configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
             DefaultSyncConfig, SyncConfigs
         ),
         {ok, SS#space_strategies{sync_configs = NewSS}}
-    end, default_record(StorageId, DefaultSyncConfig))).
+    end, ?DEFAULT_RECORD(StorageId, DefaultSyncConfig))).
 
--spec get_import_details(od_space:id(), storage:id()) -> sync_details() | {error, term()}.
+-spec get_import_details(od_space:id(), storage:id()) -> sync_details().
 get_import_details(SpaceId, StorageId) ->
     case space_strategies:get(SpaceId) of
         {ok, #document{value = #space_strategies{sync_configs = Configs}}} ->
             case maps:get(StorageId, Configs, undefined) of
-                undefined -> {error, not_found};
+                undefined -> {false, #{}};
                 SyncConfig -> get_import_details(SyncConfig)
             end;
         {error, not_found} ->
@@ -147,18 +150,16 @@ get_import_details(#storage_sync_config{
 }) ->
     {ImportEnabled, ImportConfig}.
 
--spec get_update_details(od_space:id(), storage:id()) -> sync_details() | {error, term()}.
+-spec get_update_details(od_space:id(), storage:id()) -> sync_details().
 get_update_details(SpaceId, StorageId) ->
     case space_strategies:get(SpaceId) of
         {ok, #document{value = #space_strategies{sync_configs = Configs}}} ->
             case maps:get(StorageId, Configs, undefined) of
-                undefined -> {error, not_found};
+                undefined -> {false, #{}};
                 SyncConfig -> get_update_details(SyncConfig)
             end;
         {error, not_found} ->
-            {false, #{}};
-        Error = {error, _} ->
-            Error
+            {false, #{}}
     end.
 
 -spec get_update_details(sync_config()) -> sync_details().
@@ -200,24 +201,6 @@ fill_update_config(Config) ->
         scan_interval => maps:get(scan_interval, Config, ?DEFAULT_SCAN_INTERVAL),
         max_depth => maps:get(max_depth, Config, ?DEFAULT_SYNC_MAX_DEPTH),
         sync_acl => maps:get(sync_acl, Config, ?DEFAULT_SYNC_ACL)
-    }.
-
--spec default_record(storage:id(), sync_config()) -> record().
-default_record(StorageId, SyncConfig) ->
-    #space_strategies{sync_configs = #{StorageId => SyncConfig}}.
-
--spec default_import_sync_config(boolean(), import_config()) -> sync_config().
-default_import_sync_config(Enabled, Config) ->
-    #storage_sync_config{
-        import_enabled = Enabled,
-        import_config = fill_import_config(Config)
-    }.
-
--spec default_update_sync_config(boolean(), update_config()) -> sync_config().
-default_update_sync_config(Enabled, Config) ->
-    #storage_sync_config{
-        update_enabled = Enabled,
-        update_config = fill_update_config(Config)
     }.
 
 %%%===================================================================
@@ -321,6 +304,7 @@ get_record_struct(6) ->
             {update_config, {custom, json, {?MODULE, encode, decode}}}
         ]}}}
     ]}.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Upgrades model's record from provided version to the next one.
@@ -402,14 +386,8 @@ upgrade_record(5, {?MODULE, SyncConfigs, _, _, _}) ->
             {ImportStrategyName, ImportConfig},
             {UpdateStrategyName, UpdateConfig}
         } = StorageStrategy,
-        ImportEnabled = case ImportStrategyName of
-            simple_scan -> true;
-            _ -> false
-        end,
-        UpdateEnabled = case UpdateStrategyName of
-            simple_scan -> true;
-            _ -> false
-        end,
+        ImportEnabled = ImportStrategyName =:= simple_scan,
+        UpdateEnabled = UpdateStrategyName =:= simple_scan,
         #storage_sync_config{
             import_enabled = ImportEnabled,
             import_config = ImportConfig,

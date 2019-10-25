@@ -19,7 +19,7 @@
 
 
 %% API
--export([check_if_opened_and_remove/4, remove_opened_file/1, remove_file/4,
+-export([check_if_opened_and_remove/5, remove_opened_file/2, remove_file/4,
     remove_file_handles/1, remove_auxiliary_documents/1, delete_all_opened_files/0]).
 
 %% Test API
@@ -37,9 +37,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(),
-    Silent :: boolean(), RemoteDelete :: boolean()) -> ok.
+    Silent :: boolean(), RemoteDelete :: boolean(), RemoveStorageFile :: boolean()) -> ok.
 % TODO VFS-5268 - prevent reimport connected with remote delete
-check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
+check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete, RemoveStorageFile) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         case file_handles:exists(FileUuid) of
@@ -47,7 +47,7 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
                 process_file_links(FileCtx, UserCtx, RemoteDelete),
                 ok = file_handles:mark_to_remove(FileCtx);
             _ ->
-                ok = remove_file(FileCtx, UserCtx, true, not RemoteDelete)
+                ok = remove_file(FileCtx, UserCtx, RemoveStorageFile, not RemoteDelete)
         end,
         maybe_emit_event(FileCtx, UserCtx, Silent)
     catch
@@ -60,10 +60,10 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
 %% Deletes opened file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_opened_file(file_ctx:ctx()) -> ok.
-remove_opened_file(FileCtx) ->
+-spec remove_opened_file(file_ctx:ctx(), RemoveStorageFile :: boolean()) -> ok.
+remove_opened_file(FileCtx, RemoveStorageFile) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_file(FileCtx, UserCtx, true, deletion_link).
+    ok = remove_file(FileCtx, UserCtx, RemoveStorageFile, deletion_link).
 
 %%--------------------------------------------------------------------
 %% @doc

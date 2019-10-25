@@ -231,7 +231,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
     ok = rpc:call(Worker, fslogic_delete, process_file_links, [FileCtx, UserCtx, false]),
 
-    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, remove_opened_file, [FileCtx])),
+    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, remove_opened_file, [FileCtx, true])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
@@ -257,7 +257,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, check_if_opened_and_remove,
-        [UserCtx, FileCtx, false, false])),
+        [UserCtx, FileCtx, false, false, true])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),

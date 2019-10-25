@@ -34,7 +34,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([notify_connection_to_oz/0, is_syncable_s3/1]).
+-export([notify_connection_to_oz/0, is_syncable_object_storage/1, ss_eff_init/0, ss_eff_cleanup/0]).
 
 %% Exported for tests
 -export([schedule_spaces_check/1]).
@@ -71,7 +71,7 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle(?PROVIDER_CONNECTED_TO_OZ) ->
-    init_on_connection_to_oz();
+    schedule_spaces_check();
 handle(?SPACES_CHECK) ->
     ?debug("Check spaces"),
     check_spaces();
@@ -100,13 +100,15 @@ cleanup() ->
 notify_connection_to_oz() ->
     schedule_init_on_connection_to_oz(0).
 
+ss_eff_init() ->
+    schedule(0, ss_eff_init).
+
+ss_eff_cleanup() ->
+    schedule(0, ss_eff_cleanup).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec init_on_connection_to_oz() -> ok.
-init_on_connection_to_oz() ->
-    schedule_spaces_check().
 
 %%--------------------------------------------------------------------
 %% @private
@@ -209,7 +211,7 @@ is_syncable(StorageDoc = #document{value = #storage{}}) ->
         true ->
             true;
         false ->
-            is_syncable_s3(StorageDoc)
+            is_syncable_object_storage(StorageDoc)
     end;
 is_syncable(StorageId) when is_binary(StorageId) ->
     case storage:get(StorageId) of
@@ -219,8 +221,8 @@ is_syncable(StorageId) when is_binary(StorageId) ->
             false
     end.
 
--spec is_syncable_s3(storage:doc()) -> boolean().
-is_syncable_s3(StorageDoc = #document{value = #storage{}}) ->
+-spec is_syncable_object_storage(storage:doc()) -> boolean().
+is_syncable_object_storage(StorageDoc = #document{value = #storage{}}) ->
     Helper = storage:get_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
     StoragePathType = helper:get_storage_path_type(Helper),

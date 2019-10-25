@@ -120,9 +120,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
                 StorageDoc),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
-
-            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
-            Dirname = filename:dirname(RawStoragePath),
+            {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx, true),
+            Dirname = filename:dirname(StorageFileId),
             FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
             {Size, _} = file_ctx:get_file_size(FileCtx3),
             TestFileName = storage_detector:generate_file_id(),

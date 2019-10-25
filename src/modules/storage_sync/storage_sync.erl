@@ -66,12 +66,12 @@ disable_update(SpaceId, StorageId) ->
     configure_update(SpaceId, StorageId, false, #{}).
 
 -spec get_import_details(od_space:id(), storage:id()) ->
-    space_strategies:sync_details() | {error, term()}.
+    space_strategies:sync_details().
 get_import_details(SpaceId, StorageId) ->
     space_strategies:get_import_details(SpaceId, StorageId).
 
 -spec get_update_details(od_space:id(), storage:id()) ->
-    space_strategies:sync_details() | {error, term()}.
+    space_strategies:sync_details().
 get_update_details(SpaceId, StorageId) ->
     space_strategies:get_update_details(SpaceId, StorageId).
 

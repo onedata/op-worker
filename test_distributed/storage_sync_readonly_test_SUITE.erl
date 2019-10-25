@@ -7,6 +7,13 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module tests storage_sync with readonly storage.
+%%% WARNING !!!
+%%% Some tests in this suite do not call corresponding functions from
+%%% storage_sync_test_base. This is because when storage_sync
+%%% traverses storage, it does not change directories' access times
+%%% on readonly storage, as it does on read-write storage.
+%%% This difference in behaviour results in different number of
+%%% updated/processed files which is checked in tests.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_sync_readonly_test_SUITE).

@@ -7,6 +7,7 @@
 %%% @doc
 %%% This module is responsible for syncing a single file found on storage
 %%% to Onedata filesystem.
+%%% For more info please see doc of process_file/2 function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_engine).
@@ -60,7 +61,7 @@
 %%--------------------------------------------------------------------
 -spec process_file(storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
-process_file(StorageFileCtx, Info = #{space_dir_path := SpaceStorageFileId}) ->
+process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx2),
@@ -297,7 +298,13 @@ import_file(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) ->
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason]),
-            storage_sync_deletion:delete_imported_file(FileName, ParentCtx),
+            UserCtx = user_ctx:new(?ROOT_SESS_ID),
+            try
+                {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
+                delete_req:delete(UserCtx, FileCtx, true, false)
+            catch
+                throw:?ENOENT -> ok
+            end,
             {error, Reason}
     end.
 

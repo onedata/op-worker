@@ -7,11 +7,11 @@
 %%% @doc
 %%% This module contains implementation of helper model used by
 %%% storage_sync. It is used to store information required by sync
-%%%%% to determine whether there were changes introduced to file
-%%%%% or children files on storage since last scan.
+%%% to determine whether there were changes introduced to file
+%%% or children files on storage since last scan.
 %%% It stores last synchronized mtime and timestamp
 %%% of stat operation which was performed to read the synced mtime.
-%%% For directories it also stores map of hashes computes from children
+%%% For directories it also stores map of hashes computed from children
 %%% attributes.
 %%% Each batch (where batch is identified by an integer BatchKey = Offset div BatchSize)
 %%% is associated with hash computed out of attributes of the directory's children
@@ -43,7 +43,8 @@
 
 %% API
 -export([get/2, get_mtime/1, get_batch_hash/3, are_all_batches_processed/1, delete/2, init_batch_counters/2,
-    update_mtime/4, increase_batches_to_process/2, mark_processed_batch/3, mark_processed_batch/6, update_hashes/3]).
+    update_mtime/4, increase_batches_to_process/2, update_hashes/3,
+    mark_processed_batch/3, mark_processed_batch/6, mark_processed_batch/7]).
 
 % exported for CT tests
 -export([create_or_update/3]).
@@ -51,10 +52,7 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2, id/2]).
 
--define(CTX, #{
-    model => ?MODULE,
-    routing => global
-}).
+-define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
 %%% API
@@ -184,12 +182,12 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash
 %% It also update mtime field.
 %% @end
 %%-------------------------------------------------------------------
--spec update_hashes(helpers:file_id(), od_space:id(), non_neg_integer()) -> {ok, storage_sync_info:record()}.
+-spec update_hashes(helpers:file_id(), od_space:id(), non_neg_integer()) -> {ok, doc()}.
 update_hashes(StorageFileId, SpaceId, Mtime) ->
     update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
         % this function might be called only when counters are equal
-        batches_processed = _BatchesToProcess,
-        batches_to_process = _BatchesToProcess,
+        batches_processed = BatchesToProcess,
+        batches_to_process = BatchesToProcess,
         children_hashes = ChildrenHashes,
         hashes_to_update = HashesToUpdate
     }) ->
@@ -242,7 +240,7 @@ update_hashes_map(undefined, _Value, Map) -> Map;
 update_hashes_map(_Key, undefined, Map) -> Map;
 update_hashes_map(Key, Value, Map) -> Map#{Key => Value}.
 
--spec batch_key(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
+-spec batch_key(non_neg_integer() | undefined, non_neg_integer() | undefined) -> non_neg_integer() | undefined.
 batch_key(undefined, _Length) -> undefined;
 batch_key(_Offset, undefined) -> undefined;
 batch_key(Offset, Length) -> Offset div Length.

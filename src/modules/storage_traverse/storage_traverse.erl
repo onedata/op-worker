@@ -6,14 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+% TODO REFACTOR THIS AND block_ and canonical_object_ modules
 %%% This modules implements functions for traversing files on storage.
 %%% It uses traverse framework.
-%%% To use storage_traverse, new callback module has to be defined (see traverse_behaviour.erl from cluster_worker) that
-%%% uses callbacks defined in this module and additionally provides do_slave_job function implementation.
+%%% To use storage_traverse, new callback module has to be defined
+%%% (see traverse_behaviour.erl from cluster_worker) that
+%%% uses callbacks defined in this module and additionally provides
+%%% do_slave_job function implementation.
 %%% Next, pool and tasks are started using init and run functions from this module.
-%%% The traverse jobs (see traverse.erl for jobs definition) are persisted using tree_traverse_job datastore model
-%%% which stores jobs locally and synchronizes main job for each task between providers (to allow tasks execution
-%%% on other provider resources).
+%%% The traverse jobs (see traverse.erl for jobs definition) are persisted
+%%% using storage_traverse_job datastore model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_traverse).
@@ -25,6 +27,15 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
+
+%TODO PR
+%TODO * storage_traverse
+%TODO * block_storage_traverse
+%TODO * canonical_object_storage_traverse
+%TODO * storage_sync_traverse
+
+
+
 %% API
 -export([init/4, stop/1, run/5, run/6, reset_info/1, storage_type_callback_module/1]).
 
@@ -32,17 +43,14 @@
 -export([do_master_job/2, get_job/1, update_job_progress/6]).
 
 
--define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TASK_ID, <<(?POOL_NAME)/binary, "_", (datastore_utils:gen_key())/binary>>).
-
 -type pool() :: traverse:pool() | atom().
 -type info() :: term().
 -type job() :: #storage_traverse{}.
 -type storage_type_callback_module() :: block_storage_traverse | canonical_object_storage_traverse.
 
 %% @formatter:off
--type next_batch_job_prehook() :: fun( (TraverseJob :: job()) -> term()).
--type children_batch_job_prehook() :: fun( (TraverseJob :: job()) -> term()).
+-type next_batch_job_prehook() :: fun((TraverseJob :: job()) -> ok).
+-type children_batch_job_prehook() :: fun((TraverseJob :: job()) -> ok).
 
 -type compute() :: fun(
     (StorageFileCtx :: storage_file_ctx:ctx(), Info :: info(), ComputeAcc :: term()) ->
@@ -51,9 +59,13 @@
 
 % opts that can be passed from calling method
 -type run_opts() :: #{
+    % offset from which children files are listed in order to produce master and slave jobs
     offset => non_neg_integer(),
+    % size of batch used to list children files on storage
     batch_size => non_neg_integer(),
+    %% argument passed to helpers:listobjects/5 function, see helper.erl
     marker => undefined | helpers:marker(),
+    % max depth of directory tree structure that will be processed
     max_depth => non_neg_integer(),
     % flag that informs whether slave_job should be scheduled on directories
     execute_slave_on_dir => boolean(),
@@ -75,7 +87,7 @@
 
 %% @formatter:on
 
--export_type([run_opts/0, opts/0, info/0, job/0, next_batch_job_prehook/0, compute/0,
+-export_type([run_opts/0, info/0, job/0, next_batch_job_prehook/0, compute/0,
     children_batch_job_prehook/0, storage_type_callback_module/0]).
 
 %%%===================================================================
@@ -89,7 +101,7 @@ init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
     traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
         #{executor => oneprovider:get_id_or_undefined()}).
 
--spec stop(traverse:pool() | atom()) -> any().
+-spec stop(pool() | atom()) -> any().
 stop(Pool) when is_atom(Pool) ->
     stop(atom_to_binary(Pool, utf8));
 stop(Pool) ->
@@ -103,10 +115,9 @@ run(Pool, SpaceId, StorageId, TraverseInfo, RunOpts) ->
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), TaskId, SpaceId, StorageId, TraverseInfo, RunOpts);
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
-    StorageFileId = filename_mapping:space_dir_path(SpaceId, StorageId),
-    RootStorageFileCtx = storage_file_ctx:new(StorageFileId, SpaceId, StorageId),
-    {ok, StorageDoc} = storage:get(StorageId),
-    StorageType = storage:type(StorageDoc),
+    RootStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    RootStorageFileCtx = storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId),
+    StorageType = storage:get_type(StorageId),
     DefinedTaskId = case TaskId =:= undefined of
         true -> datastore_utils:gen_key();
         false -> TaskId
@@ -115,8 +126,6 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     ChildrenMasterJobPrehook = maps:get(children_master_job_prehook, RunOpts, ?DEFAULT_CHILDREN_BATCH_JOB_PREHOOK),
     StorageTraverse = #storage_traverse{
         storage_file_ctx = RootStorageFileCtx,
-        space_id = SpaceId,
-        storage_doc = StorageDoc,
         storage_type_module = StorageTypeModule,
         execute_slave_on_dir = maps:get(execute_slave_on_dir, RunOpts, ?DEFAULT_EXECUTE_SLAVE_ON_DIR),
         async_next_batch_job = maps:get(async_next_batch_job, RunOpts, ?DEFAULT_ASYNC_NEXT_BATCH_JOB),
@@ -132,11 +141,11 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         callback_module = binary_to_atom(Pool, utf8),
         info = TraverseInfo
     },
-    StorageTraverse2 = StorageTypeModule:init_type_specific_opts(StorageTraverse, RunOpts),
+    StorageTraverse2 = StorageTypeModule:init_storage_specific_opts(StorageTraverse, RunOpts),
     ChildrenMasterJobPrehook(StorageTraverse2),
     traverse:run(Pool, DefinedTaskId, StorageTraverse2).
 
--spec storage_type_callback_module(helper:type()) -> module().
+-spec storage_type_callback_module(helper:type()) -> storage_type_callback_module().
 storage_type_callback_module(?BLOCK_STORAGE) ->
     block_storage_traverse;
 storage_type_callback_module(?OBJECT_STORAGE) ->
@@ -163,10 +172,10 @@ reset_info(TraverseJob = #storage_traverse{callback_module = CallbackModule, inf
     {ok, traverse:master_job_map()} |{ok, traverse:master_job_map(), term()} | {error, term()}.
 do_master_job(TraverseJob = #storage_traverse{
     storage_file_ctx = StorageFileCtx,
-    storage_type_module = StorageTypeModule,
-    storage_doc = #document{key = StorageId}
+    storage_type_module = StorageTypeModule
 }, Args) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case StorageTypeModule:get_children_batch(TraverseJob) of
         {ok, ChildrenIds} ->
             StorageTypeModule:generate_master_and_slave_jobs(TraverseJob, ChildrenIds, Args);

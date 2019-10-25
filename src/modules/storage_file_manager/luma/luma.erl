@@ -494,12 +494,14 @@ select_posix_compatible_storage(SpaceId) ->
                         {ok, StorageDoc} ->
                             Helper = storage:get_helper(StorageDoc),
                             HelperName = helper:get_name(Helper),
-                            case lists:member(HelperName, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]) of
+                            case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
                                 true ->
                                     StorageDoc;
                                 false ->
                                     undefined
-                            end
+                            end;
+                        {error, not_found} ->
+                            undefined
                     end;
                 (_, PosixCompatibleStorageDoc) ->
                     PosixCompatibleStorageDoc

@@ -447,13 +447,13 @@ get_root_token_file_path() ->
 -spec get_storage_import_details(od_space:id(), storage:id()) ->
     space_strategies:sync_details().
 get_storage_import_details(SpaceId, StorageId) ->
-    space_strategies:get_import_details(SpaceId, StorageId).
+    storage_sync:get_import_details(SpaceId, StorageId).
 
 
 -spec get_storage_update_details(od_space:id(), storage:id()) ->
     space_strategies:sync_details().
 get_storage_update_details(SpaceId, StorageId) ->
-    space_strategies:get_update_details(SpaceId, StorageId).
+    storage_sync:get_update_details(SpaceId, StorageId).
 
 
 -spec configure_storage_import(od_space:id(), boolean(), space_strategies:import_config()) ->

@@ -459,7 +459,7 @@ get_storage_id(Worker, SpaceId) ->
     StorageId.
 
 space_dir(Worker, SpaceId, StorageId) ->
-    rpc:call(Worker, filename_mapping, space_dir_path, [SpaceId, StorageId]).
+    rpc:call(Worker, storage_file_id, space_id, [SpaceId, StorageId]).
 
 count_files_and_dirs(FilesStructure) ->
     count_files_and_dirs(FilesStructure, 0, 0, 1).

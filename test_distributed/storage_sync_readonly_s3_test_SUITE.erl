@@ -6,6 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module tests storage_sync on readonly s3 storage.
+%%% Contrary to storage_sync_readonly_test_SUITE, all tests in this
+%%% suite call tests from storage_sync_s3_test_base.
+%%% This is because directories on s3 do not exist so their
+%%% atimes do not change when sync traverses storage.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_sync_readonly_s3_test_SUITE).

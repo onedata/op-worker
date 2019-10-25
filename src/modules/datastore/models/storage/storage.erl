@@ -28,7 +28,7 @@
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
     set_readonly/2, safe_remove/1, describe/1]).
--export([get_luma_config/1, is_luma_enabled/1, type/1]).
+-export([get_luma_config/1, is_luma_enabled/1, get_type/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -219,10 +219,10 @@ get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).
 
--spec type(id() | record() | doc()) -> helper:type().
-type(Storage) ->
+-spec get_type(id() | record() | doc()) -> helper:type().
+get_type(Storage) ->
     Helper = get_helper(Storage),
-    helper:type(Helper).
+    helper:get_type(Helper).
 
 %%--------------------------------------------------------------------
 %% @doc

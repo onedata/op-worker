@@ -189,10 +189,10 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
             {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
         ok ->
             {StorageDoc, FileCtx4} = file_ctx:get_storage_doc(FileCtx3),
-            FileCtx6 = case storage_sync_worker:is_syncable_s3(StorageDoc) of
+            FileCtx6 = case storage_sync_worker:is_syncable_object_storage(StorageDoc) of
                 true ->
                     {ParentCtx, FileCtx5} = file_ctx:get_parent(FileCtx4, UserCtx),
-                    pretend_parent_dirs_created_on_storage(ParentCtx, UserCtx),
+                    mark_parent_dirs_created_on_storage(ParentCtx, UserCtx),
                     FileCtx5;
                 false ->
                     FileCtx4
@@ -486,34 +486,34 @@ handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
 %% remote directory that has never been synchronized with local directory.
 %% @end
 %%-------------------------------------------------------------------
--spec pretend_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
-pretend_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
-    pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, []).
+-spec mark_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
+mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
+    get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []).
 
--spec pretend_parent_dirs_created_on_storage_up(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> ok.
-pretend_parent_dirs_created_on_storage_up(DirCtx, UserCtx, ParentCtxs) ->
+-spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> ok.
+get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
     case file_ctx:is_space_dir_const(DirCtx) of
         true ->
-            pretend_parent_dirs_created_on_storage_down(ParentCtxs);
+            mark_parent_dirs_created_on_storage(ParentCtxs);
         false ->
             case file_ctx:get_dir_location_doc(DirCtx) of
                 {DirLocation, DirCtx2} ->
                     case dir_location:is_storage_file_created(DirLocation) of
                         true ->
-                            pretend_parent_dirs_created_on_storage_down(ParentCtxs);
+                            mark_parent_dirs_created_on_storage(ParentCtxs);
                         false ->
                             {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
-                            pretend_parent_dirs_created_on_storage_up(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
+                            get_parent_dirs_not_created_on_storage(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
                     end
 
             end
     end.
 
--spec pretend_parent_dirs_created_on_storage_down([file_ctx:ctx()]) -> ok.
-pretend_parent_dirs_created_on_storage_down([]) ->
+-spec mark_parent_dirs_created_on_storage([file_ctx:ctx()]) -> ok.
+mark_parent_dirs_created_on_storage([]) ->
     ok;
-pretend_parent_dirs_created_on_storage_down([DirCtx | RestCtxs]) ->
+mark_parent_dirs_created_on_storage([DirCtx | RestCtxs]) ->
     Uuid = file_ctx:get_uuid_const(DirCtx),
     SpaceId = file_ctx:get_space_id_const(DirCtx),
     dir_location:mark_dir_created_on_storage(Uuid, SpaceId),
-    pretend_parent_dirs_created_on_storage_down(RestCtxs).
+    mark_parent_dirs_created_on_storage(RestCtxs).
