@@ -4,6 +4,15 @@
 CHANGELOG
 ---------
 
+### 19.02.0-rc2
+
+* VFS-5775 fix file distribution data backend crashing on empty file
+* VFS-5777 increase gui session ttl
+* VFS-5795 Add rebar3 get-deps command to Makefile and use it in package build instead of upgrade
+* VFS-5758 Update file creation
+* VFS-5699 Implement cluster upgrade procedure
+
+
 ### 19.02.0-rc1
 
 * VFS-5706 do not allow to create file if it exists on other provider
