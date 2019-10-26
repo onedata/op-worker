@@ -48,7 +48,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [fslogic_authz:access_definition()].
+-callback required_permissions() -> [fslogic_access:requirement()].
 
 
 %%--------------------------------------------------------------------

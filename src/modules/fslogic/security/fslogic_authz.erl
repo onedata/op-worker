@@ -17,22 +17,7 @@
 -include_lib("ctool/include/aai/caveats.hrl").
 
 %% API
--export([authorize/3, check_access/3]).
-
--type access_type() ::
-    owner % Check whether user owns the item
-    | traverse_ancestors % validates ancestors' exec permission.
-    | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
-    | share % Check if the file (or its ancestor) is shared
-    | write | read | exec | rdwr % posix perms
-    | binary(). % acl perms
-
--type access_definition() ::
-    root
-    | access_type()
-    | {access_type(), 'or', access_type()}.
-
--export_type([access_definition/0]).
+-export([authorize/3]).
 
 -define(DATA_LOCATION_CAVEATS, [
     cv_data_space, cv_data_path, cv_data_objectid
@@ -44,49 +29,16 @@
 %%%===================================================================
 
 
--spec authorize(user_ctx:ctx(), file_ctx:ctx(), [access_definition()]) ->
+-spec authorize(user_ctx:ctx(), file_ctx:ctx(), [fslogic_access:requirement()]) ->
     file_ctx:ctx() | no_return().
-authorize(UserCtx, FileCtx0, AccessDefinitions0) ->
-    AccessDefinitions1 = case user_ctx:is_root(UserCtx) of
-        true ->
-            [];
-        false ->
-            case user_ctx:is_guest(UserCtx) of
-                true -> [share | AccessDefinitions0];
-                false -> AccessDefinitions0
-            end
-    end,
-
+authorize(UserCtx, FileCtx0, AccessRequirements) ->
     FileCtx1 = check_constraints(UserCtx, FileCtx0),
-    check_access_definitions(UserCtx, FileCtx1, AccessDefinitions1).
-
-
--spec check_access(user_ctx:ctx(), file_ctx:ctx(), access_definition()) ->
-    file_ctx:ctx() | no_return().
-check_access(UserCtx, FileCtx, AccessDef) ->
-    UserId = user_ctx:get_user_id(UserCtx),
-    Guid = file_ctx:get_guid_const(FileCtx),
-    check_and_cache_result(
-        {AccessDef, UserId, Guid},
-        FileCtx,
-        fun rules:check_normal_def/3,
-        [AccessDef, UserCtx, FileCtx]
-    ).
+    fslogic_access:assert_granted(UserCtx, FileCtx1, AccessRequirements).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec check_access_definitions(user_ctx:ctx(), file_ctx:ctx(),
-    [access_definition()]) -> file_ctx:ctx().
-check_access_definitions(_UserCtx, FileCtx, []) ->
-    FileCtx;
-check_access_definitions(UserCtx, FileCtx0, [AccessDefinition | Rest]) ->
-    FileCtx1 = check_access(UserCtx, FileCtx0, AccessDefinition),
-    check_access_definitions(UserCtx, FileCtx1, Rest).
 
 
 %% @private
