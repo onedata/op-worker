@@ -28,6 +28,7 @@
 %%% API
 %%%===================================================================
 
+
 handle_handshake(#client_handshake_request{} = Request, IpAddress) ->
     handle_client_handshake(Request, IpAddress);
 handle_handshake(#provider_handshake_request{} = Request, IpAddress) ->
@@ -88,7 +89,10 @@ handle_client_handshake(#client_handshake_request{
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
-    assert_lack_of_api_caveats(Token),
+    case token_caveats:is_interface_allowed(Token, oneclient) of
+        true -> ok;
+        false -> throw(invalid_token)
+    end,
 
     Auth1 = Auth0#token_auth{peer_ip = IpAddress},
     case user_identity:get_or_fetch(Auth1) of
@@ -133,31 +137,6 @@ handle_provider_handshake(#provider_handshake_request{
         SessionId, Identity
     ),
     {ProviderId, SessionId}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Asserts that token used by Oneclient doesn't have any api caveats
-%% which are not supported for Oneclient connections.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_lack_of_api_caveats(tokens:serialized()) -> ok | no_return().
-assert_lack_of_api_caveats(SerializedToken) ->
-    case tokens:deserialize(SerializedToken) of
-        {ok, Token} ->
-            Caveats = tokens:get_caveats(Token),
-            case caveats:find(cv_api, Caveats) of
-                {true, _} ->
-                    ?debug("Cannot use given token due to it having api "
-                           "caveats not supported for Oneclient connections"),
-                    throw(invalid_token);
-                false ->
-                    ok
-            end;
-        {error, _} ->
-            throw(invalid_token)
-    end.
 
 
 %% @private

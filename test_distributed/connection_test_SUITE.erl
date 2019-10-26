@@ -23,14 +23,14 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/graph_sync.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% export for ct
 -export([
@@ -150,18 +150,8 @@ client_connection_test(Config) ->
     }, UserId, []),
     {ok, SerializedToken} = tokens:serialize(Token),
 
-    ApiCaveat = #cv_api{whitelist = [
-        {all, all, #gri{
-            type = '*',
-            id = <<"*">>,
-            aspect = '*'
-        }}
-    ]},
-    TokenWithApiCaveat = tokens:confine(Token, [ApiCaveat]),
-    {ok, SerializedTokenWithApiCaveat} = tokens:serialize(TokenWithApiCaveat),
-
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
-    InvalidMacaroon = #'Macaroon'{macaroon = SerializedTokenWithApiCaveat},
+    InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
 
     lists:foreach(fun({Macaroon, Version, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_client(Worker1, Macaroon, Version))
