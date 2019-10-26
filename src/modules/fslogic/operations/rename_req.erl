@@ -301,6 +301,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
     fslogic_times:update_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
     update_parent_times(SourceParentFileCtx2, TargetParentFileCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx3, TargetName, UserCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -453,7 +454,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
     FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
     {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, _SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, _SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
@@ -471,8 +472,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
           {error, ?ENOENT} -> ok
         end
     end,
-    {NewChildCtx, _} = file_ctx:get_child(TargetParentFileCtx, TargetName, UserCtx),
-    fslogic_event_emitter:emit_file_renamed_to_client(NewChildCtx, TargetName, UserCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx3, TargetName, UserCtx),
     {SourceFileCtx2, TargetFileId}.
 
 %%--------------------------------------------------------------------
