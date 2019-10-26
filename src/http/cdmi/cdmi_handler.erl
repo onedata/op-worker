@@ -178,7 +178,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
 -spec is_authorized(cowboy_req:req(), cdmi_req()) ->
     {stop | true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
 is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
-    try http_auth:authenticate(Req, rest) of
+    try http_auth:authenticate(Req, rest, true) of
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
         {ok, ?NOBODY} ->
@@ -463,7 +463,7 @@ resolve_resource_by_id(Req) ->
 
     {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
-            case http_auth:authenticate(Req, rest) of
+            case catch http_auth:authenticate(Req, rest, true) of
                 {ok, ?USER(_UserId, SessionId) = Auth0} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->

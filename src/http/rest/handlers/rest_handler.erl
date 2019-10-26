@@ -141,7 +141,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 is_authorized(Req, State) ->
     % Check if the request carries any authorization
     Result = try
-        http_auth:authenticate(Req, rest)
+        http_auth:authenticate(Req, rest, true)
     catch
         throw:Err ->
             Err;
