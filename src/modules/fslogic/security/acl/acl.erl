@@ -37,9 +37,9 @@
 
 
 -spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
-    ok | no_return().
-assert_permitted(_Acl, _User, ?no_flags_mask, _FileCtx) ->
-    ok;
+    {ok, file_ctx:ctx()} | no_return().
+assert_permitted(_Acl, _User, ?no_flags_mask, FileCtx) ->
+    {ok, FileCtx};
 assert_permitted([], _User, _Operations, _FileCtx) ->
     throw(?EACCES);
 assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
@@ -47,7 +47,7 @@ assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
         {true, FileCtx2} ->
             case ace:check_against(Operations, Ace) of
                 allowed ->
-                    ok;
+                    {ok, FileCtx2};
                 {inconclusive, LeftoverOperations} ->
                     assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
                 denied ->

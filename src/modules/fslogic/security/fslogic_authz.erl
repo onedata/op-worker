@@ -19,9 +19,7 @@
 %% API
 -export([authorize/3]).
 
--define(DATA_LOCATION_CAVEATS, [
-    cv_data_space, cv_data_path, cv_data_objectid
-]).
+-define(DATA_LOCATION_CAVEATS, [cv_data_path, cv_data_objectid]).
 
 
 %%%===================================================================
@@ -80,12 +78,6 @@ check_data_location_constraints(SerializedToken, FileCtx, Caveats) ->
     {ok, file_ctx:ctx()} | no_return().
 check_data_location_caveats([], FileCtx) ->
     {ok, FileCtx};
-check_data_location_caveats([#cv_data_space{whitelist = Spaces} | Rest], FileCtx0) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx0),
-    case lists:member(SpaceId, Spaces) of
-        true -> check_data_location_caveats(Rest, FileCtx0);
-        false -> throw(?EACCES)
-    end;
 check_data_location_caveats([#cv_data_path{whitelist = Paths} | Rest], FileCtx0) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
     IsPathAllowed = lists:any(fun(Path) ->

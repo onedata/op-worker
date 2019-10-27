@@ -28,13 +28,14 @@
     | owner_if_parent_sticky
     | share
     | traverse_ancestors            % Means ancestors' exec permission
-    | write | read | exec | rdwr
-    | binary().                     % Acl perms
+    | binary().                     % Permissions defined in acl.hrl
 
 -type requirement() ::
     root
     | type()
     | {type(), 'or', type()}.
+
+-type posix_perm() :: write | read | exec.
 
 -export_type([type/0, requirement/0]).
 
@@ -161,9 +162,11 @@ check_access(UserCtx, FileCtx0, traverse_ancestors) ->
         true ->
             {ok, FileCtx0};
         false ->
-            {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-            check_and_cache_result(UserCtx, ParentCtx, ?traverse_container),
-            check_and_cache_result(UserCtx, ParentCtx, traverse_ancestors),
+            {ParentCtx0, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+            ParentCtx1 = check_and_cache_result(
+                UserCtx, ParentCtx0, ?traverse_container
+            ),
+            check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
             {ok, FileCtx1}
     end;
 
@@ -173,117 +176,115 @@ check_access(UserCtx, FileCtx, Permission) ->
     case file_ctx:get_active_perms_type(FileCtx2) of
         {acl, FileCtx3} ->
             {Acl, _} = file_ctx:get_acl(FileCtx3),
-            check_acl(Permission, FileDoc, UserCtx, ShareId, Acl, FileCtx3);
+            check_acl_access(
+                Permission, FileDoc, UserCtx, ShareId, Acl, FileCtx3
+            );
         {posix, FileCtx3} ->
-            check_posix(Permission, FileDoc, UserCtx, ShareId, FileCtx3)
+            check_posix_access(Permission, FileDoc, UserCtx, ShareId, FileCtx3)
     end.
 
 
 %% @private
--spec check_acl(type(), file_meta:doc(), user_ctx:ctx(),
+-spec check_acl_access(type(), file_meta:doc(), user_ctx:ctx(),
     od_share:id() | undefined, acl:acl(), file_ctx:ctx()
 ) ->
     {ok, file_ctx:ctx()} | no_return().
-check_acl(?read_object, _, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+check_acl_access(?read_object, _, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?read_object_mask, FileCtx
+        ?read_object_mask, FileCtx0
     ),
-    validate_scope_privs(read, FileCtx, UserCtx, ShareId);
-check_acl(?list_container, _, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(read, FileCtx1, UserCtx, ShareId);
+check_acl_access(?list_container, _, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?list_container_mask, FileCtx
+        ?list_container_mask, FileCtx0
     ),
-    validate_scope_privs(read, FileCtx, UserCtx, ShareId);
-check_acl(?write_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(read, FileCtx1, UserCtx, ShareId);
+check_acl_access(?write_object, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?write_object_mask, FileCtx
+        ?write_object_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?add_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?add_object, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?add_object_mask, FileCtx
+        ?add_object_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?add_subcontainer, _, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?add_subcontainer, _, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?add_subcontainer_mask, FileCtx
+        ?add_subcontainer_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?read_metadata, _, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?read_metadata, _, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?read_metadata_mask, FileCtx
+        ?read_metadata_mask, FileCtx0
     ),
-    validate_scope_privs(read, FileCtx, UserCtx, ShareId);
-check_acl(?write_metadata, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(read, FileCtx1, UserCtx, ShareId);
+check_acl_access(?write_metadata, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?write_metadata_mask, FileCtx
+        ?write_metadata_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?traverse_container, #document{value = #file_meta{is_scope = true}},
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?traverse_container, #document{value = #file_meta{is_scope = true}},
     UserCtx, ShareId, Acl, FileCtx
 ) ->
     validate_scope_access(FileCtx, UserCtx, ShareId),
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
         ?traverse_container_mask, FileCtx
-    ),
-    {ok, FileCtx};
-check_acl(?traverse_container, _, UserCtx, _, Acl, FileCtx) ->
+    );
+check_acl_access(?traverse_container, _, UserCtx, _, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
         ?traverse_container_mask, FileCtx
-    ),
-    {ok, FileCtx};
-check_acl(?delete_object, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    );
+check_acl_access(?delete_object, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?delete_child_mask, FileCtx
+        ?delete_child_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?delete_subcontainer, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?delete_subcontainer, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?delete_child_mask, FileCtx
+        ?delete_child_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?read_attributes, _, UserCtx, _, Acl, FileCtx) ->
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?read_attributes, _, UserCtx, _, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
         ?read_attributes_mask, FileCtx
-    ),
-    {ok, FileCtx};
-check_acl(?write_attributes, _, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    );
+check_acl_access(?write_attributes, _, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?write_attributes_mask, FileCtx
+        ?write_attributes_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?delete, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?delete, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?delete_mask, FileCtx
+        ?delete_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(?read_acl, _, UserCtx, _, Acl, FileCtx) ->
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(?read_acl, _, UserCtx, _, Acl, FileCtx) ->
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
         ?read_acl_mask, FileCtx
-    ),
-    {ok, FileCtx};
-check_acl(?write_acl, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    acl:assert_permitted(
+    );
+check_acl_access(?write_acl, _Doc, UserCtx, ShareId, Acl, FileCtx0) ->
+    {ok, FileCtx1} = acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
-        ?write_acl_mask, FileCtx
+        ?write_acl_mask, FileCtx0
     ),
-    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
-check_acl(Perm, File, User, ShareId, Acl, _FileCtx) ->
+    validate_scope_privs(write, FileCtx1, UserCtx, ShareId);
+check_acl_access(Perm, File, User, ShareId, Acl, _FileCtx) ->
     ?error(
         "Unknown acl permission check rule: (~p, ~p, ~p, ~p, ~p)",
         [Perm, File, User, ShareId, Acl]
@@ -292,68 +293,66 @@ check_acl(Perm, File, User, ShareId, Acl, _FileCtx) ->
 
 
 %% @private
--spec check_posix(type(), file_meta:doc(), user_ctx:ctx(),
+-spec check_posix_access(type(), file_meta:doc(), user_ctx:ctx(),
     od_share:id() | undefined, file_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | no_return().
-check_posix(AccessType, #document{value = #file_meta{
-    is_scope = true
-}}, UserCtx, ShareId, FileCtx) when
-    AccessType =:= read;
-    AccessType =:= write;
-    AccessType =:= exec;
-    AccessType =:= rdwr
-->
-    {ok, FileCtx2} = validate_scope_access(FileCtx, UserCtx, ShareId),
-    {ok, FileCtx3} = validate_posix_access(AccessType, FileCtx2, UserCtx, ShareId),
-    validate_scope_privs(AccessType, FileCtx3, UserCtx, ShareId);
-check_posix(AccessType, _Doc, UserCtx, ShareId, FileCtx) when
-    AccessType =:= read;
-    AccessType =:= write;
-    AccessType =:= exec;
-    AccessType =:= rdwr
-->
-    {ok, FileCtx2} = validate_posix_access(AccessType, FileCtx, UserCtx, ShareId),
-    validate_scope_privs(AccessType, FileCtx2, UserCtx, ShareId);
-
-check_posix(?read_object, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(read, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?list_container, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(read, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?write_object, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(write, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?add_object, Doc, UserCtx, ShareId, FileCtx) ->
-    {ok, FileCtx2} = check_posix(write, Doc, UserCtx, ShareId, FileCtx),
-    check_posix(exec, Doc, UserCtx, ShareId, FileCtx2);
-check_posix(?add_subcontainer, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(write, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?read_metadata, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(read, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?write_metadata, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(write, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?traverse_container, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(exec, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?delete_object, Doc, UserCtx, ShareId, FileCtx) ->
-    {ok, FileCtx2} = check_posix(write, Doc, UserCtx, ShareId, FileCtx),
-    check_posix(exec, Doc, UserCtx, ShareId, FileCtx2);
-check_posix(?delete_subcontainer, Doc, UserCtx, ShareId, FileCtx) ->
-    {ok, FileCtx2} = check_posix(write, Doc, UserCtx, ShareId, FileCtx),
-    check_posix(exec, Doc, UserCtx, ShareId, FileCtx2);
-check_posix(?read_attributes, _Doc, _UserCtx, _ShareId, FileCtx) ->
+check_posix_access(?read_object, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(read, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?list_container, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(read, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?write_object, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?add_object, Doc, UserCtx, ShareId, FileCtx) ->
+    {ok, FileCtx2} = check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx),
+    check_posix_perm(exec, Doc, UserCtx, ShareId, FileCtx2);
+check_posix_access(?add_subcontainer, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?read_metadata, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(read, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?write_metadata, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?traverse_container, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(exec, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?delete_object, Doc, UserCtx, ShareId, FileCtx) ->
+    {ok, FileCtx2} = check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx),
+    check_posix_perm(exec, Doc, UserCtx, ShareId, FileCtx2);
+check_posix_access(?delete_subcontainer, Doc, UserCtx, ShareId, FileCtx) ->
+    {ok, FileCtx2} = check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx),
+    check_posix_perm(exec, Doc, UserCtx, ShareId, FileCtx2);
+check_posix_access(?read_attributes, _Doc, _UserCtx, _ShareId, FileCtx) ->
     {ok, FileCtx};
-check_posix(?write_attributes, Doc, UserCtx, ShareId, FileCtx) ->
-    check_posix(write, Doc, UserCtx, ShareId, FileCtx);
-check_posix(?delete, _Doc, UserCtx, _ShareId, FileCtx) ->
+check_posix_access(?write_attributes, Doc, UserCtx, ShareId, FileCtx) ->
+    check_posix_perm(write, Doc, UserCtx, ShareId, FileCtx);
+check_posix_access(?delete, _Doc, UserCtx, _ShareId, FileCtx) ->
     check_access(UserCtx, FileCtx, owner_if_parent_sticky);
-check_posix(?read_acl, _Doc, _UserCtx, _ShareId, FileCtx) ->
+check_posix_access(?read_acl, _Doc, _UserCtx, _ShareId, FileCtx) ->
     {ok, FileCtx};
-check_posix(?write_acl, _Doc, UserCtx, _ShareId, FileCtx) ->
+check_posix_access(?write_acl, _Doc, UserCtx, _ShareId, FileCtx) ->
     check_access(UserCtx, FileCtx, owner);
-check_posix(Perm, File, User, ShareId, _FileCtx) ->
+check_posix_access(Perm, File, User, ShareId, _FileCtx) ->
     ?error(
         "Unknown posix permission check rule: (~p, ~p, ~p, ~p)",
         [Perm, File, User, ShareId]
     ),
     throw(?EACCES).
+
+
+%% @private
+-spec check_posix_perm(posix_perm(), file_meta:doc(), user_ctx:ctx(),
+    od_share:id() | undefined, file_ctx:ctx()
+) ->
+    {ok, file_ctx:ctx()} | no_return().
+check_posix_perm(PosixPerm, #document{value = #file_meta{
+    is_scope = IsScope
+}}, UserCtx, ShareId, FileCtx) ->
+    {ok, FileCtx2} = case IsScope of
+        true -> validate_scope_access(FileCtx, UserCtx, ShareId);
+        false -> {ok, FileCtx}
+    end,
+    {ok, FileCtx3} = check_posix_perm(
+        PosixPerm, FileCtx2, UserCtx, ShareId
+    ),
+    validate_scope_privs(PosixPerm, FileCtx3, UserCtx, ShareId).
 
 
 %%--------------------------------------------------------------------
@@ -363,21 +362,15 @@ check_posix(Perm, File, User, ShareId, _FileCtx) ->
 %% (POSIX permission check).
 %% @end
 %%--------------------------------------------------------------------
--spec validate_posix_access(
-    read | write | exec | rdwr, file_ctx:ctx(),
-    user_ctx:ctx(), od_share:id() | undefined
-) ->
-    {ok, file_ctx:ctx()} | no_return().
-validate_posix_access(rdwr, FileCtx, UserCtx, ShareId) ->
-    {ok, FileCtx2} = validate_posix_access(write, FileCtx, UserCtx, ShareId),
-    validate_posix_access(read, FileCtx2, UserCtx, ShareId);
-validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
+-spec check_posix_perm(posix_perm(), file_ctx:ctx(), user_ctx:ctx(),
+    od_share:id() | undefined) -> {ok, file_ctx:ctx()} | no_return().
+check_posix_perm(PosixPerm, FileCtx, UserCtx, _ShareId) ->
     {#document{value = #file_meta{
         owner = OwnerId,
         mode = Mode
     }}, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
 
-    ReqBit0 = case AccessType of
+    ReqBit0 = case PosixPerm of
         read -> 8#4;
         write -> 8#2;
         exec -> 8#1
@@ -385,13 +378,13 @@ validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
 
     ReqBit1 = case user_ctx:get_user_id(UserCtx) of
         OwnerId ->
-            ReqBit0 bsl 6;  % shift to owner posix mode bits
+            ReqBit0 bsl 6;          % shift to owner posix mode bits
         _ ->
             case file_ctx:is_in_user_space_const(FileCtx, UserCtx) of
                 true ->
                     ReqBit0 bsl 3;  % shift to group posix mode bits
                 false ->
-                    ReqBit0     % remain at other posix mode bits
+                    ReqBit0         % remain at other posix mode bits
             end
     end,
 
@@ -433,7 +426,7 @@ validate_scope_access(FileCtx, _UserCtx, _ShareId) ->
 %% SPACE_READ_DATA privilege.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_scope_privs(type(), file_ctx:ctx(), user_ctx:ctx(),
+-spec validate_scope_privs(posix_perm(), file_ctx:ctx(), user_ctx:ctx(),
     od_share:id() | undefined) -> {ok, file_ctx:ctx()} | no_return().
 validate_scope_privs(read, FileCtx, UserCtx, undefined) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
