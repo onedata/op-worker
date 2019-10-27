@@ -96,11 +96,11 @@ check_and_cache_result(UserCtx, FileCtx0, Requirement) ->
 -spec check_access(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     {ok, file_ctx:ctx()} | no_return().
 check_access(UserCtx, FileCtx, {AccessType1, 'or', AccessType2}) ->
-    case catch check_access(AccessType1, UserCtx, FileCtx) of
+    case catch check_access(UserCtx, FileCtx, AccessType1) of
         {ok, _} = Res ->
             Res;
         _ ->
-            check_access(AccessType2, UserCtx, FileCtx)
+            check_access(UserCtx, FileCtx, AccessType2)
     end;
 
 check_access(UserCtx, FileCtx, root) ->
