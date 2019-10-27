@@ -43,20 +43,24 @@ authorize(UserCtx, FileCtx0, AccessRequirements) ->
 -spec check_constraints(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
 check_constraints(UserCtx, FileCtx) ->
-    case user_ctx:get_auth(UserCtx) of
-        #token_auth{token = SerializedToken} ->
-            {ok, Token} = tokens:deserialize(SerializedToken),
-            Caveats = tokens:get_caveats(Token),
-
-            check_data_location_constraints(SerializedToken, FileCtx, Caveats);
-        _ ->
-            % Root and guest are not restricted by caveats
-            FileCtx
+    case user_ctx:get_caveats(UserCtx) of
+        [] ->
+            FileCtx;
+        Caveats ->
+            SessionDiscriminator = case user_ctx:get_auth(UserCtx) of
+                #token_auth{token = SerializedToken} ->
+                    SerializedToken;
+                SessionAuth ->
+                    SessionAuth
+            end,
+            check_data_location_constraints(
+                SessionDiscriminator, FileCtx, Caveats
+            )
     end.
 
 
 %% @private
--spec check_data_location_constraints(tokens:serialized(), file_ctx:ctx(),
+-spec check_data_location_constraints(binary(), file_ctx:ctx(),
     [caveats:caveat()]) -> file_ctx:ctx().
 check_data_location_constraints(SerializedToken, FileCtx, Caveats) ->
     Guid = file_ctx:get_guid_const(FileCtx),

@@ -13,9 +13,10 @@
 -author("Krzysztof Trzepla").
 -author("Michal Wrzeszcz").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -86,9 +87,7 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = #user_identity{} = Iden}} ->
-            critical_section:run([?MODULE, SessId], fun() ->
-                reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia)
-            end);
+            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
         Error ->
             Error
     end.
@@ -194,16 +193,40 @@ remove_session(SessId) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc @private
-%% Creates session or if session exists reuses it.
+%% @private
+%% @doc
+%% @equiv reuse_or_create_session(SessId, SessType, Iden, Auth, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(session:id(), session:type(),
     session:identity(), session:auth() | undefined) ->
     {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth) ->
+    reuse_or_create_session(SessId, SessType, Iden, Auth, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_session(session:id(), session:type(),
+    session:identity(), session:auth() | undefined,
+    ProxyVia :: oneprovider:id() | undefined) ->
+    {ok, SessId :: session:id()} | error().
+reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
+    Caveats = case Auth of
+        #token_auth{token = SerializedToken} ->
+            {ok, Token} = tokens:deserialize(SerializedToken),
+            tokens:get_caveats(Token);
+        _ ->
+            []
+    end,
     critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(SessId, SessType, Iden, Auth, undefined)
+        reuse_or_create_session(
+            SessId, SessType, Iden, Auth, Caveats, ProxyVia
+        )
     end).
 
 
@@ -219,14 +242,16 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
-    ProxyVia :: oneprovider:id() | undefined) ->
+    Caveats :: [caveats:caveat()], ProxyVia :: oneprovider:id() | undefined
+) ->
     {ok, SessId :: session:id()} | error().
-reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
+reuse_or_create_session(SessId, SessType, Iden, Auth, Caveats, ProxyVia) ->
     Sess = #session{
         type = SessType,
         status = initializing,
         identity = Iden,
         auth = Auth,
+        caveats = Caveats,
         proxy_via = ProxyVia
     },
     Diff = fun

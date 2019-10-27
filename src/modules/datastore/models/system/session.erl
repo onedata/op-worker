@@ -28,7 +28,7 @@
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_user_id/1]).
+-export([get_auth/1, get_caveats/1, get_user_id/1]).
 -export([set_direct_io/2]).
 
 % exometer callbacks
@@ -288,6 +288,14 @@ get_auth(#session{auth = Auth}) ->
     Auth;
 get_auth(#document{value = Session}) ->
     get_auth(Session).
+
+
+-spec get_caveats(record() | doc()) -> [caveats:caveat()].
+get_caveats(#session{caveats = Caveats}) ->
+    Caveats;
+get_caveats(#document{value = Session}) ->
+    get_caveats(Session).
+
 
 %%--------------------------------------------------------------------
 %% @doc
