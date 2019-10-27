@@ -162,12 +162,20 @@ check_access(UserCtx, FileCtx0, traverse_ancestors) ->
         true ->
             {ok, FileCtx0};
         false ->
-            {ParentCtx0, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+            FileCtx1 = case file_ctx:is_space_dir_const(FileCtx0) of
+                true ->
+                    element(2, {ok, _} = check_access(
+                        UserCtx, FileCtx0, ?traverse_container
+                    ));
+                false ->
+                    FileCtx0
+            end,
+            {ParentCtx0, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
             ParentCtx1 = check_and_cache_result(
                 UserCtx, ParentCtx0, ?traverse_container
             ),
             check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
-            {ok, FileCtx1}
+            {ok, FileCtx2}
     end;
 
 check_access(UserCtx, FileCtx, Permission) ->
