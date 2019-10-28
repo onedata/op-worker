@@ -18,7 +18,6 @@
 %% API
 -export([
     is_interface_allowed/2,
-    assert_none_data_caveats/1,
     verify_api_caveats/3
 ]).
 
@@ -48,25 +47,6 @@ is_interface_allowed(SerializedToken, Interface) ->
             is_interface_allowed(Caveats, Interface);
         {error, _} ->
             false
-    end.
-
-
--spec assert_none_data_caveats(caveats_source()) -> ok | no_return().
-assert_none_data_caveats(Caveats) when is_list(Caveats) ->
-    case caveats:filter([cv_data_path, cv_data_objectid], Caveats) of
-        [] -> ok;
-        _ -> throw(?ERROR_TOKEN_INVALID)
-    end;
-assert_none_data_caveats(#token{} = Token) ->
-    Caveats = tokens:get_caveats(Token),
-    assert_none_data_caveats(Caveats);
-assert_none_data_caveats(SerializedToken) ->
-    case tokens:deserialize(SerializedToken) of
-        {ok, Token} ->
-            Caveats = tokens:get_caveats(Token),
-            assert_none_data_caveats(Caveats);
-        {error, _} ->
-            throw(?ERROR_TOKEN_INVALID)
     end.
 
 

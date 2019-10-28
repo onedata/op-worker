@@ -17,7 +17,6 @@
 
 -export([
     is_eff_space_member/2,
-    check_data_space_caveats/2,
     assert_space_supported_locally/1, assert_space_supported_by/2,
 
     assert_file_exists/2
@@ -34,17 +33,6 @@ is_eff_space_member(?NOBODY, _SpaceId) ->
     false;
 is_eff_space_member(?USER(UserId, SessionId), SpaceId) ->
     user_logic:has_eff_space(SessionId, UserId, SpaceId).
-
-
--spec check_data_space_caveats(od_space:id(), [caveats:caveat()]) ->
-    ok | no_return().
-check_data_space_caveats(SpaceId, Caveats) ->
-    lists:foreach(fun(DataSpaceCaveat) ->
-        case lists:member(SpaceId, DataSpaceCaveat) of
-            true -> ok;
-            false -> throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataSpaceCaveat))
-        end
-    end, caveats:filter([cv_data_space], Caveats)).
 
 
 -spec assert_space_supported_locally(od_space:id()) -> ok | no_return().

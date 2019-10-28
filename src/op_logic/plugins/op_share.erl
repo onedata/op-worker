@@ -158,13 +158,11 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
 ) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
@@ -172,13 +170,11 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = update, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
 ) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = update, auth = Auth, gri = #gri{
@@ -186,13 +182,11 @@ authorize(#op_req{operation = update, auth = Auth, gri = #gri{
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
 ) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
@@ -200,7 +194,6 @@ authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     op_logic_utils:is_eff_space_member(Auth, SpaceId).
 
 

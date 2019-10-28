@@ -178,44 +178,40 @@ exists(_, _) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = Guid,
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     transfer_utils:authorize_creation(SpaceId, UserId, replication, false);
 
-authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = replicate_by_view
 }} = OpReq, _) ->
     SpaceId = maps:get(<<"space_id">>, OpReq#op_req.data),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     transfer_utils:authorize_creation(SpaceId, UserId, replication, true);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
     id = Guid,
     aspect = instance
-}} = OpReq, _) ->
+}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
 
-    TransferType = case maps:get(<<"migration_provider_id">>, OpReq#op_req.data, undefined) of
+    TransferType = case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined -> eviction;
         _ -> migration
     end,
     transfer_utils:authorize_creation(SpaceId, UserId, TransferType, false);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     aspect = evict_by_view
 }} = OpReq, _) ->
     Data = OpReq#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
 
     TransferType = case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined -> eviction;

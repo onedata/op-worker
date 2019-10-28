@@ -130,10 +130,9 @@ exists(_, _) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
 
     ViewPrivileges = case Transfer#transfer.index_name of
         undefined -> [];
@@ -146,21 +145,18 @@ authorize(#op_req{operation = create, auth = ?USER(UserId) = Auth, gri = #gri{
     end,
     space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = As
 }}, #transfer{space_id = SpaceId}) when
     As =:= instance;
     As =:= progress;
     As =:= throughput_charts
 ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     aspect = instance
 }} = Req, #transfer{space_id = SpaceId} = Transfer) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
-
     case Transfer#transfer.user_id of
         UserId ->
             % User doesn't need cancel privileges to cancel his transfer but

@@ -138,14 +138,12 @@ authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = space
 }}, _) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_STATISTICS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     id = SpaceId,
     aspect = {user, _}
 }}, _) ->
-    op_logic_utils:check_data_space_caveats(SpaceId, Auth#auth.caveats),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_STATISTICS).
 
 

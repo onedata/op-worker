@@ -92,7 +92,7 @@ ensure_valid_caveats(Caveats, Interface, AcceptDataCaveats) ->
     end,
     case AcceptDataCaveats of
         true -> ok;
-        false -> token_caveats:assert_none_data_caveats(Caveats)
+        false -> fslogic_caveats:assert_none_data_caveats(Caveats)
     end.
 
 

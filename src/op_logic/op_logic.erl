@@ -294,6 +294,13 @@ ensure_authorized(#req_ctx{
     versioned_entity = {Entity, _},
     req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
 }) ->
+    case Plugin of
+        op_file ->
+            % Only op_file endpoints allows data caveats
+            ok;
+        _ ->
+            fslogic_caveats:assert_none_data_caveats(Auth#auth.caveats)
+    end,
     token_caveats:verify_api_caveats(Auth#auth.caveats, Operation, GRI),
 
     Result = try
