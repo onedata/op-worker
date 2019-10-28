@@ -18,6 +18,7 @@
 %% API
 -export([resolve_guid/2, get_parent/2, get_file_path/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -71,6 +72,7 @@ get_file_path(UserCtx, FileCtx0) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Resolves file guid basing on its path.
 %% @end
@@ -85,6 +87,7 @@ resolve_guid_insecure(_UserCtx, FileCtx) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets parent of file.
 %% @end
@@ -100,6 +103,7 @@ get_parent_insecure(UserCtx, FileCtx) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates given file's Guid to absolute path.
 %% @end

@@ -42,9 +42,11 @@
     schedule_file_replication/6
 ]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,6 +70,7 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
             throw(Reason)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Requests synchronization of given block with remote replicas.
@@ -90,6 +93,7 @@ request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Pri
         {error, Reason} ->
             throw(Reason)
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,6 +127,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
         }
     }.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% get_file_distribution_insecure/2 with permission checks.
@@ -136,6 +141,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
     ),
     get_file_distribution_insecure(UserCtx, FileCtx1).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Schedules file or dir replication, returns the id of created transfer doc
@@ -146,18 +152,29 @@ get_file_distribution(UserCtx, FileCtx0) ->
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
     od_provider:id(), transfer:callback(), transfer:view_name(),
     query_view_params()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, TargetProviderId, Callback,
+schedule_file_replication(
+    UserCtx, FileCtx0, TargetProviderId, Callback,
     ViewName, QueryViewParams
 ) ->
-    {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
-    schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId,
-        Callback, ViewName, QueryViewParams).
+    FileCtx1 = fslogic_authz:authorize(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
+
+    {FilePath, _} = file_ctx:get_logical_path(FileCtx1, UserCtx),
+    schedule_file_replication_insecure(
+        UserCtx, FileCtx1, FilePath, TargetProviderId,
+        Callback, ViewName, QueryViewParams
+    ).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Gets distribution of file over providers' storages.
 %% @end
@@ -181,6 +198,7 @@ get_file_distribution_insecure(_UserCtx, FileCtx) ->
         }
     }.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -188,11 +206,12 @@ get_file_distribution_insecure(_UserCtx, FileCtx) ->
 %% wrapped in 'scheduled_transfer' provider response.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
+-spec schedule_file_replication_insecure(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), od_provider:id(), transfer:callback(),
     transfer:view_name(), query_view_params()) -> provider_response().
-schedule_file_replication(UserCtx, FileCtx, FilePath, TargetProviderId, Callback,
-    ViewName, QueryViewParams
+schedule_file_replication_insecure(
+    UserCtx, FileCtx, FilePath, TargetProviderId,
+    Callback, ViewName, QueryViewParams
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
