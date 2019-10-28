@@ -76,7 +76,10 @@ get_models() -> [
     qos_entry,
     file_meta_posthooks,
     storage_sync_links,
-    storage_traverse_job
+    storage_traverse_job,
+
+    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+    space_storage
 ].
 
 %%--------------------------------------------------------------------

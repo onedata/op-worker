@@ -348,7 +348,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 -spec is_space_mounted_in_root(ctx()) -> {boolean(), ctx()}.
 is_space_mounted_in_root(FileCtx = #file_ctx{is_space_mounted_in_root = undefined}) ->
     {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
-    MiR = storage_config:is_mounted_in_root(StorageConfig),
+    MiR = storage_config:is_mount_in_root(StorageConfig),
     {MiR, FileCtx2#file_ctx{is_space_mounted_in_root = MiR}};
 is_space_mounted_in_root(FileCtx = #file_ctx{is_space_mounted_in_root = IsSpaceMountedInRoot}) ->
     {IsSpaceMountedInRoot, FileCtx}.

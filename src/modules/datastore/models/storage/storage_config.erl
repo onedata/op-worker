@@ -9,7 +9,6 @@
 %%% Model for holding storage configuration. It contains provider specific
 %%% information and private storage data. It should not be shared with other providers.
 %%% To share storage data with other providers(through onezone) od_storage model is used.
-%%%      @todo: rewrite without "ROOT_STORAGE" when implementation of persistent_store:list will be ready
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_config).
@@ -21,8 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([new/2, new/4]).
--export([get_id/1, get_name/1, is_readonly/1, is_mounted_in_root/1,
+-export([new/2, new/5]).
+-export([get_id/1, get_name/1, is_readonly/1, is_mount_in_root/1,
     get_helpers/1, get_luma_config_map/1, get_helper/1, get_type/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, save_doc/1, list/0]).
@@ -31,8 +30,8 @@
 
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
-    update_luma_config/2, set_luma_config/2, set_insecure/3,
-    set_readonly/2, set_mount_in_root/1, describe/1]).
+    update_luma_config/2, set_luma_config/2, set_insecure/3, set_readonly/2,
+    set_mount_in_root/2, set_mount_in_root_insecure/2, describe/1]).
 -export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
@@ -123,7 +122,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()]) -> doc().
 new(Name, Helpers) ->
-    new(Name, Helpers, false, undefined).
+    new(Name, Helpers, false, undefined, false).
 
 
 %%--------------------------------------------------------------------
@@ -131,13 +130,14 @@ new(Name, Helpers) ->
 %% Constructs storage record.
 %% @end
 %%--------------------------------------------------------------------
--spec new(name(), [helper()], boolean(), undefined | luma_config:config()) -> doc().
-new(Name, Helpers, ReadOnly, LumaConfig) ->
+-spec new(name(), [helper()], boolean(), undefined | luma_config:config(), boolean()) -> doc().
+new(Name, Helpers, ReadOnly, LumaConfig, MiR) ->
     #document{value = #storage_config{
         name = Name,
         helpers = Helpers,
         readonly = ReadOnly,
-        luma_config = LumaConfig
+        luma_config = LumaConfig,
+        mount_in_root = MiR
     }}.
 
 
@@ -182,14 +182,14 @@ is_readonly(#document{value = #storage_config{} = Value}) ->
 %% Checks whether storage is mounted in root.
 %% @end
 %%--------------------------------------------------------------------
--spec is_mounted_in_root(record() | doc() | od_storage:id()) -> boolean().
-is_mounted_in_root(#storage_config{mount_in_root = MiR}) ->
+-spec is_mount_in_root(record() | doc() | od_storage:id()) -> boolean().
+is_mount_in_root(#storage_config{mount_in_root = MiR}) ->
     MiR;
-is_mounted_in_root(#document{value = #storage_config{} = Value}) ->
-    is_mounted_in_root(Value);
-is_mounted_in_root(StorageId) ->
+is_mount_in_root(#document{value = #storage_config{} = Value}) ->
+    is_mount_in_root(Value);
+is_mount_in_root(StorageId) ->
     {ok, #document{value = Value}} = ?MODULE:get(StorageId),
-    is_mounted_in_root(Value).
+    is_mount_in_root(Value).
 
 -spec get_helper(record() | doc() | od_storage:id()) -> helper().
 get_helper(Storage) ->
@@ -354,13 +354,28 @@ set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets storage as mount in root.
+%% Sets storage mount in root value if it is not supporting any space.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mount_in_root(od_storage:id()) -> ok.
-set_mount_in_root(StorageId) ->
+-spec set_mount_in_root(od_storage:id(), boolean()) -> ok.
+set_mount_in_root(StorageId, Value) when is_boolean(Value)->
+    case storage_logic:supports_any_space(StorageId) of
+        true ->
+            {error, storage_in_use};
+        false ->
+            set_mount_in_root_insecure(StorageId, Value)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets storage mount in root value.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_mount_in_root_insecure(od_storage:id(), boolean()) -> ok.
+set_mount_in_root_insecure(StorageId, Value) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
-        {ok, Storage#storage_config{mount_in_root = true}}
+        {ok, Storage#storage_config{mount_in_root = Value}}
     end)).
 
 
@@ -433,7 +448,8 @@ describe(StorageId) ->
                 <<"insecure">> => helper:is_insecure(Helper),
                 <<"storagePathType">> => helper:get_storage_path_type(Helper),
                 <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
-                <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined)
+                <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined),
+                <<"mountInRoot">> => is_mount_in_root(Storage)
             }};
         {error, _} = Error -> Error
     end.
@@ -575,7 +591,7 @@ get_record_struct(6) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, Name, Helpers}) ->
+upgrade_record(1, {storage, Name, Helpers}) ->
     {2, {storage_config,
         Name,
         [{
@@ -586,16 +602,17 @@ upgrade_record(1, {?MODULE, Name, Helpers}) ->
             end, #{}, HelperArgs),
             #{},
             false
-        } || {_, HelperName, HelperArgs} <- Helpers]
+        } || {_, HelperName, HelperArgs} <- Helpers],
+        false
     }};
-upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
+upgrade_record(2, {_, Name, Helpers, Readonly}) ->
     {3, {storage_config,
         Name,
         Helpers,
         Readonly,
         undefined
     }};
-upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
+upgrade_record(3, {_, Name, Helpers, Readonly, LumaConfig}) ->
     {4, {storage_config,
         Name,
         [{
@@ -609,7 +626,7 @@ upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
         Readonly,
         LumaConfig
     }};
-upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
+upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
     {5, {storage_config,
         Name,
         [
@@ -626,8 +643,7 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
         Readonly,
         LumaConfig
     }};
-%% @TODO VFS-5854 Implement upgrade procedure using cluster upgrade
-upgrade_record(5, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
+upgrade_record(5, {_, Name, Helpers, Readonly, LumaConfig}) ->
     {6, #storage_config{
         name = Name,
         helpers = Helpers,

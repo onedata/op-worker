@@ -33,6 +33,8 @@
 -export([supports_any_space/1]).
 -export([safe_delete/1]).
 
+-export([migrate_to_zone/0]).
+
 -compile({no_auto_import,[get/1]}).
 
 %%%===================================================================
@@ -42,8 +44,8 @@
 -spec create(storage_config:doc()) -> {ok, od_storage:id()} | errors:error().
 create(StorageConfig) ->
     StorageName = storage_config:get_name(StorageConfig),
-    case create_in_zone(StorageName) of
-        {ok, {_, #document{key = StorageId, value = #od_storage{}}}} ->
+    case create_in_zone(StorageName, undefined) of
+        {ok, StorageId} ->
             case storage_config:save_doc(StorageConfig#document{key = StorageId}) of
                 {ok, StorageId} ->
                     ok = storage_config:on_storage_created(StorageId),
@@ -62,13 +64,14 @@ create(StorageConfig) ->
 
 
 %% @private
--spec create_in_zone(storage_config:name()) -> {ok, {gri:gri(), od_storage:doc()}} | errors:error().
-create_in_zone(StorageName) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+-spec create_in_zone(storage_config:name(), od_storage:id() | undefined) ->
+    {ok, od_storage:id()} | errors:error().
+create_in_zone(StorageName, StorageId) ->
+    ?CREATE_RETURN_ID(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = undefined, aspect = instance},
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = #{<<"name">> => StorageName}
-    }).
+    })).
 
 
 -spec get(od_storage:id()) -> {ok, od_storage:doc()} | errors:error().
@@ -298,3 +301,93 @@ on_space_unsupported(SpaceId, StorageId) ->
     file_popularity_api:delete_config(SpaceId),
     space_strategies:delete(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
+
+
+%%%===================================================================
+%%% Upgrade from 19.02.*
+%%%===================================================================
+
+-define(ZONE_CONNECTION_RETRIES, 180).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Migrates storages and spaces support data to Onezone.
+%% When successful removes obsolete space_storage documents.
+%%
+%% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
+%% @end
+%%--------------------------------------------------------------------
+-spec migrate_to_zone() -> ok.
+migrate_to_zone() ->
+    ?info("Checking connection to Onezone..."),
+    migrate_to_zone(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES).
+
+-spec migrate_to_zone(IsConnectedToZone :: boolean(), Retries :: integer()) -> ok.
+migrate_to_zone(false, 0) ->
+    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
+    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
+migrate_to_zone(false, Retries) ->
+    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
+    timer:sleep(timer:seconds(10)),
+    migrate_to_zone(oneprovider:is_connected_to_oz(), Retries-1);
+migrate_to_zone(true, _) ->
+    ?info("Starting storage migration procedure..."),
+    {ok, Spaces} = provider_logic:get_spaces(),
+    lists:foreach(fun migrate_space_support/1, Spaces),
+    case delete_in_zone(oneprovider:get_id()) of
+        ok -> ok;
+        ?ERROR_NOT_FOUND -> ok;
+        Error -> throw(Error)
+    end.
+
+
+%% @private
+-spec migrate_space_support(od_space:id()) -> ok.
+migrate_space_support(SpaceId) ->
+    {StorageIds, MiR} = case space_storage:get(SpaceId) of
+        {ok, SpaceStorage} ->
+            S = space_storage:get_storage_ids(SpaceStorage),
+            M = space_storage:get_mounted_in_root(SpaceStorage),
+            {S, M};
+        ?ERROR_NOT_FOUND ->
+            {[], []}
+    end,
+    lists:foreach(fun(StorageId) ->
+        {ok, StorageConfig} = storage_config:get(StorageId),
+        case provider_logic:has_storage(StorageId) of
+            true -> ok;
+            false ->
+                ?notice("Creating storage ~p in Onezone", [StorageId]),
+                {ok, StorageId} = create_in_zone(storage_config:get_name(StorageConfig), StorageId)
+        end,
+        case space_logic:is_supported_by_storage(SpaceId, StorageId) of
+            true -> ok;
+            false ->
+                case revamp_space_support(StorageId, SpaceId) of
+                    ok -> ?notice("Support of space: ~p by storage: ~p revamped in Onezone", [SpaceId]);
+                    Error -> throw(Error)
+                end
+        end
+    end, StorageIds),
+    lists:foreach(fun(StorageId) ->
+        ok = storage_config:set_mount_in_root_insecure(StorageId, true),
+        ?notice("Storage ~p set mount in root", [StorageId])
+    end, MiR),
+    ok = space_storage:delete(SpaceId),
+    ?info("Supports of space: ~p successfully migrated").
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Revamps space support in Onezone to model with new storages.
+%%
+%% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
+%% @end
+%%--------------------------------------------------------------------
+-spec revamp_space_support(od_storage:id(), od_space:id()) -> ok | errors:error().
+revamp_space_support(StorageId, SpaceId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_storage, id = StorageId, aspect = {revamp_space_support, SpaceId}}
+    }).
