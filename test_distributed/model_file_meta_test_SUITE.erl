@@ -62,9 +62,11 @@ rename_test(Config) ->
     % create file tree
     RootUuid = <<>>,
     {ok, Space1DirUuid} = ?assertMatch({ok, _},
-        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{value = #file_meta{name = <<"Space 1">>, is_scope = true}}])),
+        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = <<"space rename 1">>,
+            value = #file_meta{name = <<"Space 1">>, is_scope = true}}])),
     {ok, _Space2DirUuid} = ?assertMatch({ok, _},
-        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{value = #file_meta{name = <<"Space 2">>, is_scope = true}}])),
+        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = <<"space rename 2">>,
+            value = #file_meta{name = <<"Space 2">>, is_scope = true}}])),
     {ok, D1DirUuid} = ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Space1DirUuid}, #document{value = #file_meta{name = <<"d1">>}}])),
     ?assertMatch({ok, _},
@@ -118,7 +120,8 @@ list_test(Config) ->
     % create file tree
     RootUuid = <<>>,
     {ok, Space1DirUuid} = ?assertMatch({ok, _},
-        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{value = #file_meta{name = <<"Space list 1">>, is_scope = true}}])),
+        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = <<"space list 1">>,
+            value = #file_meta{name = <<"Space list 1">>, is_scope = true}}])),
     {ok, D1DirUuid} = ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Space1DirUuid}, #document{value = #file_meta{name = <<"list_test_d1">>}}])),
     ?assertMatch({ok, _},
@@ -184,7 +187,7 @@ init_per_suite(Config) ->
             fun(_) -> [] end),
         NewConfig,
         initializer:mock_provider_id(
-            Workers, <<"provider1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+            Workers, <<"provider1">>, <<"access-token">>, <<"identity-token">>
         ),
         NewConfig
     end,

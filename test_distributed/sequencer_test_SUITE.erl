@@ -22,7 +22,11 @@
 -include_lib("proto/oneclient/server_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -126,7 +130,7 @@ init_per_suite(Config) ->
         initializer:clear_subscriptions(Worker),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
@@ -149,6 +153,9 @@ init_per_testcase(Case, Config) when
     mock_communicator(Worker, fun(_, _, _) -> ok end),
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
+
+end_per_suite(_Config) ->
+    ok.
 
 end_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
@@ -179,12 +186,12 @@ end_per_testcase(Case, Config) when
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"nonce">>
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+-spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
+    session_setup(Worker, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -192,15 +199,15 @@ session_setup(Worker) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
-    Iden = #user_identity{user_id = <<"user_id">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, undefined, Self]
-    )),
-    {ok, SessId}.
+-spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker,
+        Nonce,
+        #user_identity{user_id = <<"user_id">>},
+        undefined,
+        self()
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -45,10 +45,10 @@
 -define(MONTH_HIST_LENGTH, 32).
 -define(MONTH_SPEED_HIST_LENGTH, 31).
 
--define(MINUTE_STAT_TYPE, <<"minute">>).
--define(HOUR_STAT_TYPE, <<"hour">>).
--define(DAY_STAT_TYPE, <<"day">>).
--define(MONTH_STAT_TYPE, <<"month">>).
+-define(MINUTE_PERIOD, <<"minute">>).
+-define(HOUR_PERIOD, <<"hour">>).
+-define(DAY_PERIOD, <<"day">>).
+-define(MONTH_PERIOD, <<"month">>).
 
 
 -define(REPLICATION_WORKER, replication_worker).

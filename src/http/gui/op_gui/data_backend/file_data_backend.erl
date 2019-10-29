@@ -24,7 +24,7 @@
 -include("http/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
@@ -309,6 +309,8 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
             op_gui_utils:association_to_ids(ResId)
     end,
     case lfm:stat(SessionId, {guid, FileId}) of
+        {error, ?EACCES} ->
+            op_gui_error:unauthorized();
         {error, ?ENOENT} ->
             op_gui_error:report_error(<<"No such file or directory.">>);
         {ok, FileAttr} ->

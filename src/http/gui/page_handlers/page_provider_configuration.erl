@@ -19,6 +19,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
 
@@ -37,7 +38,7 @@
 handle(<<"GET">>, Req) ->
     cowboy_req:reply(
         ?HTTP_200_OK,
-        #{<<"content-type">> => <<"application/json">>},
+        #{?HDR_CONTENT_TYPE => <<"application/json">>},
         % TODO VFS-5622
         json_utils:encode(op_provider:gather_configuration()),
         Req

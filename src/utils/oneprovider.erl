@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% Id of this provider (assigned by Onezone)
 -type id() :: binary().
@@ -91,7 +91,7 @@ get_rest_endpoint(Path) ->
 -spec get_id() -> od_provider:id() | no_return().
 get_id() ->
     case provider_auth:get_provider_id() of
-        {error, _} -> throw(?ERROR_UNREGISTERED_PROVIDER);
+        {error, _} -> throw(?ERROR_UNREGISTERED_ONEPROVIDER);
         {ok, ProviderId} -> ProviderId
     end.
 
@@ -297,7 +297,8 @@ restart_oz_connection() ->
 on_connect_to_oz() ->
     set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
-    ok = main_harvesting_stream:revise_all_spaces().
+    ok = main_harvesting_stream:revise_all_spaces(),
+    ok = fslogic_worker:init_cannonical_paths_cache(all).
 
 
 %%--------------------------------------------------------------------
@@ -379,9 +380,9 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         ],
         {ok, #{
             <<"providerId">> := ProviderId,
-            <<"macaroon">> := Macaroon
+            <<"providerRootToken">> := RootToken
         }} = oz_providers:register_with_uuid(none, Parameters),
-        provider_auth:save(ProviderId, Macaroon),
+        provider_auth:save(ProviderId, RootToken),
         {ok, ProviderId}
     catch
         T:M ->

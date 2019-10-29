@@ -16,7 +16,7 @@
 
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% data_backend_behaviour callbacks

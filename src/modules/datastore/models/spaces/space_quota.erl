@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("global_definitions.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -29,7 +29,7 @@
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
     upgrade_record/2]).
 
--type id() :: binary().
+-type id() :: od_space:id().
 -type diff() :: datastore_doc:diff(record()).
 -type record() :: #space_quota{}.
 -type doc() :: datastore_doc:doc(record()).

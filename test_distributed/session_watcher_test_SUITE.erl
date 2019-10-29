@@ -18,7 +18,11 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -84,8 +88,9 @@ session_create_or_reuse_session_should_update_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Accessed1 = get_session_access_time(Config),
-    rpc:call(Worker, session_manager, reuse_or_create_fuse_session,
-        [SessId, undefined, undefined, self()]),
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, SessId, undefined, undefined, self()
+    ),
     ?call(Worker, get, [SessId]),
     Accessed2 = get_session_access_time(Config),
     ?assert(Accessed2 - Accessed1 >= 0).
@@ -118,6 +123,9 @@ session_create_should_set_session_access_time(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
+init_per_suite(Config) ->
+    [{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
@@ -125,6 +133,9 @@ init_per_testcase(_Case, Config) ->
     mock_session_manager(Worker),
     {ok, Pid} = start_incoming_session_watcher(Worker, SessId),
     [{incoming_session_watcher, Pid}, {session_id, SessId} | Config].
+
+end_per_suite(_Config) ->
+    ok.
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

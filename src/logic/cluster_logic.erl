@@ -37,7 +37,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec update_version_info(Release :: binary(), Build :: binary(), GuiHash :: binary()) ->
-    ok | gs_protocol:error().
+    ok | errors:error().
 update_version_info(Release, Build, GuiHash) ->
     ClusterId = oneprovider:get_id(),
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -75,7 +75,7 @@ upload_op_worker_gui(PackagePath) ->
         Other ->
             try
                 {ok, 400, _, Body} = Other,
-                gs_protocol_errors:json_to_error(1, json_utils:decode(Body))
+                errors:from_json(json_utils:decode(Body))
             catch _:_ ->
                 {error, {unexpected_gui_upload_result, Other}}
             end

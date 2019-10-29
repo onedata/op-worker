@@ -38,6 +38,7 @@
     list_children/2, list_children/3, list_children/4,
     list_children/5, list_children/6
 ]).
+-export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -61,6 +62,7 @@
 -type time() :: non_neg_integer().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
+-type permissions_type() :: posix | acl.
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
 -type list_opts() :: #{
     token => datastore_links_iter:token() | undefined,
@@ -74,9 +76,11 @@
     last_name => name(),
     last_tree => od_provider:id()}.
 
--export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    offset/0, size/0, mode/0, time/0, posix_permissions/0,
-    file_meta/0]).
+-export_type([
+    doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
+    offset/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    file_meta/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -107,7 +111,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX, Doc));
+    ?extract_key(datastore_model:save(?CTX#{memory_copies => all}, Doc));
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -136,7 +140,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
     ?run(begin
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
-        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc),
+        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         SpaceDirUuid = case IsScope of
             true ->
                 FileDoc2#document.key;
@@ -189,7 +193,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 
                         case FileExists of
                             false ->
-                                create({uuid, ParentUuid}, FileDoc, []);
+                                create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
                             _ ->
                                 Eexists
                         end;
@@ -659,7 +663,8 @@ setup_onedata_user(UserId, EffSpaces) ->
             case create({uuid, ?ROOT_DIR_UUID},
                 #document{key = FileUuid,
                     value = #file_meta{
-                        name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                        name = UserId, type = ?DIRECTORY_TYPE,
+                        mode = 8#1755,
                         owner = ?ROOT_USER_ID, is_scope = true,
                         parent_uuid = ?ROOT_DIR_UUID
                     }
@@ -722,7 +727,8 @@ make_space_exist(SpaceId) ->
         key = SpaceDirUuid,
         value = #file_meta{
             name = SpaceId, type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_SPACE_DIR_MODE, owner = ?ROOT_USER_ID, is_scope = true,
+            mode = ?DEFAULT_SPACE_DIR_MODE,
+            owner = ?ROOT_USER_ID, is_scope = true,
             parent_uuid = ?ROOT_DIR_UUID
         }
     },
@@ -823,6 +829,37 @@ is_child_of_hidden_dir(Path) ->
     {_, ParentPath} = fslogic_path:basename_and_parent(Path),
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_active_perms_type(file_meta:uuid()) ->
+    {ok, file_meta:permissions_type()} | {error, term()}.
+get_active_perms_type(FileUuid) ->
+    case file_meta:get({uuid, FileUuid}) of
+        {ok, #document{value = #file_meta{acl = []}}} ->
+            {ok, posix};
+        {ok, _} ->
+            {ok, acl};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec update_mode(uuid(), posix_permissions()) -> ok | {error, term()}.
+update_mode(FileUuid, NewMode) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{mode = NewMode}}
+    end)).
+
+-spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
+update_acl(FileUuid, NewAcl) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{acl = NewAcl}}
+    end)).
 
 %%%===================================================================
 %%% Internal functions
@@ -950,11 +987,13 @@ get_uuid(FileUuid) ->
 %% Generates uuid if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_uuid(doc()) -> doc().
-fill_uuid(Doc = #document{key = undefined}) ->
-    NewUuid = datastore_utils:gen_key(),
-    Doc#document{key = NewUuid};
-fill_uuid(Doc) ->
+-spec fill_uuid(doc(), uuid()) -> doc().
+fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
+    Doc#document{key = datastore_utils:gen_key()};
+fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
+    HashPart = consistent_hashing:get_hashing_key(ParentUuid),
+    Doc#document{key = datastore_utils:gen_key(HashPart)};
+fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
 %%--------------------------------------------------------------------
@@ -1016,7 +1055,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    7.
+    8.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1144,6 +1183,28 @@ get_record_struct(7) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(8) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        % acl has been added in this version
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {group_owner, string},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1186,4 +1247,12 @@ upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version
 ) ->
     {7, {?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
         Scope, ProviderId, Shares, Deleted, ParentUuid}
-    }.
+    };
+upgrade_record(7, {
+    ?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
+    Scope, ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {8, {?MODULE, Name, Type, Mode, [],
+        Owner, GroupOwner, IsScope, Scope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }}.

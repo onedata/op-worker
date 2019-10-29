@@ -31,10 +31,9 @@
     end).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
@@ -485,7 +484,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | error_reply().
+    ok | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
@@ -495,7 +494,7 @@ check_perms(SessId, FileKey, PermType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | error_reply().
+    {ok, acl:acl()} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
 
@@ -505,7 +504,7 @@ get_acl(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    EntityList :: [lfm_perms:access_control_entity()]) -> ok | error_reply().
+    acl:acl()) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 

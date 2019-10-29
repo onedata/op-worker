@@ -19,13 +19,13 @@
 -include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
-    create_delayed_storage_file/1, create_delayed_storage_file/3,
+    create_delayed_storage_file/1, create_delayed_storage_file/4,
     delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
 
 % For spawning
@@ -117,20 +117,20 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 %%--------------------------------------------------------------------
 -spec create_delayed_storage_file(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
 create_delayed_storage_file(FileCtx) ->
-    create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID), false).
+    create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID), false, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx(), boolean()) ->
+-spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink) ->
+create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = Ans = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
+    }, FileCtx2} = Ans = file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, false, CheckLocationExists),
 
     case StorageFileCreated of
         false ->

@@ -343,7 +343,7 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
 }, _Helper, OAuth2IdP) ->
     {ok, {IdPAccessToken, TTL}} =
         idp_access_token:acquire(AdminId,
-            #macaroon_auth{macaroon = OnedataAccessToken}, OAuth2IdP),
+            #token_auth{token = OnedataAccessToken}, OAuth2IdP),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
@@ -363,7 +363,7 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
     <<"adminId">> := AdminId
 }, #helper{insecure = true}, OAuth2IdP) ->
     {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId,
-        #macaroon_auth{macaroon = OnedataAccessToken}, OAuth2IdP),
+        #token_auth{token = OnedataAccessToken}, OAuth2IdP),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,

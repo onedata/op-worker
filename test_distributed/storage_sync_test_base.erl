@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("kernel/include/file.hrl").
 -include("storage_sync_test.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% util functions

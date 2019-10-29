@@ -16,8 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([handle/2]).
@@ -40,8 +39,8 @@ handle(<<"fileUploadSuccess">>, Props) ->
     SessionId = op_gui_session:get_session_id(),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     ParentId = proplists:get_value(<<"parentId">>, Props),
-    {FileId, FileHandle} = page_file_upload:wait_for_file_new_file_id(SessionId, UploadId),
-    page_file_upload:upload_map_delete(SessionId, UploadId),
+    {FileId, FileHandle} = page_file_upload_deprecated:wait_for_file_new_file_id(SessionId, UploadId),
+    page_file_upload_deprecated:upload_map_delete(SessionId, UploadId),
     ok = lfm:fsync(FileHandle),
     ok = lfm:release(FileHandle),
     file_data_backend:report_file_upload(FileId, ParentId);
@@ -49,7 +48,7 @@ handle(<<"fileUploadSuccess">>, Props) ->
 handle(<<"fileUploadFailure">>, Props) ->
     SessionId = op_gui_session:get_session_id(),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
-    page_file_upload:upload_map_delete(SessionId, UploadId),
+    page_file_upload_deprecated:upload_map_delete(SessionId, UploadId),
     ok;
 
 handle(<<"fileBatchUploadComplete">>, Props) ->

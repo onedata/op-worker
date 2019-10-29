@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -70,7 +70,7 @@ all() -> [
 -define(IDP, <<"IDP">>).
 -define(ONEDATA_ACCESS_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
 -define(ADMIN_ID, <<"ADMIN_ID">>).
--define(ADMIN_AUTH, #macaroon_auth{macaroon = ?ONEDATA_ACCESS_TOKEN}).
+-define(ADMIN_AUTH, #token_auth{token = ?ONEDATA_ACCESS_TOKEN}).
 
 -define(getFetchTokenCalls(Worker, Args),
     rpc:call(Worker, meck, num_calls, [user_logic, fetch_idp_access_token, Args])

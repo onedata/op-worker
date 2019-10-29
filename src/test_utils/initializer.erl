@@ -12,16 +12,18 @@
 -module(initializer).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
+-include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("global_definitions.hrl").
--include("http/gui_paths.hrl").
+-include("test_utils/initializer.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% API
@@ -35,11 +37,8 @@
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
 -export([put_into_cache/1]).
+-export([local_ip_v4/0]).
 
--define(DUMMY_USER_MACAROON(__UserId), <<"DUMMY-USER-MACAROON-", __UserId/binary>>).
-
--define(DUMMY_PROVIDER_IDENTITY_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-MACAROON-", __ProviderId/binary>>).
--define(DUMMY_PROVIDER_AUTH_MACAROON(__ProviderId), <<"DUMMY-PROVIDER-AUTH-MACAROON-", __ProviderId/binary>>).
 
 -record(user_config, {
     id :: od_user:id(),
@@ -47,7 +46,7 @@
     default_space :: binary(),
     spaces :: [],
     groups :: [],
-    macaroon :: binary()
+    token :: binary()
 }).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -187,7 +186,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, cluster_logic, harvester_logic, space_storage]),
+        provider_logic, cluster_logic, harvester_logic, space_storage, provider_auth]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -234,14 +233,28 @@ clear_subscriptions(Worker) ->
 -spec setup_session(Worker :: node(), [#user_config{}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
-    macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
+setup_session(Worker, [{_, #user_config{
+    id = UserId,
+    spaces = Spaces,
+    token = Token,
+    groups = Groups,
+    name = UserName
+}} | R], Config) ->
 
     Name = fun(Text, User) ->
-        list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
+        list_to_binary(Text ++ "_" ++ binary_to_list(User))
+    end,
 
-    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
-    Iden = #user_identity{user_id = UserId},
+    Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
+
+    Identity = #user_identity{user_id = UserId},
+    Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
+    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+        Worker,
+        session_manager,
+        reuse_or_create_fuse_session,
+        [Nonce, Identity, Auth])
+    ),
 
     lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
@@ -250,9 +263,6 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         end
     end, Spaces),
 
-    Auth = #macaroon_auth{macaroon = Macaroon},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, Auth])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     [
         {{spaces, UserId}, Spaces},
@@ -261,6 +271,8 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
+        {{auth_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
+        {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
@@ -458,7 +470,7 @@ mock_provider_ids(Config) ->
     lists:foreach(fun(Domain) ->
         CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
-        mock_provider_id(CWorkers, ProviderId, <<"AuthMacaroon">>, <<"IdentityMacaroon">>)
+        mock_provider_id(CWorkers, ProviderId, <<"AuthToken">>, <<"IdentityToken">>)
     end, Domains).
 
 %%--------------------------------------------------------------------
@@ -467,16 +479,23 @@ mock_provider_ids(Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
-mock_provider_id(Workers, ProviderId, AuthMacaroon, IdentityMacaroon) ->
-    % Mock cached auth and identity macaroons with large TTL
+mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
+    ok = test_utils:mock_new(Workers, provider_auth),
+    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token,
+        fun(_Audience) ->
+            {ok, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)}
+        end
+    ),
+
+    % Mock cached auth and identity tokens with large TTL
     ExpirationTime = time_utils:system_time_seconds() + 999999999,
     rpc:call(hd(Workers), datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
             provider_id = ProviderId,
-            root_macaroon = <<>>,
-            cached_auth_macaroon = {ExpirationTime, AuthMacaroon},
-            cached_identity_macaroon = {ExpirationTime, IdentityMacaroon}
+            root_token = <<>>,
+            cached_access_token = {ExpirationTime, AccessToken},
+            cached_identity_token = {ExpirationTime, IdentityToken}
         }}]),
     ok.
 
@@ -593,7 +612,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
                     ok;
                 Workers ->
                     mock_provider_id(
-                        Workers, Id, ?DUMMY_PROVIDER_AUTH_MACAROON(Id), ?DUMMY_PROVIDER_IDENTITY_MACAROON(Id)
+                        Workers, Id, ?DUMMY_PROVIDER_ACCESS_TOKEN(Id), ?DUMMY_PROVIDER_IDENTITY_TOKEN(Id)
                     )
             end
         end, Providers0)
@@ -668,14 +687,14 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Macaroon = ?DUMMY_USER_MACAROON(UserId),
+        Token = ?DUMMY_USER_TOKEN(UserId),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{UserId, #user_config{
             id = UserId,
             name = Name("name", UserId),
             spaces = SpacesList,
-            macaroon = Macaroon,
+            token = Token,
             default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}
@@ -697,6 +716,11 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports),
+
+    lists:foreach(fun(DomainWorker) ->
+        rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
+    end, get_different_domain_workers(Config)),
+
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
 
@@ -807,11 +831,9 @@ user_logic_mock_setup(Workers, Users) ->
         }}}
     end,
 
-    UsersByAuth = lists:flatmap(
-        fun({UserId, #user_config{macaroon = Macaroon}}) -> [
-            {#macaroon_auth{macaroon = Macaroon}, UserId}
-        ]
-        end, Users),
+    UsersByToken = lists:map(fun({UserId, #user_config{token = Token}}) ->
+        {Token, UserId}
+    end, Users),
 
     GetUserFun = fun
         (_, _, ?ROOT_USER_ID) ->
@@ -824,6 +846,21 @@ user_logic_mock_setup(Workers, Users) ->
                     {error, not_found};
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
+            end;
+        (_, #token_auth{token = Token}, UserId) ->
+            case proplists:get_value(Token, UsersByToken, undefined) of
+                undefined ->
+                    {error, not_found};
+                UserId ->
+                    case proplists:get_value(UserId, Users) of
+                        undefined ->
+                            {error, not_found};
+                        UserConfig2 ->
+                            UserConfigToUserDoc(UserConfig2)
+                    end;
+                _ ->
+                    {error, forbidden}
+
             end;
         (_, SessionId, UserId) ->
             {ok, #document{value = #session{
@@ -842,12 +879,10 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, user_logic, get_by_auth, fun(Auth) ->
-        case proplists:get_value(Auth, UsersByAuth, undefined) of
-            undefined ->
-                {error, not_found};
-            UserId ->
-                UserConfigToUserDoc(proplists:get_value(UserId, Users))
+    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
+        case proplists:get_value(UserToken, UsersByToken, undefined) of
+            undefined -> {error, not_found};
+            UserId -> {ok, ?USER(UserId)}
         end
     end),
 
@@ -1207,20 +1242,16 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             ok
         end),
 
-    VerifyProviderIdentityFun = fun(ProviderId, Macaroon) ->
-        case Macaroon of
-            ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId) -> ok;
-            _ -> {error, bad_macaroon}
-        end
+    VerifyProviderIdentityFun = fun
+        (?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)) ->
+            {ok, ?SUB(?ONEPROVIDER, ProviderId)};
+        (_) ->
+            ?ERROR_BAD_TOKEN
     end,
 
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        fun(ProviderId) ->
-            VerifyProviderIdentityFun(ProviderId, ?DUMMY_PROVIDER_IDENTITY_MACAROON(ProviderId))
-        end),
+    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity,
-        VerifyProviderIdentityFun).
+    test_utils:mock_expect(AllWorkers, token_logic, verify_identity, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1323,3 +1354,12 @@ index_of(Value, List) ->
         {Value, Index} -> Index;
         false -> not_found
     end.
+
+
+%% @private
+local_ip_v4() ->
+    {ok, Addrs} = inet:getifaddrs(),
+    hd([
+        Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
+        size(Addr) == 4, Addr =/= {127,0,0,1}
+    ]).

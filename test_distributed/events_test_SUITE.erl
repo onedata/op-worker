@@ -145,7 +145,7 @@ init_per_suite(Config) ->
         initializer:clear_subscriptions(Worker),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
@@ -181,8 +181,8 @@ init_per_testcase(Case, Config) when
     initializer:communicator_mock(Worker),
     {ok, SubId} = create_subscription(Case, Worker),
     SessIds = lists:map(fun(N) ->
-        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-        session_setup(Worker, SessId),
+        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
+        {ok, SessId} = session_setup(Worker, Nonce),
         SessId
     end, lists:seq(0, 4)),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
@@ -237,7 +237,7 @@ end_per_testcase(_Case, Config) ->
     initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     ok.
 
 %%%===================================================================
@@ -247,12 +247,12 @@ end_per_suite(Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"nonce">>
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+-spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
+    session_setup(Worker, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -260,15 +260,12 @@ session_setup(Worker) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
+-spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
     Iden = #user_identity{user_id = <<"user1">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Self]
-    )),
-    {ok, SessId}.
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, Iden, #token_auth{}, self()
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

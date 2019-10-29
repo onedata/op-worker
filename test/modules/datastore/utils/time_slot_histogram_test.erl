@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 new_histogram_should_have_last_update_set_to_zero_test() ->
     Histogram = time_slot_histogram:new(10, 10),

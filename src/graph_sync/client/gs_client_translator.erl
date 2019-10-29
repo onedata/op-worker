@@ -16,7 +16,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([translate/2, apply_scope_mask/2]).
@@ -31,7 +31,7 @@
 %% CREATE operations do not require translation.
 %% @end
 %%--------------------------------------------------------------------
--spec translate(gs_protocol:gri(), Result :: gs_protocol:data()) ->
+-spec translate(gri:gri(), Result :: gs_protocol:data()) ->
     datastore:doc().
 translate(#gri{type = od_provider, aspect = current_time}, #{<<"timeMillis">> := TimeMillis}) ->
     TimeMillis;

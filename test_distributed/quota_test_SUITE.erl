@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("proto/common/credentials.hrl").
 
@@ -573,19 +573,20 @@ events_sent_to_client_proxyio(Config) ->
 
 events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     #env{p1 = P1, file1 = Filename} = gen_test_env(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    User = <<"user1">>,
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(P1)}}, Config),
 
     SpaceSize = available_size(SupportingProvider, SpaceId),
     RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    {ok, {Conn, _}} = fuse_test_utils:connect_via_macaroon(P1, [{active, true}], SessId(P1)),
+    {ok, {Conn, SessId}} = fuse_test_utils:connect_as_user(Config, P1, User, [{active, true}]),
     SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),
-    rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId(P1)]),
+    rpc:call(P1, event, subscribe, [#subscription{id = SubId, type = #quota_exceeded_subscription{}}, SessId]),
 
     {FileGuid, _FileHandleId} = fuse_test_utils:create_file(Conn, RootGuid, Filename),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId(P1), {guid, FileGuid}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), {guid, FileGuid}, 0, crypto:strong_rand_bytes(SpaceSize))),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, write_to_file(P1, SessId, {guid, FileGuid}, 0, crypto:strong_rand_bytes(SpaceSize))),
     ?assertMatch(0, available_size(SupportingProvider, SpaceId), ?ATTEMPTS),
 
     ExpectedMessage = #'ServerMessage'{
@@ -621,7 +622,7 @@ init_per_testcase(Case, Config) when
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+        fun(#token_auth{token = ?TOKEN}) ->
                 {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
            (Auth) -> meck:passthrough([Auth])
         end
@@ -774,7 +775,7 @@ do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, ParentGuid,
         {<<"resumableFilename">>, FileName}, {<<"resumableChunkSize">>, integer_to_binary(ChunkSize)}],
 
     utils:pforeach(fun(Chunk) ->
-        rpc:call(Worker, page_file_upload, multipart, [#{size => PartSize, left => PartsNumber}, SessionId,
+        rpc:call(Worker, page_file_upload_deprecated, multipart, [#{size => PartSize, left => PartsNumber}, SessionId,
             [{<<"resumableChunkNumber">>, integer_to_binary(Chunk)} | ParamsProp]])
     end, lists:seq(1,ChunksNumber)).
 

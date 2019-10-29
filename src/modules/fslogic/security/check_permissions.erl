@@ -18,7 +18,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -154,15 +154,15 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks if file associated with handle has acl defined. If so, function
+%% Checks if file associated with handle has acl enabled. If so, function
 %% updates storage handle context to ROOT in provided arguments.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_root_context_if_file_has_acl([#sfm_handle{} | term()]) ->
     [#sfm_handle{} | term()].
 set_root_context_if_file_has_acl(Args = [Handle = #sfm_handle{file_uuid = FileUuid} | RestOfArgs]) ->
-    case acl:exists(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, undefined))) of %todo pass FileCtx from sfm_handle
-        true ->
+    case file_meta:get_active_perms_type(FileUuid) of
+        {ok, acl} ->
             [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->
             Args

@@ -19,7 +19,11 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -254,7 +258,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    [{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -262,10 +266,14 @@ init_per_testcase(_Case, Config) ->
     mock_communicator(Workers),
     Config.
 
+end_per_suite(_Config) ->
+    ok.
+
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, event_router,
-        stream_router]).
+    test_utils:mock_validate_and_unload(Workers, [
+        communicator, event_router, stream_router
+    ]).
 
 %%%===================================================================
 %%% Internal functions
@@ -279,8 +287,8 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
-    SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    session_setup(Worker, SessId).
+    Nonce = base64:encode(crypto:strong_rand_bytes(20)),
+    session_setup(Worker, Nonce).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -288,15 +296,12 @@ session_setup(Worker) ->
 %% Creates session document in datastore with given ID.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
+-spec session_setup(Worker :: node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
     Iden = #user_identity{user_id = <<"user_id">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, undefined, Self]
-    )),
-    {ok, SessId}.
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, Iden, undefined, self()
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

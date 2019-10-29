@@ -20,7 +20,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
@@ -84,8 +85,8 @@ all() ->
 -define(TIMEOUT, timer:seconds(5)).
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
--define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
--define(OBJECT_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-object">>}).
+-define(CONTAINER_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-container">>}).
+-define(OBJECT_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-object">>}).
 
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).

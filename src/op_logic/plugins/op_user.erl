@@ -16,8 +16,7 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
@@ -55,6 +54,7 @@ op_logic_plugin() ->
 -spec operation_supported(op_logic:operation(), op_logic:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(get, instance, private) -> true;
+operation_supported(get, instance, shared) -> true;
 operation_supported(get, eff_spaces, private) -> true;
 
 operation_supported(_, _, _) -> false.
@@ -86,10 +86,19 @@ fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) 
     case user_logic:get(SessionId, UserId) of
         {ok, #document{value = User}} ->
             {ok, {User, 1}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        _ ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
+    end;
+fetch_entity(#op_req{auth = ?USER(_ClientId, SessionId), auth_hint = AuthHint, gri = #gri{
+    id = UserId,
+    aspect = instance,
+    scope = shared
+}}) ->
+    case user_logic:get_shared_data(SessionId, UserId, AuthHint) of
+        {ok, #document{value = User}} ->
+            {ok, {User, 1}};
+        {error, _} = Error ->
+            Error
     end;
 fetch_entity(_) ->
     ?ERROR_FORBIDDEN.
@@ -116,6 +125,10 @@ authorize(#op_req{auth = ?NOBODY}, _) ->
 
 %% User can perform all operations on his record
 authorize(#op_req{auth = ?USER(UserId), gri = #gri{id = UserId}}, _) ->
+    true;
+
+authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}}, _) ->
+    % authorization was checked by oz in `fetch_entity`
     true.
 
 
@@ -148,8 +161,16 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{gri = #gri{aspect = instance}}, User) ->
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, User) ->
     {ok, User};
+get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_user{
+    full_name = FullName,
+    username = Username
+}) ->
+    {ok, #{
+        <<"fullName">> => FullName,
+        <<"username">> => Username
+    }};
 get(#op_req{gri = #gri{aspect = eff_spaces}}, User) ->
     user_logic:get_eff_spaces(User).
 

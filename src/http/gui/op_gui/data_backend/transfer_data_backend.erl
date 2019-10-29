@@ -23,8 +23,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -453,13 +452,13 @@ transfer_record(StateAndTransferId) ->
         {<<"finishTime">>, FinishTime},
         {<<"currentStat">>, TransferId},
         {<<"minuteStat">>, op_gui_utils:ids_to_association(
-            ?JOB_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, TransferId)},
+            ?JOB_TRANSFERS_TYPE, ?MINUTE_PERIOD, TransferId)},
         {<<"hourStat">>, op_gui_utils:ids_to_association(
-            ?JOB_TRANSFERS_TYPE, ?HOUR_STAT_TYPE, TransferId)},
+            ?JOB_TRANSFERS_TYPE, ?HOUR_PERIOD, TransferId)},
         {<<"dayStat">>, op_gui_utils:ids_to_association(
-            ?JOB_TRANSFERS_TYPE, ?DAY_STAT_TYPE, TransferId)},
+            ?JOB_TRANSFERS_TYPE, ?DAY_PERIOD, TransferId)},
         {<<"monthStat">>, op_gui_utils:ids_to_association(
-            ?JOB_TRANSFERS_TYPE, ?MONTH_STAT_TYPE, TransferId)}
+            ?JOB_TRANSFERS_TYPE, ?MONTH_PERIOD, TransferId)}
     ]}.
 
 
@@ -482,13 +481,13 @@ on_the_fly_transfer_record(RecordId) ->
         {<<"id">>, RecordId},
         {<<"replicatingProvider">>, ProviderId},
         {<<"minuteStat">>, op_gui_utils:ids_to_association(
-            ?ON_THE_FLY_TRANSFERS_TYPE, ?MINUTE_STAT_TYPE, TransferStatsId)},
+            ?ON_THE_FLY_TRANSFERS_TYPE, ?MINUTE_PERIOD, TransferStatsId)},
         {<<"hourStat">>, op_gui_utils:ids_to_association(
-            ?ON_THE_FLY_TRANSFERS_TYPE, ?HOUR_STAT_TYPE, TransferStatsId)},
+            ?ON_THE_FLY_TRANSFERS_TYPE, ?HOUR_PERIOD, TransferStatsId)},
         {<<"dayStat">>, op_gui_utils:ids_to_association(
-            ?ON_THE_FLY_TRANSFERS_TYPE, ?DAY_STAT_TYPE, TransferStatsId)},
+            ?ON_THE_FLY_TRANSFERS_TYPE, ?DAY_PERIOD, TransferStatsId)},
         {<<"monthStat">>, op_gui_utils:ids_to_association(
-            ?ON_THE_FLY_TRANSFERS_TYPE, ?MONTH_STAT_TYPE, TransferStatsId)}
+            ?ON_THE_FLY_TRANSFERS_TYPE, ?MONTH_PERIOD, TransferStatsId)}
     ]}.
 
 
@@ -523,7 +522,7 @@ transfer_time_stat_record(RecordId) ->
                     end;
                 {error, not_found} ->
                     % Return empty stats in case transfer stats document does not exist
-                    Window = transfer_histograms:type_to_time_window(StatsType),
+                    Window = transfer_histograms:period_to_time_window(StatsType),
                     CurrentTime = provider_logic:zone_time_seconds(),
                     Timestamp = transfer_histograms:trim_timestamp(CurrentTime),
                     {#{}, 0, Timestamp, Window};
@@ -558,11 +557,11 @@ transfer_time_stat_record(RecordId) ->
 %% transfer of given type and id.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_histograms(TransferType :: binary(), HistogramsType :: binary(),
+-spec prepare_histograms(TransferType :: binary(), Period :: binary(),
     TransferOrSpaceTransferStats :: transfer:transfer() | space_transfer_stats:space_transfer_stats()
 ) -> {transfer_histograms:histograms(), StartTime :: non_neg_integer(),
     LastUpdate :: non_neg_integer(), TimeWindow :: non_neg_integer()}.
-prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, Transfer) ->
+prepare_histograms(?JOB_TRANSFERS_TYPE, Period, Transfer) ->
     StartTime = Transfer#transfer.start_time,
 
     % Return historical statistics of finished transfers intact. As for active
@@ -570,72 +569,27 @@ prepare_histograms(?JOB_TRANSFERS_TYPE, HistogramsType, Transfer) ->
     % avoid fluctuations on charts
     {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
         false ->
-            RequestedHistograms = get_histograms(Transfer, HistogramsType),
-            Window = transfer_histograms:type_to_time_window(HistogramsType),
+            RequestedHistograms = transfer_histograms:get(Transfer, Period),
+            Window = transfer_histograms:period_to_time_window(Period),
             {RequestedHistograms, get_last_update(Transfer), Window};
         true ->
             LastUpdates = Transfer#transfer.last_update,
             CurrentTime = provider_logic:zone_time_seconds(),
-            prepare_histograms(Transfer, HistogramsType, CurrentTime, LastUpdates)
+            transfer_histograms:prepare(Transfer, Period, CurrentTime, LastUpdates)
     end,
     {Histograms, StartTime, LastUpdate, TimeWindow};
-prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, HistogramsType, SpaceTransferStats) ->
+prepare_histograms(?ON_THE_FLY_TRANSFERS_TYPE, Period, SpaceTransferStats) ->
     % Some functions from transfer_histograms module require specifying
     % start time parameter. But there is no conception of start time for
     % space_transfer_stats doc. So a long past value like 0 (year 1970) is used.
     StartTime = 0,
     CurrentTime = provider_logic:zone_time_seconds(),
     LastUpdates = SpaceTransferStats#space_transfer_stats.last_update,
-    {Histograms, LastUpdate, TimeWindow} = prepare_histograms(
-        SpaceTransferStats, HistogramsType, CurrentTime, LastUpdates
+    {Histograms, LastUpdate, TimeWindow} = transfer_histograms:prepare(
+        SpaceTransferStats, Period, CurrentTime, LastUpdates
     ),
     Pred = fun(_Provider, Histogram) -> lists:sum(Histogram) > 0 end,
     {maps:filter(Pred, Histograms), StartTime, LastUpdate, TimeWindow}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get histograms of requested type from given record. Pad them with zeroes
-%% to current time and erase recent n-seconds to avoid fluctuations on charts
-%% (due to synchronization between providers). To do that for type other than
-%% minute one, it is required to calculate also mentioned minute hists
-%% (otherwise it is not possible to trim histograms of other types).
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_histograms(Stats :: #transfer{} | #space_transfer_stats{},
-    HistogramsType :: binary(), CurrentTime :: non_neg_integer(),
-    LastUpdates :: #{od_provider:id() => non_neg_integer()}
-) ->
-    {transfer_histograms:histograms(), Timestamp :: non_neg_integer(),
-        TimeWindow :: non_neg_integer()}.
-prepare_histograms(Stats, ?MINUTE_STAT_TYPE, CurrentTime, LastUpdates) ->
-    Histograms = get_histograms(Stats, ?MINUTE_STAT_TYPE),
-    Window = ?FIVE_SEC_TIME_WINDOW,
-    PaddedHistograms = transfer_histograms:pad_with_zeroes(
-        Histograms, Window, LastUpdates, CurrentTime
-    ),
-    {NewHistograms, NewTimestamp} = transfer_histograms:trim_min_histograms(
-        PaddedHistograms, CurrentTime
-    ),
-    {NewHistograms, NewTimestamp, Window};
-
-prepare_histograms(Stats, HistogramsType, CurrentTime, LastUpdates) ->
-    MinHistograms = get_histograms(Stats, ?MINUTE_STAT_TYPE),
-    RequestedHistograms = get_histograms(Stats, HistogramsType),
-    TimeWindow = transfer_histograms:type_to_time_window(HistogramsType),
-
-    PaddedMinHistograms = transfer_histograms:pad_with_zeroes(
-        MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, CurrentTime
-    ),
-    PaddedRequestedHistograms = transfer_histograms:pad_with_zeroes(
-        RequestedHistograms, TimeWindow, LastUpdates, CurrentTime
-    ),
-    {_, NewRequestedHistograms, NewTimestamp} =
-        transfer_histograms:trim_histograms(PaddedMinHistograms,
-            PaddedRequestedHistograms, TimeWindow, CurrentTime),
-
-    {NewRequestedHistograms, NewTimestamp, TimeWindow}.
 
 
 %%--------------------------------------------------------------------
@@ -697,27 +651,3 @@ get_last_update(#transfer{start_time = StartTime, last_update = LastUpdateMap}) 
     % It is possible that there is no last update, if 0 bytes were
     % transferred, in this case take the start time.
     lists:max([StartTime | maps:values(LastUpdateMap)]).
-
-
--spec get_histograms(TransferStats :: #transfer{} | #space_transfer_stats{},
-    HistogramsType :: binary()) -> transfer_histograms:histograms().
-get_histograms(TransferStats, ?MINUTE_STAT_TYPE) ->
-    case TransferStats of
-        #transfer{min_hist = Histograms} -> Histograms;
-        #space_transfer_stats{min_hist = Histograms} -> Histograms
-    end;
-get_histograms(TransferStats, ?HOUR_STAT_TYPE) ->
-    case TransferStats of
-        #transfer{hr_hist = Histograms} -> Histograms;
-        #space_transfer_stats{hr_hist = Histograms} -> Histograms
-    end;
-get_histograms(TransferStats, ?DAY_STAT_TYPE) ->
-    case TransferStats of
-        #transfer{dy_hist = Histograms} -> Histograms;
-        #space_transfer_stats{dy_hist = Histograms} -> Histograms
-    end;
-get_histograms(TransferStats, ?MONTH_STAT_TYPE) ->
-    case TransferStats of
-        #transfer{mth_hist = Histograms} -> Histograms;
-        #space_transfer_stats{mth_hist = Histograms} -> Histograms
-    end.
