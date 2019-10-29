@@ -41,13 +41,9 @@ get_routing_key(#event{type = Type}, RoutingBase) ->
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingBase) ->
     get_routing_key_with_parent(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingBase);
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingBase) ->
-    FileGuid = file_id:pack_guid(
-        FileLocation#file_location.uuid,
-        FileLocation#file_location.space_id
-    ),
-    {ok, <<"file_location_changed.", FileGuid/binary>>};
+    {ok, <<"file_location_changed.", (FileLocation#file_location.uuid)/binary>>};
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingBase) ->
-    {ok, <<"file_perm_changed.", FileGuid/binary>>};
+    {ok, key_from_guid(<<"file_perm_changed.">>, FileGuid)};
 get_routing_key(#file_removed_event{file_guid = FileGuid}, RoutingBase) ->
     get_routing_key_with_parent(<<"file_removed.">>, FileGuid, RoutingBase);
 get_routing_key(#file_renamed_event{top_entry = Entry}, RoutingBase) ->
@@ -198,10 +194,15 @@ update_context(Evt, _Ctx) ->
     {ok, Key :: subscription_manager:key()} | {error, session_only}.
 get_routing_key_with_parent(Base, FileGuid, undefined) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
+    {ParentGUID, _} = file_ctx:get_parent_guid(FileCtx, undefined),
     case ParentGuid of
-        undefined -> {ok, <<Base/binary, FileGuid/binary>>}; % user's dir
-        _ -> {ok, <<Base/binary, ParentGuid/binary>>}
+        undefined -> {ok, key_from_guid(Base, FileGuid)}; % user's dir
+        _ -> {ok, key_from_guid(Base, ParentGUID)}
     end;
 get_routing_key_with_parent(Base, _FileGuid, ParentGUID) ->
-    {ok, <<Base/binary, ParentGUID/binary>>}.
+    {ok, key_from_guid(Base, ParentGUID)}.
+
+-spec key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
+key_from_guid(Prefix, Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    <<Prefix/binary, Uuid/binary>>.
