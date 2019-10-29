@@ -199,6 +199,9 @@ update_context(Evt, _Ctx) ->
 get_routing_key_with_parent(Base, FileGuid, undefined) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
-    {ok, <<Base/binary, ParentGuid/binary>>};
+    case ParentGuid of
+        undefined -> {ok, <<Base/binary, FileGuid/binary>>}; % user's dir
+        _ -> {ok, <<Base/binary, ParentGuid/binary>>}
+    end;
 get_routing_key_with_parent(Base, _FileGuid, ParentGUID) ->
     {ok, <<Base/binary, ParentGUID/binary>>}.
