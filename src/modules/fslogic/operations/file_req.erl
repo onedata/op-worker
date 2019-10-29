@@ -195,7 +195,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             _ ->
                 FileAttr
         end,
-        fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         #fuse_response{
         status = #status{code = ?OK},
             fuse_response = #file_created{
@@ -282,7 +282,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             _ ->
                 FileAttr
         end,
-        fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         Ans#fuse_response{fuse_response = FileAttr2}
     catch
         Error:Reason ->
