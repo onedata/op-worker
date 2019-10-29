@@ -33,7 +33,7 @@
 -type children() :: gb_sets:set(file_meta:name()).
 -type data_location_caveat() :: #cv_data_objectid{} | #cv_data_path{}.
 
--export_type([relation/0]).
+-export_type([relation/0, children/0, data_location_caveat/0]).
 
 
 %%%===================================================================

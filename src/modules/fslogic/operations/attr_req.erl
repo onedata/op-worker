@@ -38,8 +38,7 @@
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:authorize(
-        UserCtx, FileCtx0,
-        [traverse_ancestors]
+        UserCtx, FileCtx0, [traverse_ancestors], false
     ),
     get_file_attr_insecure(UserCtx, FileCtx1).
 

@@ -32,8 +32,7 @@
     fslogic_worker:fuse_response().
 resolve_guid(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:authorize(
-        UserCtx, FileCtx0,
-        [traverse_ancestors]
+        UserCtx, FileCtx0, [traverse_ancestors], false
     ),
     resolve_guid_insecure(UserCtx, FileCtx1).
 
@@ -46,8 +45,7 @@ resolve_guid(UserCtx, FileCtx0) ->
     fslogic_worker:provider_response().
 get_parent(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:authorize(
-        UserCtx, FileCtx0,
-        [traverse_ancestors]
+        UserCtx, FileCtx0, [traverse_ancestors], false
     ),
     get_parent_insecure(UserCtx, FileCtx1).
 
@@ -60,8 +58,7 @@ get_parent(UserCtx, FileCtx0) ->
     fslogic_worker:provider_response().
 get_file_path(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:authorize(
-        UserCtx, FileCtx0,
-        [traverse_ancestors]
+        UserCtx, FileCtx0, [traverse_ancestors], false
     ),
     get_file_path_insecure(UserCtx, FileCtx1).
 
