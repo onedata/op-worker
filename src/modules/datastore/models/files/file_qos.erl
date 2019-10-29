@@ -54,10 +54,6 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
-%% test API
--export([get/1]).
-
-
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
 -type effective_file_qos() :: #effective_file_qos{}.
@@ -73,11 +69,6 @@
 %%%===================================================================
 %%% Functions operating on file_qos document using datastore_model API
 %%%===================================================================
-
--spec get(key()) -> {ok, datastore:doc()} | {error, term()}.
-get(Key) ->
-    datastore_model:get(?CTX, Key).
-
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->

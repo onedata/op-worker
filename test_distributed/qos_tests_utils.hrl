@@ -59,7 +59,7 @@
     qos_name :: qos_name(), % name of QoS - used only in tests to identify different QoS
     path :: file_meta:path(), % path to file / directory for which QoS should be added
     expression :: qos_expression:raw(), % QoS expression in infix notation
-    replicas_num = 1 :: non_neg_integer() % number of required replicas
+    replicas_num = 1 :: qos_entry:replics_num() % number of required replicas
 }).
 
 
@@ -71,7 +71,7 @@
     % below fields correspond to fields of QoS entry record
     file_key :: {path, file_meta:path()} | {uuid, file_meta:uuid()},
     qos_expression_in_rpn :: qos_expression:rpn(),
-    replicas_num :: non_neg_integer(),
+    replicas_num :: qos_entry:replics_num(),
     is_possible = true :: boolean()
 }).
 

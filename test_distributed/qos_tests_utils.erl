@@ -384,7 +384,10 @@ assert_file_qos_document(Worker, FileUuid, QosEntries, TargetStorages, FilePath,
     ExpectedFileQosSorted = sort_file_qos(ExpectedFileQos),
 
     GetSortedFileQosFun = fun() ->
-        {ok, #document{value = FileQos}} = ?assertMatch({ok, _Doc}, rpc:call(Worker, file_qos, get, [FileUuid])),
+        {ok, #document{value = FileQos}} = ?assertMatch(
+            {ok, _Doc},
+            rpc:call(Worker, datastore_model, get, [file_qos:get_ctx(), FileUuid])
+        ),
         FileQosSorted = sort_file_qos(FileQos),
         ErrMsg = str_utils:format(
             "Worker: ~p~n"
@@ -424,7 +427,7 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS, 
             ),
 
             % check that for file document has not been created
-            ?assertMatch({error, not_found}, rpc:call(Worker, file_qos, get, [FileUuid]))
+            ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
 
         end, Workers)
     end, ExpectedEffQosEntries).
