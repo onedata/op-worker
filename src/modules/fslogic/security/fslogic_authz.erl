@@ -30,7 +30,7 @@
 -spec authorize(user_ctx:ctx(), file_ctx:ctx(), [fslogic_access:requirement()]) ->
     file_ctx:ctx() | no_return().
 authorize(UserCtx, FileCtx0, AccessRequirements) ->
-    FileCtx1 = check_constraints(UserCtx, FileCtx0),
+    FileCtx1 = check_caveats(UserCtx, FileCtx0),
     fslogic_access:assert_granted(UserCtx, FileCtx1, AccessRequirements).
 
 
@@ -40,9 +40,9 @@ authorize(UserCtx, FileCtx0, AccessRequirements) ->
 
 
 %% @private
--spec check_constraints(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec check_caveats(user_ctx:ctx(), file_ctx:ctx()) ->
     file_ctx:ctx().
-check_constraints(UserCtx, FileCtx) ->
+check_caveats(UserCtx, FileCtx) ->
     case user_ctx:get_caveats(UserCtx) of
         [] ->
             FileCtx;
@@ -53,71 +53,23 @@ check_constraints(UserCtx, FileCtx) ->
                 SessionAuth ->
                     SessionAuth
             end,
-            check_data_location_constraints(
-                SessionDiscriminator, FileCtx, Caveats
+            check_data_location_caveats(
+                SessionDiscriminator, FileCtx, false,
+                caveats:filter(?DATA_LOCATION_CAVEATS, Caveats)
             )
     end.
 
 
 %% @private
--spec check_data_location_constraints(binary(), file_ctx:ctx(),
+-spec check_data_location_caveats(binary(), file_ctx:ctx(), boolean(),
     [caveats:caveat()]) -> file_ctx:ctx().
-check_data_location_constraints(SerializedToken, FileCtx, Caveats) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
-    case caveats:filter(?DATA_LOCATION_CAVEATS, Caveats) of
-        [] ->
-            FileCtx;
-        DataLocationCaveats ->
-            check_and_cache_result(
-                {data_location_constraints, SerializedToken, Guid},
-                FileCtx,
-                fun check_data_location_caveats/2,
-                [DataLocationCaveats, FileCtx]
-            )
-    end.
+check_data_location_caveats(_SerializedToken, FileCtx, _AllowAncestors, []) ->
+    FileCtx;
+check_data_location_caveats(SerializedToken, FileCtx0, AllowAncestors, Caveats) ->
+    Guid = file_ctx:get_guid_const(FileCtx0),
+    CacheKey = {data_location_caveats, SerializedToken, Guid},
+    LsCacheKey = {data_location_caveats_ls, SerializedToken, Guid},
 
-
-%% @private
--spec check_data_location_caveats([caveats:caveat()], file_ctx:ctx()) ->
-    {ok, file_ctx:ctx()} | no_return().
-check_data_location_caveats([], FileCtx) ->
-    {ok, FileCtx};
-check_data_location_caveats([#cv_data_path{whitelist = Paths} | Rest], FileCtx0) ->
-    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-    IsPathAllowed = lists:any(fun(Path) ->
-        str_utils:binary_starts_with(Path, FilePath)
-    end, Paths),
-
-    case IsPathAllowed of
-        true -> check_data_location_caveats(Rest, FileCtx1);
-        false -> throw(?EACCES)
-    end;
-check_data_location_caveats([#cv_data_objectid{whitelist = ObjectIds} | Rest], FileCtx0) ->
-    AllowedGuids = lists:map(fun(ObjectId) ->
-        {ok, Guid} = file_id:objectid_to_guid(ObjectId),
-        Guid
-    end, ObjectIds),
-    {AncestorsGuids, FileCtx1} = file_ctx:get_ancestors_guids(FileCtx0),
-
-    IsGuidAllowed = lists:any(fun(Guid) ->
-        lists:member(Guid, AllowedGuids)
-    end, [file_ctx:get_guid_const(FileCtx1) | AncestorsGuids]),
-
-    case IsGuidAllowed of
-        true -> check_data_location_caveats(Rest, FileCtx1);
-        false -> throw(?EACCES)
-    end.
-
-
-%% @private
--spec check_and_cache_result(
-    CacheKey :: term(),
-    file_ctx:ctx(),
-    CheckFun :: function(),
-    CheckFunArgs :: [term()]
-) ->
-    file_ctx:ctx() | no_return().
-check_and_cache_result(CacheKey, FileCtx0, CheckFun, CheckFunArgs) ->
     case permissions_cache:check_permission(CacheKey) of
         {ok, ok} ->
             FileCtx0;
@@ -125,9 +77,14 @@ check_and_cache_result(CacheKey, FileCtx0, CheckFun, CheckFunArgs) ->
             throw(?EACCES);
         _ ->
             try
-                {ok, FileCtx1} = apply(CheckFun, CheckFunArgs),
-                permissions_cache:cache_permission(CacheKey, ok),
-                FileCtx1
+                case fslogic_caveats:verify_data_location_caveats(FileCtx0, Caveats, AllowAncestors) of
+                    {subpath, FileCtx1, _} ->
+                        permissions_cache:cache_permission(CacheKey, ok),
+                        FileCtx1;
+                    {ancestor, FileCtx1, _Names} ->
+                        permissions_cache:cache_permission(LsCacheKey, ok),
+                        FileCtx1
+                end
             catch _:?EACCES ->
                 permissions_cache:cache_permission(CacheKey, ?EACCES),
                 throw(?EACCES)
