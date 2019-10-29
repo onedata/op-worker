@@ -127,8 +127,10 @@ handle_info(remove_session, #state{session_id = SessId} = State) ->
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
-handle_info(check_session_status, #state{session_id = SessId,
-    session_ttl = TTL} = State) ->
+handle_info(check_session_status, #state{
+    session_id = SessId,
+    session_ttl = TTL
+} = State) ->
     RemoveSession = case session:get(SessId) of
         {ok, #document{value = #session{status = inactive}}} ->
             true;

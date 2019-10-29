@@ -114,12 +114,16 @@ query(<<"file-distribution">>, [{<<"file">>, FileId}]) ->
         fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks, <<"totalBlocksSize">> := TotalBlocksSize}) ->
             % JSON keys must be binaries
             Data = [{integer_to_binary(BarNum), Fill} || {BarNum, Fill} <- interpolate_chunks(Blocks, FileSize)],
+            BlocksPercentage = case FileSize of
+                0 -> 0;
+                _ -> TotalBlocksSize * 100.0 / FileSize
+            end,
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"file">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"chunksBarData">>, Data},
-                {<<"blocksPercentage">>, TotalBlocksSize * 100.0 / FileSize},
+                {<<"blocksPercentage">>, BlocksPercentage},
                 {<<"neverSynchronized">>, false}
             ]
         end, Distributions),
