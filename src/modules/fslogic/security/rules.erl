@@ -42,7 +42,6 @@ check_normal_or_default_def({Type, SubjectCtx}, UserCtx, FileCtx) ->
     {ok, _} = check_normal_def({Type, SubjectCtx}, UserCtx, FileCtx),
     {ok, FileCtx};
 check_normal_or_default_def(Type, UserCtx, FileCtx) ->
-    % ?error("1"),
     {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx).
 
 
@@ -92,18 +91,15 @@ check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
             {ok, SubjectCtx3}
     end;
 check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
-    % ?error("Log bef line 95: ~p ~p ~p", [Type, SubjectCtx, UserCtx]),
     {FileDoc, SubjectCtx2} = file_ctx:get_file_doc_including_deleted(SubjectCtx),
     ShareId = file_ctx:get_share_id_const(SubjectCtx2),
-    Res = case file_ctx:get_active_perms_type(SubjectCtx2) of
+    case file_ctx:get_active_perms_type(SubjectCtx2) of
         {posix, SubjectCtx3} ->
             check(Type, FileDoc, UserCtx, ShareId, undefined, SubjectCtx3);
         {acl, SubjectCtx3} ->
             {Acl, _} = file_ctx:get_acl(SubjectCtx3),
             check(Type, FileDoc, UserCtx, ShareId, Acl, SubjectCtx3)
-    end,
-    % ?error("Log Aft line 105: ~p ~p ~p", [Type, SubjectCtx, UserCtx]),
-    Res.
+    end.
 
 
 %%%===================================================================
@@ -176,10 +172,7 @@ check(?add_subcontainer, Doc, UserCtx, ShareId, undefined, FileCtx) ->
 check(?read_metadata, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(read, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?write_metadata, Doc, UserCtx, ShareId, undefined, FileCtx) ->
-    % ?error("Log line 178: ~p ~p ~p", [Doc, UserCtx, FileCtx]),
-    Res = check(write, Doc, UserCtx, ShareId, undefined, FileCtx),
-    % ?error("Log Aft line 180: ~p ~p ~p", [Doc, UserCtx, FileCtx]),
-    Res;
+    check(write, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?traverse_container, Doc, UserCtx, ShareId, undefined, FileCtx) ->
     check(exec, Doc, UserCtx, ShareId, undefined, FileCtx);
 check(?delete_object, Doc, UserCtx, ShareId, undefined, FileCtx) ->
@@ -237,14 +230,11 @@ check(?read_metadata, _, UserCtx, ShareId, Acl, FileCtx) ->
     ),
     validate_scope_privs(read, FileCtx, UserCtx, ShareId);
 check(?write_metadata, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
-    % ?error("Log line 239: ~p, ~p, ~p", [UserCtx, Acl, FileCtx]),
     acl:assert_permitted(
         Acl, user_ctx:get_user(UserCtx),
         ?write_metadata_mask, FileCtx
     ),
-    Res = validate_scope_privs(write, FileCtx, UserCtx, ShareId),
-    % ?error("Log  Aftline 235: ~p, ~p, ~p", [UserCtx, Acl, FileCtx]),
-    Res;
+    validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(?traverse_container, #document{value = #file_meta{is_scope = true}},
     UserCtx, ShareId, Acl, FileCtx
 ) ->
@@ -303,8 +293,8 @@ check(?write_acl, _Doc, UserCtx, ShareId, Acl, FileCtx) ->
     ),
     validate_scope_privs(write, FileCtx, UserCtx, ShareId);
 check(Perm, File, User, ShareId, Acl, _FileCtx) ->
-    % ?error("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)",
-%%        [Perm, File, User, ShareId, Acl]),
+    ?error("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)",
+        [Perm, File, User, ShareId, Acl]),
     throw(?EACCES).
 
 
@@ -333,7 +323,7 @@ validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
         owner = OwnerId,
         mode = Mode
     }}, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    % ?error("Log line 335"),
+
     ReqBit0 = case AccessType of
         read -> 8#4;
         write -> 8#2;
@@ -351,11 +341,9 @@ validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
                     ReqBit0     % remain at other posix mode bits
             end
     end,
-    % ?error("Log AFt line 354, Mode: ~p, ReqBit1: ~p, AccessType: ~p, UserCtx, ~p OwnerId: ~p", [Mode, ReqBit1, AccessType, UserCtx, OwnerId]),
 
     case ?has_flag(Mode, ReqBit1) of
         true ->
-            % ?error("Log line 356"),
             {ok, FileCtx2};
         false ->
             throw(?EACCES)

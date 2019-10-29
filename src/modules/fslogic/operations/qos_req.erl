@@ -112,30 +112,29 @@ check_fulfillment(UserCtx, FileCtx, QosEntryId) ->
 -spec add_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
 add_qos_entry_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
-    QosExpressionInRPN = case qos_expression:raw_to_rpn(QosExpression) of
-        {ok, Expression} ->
-            Expression;
+    case qos_expression:raw_to_rpn(QosExpression) of
+        {ok, QosExpressionInRPN} ->
+            % TODO: VFS-5567 for now target storage for dir is selected here and
+            % does not change in qos traverse task. Have to figure out how to
+            % choose different storages for subdirs and/or file if multiple storage
+            % fulfilling qos are available.
+            CalculatedStorages = calculate_target_storages(user_ctx:get_session_id(UserCtx),
+                FileCtx, QosExpressionInRPN, ReplicasNum),
+
+            case CalculatedStorages of
+                {true, TargetStoragesList} ->
+                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList);
+                false ->
+                    add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum);
+                ?ERROR_INVALID_QOS_EXPRESSION ->
+                    #provider_response{status = #status{code = ?EINVAL}};
+                _ ->
+                    #provider_response{status = #status{code = ?EAGAIN}}
+            end;
         ?ERROR_INVALID_QOS_EXPRESSION ->
             #provider_response{status = #status{code = ?EINVAL}}
-    end,
-
-    % TODO: VFS-5567 for now target storage for dir is selected here and
-    % does not change in qos traverse task. Have to figure out how to
-    % choose different storages for subdirs and/or file if multiple storage
-    % fulfilling qos are available.
-    CalculatedStorages = calculate_target_storages(user_ctx:get_session_id(UserCtx),
-        FileCtx, QosExpressionInRPN, ReplicasNum),
-
-    case CalculatedStorages of
-        {true, TargetStoragesList} ->
-            add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList);
-        false ->
-            add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum);
-        ?ERROR_INVALID_QOS_EXPRESSION ->
-            #provider_response{status = #status{code = ?EINVAL}};
-        _ ->
-            #provider_response{status = #status{code = ?EAGAIN}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -300,28 +299,24 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
 -spec calculate_target_storages(session:id(), file_ctx:ctx(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {true, [storage:id()]} | false | {error, term()}.
 calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
-    case file_ctx:get_file_location_docs(FileCtx) of
-        {FileLocationsDoc, _NewFileCtx} ->
-            ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
-                #file_location{provider_id = ProviderId, blocks = Blocks} = FileLocation,
-                TotalBlocksSize = lists:foldl(fun(#file_block{size = S}, SizeAcc) ->
-                    SizeAcc + S
-                end, 0, Blocks),
-                #{
-                    <<"providerId">> => ProviderId,
-                    <<"totalBlocksSize">> => TotalBlocksSize
-                }
-            end, FileLocationsDoc),
+    {FileLocationsDoc, _NewFileCtx} =  file_ctx:get_file_location_docs(FileCtx),
+    ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
+        #file_location{provider_id = ProviderId, blocks = Blocks} = FileLocation,
+        TotalBlocksSize = lists:foldl(fun(#file_block{size = S}, SizeAcc) ->
+            SizeAcc + S
+        end, 0, Blocks),
+        #{
+            <<"providerId">> => ProviderId,
+            <<"totalBlocksSize">> => TotalBlocksSize
+        }
+    end, FileLocationsDoc),
 
-            % TODO: VFS-5574 add check if storage has enough free space
-            % call using ?MODULE macro for mocking in tests
-            SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
-            qos_expression:calculate_target_storages(
-                Expression, ReplicasNum, SpaceStorages, ProvidersBlocks
-            );
-        Error ->
-            Error
-    end.
+    % TODO: VFS-5574 add check if storage has enough free space
+    % call using ?MODULE macro for mocking in tests
+    SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
+    qos_expression:calculate_target_storages(
+        Expression, ReplicasNum, SpaceStorages, ProvidersBlocks
+    ).
 
 
 %%--------------------------------------------------------------------

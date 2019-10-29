@@ -20,7 +20,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/logging.hrl").
 %% API
 -export([execute/3]).
 
@@ -71,23 +70,9 @@ execute(AccessDefinitions, Args = [#sfm_handle{
 execute(AccessDefinitions, Args = [UserCtx, DefaultFileCtx | OtherArgs], Function) ->
     {ExpandedAccessDefinitions, DefaultFileCtx2} =
         expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    ?error("2"),
-    try
-        rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2)
-    catch
-        Error ->
-            ?error("QWE: ~p  ~n Err: ~p", [erlang:get_stacktrace(), Error]),
-            throw(Error)
-    end,
-    ?error("3"),
+    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
     NewArgs = [UserCtx, DefaultFileCtx2 | OtherArgs],
-    try
-        apply(Function, NewArgs)
-    catch
-        Error2 ->
-            ?error("QWE2: ~p  ~n Err: ~p", [erlang:get_stacktrace(), Error2]),
-            throw(Error2)
-    end.
+    apply(Function, NewArgs).
 
 %%%===================================================================
 %%% Internal functions
