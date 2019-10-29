@@ -441,7 +441,7 @@ end).
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
         <<"gri">> => gri:serialize(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
-        <<"spaces">> => case __ProviderId of
+        <<"effectiveSpaces">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> #{};
             _ -> ?PROVIDER_SPACES_VALUE(__ProviderId)
         end,

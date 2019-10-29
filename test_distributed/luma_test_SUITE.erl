@@ -896,7 +896,7 @@ init_per_testcase(_Case, Config) ->
         (?USER_ID, ?SESS_ID, ?OAUTH2_IDP) ->
             {ok, {?IDP_USER_TOKEN, ?TTL}}
     end),
-    ok = test_utils:mock_expect(Worker, space_logic, get_storage_ids, fun(_) ->
+    ok = test_utils:mock_expect(Worker, space_logic, get_local_storage_ids, fun(_) ->
         {ok, [<<"whatever">>]}
     end),
     Config.

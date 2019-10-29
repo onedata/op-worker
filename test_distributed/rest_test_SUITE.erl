@@ -211,7 +211,7 @@ mock_space_logic(Config) ->
         fun(_, ?SPACE_ID) ->
             {ok, ?SPACE_NAME}
         end),
-    test_utils:mock_expect(Workers, space_logic, get_storage_ids,
+    test_utils:mock_expect(Workers, space_logic, get_local_storage_ids,
         fun (_SpaceId) ->
             {ok, lists:foldl(fun(Worker, Acc) ->
                 case ?config({storage_id, ?GET_DOMAIN(Worker)}, Config) of
