@@ -42,7 +42,7 @@ subscribe_on_dir_test(Config) ->
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
 
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
