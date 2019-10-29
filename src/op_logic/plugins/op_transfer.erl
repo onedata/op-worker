@@ -77,7 +77,10 @@ operation_supported(_, _, _) -> false.
 data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= instance;
+    As =:= progress
+->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = throughput_charts}}) -> #{
