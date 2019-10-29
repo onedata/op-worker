@@ -195,6 +195,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             _ ->
                 FileAttr
         end,
+        fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         #fuse_response{
         status = #status{code = ?OK},
             fuse_response = #file_created{
@@ -273,7 +274,16 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     try
         {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
-        attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
+        #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} = Ans =
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
+        FileAttr2 = case Size of
+            undefined ->
+                FileAttr#file_attr{size = 0};
+            _ ->
+                FileAttr
+        end,
+        fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        Ans#fuse_response{fuse_response = FileAttr2}
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
