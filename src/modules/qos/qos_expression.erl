@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions operating on qos expressions.
+%%% This module contains functions operating on QoS expressions.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_expression).
@@ -20,7 +20,7 @@
 %% API
 -export([raw_to_rpn/1, calculate_target_storages/4]).
 
-% the raw type stores expression as single binary. It is used to store inupt
+% the raw type stores expression as single binary. It is used to store input
 % from user. In the process of adding new qos_entry raw expression is
 % parsed to rpn form (list of key-value binaries separated by operators)
 -type raw() :: binary(). % e.g. <<"country=FR&type=disk">>
@@ -56,6 +56,7 @@ raw_to_rpn(Expression) ->
             ?ERROR_INVALID_QOS_EXPRESSION
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Calculate list of storages on which file should be replicated according to given
@@ -67,6 +68,7 @@ raw_to_rpn(Expression) ->
     {ture, [storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
 calculate_target_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
     false;
+
 calculate_target_storages(Expression, ReplicasNum, SpaceStorages, FileLocations) ->
     % TODO: VFS-5734 choose storages for dirs according to current files distribution
     try
@@ -132,6 +134,7 @@ handle_right_paren([Op | Stack], RPNExpression) ->
 handle_right_paren([], _RPNExpression) ->
     throw(?ERROR_INVALID_QOS_EXPRESSION).
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -152,6 +155,7 @@ handle_operator(ParsedOp, [StackOperator | Stack], RPNExpression) when
     handle_operator(ParsedOp, Stack, RPNExpression ++ [StackOperator]);
 handle_operator(ParsedOperator, Stack, RPNExpression) ->
     {[ParsedOperator | Stack], RPNExpression}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -204,6 +208,7 @@ filter_storage(Key, Val, StorageSet) ->
         end
     end, StorageSet).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @private
@@ -231,6 +236,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
         _ ->
             false
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

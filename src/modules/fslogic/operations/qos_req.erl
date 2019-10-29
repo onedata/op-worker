@@ -13,9 +13,9 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -38,7 +38,7 @@
     fslogic_worker:provider_response().
 add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum) ->
     check_permissions:execute(
-        [owner],
+        [traverse_ancestors, ?write_metadata],
         [UserCtx, FileCtx, Expression, ReplicasNum],
         fun add_qos_entry_insecure/4
     ).
@@ -51,7 +51,7 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum) ->
     fslogic_worker:provider_response().
 get_effective_file_qos(UserCtx, FileCtx) ->
     check_permissions:execute(
-        [owner],
+        [traverse_ancestors, ?read_metadata],
         [UserCtx, FileCtx],
         fun get_effective_file_qos_insecure/2
     ).
@@ -64,7 +64,7 @@ get_effective_file_qos(UserCtx, FileCtx) ->
     fslogic_worker:provider_response().
 get_qos_entry(UserCtx, FileCtx, QosEntryId) ->
     check_permissions:execute(
-        [owner],
+        [traverse_ancestors, ?read_metadata],
         [UserCtx, FileCtx, QosEntryId],
         fun get_qos_entry_insecure/3
     ).
@@ -77,7 +77,7 @@ get_qos_entry(UserCtx, FileCtx, QosEntryId) ->
     fslogic_worker:provider_response().
 remove_qos_entry(UserCtx, FileCtx, QosEntryId) ->
     check_permissions:execute(
-        [owner],
+        [traverse_ancestors, ?write_metadata],
         [UserCtx, FileCtx, QosEntryId],
         fun remove_qos_entry_insecure/3
     ).
@@ -90,7 +90,7 @@ remove_qos_entry(UserCtx, FileCtx, QosEntryId) ->
     fslogic_worker:provider_response().
 check_fulfillment(UserCtx, FileCtx, QosEntryId) ->
     check_permissions:execute(
-        [owner],
+        [traverse_ancestors, ?read_metadata],
         [UserCtx, FileCtx, QosEntryId],
         fun check_fulfillment_insecure/3
     ).
@@ -103,9 +103,9 @@ check_fulfillment(UserCtx, FileCtx, QosEntryId) ->
 %% @private
 %% @doc
 %% Creates new qos_entry document. Transforms expression to RPN form.
-%% Delegates traverse jobs responsible for data management for given QoS
+%% Delegates traverse jobs responsible for data management for given QoS entry
 %% to appropriate providers. This is done by creating qos_traverse_req for
-%% given QoS that holds information for which file and on which storage
+%% given QoS entry that holds information for which file and on which storage
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
@@ -141,7 +141,7 @@ add_qos_entry_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
 %% @private
 %% @doc
 %% Gets effective QoS for given file or directory. Returns empty effective QoS
-%% if no QoS requirements are defined for file/directory.
+%% if there is no QoS entry that influences file/directory.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos_insecure(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:provider_response().
@@ -168,7 +168,7 @@ get_effective_file_qos_insecure(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gets details about qos_entry.
+%% Gets details about QoS entry.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
@@ -185,8 +185,7 @@ get_qos_entry_insecure(_UserCtx, _FileCtx, QosEntryId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes qos_entry ID from file_qos documents then removes qos_entry document
-%% for given QoS.
+%% Removes qos_entry ID from file_qos documents then removes qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
@@ -195,8 +194,8 @@ remove_qos_entry_insecure(_UserCtx, FileCtx, QosEntryId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    % TODO: VFS-5567 For now QoS is added only for file or dir
-    % for which QoS has been added, so starting traverse is not needed.
+    % TODO: VFS-5567 For now QoS entry is added only for file or dir
+    % for which it has been added, so starting traverse is not needed.
     try
         ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId),
         SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -299,18 +298,26 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_target_storages(session:id(), file_ctx:ctx(), qos_expression:rpn(),
-    pos_integer()) -> {true, [storage:id()]} | false | {error, term()}.
+    qos_entry:replicas_num()) -> {true, [storage:id()]} | false | {error, term()}.
 calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    FileKey = {guid, FileGuid},
+    case file_ctx:get_file_location_docs(FileCtx) of
+        {FileLocationsDoc, _NewFileCtx} ->
+            ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
+                #file_location{provider_id = ProviderId, blocks = Blocks} = FileLocation,
+                TotalBlocksSize = lists:foldl(fun(#file_block{size = S}, SizeAcc) ->
+                    SizeAcc + S
+                end, 0, Blocks),
+                #{
+                    <<"providerId">> => ProviderId,
+                    <<"totalBlocksSize">> => TotalBlocksSize
+                }
+            end, FileLocationsDoc),
 
-    case lfm:get_file_distribution(SessId, FileKey) of
-        {ok, FileLocations} ->
             % TODO: VFS-5574 add check if storage has enough free space
             % call using ?MODULE macro for mocking in tests
             SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
             qos_expression:calculate_target_storages(
-                Expression, ReplicasNum, SpaceStorages, FileLocations
+                Expression, ReplicasNum, SpaceStorages, ProvidersBlocks
             );
         Error ->
             Error

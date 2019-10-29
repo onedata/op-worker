@@ -197,7 +197,7 @@ notify_finished_task_async(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Sends message to server to notify about finished task.
+%% Sends asynchronous message to server to notify about finished task.
 %% @end
 %%-------------------------------------------------------------------
 -spec notify_finished_task_async_internal(od_space:id()) -> ok.

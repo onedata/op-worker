@@ -5,26 +5,27 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc The qos_entry document contains information about single QoS requirement
-%%% including QoS expression, number of required replicas, UUID of file or
-%%% directory for which requirement has been added, information whether QoS
-%%% requirement can be satisfied and information about traverse requests.
+%%% @doc The qos_entry document is synchronized within space. It contains
+%%% information about single QoS requirement including QoS expression, number
+%%% of required replicas, UUID of file or directory for which requirement has
+%%% been added, information whether QoS requirement can be satisfied and
+%%% information about traverse requests.
 %%% Such document is created when user adds QoS requirement for file or directory.
-%%% Requirement added for directory is inherited by whole directory structure.
-%%% Each QoS requirement is evaluated separately. It means that it is not
-%%% possible to define inconsistent requirements. For example if one requirement
-%%% says that file should be present on storage in Poland and other requirement
+%%% qos_entry added for directory is inherited by whole directory structure.
+%%% Each qos_entry is evaluated separately. It means that it is not
+%%% possible to define inconsistent requirements. For example if one qos_entry
+%%% says that file should be present on storage in Poland and other qos_entry
 %%% says that file should be present on storage in any country but Poland,
 %%% two different replicas will be created. On the other hand the same file
-%%% replica can fulfill multiple different QoS requirements. For example if
+%%% replica can fulfill multiple different qos_entries. For example if
 %%% there is storage of type disk in Poland, then replica on such storage can
-%%% fulfill requirements that demands replica on storage in Poland and requirements
+%%% fulfill QoS entry that demands replica on storage in Poland and qos_entry
 %%% that demands replica on storage of type disk.
 %%% Multiple qos_entry documents can be created for the same file or directory.
 %%% Adding two identical QoS requirements for the same file results in two
 %%% different qos_entry documents.
-%%% QoS requirement is considered as fulfilled when:
-%%%     - there is no information that QoS requirement cannot be
+%%% qos_entry is considered as fulfilled when:
+%%%     - there is no information that qos_entry cannot be
 %%%       satisfied (this information is stored in is_possible field
 %%%       in qos_entry document. It is set to true if during evaluation of
 %%%       QoS expression it was not possible to calculate list of storages
@@ -32,7 +33,8 @@
 %%%     - there are no traverse requests in qos_entry document. Traverse requests
 %%%       are added to qos_entry document on its creation and removed from document
 %%%       when traverse task for this request is completed
-%%%     - all traverse tasks, triggered by creating this QoS requirement, are finished
+%%%     - there are no links indicating that file has been changed and it should
+%%%       be reconciled (see qos_status.erl)
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
@@ -62,7 +64,7 @@
     get_file_uuid/1, get_traverse_map/1, are_all_traverses_finished/1
 ]).
 
-%% functions responsible for traverses under given QoS entry.
+%% functions responsible for traverses under given qos_entry.
 -export([remove_traverse_req/2]).
 
 %% datastore_model callbacks

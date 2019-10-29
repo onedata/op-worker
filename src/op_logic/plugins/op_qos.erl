@@ -15,8 +15,8 @@
 
 -behaviour(op_logic_behaviour).
 
--include("op_logic.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("op_logic.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 

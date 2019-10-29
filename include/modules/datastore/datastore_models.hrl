@@ -277,7 +277,7 @@
     target_storages = #{} :: file_qos:target_storages()
 }).
 
-% This model holds information about single QoS, that is QoS requirement
+% This model holds information about QoS entry, that is QoS requirement
 % defined by the user for file or directory through QoS expression and
 % number of required replicas. Each such requirement creates new qos_entry
 % document even if expressions are exactly the same. For each file / directory

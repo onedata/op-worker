@@ -14,7 +14,6 @@
 -module(fslogic_worker).
 -behaviour(worker_plugin_behaviour).
 
--include("modules/datastore/qos.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -24,7 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([init_cannonical_paths_cache/1]).
--export([init/1, handle/1, cleanup/0, init_qos_cache_for_space/1]).
+-export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 %%%===================================================================
@@ -56,8 +55,6 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
--define(CHECK_QOS_CACHE, bounded_cache_timer).
 -define(INIT_CANNONICAL_PATHS_CACHE(Space), {init_cannonical_paths_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
@@ -119,10 +116,6 @@ init(_Args) ->
     erlang:send_after(0, self(), {sync_timer, ?INIT_CANNONICAL_PATHS_CACHE(all)}),
 
     transfer:init(),
-    qos_traverse:init_pool(),
-    qos_bounded_cache:init_group(),
-    qos_bounded_cache:ensure_exists_for_all_spaces(),
-
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
@@ -185,12 +178,6 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
             ok
     end,
     schedule_periodical_spaces_autocleaning_check();
-handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
-    ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
-    init_qos_cache_for_space_internal(SpaceId);
-handle({?CHECK_QOS_CACHE, Msg}) ->
-    ?debug("Cleaning QoS bounded cache if needed"),
-    bounded_cache:check_cache_size(Msg);
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -262,16 +249,6 @@ init_report() ->
         {?EXOMETER_TIME_NAME(Name), [min, max, median, mean, n]}
     end, ?EXOMETER_COUNTERS),
     ?init_reports(Reports ++ Reports2).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedule initialization of QoS bounded cache for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec init_qos_cache_for_space(od_space:id()) -> ok.
-init_qos_cache_for_space(SpaceId) ->
-    erlang:send_after(0, ?MODULE, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
-    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -743,16 +720,4 @@ restart_autocleaning_runs() ->
     catch
         Error2:Reason ->
             ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
-    end.
-
--spec init_qos_cache_for_space_internal(od_space:id()) -> ok.
-init_qos_cache_for_space_internal(SpaceId) ->
-    try qos_bounded_cache:init(SpaceId) of
-        ok ->
-            ok;
-       Error = {error, _} ->
-            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.

@@ -122,7 +122,7 @@ add_qos(Config, #qos_to_add{
 
     {ok, QosEntryId} = ?assertMatch(
         {ok, _QosEntryId},
-        lfm_proxy:add_qos(Worker, SessId, {path, FilePath}, QosExpression, ReplicasNum)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, FilePath}, QosExpression, ReplicasNum)
     ),
 
     {ok, {QosName, QosEntryId}}.

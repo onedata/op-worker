@@ -7,17 +7,19 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for calculating QoS entry fulfillment status.
-%%% QoS is fulfilled when:
-%%%     - all traverse tasks, triggered by creating this QoS entry, are finished
-%%%     - there are no remaining transfers, that were created to fulfill this QoS
+%%% QoS entry is fulfilled when:
+%%%     - there is no information that qos_entry cannot be satisfied (see qos_entry.erl)
+%%%     - there are no traverse requests in qos_entry document (see qos_entry.erl)
+%%%     - there are no links indicating that file has been changed and it should
+%%%       be reconciled. When provider notices file_location change that impacts
+%%%       local replica it calculates effective_file_qos for given file. For
+%%%       each QoS entry in effective_file_qos provider creates appropriate link
+%%%       and schedules file reconciliation. Links are created as follow:
+%%%         * value is set to traverse task ID
+%%%         * key is expressed as combined: relative path to QoS entry origin
+%%%           file (file that QoS entry was added to) and traverse task id
 %%%
-%%% Active transfers are stored as links where value is transfer id and key is
-%%% expressed as combined:
-%%%     * relative path to QoS entry origin file (file that QoS entry was added to)
-%%%     * storage id where file is transferred to
-%%%     * traverse task id that started this transfer
-%%%
-%%% QoS status of directory is checked by getting next status link to
+%%% QoS fulfillment status of directory is checked by getting next status link to
 %%% given directory relative path. Because status links keys start with relative
 %%% path, if there is unfinished transfer in subtree of this directory next
 %%% status link will start with given parent directory relative path.
@@ -76,8 +78,8 @@ report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether given QoS is fulfilled for given file i.e. there is no traverse task
-%% and all transfers in subtree of given file are finished.
+%% Checks whether requirements specified in given qos_entry are fulfilled
+%% for given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().

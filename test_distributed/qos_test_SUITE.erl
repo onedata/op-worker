@@ -262,7 +262,7 @@ key_without_value(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country">>, 1)
     ).
 
 
@@ -274,7 +274,7 @@ two_keys_without_value_connected_with_operand(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country|type">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country|type">>, 1)
     ).
 
 
@@ -286,7 +286,7 @@ operator_without_second_operand(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&">>, 1)
     ).
 
 
@@ -298,7 +298,7 @@ operator_without_first_operand(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"|country=PL">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"|country=PL">>, 1)
     ).
 
 
@@ -310,7 +310,7 @@ two_operators_in_row(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&-type-disk">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&-type-disk">>, 1)
     ).
 
 
@@ -322,7 +322,7 @@ closing_paren_without_matching_opening_one(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL)">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL)">>, 1)
     ).
 
 
@@ -334,7 +334,7 @@ opening_paren_without_matching_closing_one(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(country=PL">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(country=PL">>, 1)
     ).
 
 
@@ -346,7 +346,7 @@ mismatching_nested_parens(Config) ->
 
     ?assertMatch(
         ?ERROR_INVALID_QOS_EXPRESSION,
-        lfm_proxy:add_qos(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(type=disk|tier=t2&(country=PL)">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(type=disk|tier=t2&(country=PL)">>, 1)
     ).
 
 

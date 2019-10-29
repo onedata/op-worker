@@ -6,15 +6,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides hooks concerning QoS.
+%%% This module provides hooks concerning QoS management.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_hooks).
 -author("Michal Stanisz").
 
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([
@@ -22,6 +22,11 @@
     reconcile_qos_on_storage/2,
     maybe_start_traverse/4
 ]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,8 +57,8 @@ handle_qos_entry_change(SpaceId, #document{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules file replication to given storage if it is required by QoS.
-%% Uses QoS traverse pool.
+%% Schedules file replication to given storage if it is required by
+%% effective_file_qos. Uses QoS traverse pool.
 %% @end
 %%--------------------------------------------------------------------
 -spec reconcile_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
@@ -88,7 +93,7 @@ maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId) ->
         Storage ->
             ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            case lookup_file_doc(FileCtx) of
+            case lookup_file_meta_doc(FileCtx) of
                 {ok, FileCtx1} ->
                     ok = qos_traverse:start_initial_traverse(FileCtx1, QosEntryId, TaskId);
                 {error, not_found} ->
@@ -101,14 +106,20 @@ maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId) ->
             ok
     end.
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @doc
+%% @private
 %% Returns file's file_meta document.
 %% Returns error if there is no such file doc (it is not synced yet).
 %% @end
 %%--------------------------------------------------------------------
--spec lookup_file_doc(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, not_found}.
-lookup_file_doc(FileCtx) ->
+-spec lookup_file_meta_doc(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, not_found}.
+lookup_file_meta_doc(FileCtx) ->
     try
         {_Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
         {ok, FileCtx2}

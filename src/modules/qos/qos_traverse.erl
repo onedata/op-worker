@@ -11,9 +11,6 @@
 %%% Traverse is started for each storage that given QoS requires files
 %%% to be. Traverse is run on provider, that given storage belongs to.
 %%%
-%%% This module uses traverse_behaviour however it is not specified as
-%%% behaviour here as this module does not implement all callbacks (some
-%%% are optional)
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_traverse).

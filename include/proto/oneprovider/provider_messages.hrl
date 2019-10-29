@@ -111,13 +111,10 @@
 -record(remove_share, {
 }).
 
-% messages for adding, listing, getting and removing QoS entry
+% messages for adding, getting and removing QoS entry
 -record(add_qos_entry, {
     expression :: qos_expression:raw(),
     replicas_num :: qos_entry:replicas_num()
-}).
-
--record(get_effective_file_qos, {
 }).
 
 -record(get_qos_entry, {
@@ -126,6 +123,9 @@
 
 -record(remove_qos_entry, {
     id :: qos_entry:id()
+}).
+
+-record(get_effective_file_qos, {
 }).
 
 -record(check_qos_fulfillment, {

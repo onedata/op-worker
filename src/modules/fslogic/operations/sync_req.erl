@@ -39,7 +39,8 @@
 ]).
 
 -export([
-    schedule_file_replication/6
+    schedule_file_replication/6,
+    get_file_distribution_insecure/2
 ]).
 
 %%%===================================================================

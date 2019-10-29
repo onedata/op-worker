@@ -8,7 +8,8 @@
 %%% @doc The file_qos document contains information about QoS entries defined
 %%% for file or directory. It contains:
 %%%     - qos_entries - holds IDs of all qos_entries defined for this file (
-%%%       including qos_entries which demands cannot be satisfied),
+%%%       including qos_entries which demands cannot be satisfied). This list
+%%%       is updated on change of qos_entry document (see qos_hooks.erl),
 %%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
 %%%       should be stored are calculated using QoS expression. Then traverse
@@ -36,7 +37,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% functions operating on record using datastore model API
+%% functions operating on file_qos document using datastore_model API
 -export([delete/1]).
 
 %% higher-level functions operating on file_qos document
@@ -70,12 +71,13 @@
 
 
 %%%===================================================================
-%%% Functions operating on record using datastore_model API
+%%% Functions operating on file_qos document using datastore_model API
 %%%===================================================================
 
 -spec get(key()) -> {ok, datastore:doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
+
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
@@ -91,8 +93,9 @@ delete(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns effective file_qos for file. If effective value cannot be calculated
-%% because of file_meta documents not being synchronized yet, ErrorCallback is executed.
+%% Returns effective_file_qos for file. If effective value cannot be calculated
+%% because of file_meta documents not being synchronized yet, appropriate error
+%% is returned.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective(file_meta:uuid()) -> {ok, effective_file_qos()} | {error, term()} | undefined.
@@ -108,7 +111,7 @@ get_effective(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes given Qos ID from both qos_entries and target_storages in file_qos doc.
+%% Removes given QoS entry ID from both qos_entries and target_storages.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_entry_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
@@ -132,7 +135,7 @@ remove_qos_entry_id(FileUuid, QosEntryId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv
-%% add_qos(FileUuid, SpaceId, QosEntryId, undefined)
+%% add_qos_entry_id(FileUuid, SpaceId, QosEntryId, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id()) -> ok.
@@ -216,7 +219,7 @@ get_qos_to_update(StorageId, EffectiveFileQos) ->
 %% @doc
 %% @private
 %% Merge parent's file_qos with child's file_qos. Used when calculating
-%% effective file_qos.
+%% effective_file_qos.
 %% @end
 %%--------------------------------------------------------------------
 -spec merge_file_qos(record(), record()) -> record().
@@ -231,6 +234,7 @@ merge_file_qos(ParentQos, ChildQos) ->
         )
     }.
 
+
 -spec merge_target_storages(target_storages(), target_storages()) -> target_storages().
 merge_target_storages(ParentTargetStorages, ChildTargetStorages) ->
     maps:fold(fun(StorageId, StorageQosEntries, Acc) ->
@@ -238,6 +242,7 @@ merge_target_storages(ParentTargetStorages, ChildTargetStorages) ->
             ParentStorageQosEntries ++ StorageQosEntries
         end, StorageQosEntries, Acc)
     end, ParentTargetStorages, ChildTargetStorages).
+
 
 -spec get_effective_internal(file_meta:doc(), od_space:id()) ->
     {ok, effective_file_qos()} | {error, term()}| undefined.

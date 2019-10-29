@@ -7,9 +7,8 @@
 %%% @doc
 %%% This file contains definitions of macros used by qos module.
 %%%
-%%% QoS management is based on two types of documents synchronized within space:
-%%% qos_entry and file_qos. See qos_entry.erl or file_qos.erl for more
-%%% information.
+%%% QoS management is based on two types of documents qos_entry and file_qos.
+%%% See qos_entry.erl or file_qos.erl for more information.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------

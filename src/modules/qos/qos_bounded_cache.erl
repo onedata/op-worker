@@ -21,7 +21,7 @@
 
 %% API
 -export([
-    init_group/0, init/1,
+    init_group/0,
     ensure_exists_for_all_spaces/0,
     ensure_exists_on_all_nodes/1,
     ensure_exists/1, invalidate_on_all_nodes/1
@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes bounded_cache group for QoS.
+%% Initializes bounded_cache group.
 %% @end
 %%--------------------------------------------------------------------
 -spec init_group() -> ok | {error, term()}.
@@ -53,11 +53,6 @@ init_group() ->
         size => Size,
         worker => true
     }).
-
-
--spec init(od_space:id()) -> ok | {error, term()}.
-init(SpaceId) ->
-    bounded_cache:init_cache(?CACHE_TABLE_NAME(SpaceId), #{group => ?QOS_BOUNDED_CACHE_GROUP}).
 
 
 -spec ensure_exists_for_all_spaces() -> ok.
@@ -121,7 +116,7 @@ ensure_exists(SpaceId) ->
     CacheTableInfo = ets:info(CacheTableName),
     case CacheTableInfo of
         undefined ->
-            fslogic_worker:init_qos_cache_for_space(SpaceId);
+            qos_worker:init_qos_cache_for_space(SpaceId);
         _ ->
             ok
     end.
