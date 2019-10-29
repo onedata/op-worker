@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_file_attr_changed/2, emit_sizeless_file_attrs_changed/1,
+-export([emit_file_attr_changed/2, emit_file_attr_changed/3, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_locations_changed/2,
     emit_file_perm_changed/1, emit_file_removed/2,
@@ -44,12 +44,23 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
         {#document{}, FileCtx2} ->
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
                 attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true),
-            {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx2, undefined),
-            event:get_subscribers_and_emit(#file_attr_changed_event{file_attr = FileAttr},
-                ParentGuid, ExcludedSessions);
+            emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
         Other ->
             Other
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends file attributes to all subscribers except for the ones present
+%% in 'ExcludedSessions' list.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_attr_changed(file_ctx:ctx(), #file_attr{}, [session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_file_attr_changed(FileCtx, FileAttr, ExcludedSessions) ->
+    {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
+    event:get_subscribers_and_emit(#file_attr_changed_event{file_attr = FileAttr},
+        ParentGuid, ExcludedSessions).
 
 %%--------------------------------------------------------------------
 %% @doc
