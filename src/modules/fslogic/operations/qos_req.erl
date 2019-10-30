@@ -127,9 +127,7 @@ add_qos_entry_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
                 false ->
                     add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum);
                 ?ERROR_INVALID_QOS_EXPRESSION ->
-                    #provider_response{status = #status{code = ?EINVAL}};
-                _ ->
-                    #provider_response{status = #status{code = ?EAGAIN}}
+                    #provider_response{status = #status{code = ?EINVAL}}
             end;
         ?ERROR_INVALID_QOS_EXPRESSION ->
             #provider_response{status = #status{code = ?EINVAL}}
