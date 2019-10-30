@@ -119,7 +119,7 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(StrategyType :: space_strategy:type(), SpaceId :: od_space:id(),
-    StorageId :: storage:id() | undefined,
+    StorageId :: od_storage:id() | undefined,
     InitData :: space_strategy:job_data()) -> space_strategy:runnable().
 init(StrategyType, SpaceId, StorageId, InitData) ->
     {ok, #document{value = SpaceStrategies}} = space_strategies:get(SpaceId),
@@ -221,12 +221,8 @@ check_strategies() ->
 -spec check_strategies([od_space:id()], boolean()) -> ok.
 check_strategies(SpaceIds, FirstRun) ->
     lists:foreach(fun(SpaceId) ->
-        case space_storage:get(SpaceId) of
-            {ok, #document{value = #space_storage{storage_ids = StorageIds}}} ->
-                check_strategies(SpaceId, StorageIds, FirstRun);
-            _ ->
-                ok
-        end
+        {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+        check_strategies(SpaceId, StorageIds, FirstRun)
     end, SpaceIds).
 
 
@@ -238,7 +234,7 @@ check_strategies(SpaceIds, FirstRun) ->
 %% supported by given storages
 %% @end
 %%--------------------------------------------------------------------
--spec check_strategies(od_space:id(), [storage:id()], boolean()) -> ok.
+-spec check_strategies(od_space:id(), [od_storage:id()], boolean()) -> ok.
 check_strategies(SpaceId, StorageIds, FirstRun) ->
     lists:foreach(fun(StorageId) ->
         maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun)
@@ -251,7 +247,7 @@ check_strategies(SpaceId, StorageIds, FirstRun) ->
 %% if they are set for given storage supporting given space
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_start_storage_import_and_update(od_space:id(), storage:id(),
+-spec maybe_start_storage_import_and_update(od_space:id(), od_storage:id(),
     boolean()) -> ok.
 maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun) ->
     case storage_sync_monitoring:get(SpaceId, StorageId) of
@@ -270,7 +266,7 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, FirstRun) ->
 %% for given storage supporting given space
 %% @end
 %%--------------------------------------------------------------------
--spec start_storage_import_and_update(od_space:id(), storage:id(),
+-spec start_storage_import_and_update(od_space:id(), od_storage:id(),
     {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()}) -> ok.
 start_storage_import_and_update(SpaceId, StorageId, {ImportStartTime, ImportFinishTime,
     LastUpdateStartTime, LastUpdateFinishTime
@@ -292,7 +288,7 @@ start_storage_import_and_update(SpaceId, StorageId, {ImportStartTime, ImportFini
 %% @end
 %%--------------------------------------------------------------------
 -spec log_import_answer([space_strategy:job_result()] | space_strategy:job_result(),
-    od_space:id(), storage:id()) -> ok.
+    od_space:id(), od_storage:id()) -> ok.
 log_import_answer(Answer, SpaceId, StorageId) ->
     log_answer(Answer, SpaceId, StorageId, import).
 
@@ -303,7 +299,7 @@ log_import_answer(Answer, SpaceId, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec log_update_answer([space_strategy:job_result()] | space_strategy:job_result(),
-    od_space:id(), storage:id()) -> ok.
+    od_space:id(), od_storage:id()) -> ok.
 log_update_answer(Answer, SpaceId, StorageId) ->
     log_answer(Answer, SpaceId, StorageId, update).
 
@@ -316,7 +312,7 @@ log_update_answer(Answer, SpaceId, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec log_answer([space_strategy:job_result()] | space_strategy:job_result(),
-    od_space:id(), storage:id(), atom()) -> ok.
+    od_space:id(), od_storage:id(), atom()) -> ok.
 log_answer({error, Reason}, SpaceId, StorageId, Strategy) ->
     ?error("~p of storage: ~p  supporting space: ~p failed due to: ~p",
         [Strategy, StorageId, SpaceId, Reason]);
@@ -469,7 +465,7 @@ merge_type(StrategyType, StrategyName) ->
 %% strategy arguments (aka strategy config).
 %% @end
 %%--------------------------------------------------------------------
--spec strategy_config(space_strategy:type(), storage:id() | undefined,
+-spec strategy_config(space_strategy:type(), od_storage:id() | undefined,
     #space_strategies{}) -> space_strategy:config() | [space_strategy:config()].
 strategy_config(StrategyType, StorageId, SpaceStrategies =
     #space_strategies{storage_strategies = StorageStrategies}

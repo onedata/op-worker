@@ -195,11 +195,11 @@ normalize_ace(ACE = #access_control_entity{
 -spec normalize_who(non_neg_integer(), binary(), storage_file_ctx:ctx()) ->
     {od_user:id() | od_group:id(), storage_file_ctx:ctx()}.
 normalize_who(Flags, Who, StorageFileCtx) when ?has_flag(Flags, ?identifier_group_mask) ->
-    {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
+    {StorageConfig, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
-    {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, SpaceId, StorageDoc),
+    {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, SpaceId, StorageConfig),
     {GroupId, StorageFileCtx2};
 normalize_who(_, Who, StorageFileCtx) ->
-    {StorageDoc, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
-    {ok, UserId} = reverse_luma:get_user_id_by_name(Who, StorageDoc),
+    {StorageConfig, StorageFileCtx2} = storage_file_ctx:get_storage_doc(StorageFileCtx),
+    {ok, UserId} = reverse_luma:get_user_id_by_name(Who, StorageConfig),
     {UserId, StorageFileCtx2}.

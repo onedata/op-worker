@@ -323,8 +323,7 @@ get_monitoring_id(SpaceId, UserId) ->
 %%--------------------------------------------------------------------
 -spec all_supporting_storages_are_readonly(od_space:id()) -> boolean().
 all_supporting_storages_are_readonly(SpaceId) ->
-    {ok, #document{value=#space_storage{storage_ids = StorageIds}}}
-        = space_storage:get(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     all_storages_are_readonly(StorageIds).
 
 %%--------------------------------------------------------------------
@@ -333,7 +332,7 @@ all_supporting_storages_are_readonly(SpaceId) ->
 %% Checks if all storages from StorageIds list are readonly.
 %% @end
 %%--------------------------------------------------------------------
--spec all_storages_are_readonly([storage:id()]) -> boolean().
+-spec all_storages_are_readonly([od_storage:id()]) -> boolean().
 all_storages_are_readonly(StorageIds) ->
     lists:all(fun is_storage_readonly/1, StorageIds).
 
@@ -344,7 +343,7 @@ all_storages_are_readonly(StorageIds) ->
 %% Checks if given storage is read-only.
 %% @end
 %%--------------------------------------------------------------------
--spec is_storage_readonly(storage:id()) -> boolean().
+-spec is_storage_readonly(od_storage:id()) -> boolean().
 is_storage_readonly(StorageId) ->
-    {ok, #document{value=#storage{readonly=ReadOnly}}} = storage:get(StorageId),
+    {ok, #document{value=#storage_config{readonly=ReadOnly}}} = storage_config:get(StorageId),
     ReadOnly.

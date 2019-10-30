@@ -1,33 +1,33 @@
 %%%-------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @author Michal Stanisz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model serves as cache for od_group records
+%%% This model serves as cache for od_storage records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
--module(od_group).
--author("Lukasz Opiola").
+-module(od_storage).
+-author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type id() :: binary().
--type record() :: #od_group{}.
+-type record() :: #od_storage{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
+-type qos_parameters() :: #{binary() => binary()}.
 
--type name() :: binary().
--type type() :: 'organization' | 'unit' | 'team' | 'role'.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, type/0]).
+-export_type([qos_parameters/0]).
 
 -define(CTX, #{
     model => ?MODULE,

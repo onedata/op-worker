@@ -28,11 +28,10 @@
 %% Convert given logical path to storage path
 %% @end
 %%--------------------------------------------------------------------
--spec to_storage_path(od_space:id(), storage:id(), file_meta:path()) ->
+-spec to_storage_path(od_space:id(), od_storage:id(), file_meta:path()) ->
     file_meta:path().
 to_storage_path(SpaceId, StorageId, FilePath) ->
-    MountedInRoot = space_storage:get_mounted_in_root(SpaceId),
-    case lists:member(StorageId, MountedInRoot) of
+    case storage_config:is_mounted_in_root(StorageId) of
         true ->
             filter_space_id(SpaceId, FilePath);
         false ->

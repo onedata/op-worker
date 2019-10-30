@@ -53,8 +53,8 @@ all() -> [
 
 -define(SPACE_ID, <<"space1">>).
 -define(STORAGE_ID(Worker), begin
-    {ok, [__Storage]} = rpc:call(Worker, storage, list, []),
-    storage:get_id(__Storage)
+    {ok, [__Storage]} = rpc:call(Worker, storage_config, list, []),
+    storage_config:get_id(__Storage)
     end
 ).
 -define(FILE_PATH, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
@@ -261,7 +261,7 @@ mock_fetch_token(Worker, Token, TTL) ->
         fun (_, _, _) -> {ok, {Token, TTL}} end).
 
 storage_update(Worker, StorageId, UpdateFun) ->
-    rpc:call(Worker, storage, update, [StorageId, UpdateFun]).
+    rpc:call(Worker, storage_config, update, [StorageId, UpdateFun]).
 
 enable_webdav_test_mode_secure_storage(Worker, StorageId) ->
     enable_webdav_test_mode(Worker, StorageId, false).
@@ -275,13 +275,13 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
         false -> #luma_config{}
     end,
 
-    {ok, _} = storage_update(Worker, StorageId, fun(Storage = #storage{helpers = [Helper]}) ->
+    {ok, _} = storage_update(Worker, StorageId, fun(Storage = #storage_config{helpers = [Helper]}) ->
         #helper{args = Args, admin_ctx = AdminCtx}  = Helper,
         Args2 = Args#{
             <<"testTokenRefreshMode">> => <<"true">>,
             <<"oauth2IdP">> => ?IDP
         },
-        {ok, Storage#storage{helpers = [Helper#helper{
+        {ok, Storage#storage_config{helpers = [Helper#helper{
             args = Args2,
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
@@ -296,9 +296,9 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
     end).
 
 get_sfm_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
-    {ok, StorageDoc} = rpc:call(Worker, storage, get, [StorageId]),
+    {ok, StorageConfig} = rpc:call(Worker, storage_config, get, [StorageId]),
     rpc:call(Worker, storage_file_manager, new_handle,
-        [SessionId, SpaceId, Uuid, StorageDoc, FilePath, undefined]).
+        [SessionId, SpaceId, Uuid, StorageConfig, FilePath, undefined]).
 
 setxattr(Worker, SFMHandle, Key, Value) ->
     rpc:call(Worker, storage_file_manager, setxattr, [SFMHandle, Key, Value, true, true]).

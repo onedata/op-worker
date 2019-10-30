@@ -71,7 +71,7 @@ run(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_file_and_update_counters(file_meta:name(),
-    file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+    file_ctx:ctx(), od_space:id(), od_storage:id()) -> ok.
 maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId, StorageId) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
@@ -98,7 +98,7 @@ maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId, St
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_file_and_update_counters(file_ctx:ctx(), od_space:id(),
-    storage:id()) -> ok.
+    od_storage:id()) -> ok.
 maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     try
         {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
@@ -163,7 +163,7 @@ delete_imported_file(FileCtx) ->
 %% Remove directory that had been earlier imported.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_imported_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+-spec delete_imported_dir(file_ctx:ctx(), od_space:id(), od_storage:id()) -> ok.
 delete_imported_dir(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
@@ -178,7 +178,7 @@ delete_imported_dir(FileCtx, SpaceId, StorageId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_imported_dir_children(file_ctx:ctx(), user_ctx:ctx(),
-    non_neg_integer(), non_neg_integer(), od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
+    non_neg_integer(), non_neg_integer(), od_space:id(), od_storage:id()) -> {ok, file_ctx:ctx()}.
 delete_imported_dir_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
     try
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
@@ -245,7 +245,7 @@ create_ets(Name) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec remove_files_not_existing_on_storage(atom(), atom(), file_ctx:ctx(),
-    od_space:id(), storage:id()) -> ok.
+    od_space:id(), od_storage:id()) -> ok.
 remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId, StorageId) ->
     StorageFirst = ets:first(StorageTable),
     DBFirst = ets:first(DBTable),
@@ -261,7 +261,7 @@ remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId, St
 %% @end
 %%-------------------------------------------------------------------
 -spec iterate_and_remove(key(), atom(), key(), atom(),file_ctx:ctx(),
-    od_space:id(), storage:id()) -> ok.
+    od_space:id(), od_storage:id()) -> ok.
 iterate_and_remove('$end_of_table', _, '$end_of_table', _, _FileCtx, _SpaceId, _StorageId) ->
     ok;
 iterate_and_remove(StKey, StorageTable, DBKey = '$end_of_table', DBTable,
@@ -417,7 +417,7 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_dir_and_update_counters(file_ctx:ctx(),
-    od_space:id(), storage:id()) -> ok.
+    od_space:id(), od_storage:id()) -> ok.
 maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
     delete_imported_dir(FileCtx, SpaceId, StorageId),
     {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
@@ -431,7 +431,7 @@ maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_delete_imported_regular_file_and_update_counters(file_ctx:ctx(),
-    od_space:id(), storage:id()) -> ok.
+    od_space:id(), od_storage:id()) -> ok.
 maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     delete_imported_file(FileCtx),
     {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),

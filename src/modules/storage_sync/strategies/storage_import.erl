@@ -182,7 +182,7 @@ main_worker_pool() ->
 %% Function responsible for starting storage import.
 %% @end
 %%--------------------------------------------------------------------
--spec start(od_space:id(), storage:id(), space_strategy:timestamp(),
+-spec start(od_space:id(), od_storage:id(), space_strategy:timestamp(),
     space_strategy:timestamp(), file_ctx:ctx(), file_meta:path()) ->
     [space_strategy:job_result()] | space_strategy:job_result().
 start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, ParentCtx, FileName) ->

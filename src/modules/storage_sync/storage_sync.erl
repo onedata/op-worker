@@ -40,7 +40,7 @@ modify_storage_import(SpaceId, StrategyName, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_storage_import(od_space:id(), space_strategy:name(),
-    storage:id(), space_strategy:arguments()) ->
+    od_storage:id(), space_strategy:arguments()) ->
     {ok, datastore:key()} | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
     storage_sync_monitoring:ensure_created(SpaceId, StorageId),
@@ -53,7 +53,7 @@ modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
 %% @equiv modify_storage_import(SpaceId, simple_scan, StorageId, #{max_depth =>MaxDepth}).
 %% @end
 %%--------------------------------------------------------------------
--spec start_simple_scan_import(od_space:id(), storage:id(), non_neg_integer(),
+-spec start_simple_scan_import(od_space:id(), od_storage:id(), non_neg_integer(),
     boolean()) -> {ok, datastore:key()} | {error, term()}.
 start_simple_scan_import(SpaceId, StorageId, MaxDepth, SyncAcl) ->
     modify_storage_import(SpaceId, simple_scan, StorageId, #{
@@ -88,7 +88,7 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
 %% Wrapper for starting storage update.
 %% @end
 %%--------------------------------------------------------------------
--spec modify_storage_update(od_space:id(),space_strategy:name(), storage:id(),
+-spec modify_storage_update(od_space:id(),space_strategy:name(), od_storage:id(),
     space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     storage_sync_monitoring:ensure_created(SpaceId, StorageId),
@@ -108,7 +108,7 @@ modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
 %% @equiv modify_storage_update(SpaceId, simple_scan, Args).
 %% @end
 %%--------------------------------------------------------------------
--spec start_simple_scan_update(od_space:id(), storage:id(),
+-spec start_simple_scan_update(od_space:id(), od_storage:id(),
     non_neg_integer(), non_neg_integer(), boolean(), boolean(), boolean()) ->
     {ok, datastore:key()} | {error, term()}.
 start_simple_scan_update(SpaceId, StorageId, MaxDepth, ScanInterval, WriteOnce,
@@ -142,8 +142,7 @@ stop_storage_update(SpaceId) ->
 %% Returns head of list of storages supporting given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_supporting_storage(od_space:id()) -> storage:id().
+-spec get_supporting_storage(od_space:id()) -> od_storage:id().
 get_supporting_storage(SpaceId) ->
-    {ok, #document{value=#space_storage{storage_ids=StorageIds}}} =
-        space_storage:get(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     hd(StorageIds).

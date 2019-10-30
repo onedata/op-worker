@@ -22,7 +22,7 @@
     id :: helpers:file_id(),
     canonical_path :: helpers:file_id(),
     space_id :: od_space:id(),
-    storage_id :: storage:id(),
+    storage_id :: od_storage:id(),
     handle = undefined :: undefined | storage_file_manager:handle(),
     stat = undefined :: undefined | #statbuf{},
     stat_timestamp :: undefined | non_neg_integer(),
@@ -45,7 +45,7 @@
 %% Returns initialized #storage_file_ctx{}.
 %% @end
 %%-------------------------------------------------------------------
--spec new(file_meta:name(), od_space:id(), storage:id()) -> ctx().
+-spec new(file_meta:name(), od_space:id(), od_storage:id()) -> ctx().
 new(CanonicalPath, SpaceId, StorageId) ->
     FileName = filename:basename(CanonicalPath),
     Ctx = #storage_file_ctx{
@@ -168,15 +168,15 @@ get_handle(StorageFileCtx = #storage_file_ctx{handle = SFMHandle}) ->
 %% Returns #storage{} record for storage associated with given context.
 %% @end
 %%-------------------------------------------------------------------
--spec get_storage_doc(ctx()) -> {storage:doc(), ctx()}.
+-spec get_storage_doc(ctx()) -> {storage_config:doc(), ctx()}.
 get_storage_doc(StorageFileCtx = #storage_file_ctx{handle = undefined}) ->
     StorageFileCtx2 = set_sfm_handle(StorageFileCtx),
     get_storage_doc(StorageFileCtx2);
 get_storage_doc(StorageFileCtx = #storage_file_ctx{
     handle = #sfm_handle{
-        storage = StorageDoc = #document{}
+        storage = StorageConfig = #document{}
 }}) ->
-    {StorageDoc, StorageFileCtx}.
+    {StorageConfig, StorageFileCtx}.
 
 
 %%-------------------------------------------------------------------
@@ -242,7 +242,7 @@ set_sfm_handle(Ctx = #storage_file_ctx{
     space_id = SpaceId,
     storage_id = StorageId
 }) ->
-    {ok, Storage} = storage:get(StorageId),
+    {ok, Storage} = storage_config:get(StorageId),
     SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
         undefined, Storage, CanonicalPath, undefined),
     Ctx#storage_file_ctx{handle = SFMHandle}.
