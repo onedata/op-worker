@@ -79,7 +79,7 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    ok = test_utils:mock_expect(Nodes, token_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
+    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
         Authorization = {token, UserToken},
         ?USER_GS_TOKEN_AUTH(UserId) = Authorization,
         {ok, #auth{
