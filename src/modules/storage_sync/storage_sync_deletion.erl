@@ -16,6 +16,8 @@
 -module(storage_sync_deletion).
 -author("Jakub Kudzia").
 
+-behaviour(traverse_behaviour).
+
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -189,7 +191,7 @@ task_finished(TaskId) ->
     end.
 
 
--spec to_string(job() | slave_job()) -> {ok, binary()}.
+-spec to_string(job() | slave_job()) -> binary().
 to_string(#storage_sync_deletion{
     storage_file_ctx = StorageFileCtx,
     file_ctx = FileCtx,
@@ -199,26 +201,26 @@ to_string(#storage_sync_deletion{
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    {ok, str_utils:format_bin(
+    str_utils:format_bin(
         " ~nstorage_sync_deletion master job:~n"
         "    storage_file_id: ~p~n"
         "    canonical_path: ~p~n"
         "    space: ~p~n"
         "    storage: ~p~n"
         "    storage_type: ~p~n",
-        [StorageFileId, CanonicalPath, SpaceId, StorageId, StorageType])};
+        [StorageFileId, CanonicalPath, SpaceId, StorageId, StorageType]);
 to_string(#slave_job{
     file_ctx = FileCtx,
     storage_id = StorageId
 }) ->
     {CanonicalPath, _} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, str_utils:format_bin(
+    str_utils:format_bin(
         " ~nstorage_sync_deletion slave job:~n"
         "    canonical_path: ~p~n"
         "    space: ~p~n"
         "    storage: ~p~n",
-        [CanonicalPath, SpaceId, StorageId])}.
+        [CanonicalPath, SpaceId, StorageId]).
 
 %%===================================================================
 %% Internal functions

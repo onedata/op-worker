@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([save_master_job/5, delete_master_job/1, get_master_job/1]).
+-export([save_master_job/4, delete_master_job/1, get_master_job/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -34,9 +34,9 @@
 %%% API
 %%%===================================================================
 
--spec save_master_job(undefined | datastore:key(), storage_traverse:job(), traverse:pool(), traverse:id(),
-    traverse:callback_module()) -> {ok, key()} | {error, term()}.
-save_master_job(Key, StorageTraverse = #storage_traverse{storage_file_ctx = StorageFileCtx}, Pool, TaskId, CallbackModule) ->
+-spec save_master_job(undefined | datastore:key(), storage_traverse:master_job(), traverse:pool(), traverse:id()) ->
+    {ok, key()} | {error, term()}.
+save_master_job(Key, StorageTraverse = #storage_traverse_master{storage_file_ctx = StorageFileCtx, callback_module = CallbackModule}, Pool, TaskId) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     ?extract_key(datastore_model:save(?CTX, #document{
         key = Key,
@@ -57,6 +57,7 @@ get_master_job(#document{value = #storage_traverse_job{
     storage_file_id = StorageFileId,
     space_id = SpaceId,
     storage_id = StorageId,
+    iterator = Iterator,
     offset = Offset,
     batch_size = BatchSize,
     marker = Marker,
@@ -68,12 +69,10 @@ get_master_job(#document{value = #storage_traverse_job{
     compute_enabled = ComputeEnabled,
     info = Info
 }}) ->
-    StorageType = storage:get_type(StorageId),
-    StorageTypeModule = storage_traverse:storage_type_callback_module(StorageType),
     TraverseInfo = binary_to_term(Info),
-    Job = #storage_traverse{
+    Job = #storage_traverse_master{
         storage_file_ctx = storage_file_ctx:new(StorageFileId, SpaceId, StorageId),
-        storage_type_module = StorageTypeModule,
+        iterator = Iterator,
         offset = Offset,
         batch_size = BatchSize,
         marker = Marker,
@@ -121,6 +120,7 @@ get_record_struct(1) ->
         {storage_file_id, string},
         {space_id, string},
         {storage_id, string},
+        {iterator, atom},
         {offset, integer},
         {batch_size, integer},
         {marker, string},
@@ -137,10 +137,11 @@ get_record_struct(1) ->
 %%% Internal functions
 %%%===================================================================
 
--spec create_record(traverse:pool(), traverse:callback_module(), traverse:id(), storage_traverse:job()) ->
+-spec create_record(traverse:pool(), traverse:callback_module(), traverse:id(), storage_traverse:master_job()) ->
     record().
-create_record(Pool, TaskId, CallbackModule, #storage_traverse{
+create_record(Pool, TaskId, CallbackModule, #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
+    iterator = Iterator,
     offset = Offset,
     batch_size = BatchSize,
     marker = Marker,
@@ -162,6 +163,7 @@ create_record(Pool, TaskId, CallbackModule, #storage_traverse{
         storage_file_id = StorageFileId,
         space_id = SpaceId,
         storage_id = StorageId,
+        iterator = Iterator,
         offset = Offset,
         batch_size = BatchSize,
         marker = Marker,
@@ -185,7 +187,7 @@ next_batch_job_prehook(CallbackModule, TraverseInfo) ->
     end.
 
 -spec children_master_job_prehook(traverse:callback_module(), storage_traverse:info()) ->
-    storage_traverse:children_batch_job_prehook().
+    storage_traverse:children_master_job_prehook().
 children_master_job_prehook(CallbackModule, TraverseInfo) ->
     case erlang:function_exported(CallbackModule, children_master_job_prehook, 1) of
         true ->

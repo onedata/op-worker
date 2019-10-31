@@ -12,6 +12,8 @@
 -module(storage_traverse_test_SUITE).
 -author("Jakub Kudzia").
 
+-behaviour(traverse_behaviour).
+
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
@@ -38,30 +40,30 @@
     canonical_s3_files_only_async_master_jobs_mount_in_root_test/1,
     posix_files_and_dirs_async_master_jobs_test/1,
     posix_files_and_dirs_async_master_jobs_mount_in_root_test/1,
-    posix_files_only_max_depth_test/1,
+    posix_files_only_max_depth0_test/1,
+    posix_files_only_max_depth1_test/1,
     posix_files_only_max_depth2_test/1,
     posix_files_only_max_depth3_test/1,
-    posix_files_only_max_depth4_test/1,
-    posix_files_only_mount_in_root_max_depth_test/1,
+    posix_files_only_mount_in_root_max_depth0_test/1,
+    posix_files_only_mount_in_root_max_depth1_test/1,
     posix_files_only_mount_in_root_max_depth2_test/1,
     posix_files_only_mount_in_root_max_depth3_test/1,
-    posix_files_only_mount_in_root_max_depth4_test/1,
-    canonical_s3_files_only_max_depth_test/1,
+    canonical_s3_files_only_max_depth0_test/1,
+    canonical_s3_files_only_max_depth1_test/1,
     canonical_s3_files_only_max_depth2_test/1,
     canonical_s3_files_only_max_depth3_test/1,
-    canonical_s3_files_only_max_depth4_test/1,
-    canonical_s3_files_only_mount_in_root_max_depth_test/1,
+    canonical_s3_files_only_mount_in_root_max_depth0_test/1,
+    canonical_s3_files_only_mount_in_root_max_depth1_test/1,
     canonical_s3_files_only_mount_in_root_max_depth2_test/1,
     canonical_s3_files_only_mount_in_root_max_depth3_test/1,
-    canonical_s3_files_only_mount_in_root_max_depth4_test/1,
-    posix_files_and_dirs_max_depth_test/1,
+    posix_files_and_dirs_max_depth0_test/1,
+    posix_files_and_dirs_max_depth1_test/1,
     posix_files_and_dirs_max_depth2_test/1,
     posix_files_and_dirs_max_depth3_test/1,
-    posix_files_and_dirs_max_depth4_test/1,
-    posix_files_and_dirs_mount_in_root_max_depth_test/1,
+    posix_files_and_dirs_mount_in_root_max_depth0_test/1,
+    posix_files_and_dirs_mount_in_root_max_depth1_test/1,
     posix_files_and_dirs_mount_in_root_max_depth2_test/1,
     posix_files_and_dirs_mount_in_root_max_depth3_test/1,
-    posix_files_and_dirs_mount_in_root_max_depth4_test/1,
     posix_files_only_synchronous_next_batch_test/1,
     posix_files_only_synchronous_next_batch_mount_in_root_test/1,
     canonical_s3_files_only_synchronous_next_batch_test/1,
@@ -88,30 +90,30 @@ all() -> ?ALL([
     canonical_s3_files_only_async_master_jobs_mount_in_root_test,
     posix_files_and_dirs_async_master_jobs_test,
     posix_files_and_dirs_async_master_jobs_mount_in_root_test,
-    posix_files_only_max_depth_test,
+    posix_files_only_max_depth0_test,
+    posix_files_only_max_depth1_test,
     posix_files_only_max_depth2_test,
     posix_files_only_max_depth3_test,
-    posix_files_only_max_depth4_test,
-    posix_files_only_mount_in_root_max_depth_test,
+    posix_files_only_mount_in_root_max_depth0_test,
+    posix_files_only_mount_in_root_max_depth1_test,
     posix_files_only_mount_in_root_max_depth2_test,
     posix_files_only_mount_in_root_max_depth3_test,
-    posix_files_only_mount_in_root_max_depth4_test,
-    canonical_s3_files_only_max_depth_test,
+    canonical_s3_files_only_max_depth0_test,
+    canonical_s3_files_only_max_depth1_test,
     canonical_s3_files_only_max_depth2_test,
     canonical_s3_files_only_max_depth3_test,
-    canonical_s3_files_only_max_depth4_test,
-    canonical_s3_files_only_mount_in_root_max_depth_test,
+    canonical_s3_files_only_mount_in_root_max_depth0_test,
+    canonical_s3_files_only_mount_in_root_max_depth1_test,
     canonical_s3_files_only_mount_in_root_max_depth2_test,
     canonical_s3_files_only_mount_in_root_max_depth3_test,
-    canonical_s3_files_only_mount_in_root_max_depth4_test,
-    posix_files_and_dirs_max_depth_test,
+    posix_files_and_dirs_max_depth0_test,
+    posix_files_and_dirs_max_depth1_test,
     posix_files_and_dirs_max_depth2_test,
     posix_files_and_dirs_max_depth3_test,
-    posix_files_and_dirs_max_depth4_test,
-    posix_files_and_dirs_mount_in_root_max_depth_test,
+    posix_files_and_dirs_mount_in_root_max_depth0_test,
+    posix_files_and_dirs_mount_in_root_max_depth1_test,
     posix_files_and_dirs_mount_in_root_max_depth2_test,
     posix_files_and_dirs_mount_in_root_max_depth3_test,
-    posix_files_and_dirs_mount_in_root_max_depth4_test,
     posix_files_only_synchronous_next_batch_test,
     posix_files_only_synchronous_next_batch_mount_in_root_test,
     canonical_s3_files_only_synchronous_next_batch_test,
@@ -168,76 +170,76 @@ posix_files_and_dirs_async_master_jobs_mount_in_root_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_master_jobs => true}).
 
 
-posix_files_only_max_depth_test(Config) ->
+posix_files_only_max_depth0_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{max_depth => 0}).
 
-posix_files_only_max_depth2_test(Config) ->
+posix_files_only_max_depth1_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{max_depth => 1}).
 
-posix_files_only_max_depth3_test(Config) ->
+posix_files_only_max_depth2_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{max_depth => 2}).
 
-posix_files_only_max_depth4_test(Config) ->
+posix_files_only_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{max_depth => 3}).
 
-posix_files_only_mount_in_root_max_depth_test(Config) ->
+posix_files_only_mount_in_root_max_depth0_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 0}).
 
-posix_files_only_mount_in_root_max_depth2_test(Config) ->
+posix_files_only_mount_in_root_max_depth1_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 1}).
 
-posix_files_only_mount_in_root_max_depth3_test(Config) ->
+posix_files_only_mount_in_root_max_depth2_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 2}).
 
-posix_files_only_mount_in_root_max_depth4_test(Config) ->
+posix_files_only_mount_in_root_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 3}).
 
-canonical_s3_files_only_max_depth_test(Config) ->
+canonical_s3_files_only_max_depth0_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{max_depth => 0}).
 
-canonical_s3_files_only_max_depth2_test(Config) ->
+canonical_s3_files_only_max_depth1_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{max_depth => 1}).
 
-canonical_s3_files_only_max_depth3_test(Config) ->
+canonical_s3_files_only_max_depth2_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{max_depth => 2}).
 
-canonical_s3_files_only_max_depth4_test(Config) ->
+canonical_s3_files_only_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{max_depth => 3}).
 
-canonical_s3_files_only_mount_in_root_max_depth_test(Config) ->
+canonical_s3_files_only_mount_in_root_max_depth0_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 0}).
 
-canonical_s3_files_only_mount_in_root_max_depth2_test(Config) ->
+canonical_s3_files_only_mount_in_root_max_depth1_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 1}).
 
-canonical_s3_files_only_mount_in_root_max_depth3_test(Config) ->
+canonical_s3_files_only_mount_in_root_max_depth2_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 2}).
 
-canonical_s3_files_only_mount_in_root_max_depth4_test(Config) ->
+canonical_s3_files_only_mount_in_root_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 3}).
 
-posix_files_and_dirs_max_depth_test(Config) ->
+posix_files_and_dirs_max_depth0_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{max_depth => 0}).
 
-posix_files_and_dirs_max_depth2_test(Config) ->
+posix_files_and_dirs_max_depth1_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{max_depth => 1}).
 
-posix_files_and_dirs_max_depth3_test(Config) ->
+posix_files_and_dirs_max_depth2_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{max_depth => 2}).
 
-posix_files_and_dirs_max_depth4_test(Config) ->
+posix_files_and_dirs_max_depth3_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{max_depth => 3}).
 
-posix_files_and_dirs_mount_in_root_max_depth_test(Config) ->
+posix_files_and_dirs_mount_in_root_max_depth0_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 0}).
 
-posix_files_and_dirs_mount_in_root_max_depth2_test(Config) ->
+posix_files_and_dirs_mount_in_root_max_depth1_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 1}).
 
-posix_files_and_dirs_mount_in_root_max_depth3_test(Config) ->
+posix_files_and_dirs_mount_in_root_max_depth2_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 2}).
 
-posix_files_and_dirs_mount_in_root_max_depth4_test(Config) ->
+posix_files_and_dirs_mount_in_root_max_depth3_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 4}).
 
 
@@ -287,7 +289,7 @@ traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sfm_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
-    TestFilesStructure = [{10, 0}, {10, 0}, {0, 10}],
+    TestFilesStructure = [{10, 10}, {10, 10}, {0, 10}],
     sfm_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
@@ -309,7 +311,7 @@ traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sfm_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
-    TestFilesStructure = [{10, 0}, {10, 0}, {0, 10}],
+    TestFilesStructure = [{10, 10}, {10, 10}, {10, 10}],
     sfm_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
@@ -341,20 +343,15 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
     % generate names of files taking max_depth into consideration
-    {CreatedDirs, CreatedFiles} = sfm_test_utils:setup_test_files_structure(W, Handle,
+    {_CreatedDirs, CreatedFiles} = sfm_test_utils:setup_test_files_structure(W, Handle,
         StrippedTestFilesStructure, true),
-    [space_dir(W, SpaceId, StorageId) | CreatedDirs],
     {_DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
     FilesCounterRef = countdown_server:init_counter(W, FilesNum),
     ComputeCounterRef = countdown_server:init_counter(W, ExpectedComputeValue),
     StartTime = time_utils:system_time_millis(),
     run_traverse(W, SpaceId, StorageId, {CSPid, undefined, FilesCounterRef, ComputeCounterRef},
         Opts#{
-            compute_fun => fun(StorageFileCtx, _Info, Acc) ->
-                % custom compute function will count number of traversed files
-                StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                {Acc + 1, StorageFileCtx}
-            end,
+            compute_fun => fun(StorageFileCtx, _Info, Acc) -> {Acc + 1, StorageFileCtx} end,
             compute_init => 0
         }),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
@@ -402,9 +399,9 @@ end_per_testcase(_Case, Config) ->
 % Pool callbacks
 %===================================================================
 
-do_master_job(TraverseJob = #storage_traverse{compute_fun = undefined}, TaskId) ->
+do_master_job(TraverseJob = #storage_traverse_master{compute_fun = undefined}, TaskId) ->
     storage_traverse:do_master_job(TraverseJob, TaskId);
-do_master_job(TraverseJob = #storage_traverse{info = {Pid, _, _, ComputeCounterRef}}, TaskId) ->
+do_master_job(TraverseJob = #storage_traverse_master{info = {Pid, _, _, ComputeCounterRef}}, TaskId) ->
     {ok, MasterJobMap, ComputeResult} = storage_traverse:do_master_job(TraverseJob, TaskId),
     case ComputeResult > 0 of
         true -> countdown_server:decrease_by_value(Pid, ComputeCounterRef, ComputeResult);
@@ -412,7 +409,10 @@ do_master_job(TraverseJob = #storage_traverse{info = {Pid, _, _, ComputeCounterR
     end,
     {ok, MasterJobMap}.
 
-do_slave_job({StorageFileCtx, {Pid, DirsCounterRef, FilesCounterRef}}, _TaskId) ->
+do_slave_job(#storage_traverse_slave{
+    storage_file_ctx = StorageFileCtx,
+    info = {Pid, DirsCounterRef, FilesCounterRef}
+}, _TaskId) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, _} = storage_file_ctx:stat(StorageFileCtx),
     case file_meta:type(Mode) of
@@ -423,7 +423,10 @@ do_slave_job({StorageFileCtx, {Pid, DirsCounterRef, FilesCounterRef}}, _TaskId) 
         _ ->
             ok
     end;
-do_slave_job({StorageFileCtx, {Pid, DirsCounterRef, FilesCounterRef, _ComputeCounterRef}}, _TaskId) ->
+do_slave_job(#storage_traverse_slave{
+    storage_file_ctx = StorageFileCtx,
+    info = {Pid, DirsCounterRef, FilesCounterRef, _ComputeCounterRef}
+}, _TaskId) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, _} = storage_file_ctx:stat(StorageFileCtx),
     case file_meta:type(Mode) of
@@ -436,7 +439,7 @@ do_slave_job({StorageFileCtx, {Pid, DirsCounterRef, FilesCounterRef, _ComputeCou
     end.
 
 update_job_progress(ID, Job, Pool, TaskID, Status) ->
-    storage_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
+    storage_traverse:update_job_progress(ID, Job, Pool, TaskID, Status).
 
 get_job(DocOrID) ->
     storage_traverse:get_job(DocOrID).

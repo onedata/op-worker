@@ -33,6 +33,9 @@
 -module(storage_sync_traverse).
 -author("Jakub Kudzia").
 
+-behaviour(traverse_behaviour).
+-behaviour(storage_traverse).
+
 -include("global_definitions.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/storage_sync/storage_sync.hrl").
@@ -45,7 +48,8 @@
 %%% Types
 %%%===================================================================
 
--type job() :: storage_traverse:job().
+-type master_job() :: storage_traverse:master_job().
+-type slave_job() :: storage_traverse:slave_job().
 -type scan_status() :: not_started | in_progress | finished.
 -type info() :: #{atom() => term()}.
 
@@ -133,14 +137,17 @@ cancel(SpaceId, StorageId) ->
 % Pool callbacks
 %===================================================================
 
--spec do_master_job(job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
-do_master_job(TraverseJob = #storage_traverse{info = #{scan_num := 1}}, Args) ->
+-spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+do_master_job(TraverseJob = #storage_traverse_master{info = #{scan_num := 1}}, Args) ->
     do_import_master_job(TraverseJob, Args);
-do_master_job(TraverseJob = #storage_traverse{info = #{scan_num := ScanNum}}, Args) when ScanNum >= 1 ->
+do_master_job(TraverseJob = #storage_traverse_master{info = #{scan_num := ScanNum}}, Args) when ScanNum >= 1 ->
     do_update_master_job(TraverseJob, Args).
 
--spec do_slave_job({storage_file_ctx:ctx(), info()}, traverse:id()) -> ok | {error, term()}.
-do_slave_job({StorageFileCtx, Info}, _Task) ->
+-spec do_slave_job(slave_job(), traverse:id()) -> ok | {error, term()}.
+do_slave_job(#storage_traverse_slave{
+    storage_file_ctx = StorageFileCtx,
+    info = Info
+}, _Task) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case process_storage_file(StorageFileCtx, Info) of
@@ -152,13 +159,13 @@ do_slave_job({StorageFileCtx, Info}, _Task) ->
     end.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
-    job(), traverse:pool(), traverse:id(), traverse:job_status()) ->
+    master_job(), traverse:pool(), traverse:id(), traverse:job_status()) ->
     {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(ID, Job, Pool, TaskID, Status) ->
-    storage_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
+    storage_traverse:update_job_progress(ID, Job, Pool, TaskID, Status).
 
 -spec get_job(traverse:job_id()) ->
-    {ok, job(), traverse:pool(), traverse:id()}  | {error, term()}.
+    {ok, master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_job(DocOrID) ->
     storage_traverse:get_job(DocOrID).
 
@@ -186,19 +193,22 @@ task_canceled(TaskId) ->
     ?debug("Storage sync scan ~p canceled", [TaskId]),
     storage_sync_logger:log_scan_cancelled(SpaceId, ScanNum).
 
--spec to_string({storage_file_ctx:ctx(), info()} | job()) -> {ok, binary()}.
-to_string({StorageFileCtx, #{scan_num := ScanNum}}) ->
+-spec to_string(slave_job() | master_job()) -> binary().
+to_string(#storage_traverse_slave{
+    storage_file_ctx = StorageFileCtx,
+    info = #{scan_num := ScanNum}
+}) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    {ok, str_utils:format_bin(
+    str_utils:format_bin(
         " ~nStorage sync slave job:~n"
         "    file: ~p~n"
         "    storage: ~p~n"
         "    space: ~p~n"
         "    scan no.: ~p~n",
-        [StorageFileId, StorageId, SpaceId, ScanNum])};
-to_string(#storage_traverse{
+        [StorageFileId, StorageId, SpaceId, ScanNum]);
+to_string(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{scan_num := ScanNum},
     offset = Offset,
@@ -207,7 +217,7 @@ to_string(#storage_traverse{
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    {ok, str_utils:format_bin(
+    str_utils:format_bin(
         " ~nStorage sync master job:~n"
         "    file: ~p~n"
         "    storage: ~p~n"
@@ -215,14 +225,14 @@ to_string(#storage_traverse{
         "    scan no.: ~p~n"
         "    offset: ~p~n"
         "    marker: ~p~n",
-        [StorageFileId, StorageId, SpaceId, ScanNum, Offset, Marker])}.
+        [StorageFileId, StorageId, SpaceId, ScanNum, Offset, Marker]).
 
 %%%===================================================================
 %%% storage_traverse callbacks
 %%%===================================================================
 
--spec reset_info(job()) -> info().
-reset_info(#storage_traverse{info = Info}) ->
+-spec reset_info(master_job()) -> info().
+reset_info(#storage_traverse_master{info = Info}) ->
     Info2 = maps:remove(storage_sync_info_doc, Info),
     Info3 = maps:remove(file_ctx, Info2),
     Info4 = maps:remove(add_deletion_detection_link, Info3),
@@ -230,7 +240,7 @@ reset_info(#storage_traverse{info = Info}) ->
 
 -spec next_batch_job_prehook(info()) -> storage_traverse:next_batch_job_prehook().
 next_batch_job_prehook(_TraverseInfo) ->
-    fun(#storage_traverse{storage_file_ctx = StorageFileCtx}) ->
+    fun(#storage_traverse_master{storage_file_ctx = StorageFileCtx}) ->
         StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
         SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
         storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
@@ -238,9 +248,9 @@ next_batch_job_prehook(_TraverseInfo) ->
         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId)
     end.
 
--spec children_master_job_prehook(info()) -> storage_traverse:children_batch_job_prehook().
+-spec children_master_job_prehook(info()) -> storage_traverse:children_master_job_prehook().
 children_master_job_prehook(_TraverseInfo) ->
-    fun(#storage_traverse{storage_file_ctx = StorageFileCtx}) ->
+    fun(#storage_traverse_master{storage_file_ctx = StorageFileCtx}) ->
         SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
         storage_sync_info:init_batch_counters(StorageFileId, SpaceId)
@@ -250,8 +260,8 @@ children_master_job_prehook(_TraverseInfo) ->
 compute_fun(TraverseInfo) ->
     SyncAcl = maps:get(sync_acl, TraverseInfo, false),
     fun(StorageFileCtx, Info, HashAcc) ->
-%%        {Hash, StorageFileCtx2} = storage_sync_hash:compute_file_attrs_hash(StorageFileCtx, SyncAcl),
-        {Hash, StorageFileCtx2} = {<<"">>, StorageFileCtx},
+        {Hash, StorageFileCtx2} = storage_sync_hash:compute_file_attrs_hash(StorageFileCtx, SyncAcl),
+%%        {Hash, StorageFileCtx2} = {<<"">>, StorageFileCtx},
         maybe_add_deletion_detection_link(StorageFileCtx, Info),
         {[Hash | HashAcc], StorageFileCtx2}
     end.
@@ -296,9 +306,9 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     },
     storage_traverse:run(?POOL, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts).
 
--spec do_import_master_job(job(), traverse:master_job_extended_args()) ->
+-spec do_import_master_job(master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
-do_import_master_job(TraverseJob = #storage_traverse{
+do_import_master_job(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = Info,
     offset = Offset,
@@ -315,7 +325,7 @@ do_import_master_job(TraverseJob = #storage_traverse{
             % we perform stat here to ensure that jobs for all batches for given directory
             % will be scheduled with the same stat result
             {#statbuf{st_mtime = MTime}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
-            TraverseJob2 = TraverseJob#storage_traverse{
+            TraverseJob2 = TraverseJob#storage_traverse_master{
                 storage_file_ctx = StorageFileCtx3,
                 info = Info#{file_ctx => FileCtx}
             },
@@ -350,9 +360,9 @@ do_import_master_job(TraverseJob = #storage_traverse{
             Error2
     end.
 
--spec do_update_master_job(job(), traverse:master_job_extended_args()) ->
+-spec do_update_master_job(master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
-do_update_master_job(#storage_traverse{
+do_update_master_job(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{
         detect_deletions := true,
@@ -368,7 +378,7 @@ do_update_master_job(#storage_traverse{
         {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
         storage_sync_info:update_hashes(StorageFileId, SpaceId, STMtime)
     end}};
-do_update_master_job(TraverseJob = #storage_traverse{
+do_update_master_job(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = Info = #{
         delete_enable := DeleteEnable,
@@ -386,7 +396,7 @@ do_update_master_job(TraverseJob = #storage_traverse{
             % will be scheduled with the same stat result
             {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
             MTimeHasChanged = storage_sync_traverse:mtime_has_changed(SSIDoc, StorageFileCtx3),
-            TraverseJob2 = TraverseJob#storage_traverse{
+            TraverseJob2 = TraverseJob#storage_traverse_master{
                 storage_file_ctx = StorageFileCtx3,
                 info = Info2 = Info#{
                     file_ctx => FileCtx,
@@ -398,14 +408,14 @@ do_update_master_job(TraverseJob = #storage_traverse{
 
             case {MTimeHasChanged, DeleteEnable, WriteOnce} of
                 {true, true, _} ->
-                    TraverseJob3 = TraverseJob2#storage_traverse{info = Info2#{add_deletion_detection_link => true}},
+                    TraverseJob3 = TraverseJob2#storage_traverse_master{info = Info2#{add_deletion_detection_link => true}},
                     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                     traverse(TraverseJob3, Args, true);
                 {false, _, true} ->
                     % WriteOnce option is enabled and MTime of directory has not changed, therefore
                     % we are sure that hash computed out of children (only regular files) attributes
                     % mustn't have changed
-                    traverse_only_directories(TraverseJob2#storage_traverse{compute_enabled = false}, Args);
+                    traverse_only_directories(TraverseJob2#storage_traverse_master{compute_enabled = false}, Args);
                 {_, _, _} ->
                     % Hash of children attrs might have changed, therefore it must be computed
                     traverse(TraverseJob2, Args, false)
@@ -416,7 +426,7 @@ do_update_master_job(TraverseJob = #storage_traverse{
             storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
             {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
             FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
-                MasterJobCallback([TraverseJob#storage_traverse{info = Info#{
+                MasterJobCallback([TraverseJob#storage_traverse_master{info = Info#{
                     detect_deletions => true,
                     file_ctx => FileCtx,
                     parent_ctx => ParentCtx2
@@ -428,9 +438,9 @@ do_update_master_job(TraverseJob = #storage_traverse{
             Error
     end.
 
--spec traverse_only_directories(job(), traverse:master_job_extended_args()) ->
+-spec traverse_only_directories(master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
-traverse_only_directories(TraverseJob = #storage_traverse{storage_file_ctx = StorageFileCtx}, Args) ->
+traverse_only_directories(TraverseJob = #storage_traverse_master{storage_file_ctx = StorageFileCtx}, Args) ->
     case storage_traverse:do_master_job(TraverseJob, Args) of
         {ok, MasterJobMap} ->
             schedule_jobs_for_directories_only(MasterJobMap, StorageFileCtx);
@@ -438,9 +448,9 @@ traverse_only_directories(TraverseJob = #storage_traverse{storage_file_ctx = Sto
             Error
     end.
 
--spec traverse(job(), traverse:master_job_extended_args(), boolean()) ->
+-spec traverse(master_job(), traverse:master_job_extended_args(), boolean()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
-traverse(TraverseJob = #storage_traverse{
+traverse(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = Offset,
     batch_size = BatchSize,
@@ -477,9 +487,9 @@ schedule_jobs_for_directories_only(MasterJobMap, StorageFileCtx) ->
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}}.
 
--spec schedule_jobs_for_all_files(job(), traverse:master_job_map(), storage_file_ctx:ctx(),
+-spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_file_ctx:ctx(),
     storage_sync_hash:hash(), boolean()) -> {ok, traverse:master_job_map()}.
-schedule_jobs_for_all_files(#storage_traverse{offset = Offset, batch_size = BatchSize},
+schedule_jobs_for_all_files(#storage_traverse_master{offset = Offset, batch_size = BatchSize},
     MasterJobMap, StorageFileCtx, BatchHash,false
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -494,7 +504,7 @@ schedule_jobs_for_all_files(#storage_traverse{offset = Offset, batch_size = Batc
         storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash)
     end),
     {ok, MasterJobMap#{finish_callback => FinishCallback}};
-schedule_jobs_for_all_files(TraverseJob = #storage_traverse{offset = Offset, batch_size = BatchSize, info = Info},
+schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{offset = Offset, batch_size = BatchSize, info = Info},
     MasterJobMap, StorageFileCtx, BatchHash, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -510,7 +520,7 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse{offset = Offset, bat
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash, false),
                 case storage_sync_info:are_all_batches_processed(SSI) of
-                    true -> MasterJobCallback([TraverseJob#storage_traverse{info = Info#{detect_deletions => true}}]);
+                    true -> MasterJobCallback([TraverseJob#storage_traverse_master{info = Info#{detect_deletions => true}}]);
                     false -> ok
                 end;
             _ ->
@@ -528,16 +538,16 @@ decode_task_id(TaskId) ->
     [_Prefix, SpaceId, StorageId, ScanNum] = binary:split(TaskId, ?TASK_ID_SEP, [global]),
     {SpaceId, StorageId, binary_to_integer(ScanNum)}.
 
--spec do_slave_job_on_directory(job()) ->
+-spec do_slave_job_on_directory(master_job()) ->
     {ok, {storage_sync_engine:result(), file_ctx:ctx(), storage_file_ctx:ctx()}} | {error, term()}.
-do_slave_job_on_directory(#storage_traverse{
+do_slave_job_on_directory(#storage_traverse_master{
     offset = 0,
     storage_file_ctx = StorageFileCtx,
     info = Info
 }) ->
     % slave job on dir should be executed just once
     process_storage_file(StorageFileCtx, Info);
-do_slave_job_on_directory(#storage_traverse{
+do_slave_job_on_directory(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{file_ctx := FileCtx}
 }) ->
@@ -585,8 +595,8 @@ increase_suitable_counter(updated, SpaceId, StorageId) ->
 increase_suitable_counter(processed, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId).
 
--spec get_storage_sync_info_doc(job()) -> storage_sync_info:doc().
-get_storage_sync_info_doc(#storage_traverse{
+-spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().
+get_storage_sync_info_doc(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = 0
 }) ->
@@ -597,7 +607,7 @@ get_storage_sync_info_doc(#storage_traverse{
         {error, not_found} -> undefined;
         {ok, SSIDoc} -> SSIDoc
     end;
-get_storage_sync_info_doc(#storage_traverse{
+get_storage_sync_info_doc(#storage_traverse_master{
     info = #{storage_sync_info_doc := SSIDoc}
 }) ->
     % for other batches it is cached in #storage_traverse.info map

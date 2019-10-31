@@ -81,17 +81,22 @@ end).
 -define(SESSION_ID(Config, Worker), ?config({session_id, {?USER, ?GET_DOMAIN(Worker)}}, Config)).
 
 % {StorageType, MountInRoot}
--define(BLOCK_STORAGE_CONFIGS, [{block, false}, {block, true}]).
--define(OBJECT_STORAGE_CONFIGS, [{object, false}, {object, true}]).
+-define(BLOCK_STORAGE_CONFIGS, [{block_storage, false}, {block_storage, true}]).
+-define(OBJECT_STORAGE_CONFIGS, [
+    {object_storage, false}
+%%    ,
+%%    {object_storage, true}
+]).
 
--define(STORAGE_CONFIGS, ?BLOCK_STORAGE_CONFIGS ++ ?OBJECT_STORAGE_CONFIGS).
+%%-define(STORAGE_CONFIGS, ?BLOCK_STORAGE_CONFIGS ++ ?OBJECT_STORAGE_CONFIGS).
+-define(STORAGE_CONFIGS, ?OBJECT_STORAGE_CONFIGS).
 
 -define(STORAGE_TO_SPACE_ID(StorageType, MountInRoot),
     case {StorageType, MountInRoot} of
-        {block, false} -> ?SPACE_ID1;
-        {object, false} -> ?SPACE_ID2;
-        {block, true} -> ?SPACE_ID3;
-        {object, true} -> ?SPACE_ID4
+        {block_storage, false} -> ?SPACE_ID1;
+        {object_storage, false} -> ?SPACE_ID2;
+        {block_storage, true} -> ?SPACE_ID3;
+        {object_storage, true} -> ?SPACE_ID4
     end).
 
 -define(FOR_ALL_STORAGE_CONFIGS(TestFun, Args),
@@ -123,7 +128,7 @@ delete_nested_child_on_object_storage_test(Config) ->
 
 delete_nested_child_on_block_storage_test(Config) ->
     ?FOR_EACH_STORAGE_CONFIG(fun delete_nested_child_on_block_storage_test_base/1, [Config],
-        [{block, false}, {block, true}]).
+        [{block_storage, false}, {block_storage, true}]).
 
 do_not_delete_child_file_basic_test(Config) ->
     ?FOR_ALL_STORAGE_CONFIGS(fun do_not_delete_child_file_basic_test_base/1, [Config]).
@@ -257,6 +262,7 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
     {ok, H2} = lfm_proxy:open(W, SessionId, {guid, FileGuid2}, write),
     {ok, _} = lfm_proxy:write(W, H2, 0, <<"test_data">>),
+    ?assertMatch({ok, [{DirGuid1, _}]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT),
     Child1FilePath = filename:join([SpaceStorageFileId, ChildDir1, ChildDir2, ChildDir3, ChildFile1]),
     add_storage_sync_link(W, SpaceStorageFileId, Child1FilePath, SpaceId, StorageId, true),
 
@@ -454,17 +460,29 @@ run_sync_deletion(Worker, StorageFileCtx, FileCtx, Mode) ->
     ok = rpc:call(Worker, storage_sync_deletion, run, [StorageFileCtx, FileCtx, Mode, false, false]).
 
 clean_spaces(Worker) ->
+    lfm_proxy:close_all(Worker),
     lists:foreach(fun(SpaceId) ->
         clean_space(Worker, SpaceId)
     end, ?SPACE_IDS).
 
 clean_space(Worker, SpaceId) ->
     SpaceGuid = ?SPACE_GUID(SpaceId),
-    {ok, Children} = lfm_proxy:ls(Worker, <<"0">>, {guid, SpaceGuid}, 0, 1000),
+    clean_space(Worker, SpaceGuid, 0, 1000),
+    ?assertMatch({ok, []}, lfm_proxy:ls(Worker, <<"0">>, {guid, SpaceGuid}, 0, 1000)).
+
+
+clean_space(Worker, SpaceGuid, Offset, Count) ->
+    {ok, Children} = lfm_proxy:ls(Worker, <<"0">>, {guid, SpaceGuid}, Offset, Count),
     lists:foreach(fun({ChildGuid, _}) ->
-        lfm_proxy:rm_recursive(Worker, <<"0">>, {guid, ChildGuid})
+        lfm_proxy:rm_recursive(Worker, <<"0">>, {guid, ChildGuid}),
+        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, <<"0">>,  {guid, ChildGuid}))
     end, Children),
-    ?assertMatch({ok, []}, lfm_proxy:ls(Worker, <<"0">>, {guid, SpaceGuid}, 0, 1)).
+    case length(Children) < Count of
+        true ->
+            ok;
+        false ->
+            clean_space(Worker, SpaceGuid, Offset + length(Children), Count)
+    end.
 
 clean_storage_sync_links(Worker) ->
     lists:foreach(fun(SpaceId) ->
@@ -487,8 +505,8 @@ add_storage_sync_link(Worker, RootStorageFileId, ChildName, SpaceId, StorageId, 
     ok = storage_sync_links_test_utils:add_link(Worker, RootStorageFileId, SpaceId, StorageId,
         ChildStorageFileId, MarkLeaves).
 
-should_mark_leaves(object = _StorageType) -> true;
-should_mark_leaves(block = _StorageType) -> false.
+should_mark_leaves(object_storage = _StorageType) -> true;
+should_mark_leaves(block_storage = _StorageType) -> false.
 
 run_test_for_all_storage_configs(Testcase, TestFun, Args, StorageConfigs) ->
     Results = lists:map(fun(StorageConfig) ->

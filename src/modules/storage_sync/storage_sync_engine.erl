@@ -11,7 +11,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_engine).
-% rename to storage_sync_engine
 -author("Jakub Kudzia").
 
 -include("modules/storage_sync/storage_sync.hrl").
@@ -76,10 +75,10 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
         false ->
             find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx2, Info#{parent_ctx => SpaceCtx})
     end,
-
     case file_ctx:is_root_dir_const(ParentCtx2) of
         true ->
-            sync_if_file_is_not_being_replicated(StorageFileCtx2, SpaceCtx, ?DIRECTORY_TYPE, Info2);
+
+            try_syncing_file(StorageFileCtx2, SpaceCtx, ?DIRECTORY_TYPE, Info2);
         false ->
             % check whether FileName of processed file is in the form
             % FileName = <<FileBaseName, ?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, FileUuid>>
@@ -144,7 +143,7 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                             FileCtx = file_ctx:new_by_guid(FileGuid),
-                            sync_if_file_is_not_being_replicated(StorageFileCtx2, FileCtx, FileType, Info2);
+                            try_syncing_file(StorageFileCtx2, FileCtx, FileType, Info2);
                         {ok, _} ->
                             {processed, undefined, StorageFileCtx2}
                     end
@@ -177,7 +176,6 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{parent_
     Info3 = ensure_parents_exist(ParentStorageFileCtx, Info2, MissingParentTokens),
     Info3.
 
-
 -spec ensure_parents_exist(storage_file_ctx:ctx(), storage_sync_traverse:info(), [helpers:file_id()]) ->
     storage_sync_traverse:info().
 ensure_parents_exist(_ParentStorageFileCtx, Info, []) ->
@@ -189,7 +187,12 @@ ensure_parents_exist(ParentStorageFileCtx, Info = #{parent_ctx := ParentCtx}, [M
             ensure_parents_exist(MissingParentStorageCtx, Info#{parent_ctx => MissingParentCtx}, Rest);
         {error, ?ENOENT} ->
             ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-            % todo wyjasnic dlaczego jest ta sekcja krytyczna
+            % TODO VFS-5881 get rid of this critical section
+            % this critical section is to avoid race on creating missing parent by call to import_file function
+            % in case of simultaneous creation of missing parent file_meta, one of syncing processes
+            % would get {error, already_exists} which is handled in import_file as a race between syncing process
+            % and creating a file via lfm. As a result there will be 2 parents created, one with suffix for
+            % conflicted files. Critical section is used to avoid this situation.
             MissingParentCtx2 = critical_section:run({create_missing_parent, ParentUuid, MissingParentName},
                 fun() ->
                     case get_child_safe(ParentCtx, MissingParentName) of
@@ -219,17 +222,18 @@ get_child_safe(FileCtx, ChildName) ->
 %% @private
 %% @doc
 %% This function synchronizes the file.
-%% For regular files, it checks whether the file is being replicated and
-%% synchronizes it ONLY if it isn't.
+%% For regular files, it checks whether the file can be synced.
+%% Files can be synced only if they are fully replicated (they
+%% have one block which size equals file's size).
 %% Directories are always processed.
 %% @end
 %%-------------------------------------------------------------------
--spec sync_if_file_is_not_being_replicated(storage_file_ctx:ctx(), file_ctx:ctx(),
+-spec try_syncing_file(storage_file_ctx:ctx(), file_ctx:ctx(),
     file_meta:type(), storage_sync_traverse:info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
-sync_if_file_is_not_being_replicated(StorageFileCtx, FileCtx, ?DIRECTORY_TYPE, Info) ->
-    maybe_sync_file_with_existing_metadata(StorageFileCtx, FileCtx, Info);
-sync_if_file_is_not_being_replicated(StorageFileCtx, FileCtx, ?REGULAR_FILE_TYPE, Info) ->
+try_syncing_file(StorageFileCtx, FileCtx, ?DIRECTORY_TYPE, Info) ->
+    maybe_update_file(StorageFileCtx, FileCtx, Info);
+try_syncing_file(StorageFileCtx, FileCtx, ?REGULAR_FILE_TYPE, Info) ->
     % Get only two blocks - it is enough to verify if file can be imported
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case fslogic_location_cache:get_location(
@@ -244,9 +248,10 @@ sync_if_file_is_not_being_replicated(StorageFileCtx, FileCtx, ?REGULAR_FILE_TYPE
                 true ->
                     case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
                         [#file_block{offset = 0, size = Size}] ->
-                            maybe_sync_file_with_existing_metadata(StorageFileCtx, FileCtx, Info);
+                            % file has one block which size is equal to file's size
+                            maybe_update_file(StorageFileCtx, FileCtx, Info);
                         [] when Size =:= 0 ->
-                            maybe_sync_file_with_existing_metadata(StorageFileCtx, FileCtx, Info);
+                            maybe_update_file(StorageFileCtx, FileCtx, Info);
                         _ ->
                             {processed, FileCtx, StorageFileCtx}
                     end;
@@ -259,29 +264,22 @@ sync_if_file_is_not_being_replicated(StorageFileCtx, FileCtx, ?REGULAR_FILE_TYPE
             {processed, FileCtx, StorageFileCtx}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks if file (which metadata exists in onedata) is fully imported
-%% (.i.e. for regular files checks if its file_location exists).
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_sync_file_with_existing_metadata(storage_file_ctx:ctx(), file_ctx:ctx(),
+-spec maybe_update_file(storage_file_ctx:ctx(), file_ctx:ctx(),
     storage_sync_traverse:info()) -> {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
-maybe_sync_file_with_existing_metadata(StorageFileCtx, FileCtx, Info) ->
+maybe_update_file(StorageFileCtx, FileCtx, Info) ->
     #fuse_response{
         status = #status{code = StatusCode},
         fuse_response = FileAttr
     } = get_attr(FileCtx),
     case StatusCode of
         ?OK ->
-            Result = handle_already_imported_file(StorageFileCtx, FileAttr, FileCtx, Info),
+            Result = maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info),
             {Result, FileCtx ,StorageFileCtx};
         ErrorCode when
             ErrorCode =:= ?ENOENT;
             ErrorCode =:= ?EAGAIN
         ->
-            % TODO VFS-5273
+            % TODO VFS-5273 - verify whether this fallback is needed
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             import_file(StorageFileCtx, FileUuid, Info)
     end.
@@ -362,9 +360,9 @@ import_file_unsafe(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) 
 %% Updates mode, times, size, file_location and ACLs of already imported file.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_already_imported_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
+-spec maybe_update_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
     storage_sync_traverse:info()) -> result().
-handle_already_imported_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
+maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
     SyncAcl = maps:get(sync_acl, Info, false),
     try
         {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
@@ -374,7 +372,7 @@ handle_already_imported_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             ?error_stacktrace(
-                "storage_sync_traverse:handle_already_imported file for file ~p in space ~p"
+                "storage_sync_engine:maybe_update_file file for file ~p in space ~p"
                 " failed due to ~w:~w",
                 [FileName, SpaceId, Error, Reason]),
             {error, Reason}

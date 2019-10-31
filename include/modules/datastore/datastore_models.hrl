@@ -505,6 +505,7 @@
     storage_file_id :: helper:name(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
+    iterator :: storage_traverse:iterator(),
     offset = 0 ::  non_neg_integer(),
     batch_size :: non_neg_integer(),
     marker :: undefined | helpers:marker(),

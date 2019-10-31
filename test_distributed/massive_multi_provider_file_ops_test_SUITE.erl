@@ -12,6 +12,8 @@
 -module(massive_multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-behaviour(traverse_behaviour).
+
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -35,7 +37,7 @@
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1,
-    on_cancel_init/1, task_canceled/1, task_finished/1]).
+    on_cancel_init/1, task_canceled/2, task_finished/2]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
@@ -658,12 +660,12 @@ get_sync_info(Job) ->
 on_cancel_init(TaskID) ->
     save_callback(on_cancel_init, TaskID).
 
-task_canceled(TaskID) ->
+task_canceled(TaskID, _PoolName) ->
     save_callback(task_canceled, TaskID),
     timer:sleep(2000),
     ok.
 
-task_finished(TaskID) ->
+task_finished(TaskID, _PoolName) ->
     save_callback(task_finished, TaskID).
 
 %%%===================================================================
