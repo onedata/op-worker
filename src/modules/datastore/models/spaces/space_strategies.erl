@@ -26,7 +26,7 @@
 -export([get/1, delete/1]).
 -export([
     get_import_details/1, get_import_details/2,
-    get_update_details/1, get_update_details/2, 
+    get_update_details/1, get_update_details/2,
     get_sync_configs/1, is_any_storage_imported/1,
     configure_import/4, configure_update/4
 ]).
@@ -62,7 +62,7 @@
 
 -export_type([import_config/0, update_config/0, config/0, sync_config/0, sync_configs/0, sync_details/0]).
 
--define(CTX, #{model => ?MODULE}).
+-define(CTX, #{model => ?MODULE, memory_copies => all}).
 -define(DEFAULT_IMPORT_SYNC_CONFIG(Enabled, Config),
     #storage_sync_config{
         import_enabled = Enabled,

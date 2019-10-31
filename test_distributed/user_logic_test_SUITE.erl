@@ -18,7 +18,6 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    preauthorize_test/1,
     get_test/1,
     get_protected_data_test/1,
     get_shared_data_test/1,
@@ -29,7 +28,6 @@
 ]).
 
 all() -> ?ALL([
-    preauthorize_test,
     get_test,
     get_protected_data_test,
     get_shared_data_test,
@@ -42,27 +40,6 @@ all() -> ?ALL([
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
-
-preauthorize_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        {ok, ?USER(?USER_1)},
-        rpc:call(Node, user_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    % Getting user by auth is always done by delegating to onezone, so no cache
-    % works here
-    ?assertMatch(
-        {ok, ?USER(?USER_1)},
-        rpc:call(Node, user_logic, preauthorize, [?USER_INTERNAL_TOKEN_AUTH(?USER_1)])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
 
 
 get_test(Config) ->

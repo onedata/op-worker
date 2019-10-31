@@ -111,7 +111,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX, Doc));
+    ?extract_key(datastore_model:save(?CTX#{memory_copies => all}, Doc));
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -140,7 +140,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
     ?run(begin
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
-        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc),
+        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         SpaceDirUuid = case IsScope of
             true ->
                 FileDoc2#document.key;
@@ -987,11 +987,13 @@ get_uuid(FileUuid) ->
 %% Generates uuid if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_uuid(doc()) -> doc().
-fill_uuid(Doc = #document{key = undefined}) ->
-    NewUuid = datastore_utils:gen_key(),
-    Doc#document{key = NewUuid};
-fill_uuid(Doc) ->
+-spec fill_uuid(doc(), uuid()) -> doc().
+fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
+    Doc#document{key = datastore_utils:gen_key()};
+fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
+    HashPart = consistent_hashing:get_hashing_key(ParentUuid),
+    Doc#document{key = datastore_utils:gen_key(HashPart)};
+fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
 %%--------------------------------------------------------------------

@@ -23,7 +23,11 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -301,9 +305,9 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 
     initializer:remove_pending_messages(),
     Sessions = lists:map(fun(N) ->
-        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
+        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
         Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-        session_setup(Worker, SessId, Iden, Self),
+        {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
         SubId = subscribe(Worker, SessId,
             fun(Meta) -> Meta >= CtrThr end,
             forward_events_handler(Self)
@@ -362,7 +366,7 @@ init_per_suite(Config) ->
         initializer:clear_subscriptions(Worker),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 
 init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
@@ -385,7 +389,6 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-    SessId = <<"session_id">>,
     Iden = #user_identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
@@ -396,10 +399,18 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    session_setup(Worker, SessId, Iden, Self),
+    Nonce = <<"nonce">>,
+    {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]).
+    initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"),
+        [{session_id, SessId} | Config]
+    ).
+
+
+end_per_suite(_Config) ->
+    ok.
+
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -430,9 +441,9 @@ end_per_testcase(_Case, Config) ->
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:identity(), Conn :: pid()) -> ok.
 session_setup(Worker, SessId, Iden, Conn) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #token_auth{}, Conn]
-    )).
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, SessId, Iden, #token_auth{}, Conn
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

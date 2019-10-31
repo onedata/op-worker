@@ -71,7 +71,7 @@ translate_client_handshake_request_from_protobuf_test() ->
     ?assertEqual(Internal, clproto_translator:translate_from_protobuf(Protobuf)).
 
 translate_provider_handshake_request_from_protobuf_test() ->
-    {Internal, Protobuf} = get_provider_handshake_request(<<"abcd">>, <<"nonce">>),
+    {Internal, Protobuf} = get_provider_handshake_request(<<"abcd">>, <<"token">>),
     ?assertEqual(Internal, clproto_translator:translate_from_protobuf(Protobuf)).
 
 translate_message_stream_from_protobuf_test() ->
@@ -324,17 +324,17 @@ get_token_auth(Val) ->
         #'Macaroon'{macaroon = Val}
     }.
 
-get_client_handshake_request(Token, SessionId, CompOpVersions) ->
+get_client_handshake_request(Token, Nonce, CompOpVersions) ->
     {Internal, Protobuf} = get_token_auth(Token),
     {
-        #client_handshake_request{auth = Internal, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
-        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions}
+        #client_handshake_request{auth = Internal, nonce = Nonce, compatible_oneprovider_versions = CompOpVersions},
+        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = Nonce, compatible_oneprovider_versions = CompOpVersions}
     }.
 
-get_provider_handshake_request(ProviderId, Nonce) ->
+get_provider_handshake_request(ProviderId, Token) ->
     {
-        #provider_handshake_request{provider_id = ProviderId, nonce = Nonce},
-        #'ProviderHandshakeRequest'{provider_id = ProviderId, nonce = Nonce}
+        #provider_handshake_request{provider_id = ProviderId, token = Token},
+        #'ProviderHandshakeRequest'{provider_id = ProviderId, token = Token}
     }.
 
 get_message_stream(StmId, SeqNum) ->

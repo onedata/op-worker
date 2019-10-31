@@ -33,7 +33,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    disc_driver => undefined
+    disc_driver => undefined,
+    memory_copies => all
 }).
 
 -define(LUMA_USER_ROOT_PREFIX, <<"luma_user_">>).

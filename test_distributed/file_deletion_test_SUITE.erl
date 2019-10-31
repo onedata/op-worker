@@ -69,8 +69,6 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(FILE_UUID, <<"file_uuid">>).
 -define(FILE_GUID, file_id:pack_guid(?FILE_UUID, <<"spaceid">>)).
--define(SESSION_ID_1, <<"session_id_1">>).
--define(SESSION_ID_2, <<"session_id_2">>).
 
 -define(req(W, P), rpc:call(W, worker_proxy, call, [fslogic_deletion_worker, P])).
 
@@ -80,44 +78,44 @@ all() -> ?ALL(?TEST_CASES).
 
 counting_file_open_and_release_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId} = init_session(Worker, <<"nonce">>),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 70])),
+        [FileCtx, SessId, 70])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 50])),
+        [FileCtx, SessId, 50])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 20])),
+        [FileCtx, SessId, 20])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     %% Release of non existing file should not fail.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 50])),
+        [FileCtx, SessId, 50])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 1])),
+        [FileCtx, SessId, 1])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     %% Release of file marked to remove should trigger call to file deletion worker.
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 1])),
+        [FileCtx, SessId, 1])),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 1, 1).
 
@@ -125,57 +123,57 @@ invalidating_session_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% With one active session entry for UUID should be removed after its expiration.
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId1, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    init_session(Worker, ?SESSION_ID_1),
-    init_session(Worker, ?SESSION_ID_2),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
+    {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
     %% With few active sessions entry for UUID should be removed only after
     %% all of them expired.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId1, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_2, 30])),
+        [FileCtx, SessId2, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId2])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% Last session expiration should trigger call to file deletion worker when
     %% file is marked to remove.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId1, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 1, 1),
 
     %% Invalidating session when file or session entry not exists should not fail.
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, invalidate_session_entry,
-        [FileCtx, ?SESSION_ID_1])),
+        [FileCtx, SessId1])),
 
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId1, 30])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, invalidate_session_entry,
-        [FileCtx, ?SESSION_ID_2])).
+        [FileCtx, SessId1])).
 
 init_should_clear_open_files(Config) ->
     init_should_clear_open_files_test_base(Config, false).
@@ -441,7 +439,7 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base, fuse_test_utils]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
@@ -516,8 +514,10 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_validate_and_unload(Worker, [fslogic_delete, file_ctx, file_meta]),
-    ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
-    ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
+    {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
+    ?assertMatch(ok, rpc:call(Worker, session, delete, [SessId1])),
+    ?assertMatch(ok, rpc:call(Worker, session, delete, [SessId2])),
 
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -556,12 +556,11 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-init_session(Worker, SessID) ->
-    Self = self(),
+init_session(Worker, Nonce) ->
     Iden = #user_identity{user_id = <<"u1">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessID, Iden, undefined, Self]
-    )).
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, Iden, undefined, self()
+    ).
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

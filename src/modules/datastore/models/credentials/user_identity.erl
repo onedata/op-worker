@@ -93,7 +93,7 @@ delete(Credentials) ->
 fetch(Credentials) ->
     Auth = to_auth(Credentials),
     try
-        case user_logic:preauthorize(Auth) of
+        case token_logic:preauthorize(Auth) of
             {ok, #auth{subject = ?SUB(user, UserId), caveats = _Caveats}} ->
                 %% @TODO VFS-5719 use the caveats in op_logic and user_ctx
                 case provider_logic:has_eff_user(UserId) of
