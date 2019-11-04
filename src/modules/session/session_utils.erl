@@ -21,12 +21,8 @@
     get_provider_session_id/2,
     session_id_to_provider_id/1
 ]).
--export([session_ttl/0]).
 
 -define(PROVIDER_SESSION_PREFIX, "$$PRV$$__").
-
--define(SESSION_TTL,
-    application:get_env(op_worker, gui_session_ttl_seconds, 3600)).
 
 %%%===================================================================
 %%% API - session type check
@@ -110,16 +106,3 @@ get_provider_session_id(Type, ProviderId) ->
 session_id_to_provider_id(<<?PROVIDER_SESSION_PREFIX, SessId/binary>>) ->
     {_, _, ProviderId} = binary_to_term(http_utils:base64url_decode(SessId)),
     ProviderId.
-
-%%%===================================================================
-%%% API - other functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns session Time To Live in seconds.
-%% @end
-%%--------------------------------------------------------------------
--spec session_ttl() -> integer().
-session_ttl() ->
-    ?SESSION_TTL.
