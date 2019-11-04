@@ -117,7 +117,7 @@ counting_file_open_and_release_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, SessId, 1])),
 
-    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 1, 1).
+    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 2, 1).
 
 invalidating_session_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -162,7 +162,7 @@ invalidating_session_open_files_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
 
-    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 2, 1),
 
     %% Invalidating session when file or session entry not exists should not fail.
 
@@ -453,7 +453,7 @@ init_per_testcase(Case, Config) when
         [passthrough]),
 
     test_utils:mock_expect(Worker, fslogic_delete, remove_opened_file,
-        fun(FileCtx) ->
+        fun(FileCtx, _) ->
             true = file_ctx:is_file_ctx_const(FileCtx),
             ?FILE_UUID = file_ctx:get_uuid_const(FileCtx),
             ok

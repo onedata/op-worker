@@ -36,6 +36,9 @@
 -behaviour(traverse_behaviour).
 -behaviour(storage_traverse).
 
+% todo rename space_strategies model
+% todo refactor modules structure storage/sync/ etc.
+
 -include("global_definitions.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/storage_sync/storage_sync.hrl").
@@ -68,7 +71,7 @@
     task_started/1, task_finished/1, task_canceled/1]).
 
 %% storage_traverse callbacks
--export([reset_info/1, next_batch_job_prehook/1, children_master_job_prehook/1, compute_fun/1]).
+-export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_compute_fun/1]).
 
 %% exported for tests
 -export([mtime_has_changed/2]).
@@ -233,13 +236,10 @@ to_string(#storage_traverse_master{
 
 -spec reset_info(master_job()) -> info().
 reset_info(#storage_traverse_master{info = Info}) ->
-    Info2 = maps:remove(storage_sync_info_doc, Info),
-    Info3 = maps:remove(file_ctx, Info2),
-    Info4 = maps:remove(add_deletion_detection_link, Info3),
-    maps:remove(detect_deletions, Info4).
+    maps:without([storage_sync_info_doc, file_ctx, add_deletion_detection_link, detect_deletions], Info).
 
--spec next_batch_job_prehook(info()) -> storage_traverse:next_batch_job_prehook().
-next_batch_job_prehook(_TraverseInfo) ->
+-spec get_next_batch_job_prehook(info()) -> storage_traverse:next_batch_job_prehook().
+get_next_batch_job_prehook(_TraverseInfo) ->
     fun(#storage_traverse_master{storage_file_ctx = StorageFileCtx}) ->
         StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
         SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -248,20 +248,19 @@ next_batch_job_prehook(_TraverseInfo) ->
         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId)
     end.
 
--spec children_master_job_prehook(info()) -> storage_traverse:children_master_job_prehook().
-children_master_job_prehook(_TraverseInfo) ->
+-spec get_children_master_job_prehook(info()) -> storage_traverse:children_master_job_prehook().
+get_children_master_job_prehook(_TraverseInfo) ->
     fun(#storage_traverse_master{storage_file_ctx = StorageFileCtx}) ->
         SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
         storage_sync_info:init_batch_counters(StorageFileId, SpaceId)
     end.
 
--spec compute_fun(info()) -> storage_traverse:compute().
-compute_fun(TraverseInfo) ->
+-spec get_compute_fun(info()) -> storage_traverse:compute().
+get_compute_fun(TraverseInfo) ->
     SyncAcl = maps:get(sync_acl, TraverseInfo, false),
     fun(StorageFileCtx, Info, HashAcc) ->
         {Hash, StorageFileCtx2} = storage_sync_hash:compute_file_attrs_hash(StorageFileCtx, SyncAcl),
-%%        {Hash, StorageFileCtx2} = {<<"">>, StorageFileCtx},
         maybe_add_deletion_detection_link(StorageFileCtx, Info),
         {[Hash | HashAcc], StorageFileCtx2}
     end.
@@ -297,11 +296,11 @@ run(SpaceId, StorageId, ScanNum, Config) ->
         execute_slave_on_dir => false,
         async_master_jobs => true,
         async_next_batch_job => true,
-        next_batch_job_prehook => next_batch_job_prehook(TraverseInfo),
-        children_master_job_prehook => children_master_job_prehook(TraverseInfo),
+        next_batch_job_prehook => get_next_batch_job_prehook(TraverseInfo),
+        children_master_job_prehook => get_children_master_job_prehook(TraverseInfo),
         batch_size => ?SYNC_DIR_BATCH_SIZE,
         max_depth => MaxDepth,
-        compute_fun => compute_fun(TraverseInfo),
+        compute_fun => get_compute_fun(TraverseInfo),
         compute_init => []
     },
     storage_traverse:run(?POOL, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts).

@@ -87,11 +87,11 @@
 %%%===================================================================
 -callback reset_info(master_job()) -> info().
 
--callback next_batch_job_prehook(info()) -> next_batch_job_prehook().
+-callback get_next_batch_job_prehook(info()) -> next_batch_job_prehook().
 
--callback children_master_job_prehook(info()) -> children_master_job_prehook().
+-callback get_children_master_job_prehook(info()) -> children_master_job_prehook().
 
--callback compute_fun(info()) -> compute_result().
+-callback get_compute_fun(info()) -> compute_result().
 
 %%%===================================================================
 %%% API functions
@@ -269,8 +269,9 @@ maybe_schedule_next_batch_job(TraverseJob = #storage_traverse_master{
     batch_size = BatchSize,
     async_next_batch_job = AsyncNextBatchJob,
     next_batch_job_prehook = NextBatchJobPrehook
-}, ChildrenBatch, #{master_job_starter_callback := MasterJobStarterCallback}) when length(ChildrenBatch) =:=
-    BatchSize ->
+}, ChildrenBatch, #{master_job_starter_callback := MasterJobStarterCallback})
+    when length(ChildrenBatch) =:= BatchSize ->
+
     % it is not the last batch
     NextBatchJobPrehook(TraverseJob),
     case AsyncNextBatchJob of

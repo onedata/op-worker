@@ -18,7 +18,7 @@
 %%%      ** s3
 %%% NOTE:
 %%% When implementing new iterator, function clause for it must be added
-%%% to ?MODULE:get_iterator/1 function.
+%%% to storage_traverse:get_iterator/1 function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_iterator).

@@ -37,7 +37,7 @@
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1,
-    on_cancel_init/1, task_canceled/2, task_finished/2]).
+    on_cancel_init/1, task_canceled/1, task_finished/1]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
@@ -660,12 +660,12 @@ get_sync_info(Job) ->
 on_cancel_init(TaskID) ->
     save_callback(on_cancel_init, TaskID).
 
-task_canceled(TaskID, _PoolName) ->
+task_canceled(TaskID) ->
     save_callback(task_canceled, TaskID),
     timer:sleep(2000),
     ok.
 
-task_finished(TaskID, _PoolName) ->
+task_finished(TaskID) ->
     save_callback(task_finished, TaskID).
 
 %%%===================================================================

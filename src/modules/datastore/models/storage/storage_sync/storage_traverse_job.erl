@@ -36,11 +36,14 @@
 
 -spec save_master_job(undefined | datastore:key(), storage_traverse:master_job(), traverse:pool(), traverse:id()) ->
     {ok, key()} | {error, term()}.
-save_master_job(Key, StorageTraverse = #storage_traverse_master{storage_file_ctx = StorageFileCtx, callback_module = CallbackModule}, Pool, TaskId) ->
+save_master_job(Key, StorageTraverseMaster = #storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    callback_module = CallbackModule
+}, Pool, TaskId) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     ?extract_key(datastore_model:save(?CTX, #document{
         key = Key,
-        value = create_record(Pool, TaskId, CallbackModule, StorageTraverse),
+        value = create_record(Pool, TaskId, CallbackModule, StorageTraverseMaster),
         scope = SpaceId
     })).
 
@@ -77,9 +80,9 @@ get_master_job(#document{value = #storage_traverse_job{
         batch_size = BatchSize,
         marker = Marker,
         max_depth = MaxDepth,
-        next_batch_job_prehook = next_batch_job_prehook(CallbackModule, TraverseInfo),
-        children_master_job_prehook = children_master_job_prehook(CallbackModule, TraverseInfo),
-        compute_fun = compute_fun(CallbackModule, TraverseInfo),
+        next_batch_job_prehook = get_next_batch_job_prehook(CallbackModule, TraverseInfo),
+        children_master_job_prehook = get_children_master_job_prehook(CallbackModule, TraverseInfo),
+        compute_fun = get_compute_fun(CallbackModule, TraverseInfo),
         execute_slave_on_dir = ExecuteSlaveOnDir,
         async_master_jobs = AsyncMasterJobs,
         async_next_batch_job = AsyncNextBatchJob,
@@ -176,32 +179,32 @@ create_record(Pool, TaskId, CallbackModule, #storage_traverse_master{
         info = term_to_binary(Info)
     }.
 
--spec next_batch_job_prehook(traverse:callback_module(), storage_traverse:info()) ->
+-spec get_next_batch_job_prehook(traverse:callback_module(), storage_traverse:info()) ->
     storage_traverse:next_batch_job_prehook().
-next_batch_job_prehook(CallbackModule, TraverseInfo) ->
-    case erlang:function_exported(CallbackModule, next_batch_job_prehook, 1) of
+get_next_batch_job_prehook(CallbackModule, TraverseInfo) ->
+    case erlang:function_exported(CallbackModule, get_next_batch_job_prehook, 1) of
         true ->
-            CallbackModule:next_batch_job_prehook(TraverseInfo);
+            CallbackModule:get_next_batch_job_prehook(TraverseInfo);
         false ->
             ?DEFAULT_NEXT_BATCH_JOB_PREHOOK
     end.
 
--spec children_master_job_prehook(traverse:callback_module(), storage_traverse:info()) ->
+-spec get_children_master_job_prehook(traverse:callback_module(), storage_traverse:info()) ->
     storage_traverse:children_master_job_prehook().
-children_master_job_prehook(CallbackModule, TraverseInfo) ->
-    case erlang:function_exported(CallbackModule, children_master_job_prehook, 1) of
+get_children_master_job_prehook(CallbackModule, TraverseInfo) ->
+    case erlang:function_exported(CallbackModule, get_children_master_job_prehook, 1) of
         true ->
-            CallbackModule:children_master_job_prehook(TraverseInfo);
+            CallbackModule:get_children_master_job_prehook(TraverseInfo);
         false ->
             ?DEFAULT_CHILDREN_BATCH_JOB_PREHOOK
     end.
 
--spec compute_fun(traverse:callback_module(), storage_traverse:info()) ->
+-spec get_compute_fun(traverse:callback_module(), storage_traverse:info()) ->
     storage_traverse:compute() | undefined.
-compute_fun(CallbackModule, TraverseInfo) ->
-    case erlang:function_exported(CallbackModule, compute_fun, 1) of
+get_compute_fun(CallbackModule, TraverseInfo) ->
+    case erlang:function_exported(CallbackModule, get_compute_fun, 1) of
         true ->
-            CallbackModule:compute_fun(TraverseInfo);
+            CallbackModule:get_compute_fun(TraverseInfo);
         false ->
             undefined
     end.

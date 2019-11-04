@@ -488,19 +488,20 @@ handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
 %%-------------------------------------------------------------------
 -spec mark_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
-    get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []).
+    ParentCtxs = get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []),
+    mark_parent_dirs_created_on_storage(ParentCtxs).
 
 -spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> ok.
 get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
     case file_ctx:is_space_dir_const(DirCtx) of
         true ->
-            mark_parent_dirs_created_on_storage(ParentCtxs);
+            ParentCtxs;
         false ->
             case file_ctx:get_dir_location_doc(DirCtx) of
                 {DirLocation, DirCtx2} ->
                     case dir_location:is_storage_file_created(DirLocation) of
                         true ->
-                            mark_parent_dirs_created_on_storage(ParentCtxs);
+                            ParentCtxs;
                         false ->
                             {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
                             get_parent_dirs_not_created_on_storage(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
