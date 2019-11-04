@@ -491,7 +491,7 @@ mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
     ParentCtxs = get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []),
     mark_parent_dirs_created_on_storage(ParentCtxs).
 
--spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> ok.
+-spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> [file_ctx:ctx()].
 get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
     case file_ctx:is_space_dir_const(DirCtx) of
         true ->
