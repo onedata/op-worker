@@ -280,7 +280,7 @@ get_record_struct(1) ->
         {is_possible, boolean},
         {traverse_reqs, #{binary => {record, [
             {start_file_uuid, string},
-            {assigned_entry, string}
+            {storage_id, string}
         ]}}}
     ]}.
 
@@ -328,7 +328,7 @@ split_traverses(Traverses) ->
     ProviderId = oneprovider:get_id(),
     maps:fold(fun(TaskId, QosTraverse, {LocalTraverses, RemoteTraverses}) ->
         % TODO VFS-5573 use storage id instead of provider
-        case QosTraverse#qos_traverse_req.assigned_entry == ProviderId of
+        case QosTraverse#qos_traverse_req.storage_id == ProviderId of
             true -> {[TaskId | LocalTraverses], RemoteTraverses};
             false -> {LocalTraverses, [TaskId | RemoteTraverses]}
         end

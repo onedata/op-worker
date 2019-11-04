@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([raw_to_rpn/1, calculate_assigned_entries/4]).
+-export([raw_to_rpn/1, calculate_storages/4]).
 
 % the raw type stores expression as single binary. It is used to store input
 % from user. In the process of adding new qos_entry raw expression is
@@ -64,12 +64,12 @@ raw_to_rpn(Expression) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_assigned_entries(rpn(), pos_integer(), [storage:id()], [#file_location{}]) ->
+-spec calculate_storages(rpn(), pos_integer(), [storage:id()], [#file_location{}]) ->
     {ture, [storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
-calculate_assigned_entries(_Expression, _ReplicasNum, [], _FileLocations) ->
+calculate_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
     false;
 
-calculate_assigned_entries(Expression, ReplicasNum, SpaceStorages, FileLocations) ->
+calculate_storages(Expression, ReplicasNum, SpaceStorages, FileLocations) ->
     % TODO: VFS-5734 choose storages for dirs according to current files distribution
     try
         StorageList = eval_rpn(Expression, SpaceStorages),

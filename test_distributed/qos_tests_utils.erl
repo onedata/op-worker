@@ -371,10 +371,12 @@ assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther
     end, ExpectedFileQos).
 
 
-assert_file_qos_document(Worker, FileUuid, QosEntries, AssignedEntries, FilePath, FilterTS, Attempts) ->
+assert_file_qos_document(
+    Worker, FileUuid, QosEntries, AssignedEntries, FilePath, FilterAssignedEntries, Attempts
+) ->
     ExpectedFileQos = #file_qos{
         qos_entries = QosEntries,
-        assigned_entries = case FilterTS of
+        assigned_entries = case FilterAssignedEntries of
             true ->
                 maps:filter(fun(Key, _Val) -> Key == ?PROVIDER_ID(Worker) end, AssignedEntries);
             false ->
@@ -401,10 +403,10 @@ assert_file_qos_document(Worker, FileUuid, QosEntries, AssignedEntries, FilePath
     assert_match_with_err_msg(GetSortedFileQosFun, ExpectedFileQosSorted, Attempts, 500).
 
 
-assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS) ->
-    assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS, 1).
+assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries) ->
+    assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries, 1).
 
-assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS, Attempts) ->
+assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries, Attempts) ->
     lists:foreach(fun(        #expected_file_qos{
         workers = WorkersOrUndef,
         path = FilePath,
@@ -423,7 +425,7 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS, 
             FileUuid = ?GET_FILE_UUID(Worker, SessId, FilePath),
             assert_effective_qos(
                 Worker, FileUuid, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
-                FilterTS, Attempts
+                FilterAssignedEntries, Attempts
             ),
 
             % check that for file document has not been created
