@@ -821,7 +821,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
             #expected_file_qos{
                 path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
-                target_storages = #{
+                assigned_entries = #{
                     ?PROVIDER_ID(Worker3) => [?QOS1]
                 }
             }

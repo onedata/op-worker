@@ -79,7 +79,7 @@ simple_key_val_qos_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P2, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P2, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -110,7 +110,7 @@ qos_with_intersection_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap)
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P3, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P3, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -141,7 +141,7 @@ qos_with_complement_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) -
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P1, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P1, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -172,7 +172,7 @@ qos_with_union_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P1, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P1, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -203,7 +203,7 @@ qos_with_multiple_replicas_spec(Path, WorkerAddingQos, AssertionWorkers, Provide
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P3, ProviderMap) => [?QOS1]
                 }
@@ -237,7 +237,7 @@ qos_with_intersection_and_union_spec(Path, WorkerAddingQos, AssertionWorkers, Pr
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P2, ProviderMap) => [?QOS1],
                     maps:get(?P3, ProviderMap) => [?QOS1]
                 }
@@ -271,7 +271,7 @@ qos_with_union_and_complement_spec(Path, WorkerAddingQos, AssertionWorkers, Prov
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P1, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P1, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -302,7 +302,7 @@ qos_with_intersection_and_complement_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P3, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P3, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -333,7 +333,7 @@ qos_with_multiple_replicas_and_union_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS1],
                     maps:get(?P3, ProviderMap) => [?QOS1]
@@ -370,7 +370,7 @@ key_val_qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{}
+                assigned_entries = #{}
             }
         ]
     }.
@@ -403,7 +403,7 @@ qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorkers, _Prov
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{}
+                assigned_entries = #{}
             }
         ]
     }.
@@ -435,7 +435,7 @@ qos_with_parens_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P1, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P1, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -495,7 +495,7 @@ multi_qos_resulting_in_different_storages_spec(
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P2, ProviderMap) => [?QOS2],
                     maps:get(?P3, ProviderMap) => [?QOS1]
                 }
@@ -552,7 +552,7 @@ multi_qos_resulting_in_the_same_storages_spec(
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P2, ProviderMap) => [?QOS1, ?QOS2]
                 }
             }
@@ -622,7 +622,7 @@ same_qos_multiple_times_spec(
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2, ?QOS3],
-                target_storages = #{maps:get(?P2, ProviderMap) => [?QOS1, ?QOS2, ?QOS3]}
+                assigned_entries = #{maps:get(?P2, ProviderMap) => [?QOS1, ?QOS2, ?QOS3]}
             }
         ]
     }.
@@ -670,7 +670,7 @@ contrary_qos_spec(Path, [WorkerAddingQos1, WorkerAddingQos2], AssertionWorkers, 
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS2]
                 }
@@ -728,7 +728,7 @@ multi_qos_where_one_cannot_be_satisfied_spec(
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{maps:get(?P2, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P2, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -782,7 +782,7 @@ multi_qos_that_overlaps_spec(
                 workers = AssertionWorkers,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS2],
                     maps:get(?P3, ProviderMap) => [?QOS1, ?QOS2]
@@ -822,7 +822,7 @@ effective_qos_for_file_in_directory_spec(DirPath, FilePath, WorkerAddingQos, Ass
                 workers = AssertionWorkers,
                 path = FilePath,
                 qos_entries = [?QOS1],
-                target_storages = #{maps:get(?P2, ProviderMap) => [?QOS1]}
+                assigned_entries = #{maps:get(?P2, ProviderMap) => [?QOS1]}
             }
         ]
     }.
@@ -891,7 +891,7 @@ effective_qos_for_file_in_nested_directories_spec(
             #expected_file_qos{
                 path = FileInDir2Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS2]
                 }
@@ -899,7 +899,7 @@ effective_qos_for_file_in_nested_directories_spec(
             #expected_file_qos{
                 path = FileInDir3Path,
                 qos_entries = [?QOS1, ?QOS2, ?QOS3],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS2],
                     maps:get(?P3, ProviderMap) => [?QOS3]
@@ -973,7 +973,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
                 workers = AssertionWorkers,
                 path = FileInDir3Path,
                 qos_entries = [?QOS1, ?QOS3],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P3, ProviderMap) => [?QOS3]
                 }
@@ -982,7 +982,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
                 workers = AssertionWorkers,
                 path = FileInDir2Path,
                 qos_entries = [?QOS1, ?QOS2],
-                target_storages = #{
+                assigned_entries = #{
                     maps:get(?P1, ProviderMap) => [?QOS1],
                     maps:get(?P2, ProviderMap) => [?QOS2]
                 }

@@ -64,7 +64,7 @@ handle({?CHECK_QOS_CACHE, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
-    init_qos_cache_for_space_internal(SpaceId);
+    qos_bounded_cache:init_qos_cache_for_space(SpaceId);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -95,20 +95,3 @@ cleanup() ->
 init_qos_cache_for_space(SpaceId) ->
     erlang:send_after(0, ?MODULE, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
     ok.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec init_qos_cache_for_space_internal(od_space:id()) -> ok.
-init_qos_cache_for_space_internal(SpaceId) ->
-    try bounded_cache:init_cache(?CACHE_TABLE_NAME(SpaceId), #{group => ?QOS_BOUNDED_CACHE_GROUP}) of
-        ok ->
-            ok;
-        Error = {error, _} ->
-            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
-    end.

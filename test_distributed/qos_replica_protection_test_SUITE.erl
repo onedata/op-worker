@@ -852,7 +852,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
             #expected_file_qos{
                 path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
-                target_storages = #{?PROVIDER_ID(WorkerP1) => [?QOS1]}
+                assigned_entries = #{?PROVIDER_ID(WorkerP1) => [?QOS1]}
             }
         ],
         expected_dir_structure = #test_dir_structure{

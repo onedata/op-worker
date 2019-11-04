@@ -118,12 +118,12 @@ add_qos_entry_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
             % does not change in qos traverse task. Have to figure out how to
             % choose different storages for subdirs and/or file if multiple storage
             % fulfilling qos are available.
-            CalculatedStorages = calculate_target_storages(user_ctx:get_session_id(UserCtx),
+            CalculatedStorages = calculate_assigned_entries(user_ctx:get_session_id(UserCtx),
                 FileCtx, QosExpressionInRPN, ReplicasNum),
 
             case CalculatedStorages of
-                {true, TargetStoragesList} ->
-                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList);
+                {true, AssignedEntriesList} ->
+                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, AssignedEntriesList);
                 false ->
                     add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum);
                 ?ERROR_INVALID_QOS_EXPRESSION ->
@@ -150,7 +150,7 @@ get_effective_file_qos_insecure(_UserCtx, FileCtx) ->
                 status = #status{code = ?OK},
                 provider_response = #effective_file_qos{
                     qos_entries = file_qos:get_qos_entries(EffQos),
-                    target_storages = file_qos:get_target_storages(EffQos)
+                    assigned_entries = file_qos:get_assigned_entries(EffQos)
                 }
             };
         undefined ->
@@ -233,7 +233,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [storage:id()]) ->
     fslogic_worker:provider_response().
-add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList) ->
+add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, AssignedEntriesList) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     QosEntryId = datastore_utils:gen_key(),
@@ -242,16 +242,16 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, TargetStoragesList) -
         TaskId = datastore_utils:gen_key(),
         Acc#{TaskId => #qos_traverse_req{
             start_file_uuid = FileUuid,
-            target_storage = Storage
+            assigned_entry = Storage
         }}
-    end, #{}, TargetStoragesList),
+    end, #{}, AssignedEntriesList),
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
                           ReplicasNum, true, TraverseReqs) of
         {ok, _} ->
             % QoS cache is invalidated by each provider that should start traverse
             % task (see qos_hooks:maybe_start_traverse)
-            maps:fold(fun(TaskId, #qos_traverse_req{target_storage = Storage}, _) ->
+            maps:fold(fun(TaskId, #qos_traverse_req{assigned_entry = Storage}, _) ->
                 ok = qos_hooks:maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId)
             end, ok, TraverseReqs),
             #provider_response{
@@ -294,9 +294,9 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
 %% given expression and replicas number.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_target_storages(session:id(), file_ctx:ctx(), qos_expression:rpn(),
+-spec calculate_assigned_entries(session:id(), file_ctx:ctx(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {true, [storage:id()]} | false | {error, term()}.
-calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
+calculate_assigned_entries(SessId, FileCtx, Expression, ReplicasNum) ->
     {FileLocationsDoc, _NewFileCtx} =  file_ctx:get_file_location_docs(FileCtx),
     ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
         #file_location{provider_id = ProviderId, blocks = Blocks} = FileLocation,
@@ -312,7 +312,7 @@ calculate_target_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     % call using ?MODULE macro for mocking in tests
     SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
-    qos_expression:calculate_target_storages(
+    qos_expression:calculate_assigned_entries(
         Expression, ReplicasNum, SpaceStorages, ProvidersBlocks
     ).
 

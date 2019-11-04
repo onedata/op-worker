@@ -83,7 +83,7 @@
 
     % below files correspond to fields in file QoS record
     qos_entries :: [qos_entry:record()],
-    target_storages :: file_qos:target_storages()
+    assigned_entries :: file_qos:assigned_entries()
 }).
 
 

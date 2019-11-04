@@ -272,9 +272,9 @@
     % should be stored are calculated using QoS expression. Calculated storages
     % are used to create traverse requests in qos_entry document. When provider
     % notices change in qos_entry document, it checks whether traverse request
-    % for his storage is present. If yes provider updates entry in target_storages
+    % for his storage is present. If yes provider updates entry in assigned_entries
     % map for his local storage.
-    target_storages = #{} :: file_qos:target_storages()
+    assigned_entries = #{} :: file_qos:assigned_entries()
 }).
 
 % This model holds information about QoS entry, that is QoS requirement

@@ -191,7 +191,7 @@ qos_bounded_cache_should_be_periodically_cleaned_if_overfilled(Config) ->
             #expected_file_qos{
                 path = FilePath,
                 qos_entries = [?QOS1],
-                target_storages = #{?P2 => [?QOS1]}
+                assigned_entries = #{?P2 => [?QOS1]}
             }
         ]
     },
@@ -231,7 +231,7 @@ qos_bounded_cache_should_not_be_cleaned_if_not_overfilled(Config) ->
             #expected_file_qos{
                 path = FilePath,
                 qos_entries = [?QOS1],
-                target_storages = #{?P2 => [?QOS1]}
+                assigned_entries = #{?P2 => [?QOS1]}
             }
         ]
     },

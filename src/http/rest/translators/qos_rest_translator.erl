@@ -33,7 +33,7 @@
     {op_logic:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, QosEntryId) ->
     PathTokens = [<<"qos-id">>, QosEntryId],
-    ?CREATED_REPLY(PathTokens, #{<<"QosEntryId">> => QosEntryId}).
+    ?CREATED_REPLY(PathTokens, #{<<"qosEntryId">> => QosEntryId}).
 
 
 %%--------------------------------------------------------------------

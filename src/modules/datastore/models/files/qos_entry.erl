@@ -92,8 +92,6 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
--define(QOS_TRAVERSE_LIST(QosEntryId), <<"qos_traverses", QosEntryId/binary>>).
-
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
@@ -164,8 +162,8 @@ get_file_guid(#document{scope = SpaceId, value = #qos_entry{file_uuid = FileUuid
 
 get_file_guid(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
-        {ok, #document{value = QosEntry, scope = SpaceId}} ->
-            {ok, file_id:pack_guid(QosEntry#qos_entry.file_uuid, SpaceId)};
+        {ok, Doc} ->
+            {ok, get_file_guid(Doc)};
         {error, _} = Error ->
             Error
     end.
@@ -282,7 +280,7 @@ get_record_struct(1) ->
         {is_possible, boolean},
         {traverse_reqs, #{binary => {record, [
             {start_file_uuid, string},
-            {target_storage, string}
+            {assigned_entry, string}
         ]}}}
     ]}.
 
@@ -290,7 +288,7 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% This conflict resolution promotes changes done by provider
-%% responsible for given traverse (target storage is one of its storages).
+%% responsible for given traverse (assigned_entry includes one of its storages).
 %% This means that only remote changes of remote providers traverses and
 %% local changes of current provider traverses are taken into account.
 %% (The only changes done to this document are removals of traverse_reqs or
@@ -330,7 +328,7 @@ split_traverses(Traverses) ->
     ProviderId = oneprovider:get_id(),
     maps:fold(fun(TaskId, QosTraverse, {LocalTraverses, RemoteTraverses}) ->
         % TODO VFS-5573 use storage id instead of provider
-        case QosTraverse#qos_traverse_req.target_storage == ProviderId of
+        case QosTraverse#qos_traverse_req.assigned_entry == ProviderId of
             true -> {[TaskId | LocalTraverses], RemoteTraverses};
             false -> {LocalTraverses, [TaskId | RemoteTraverses]}
         end

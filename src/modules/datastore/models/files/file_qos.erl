@@ -10,12 +10,12 @@
 %%%     - qos_entries - holds IDs of all qos_entries defined for this file (
 %%%       including qos_entries which demands cannot be satisfied). This list
 %%%       is updated on change of qos_entry document (see qos_hooks.erl),
-%%%     - target_storages - holds mapping storage_id to list of qos_entry IDs.
+%%%     - assigned_entries - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
 %%%       should be stored are calculated using QoS expression. Then traverse
 %%%       requests are added to qos_entry document. When provider notices change
 %%%       in qos_entry, it checks whether there is traverse request defining
-%%%       its storage. If yes, provider updates target_storages and
+%%%       its storage. If yes, provider updates assigned_entries and
 %%%       starts traverse.
 %%% Each file or directory can be associated with zero or one such document.
 %%% Getting information about all QoS entries that influences file or directory
@@ -48,7 +48,7 @@
 
 %% higher-level functions operating on effective_file_qos record.
 -export([
-    get_qos_to_update/2, get_qos_entries/1, get_target_storages/1
+    get_qos_to_update/2, get_qos_entries/1, get_assigned_entries/1
 ]).
 
 %% datastore_model callbacks
@@ -57,9 +57,9 @@
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
 -type effective_file_qos() :: #effective_file_qos{}.
--type target_storages() :: #{storage:id() => [qos_entry:id()]}.
+-type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
 
--export_type([target_storages/0]).
+-export_type([assigned_entries/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -102,22 +102,26 @@ get_effective(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes given QoS entry ID from both qos_entries and target_storages.
+%% Removes given QoS entry ID from both qos_entries and assigned_entries.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_entry_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
 remove_qos_entry_id(FileUuid, QosEntryId) ->
-    Diff = fun(FileQos = #file_qos{qos_entries = QosEntries, target_storages = TS}) ->
+    Diff = fun(FileQos = #file_qos{qos_entries = QosEntries, assigned_entries = AssignedEntries}) ->
         UpdatedQosEntries = lists:delete(QosEntryId, QosEntries),
-        UpdatedTS = maps:fold(fun(StorageId, QosEntries, UpdatedTSPartial) ->
+        UpdatedAssignedEntries = maps:fold(fun(StorageId, QosEntries, UpdatedAssignedEntriesPartial) ->
             case lists:delete(QosEntryId, QosEntries) of
                 [] ->
-                    UpdatedTSPartial;
+                    UpdatedAssignedEntriesPartial;
                 List ->
-                    UpdatedTSPartial#{StorageId => List}
+                    UpdatedAssignedEntriesPartial#{StorageId => List}
             end
-        end, #{}, TS),
-        {ok, FileQos#file_qos{qos_entries = UpdatedQosEntries, target_storages = UpdatedTS}}
+        end, #{}, AssignedEntries),
+
+        {ok, FileQos#file_qos{
+            qos_entries = UpdatedQosEntries,
+            assigned_entries = UpdatedAssignedEntries
+        }}
     end,
 
     ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff)).
@@ -136,34 +140,38 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates or updates file_qos document. Document and diff function are
-%% created using QoS entry ID and storage ID for that QoS.
+%% Adds new QoS entry to file_qos document associated with file.
+%% Creates file_qos document if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id()) -> ok.
-add_qos_entry_id(FileUuid, SpaceId, QosEntryId, TargetStorage) ->
+add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
     NewDoc = #document{
         key = FileUuid,
         scope = SpaceId,
         value = #file_qos{
             qos_entries = [QosEntryId],
-            target_storages = case TargetStorage of
+            assigned_entries = case Storage of
                 undefined -> #{};
-                _ -> #{TargetStorage => [QosEntryId]}
+                _ -> #{Storage => [QosEntryId]}
             end
         }
     },
 
-    Diff = fun(#file_qos{qos_entries = CurrQosEntries, target_storages = CurrTS}) ->
-        UpdatedTS = case TargetStorage of
+    Diff = fun(#file_qos{qos_entries = CurrQosEntries, assigned_entries = CurrAssignedEntries}) ->
+        UpdatedAssignedEntries = case Storage of
             undefined ->
-                CurrTS;
+                CurrAssignedEntries;
             _ ->
-                maps:update_with(TargetStorage, fun(QosEntries) ->
+                maps:update_with(Storage, fun(QosEntries) ->
                     lists:usort([QosEntryId | QosEntries])
-                end, [QosEntryId], CurrTS)
+                end, [QosEntryId], CurrAssignedEntries)
         end,
-        {ok, #file_qos{qos_entries = lists:usort([QosEntryId | CurrQosEntries]), target_storages = UpdatedTS}}
+
+        {ok, #file_qos{
+            qos_entries = lists:usort([QosEntryId | CurrQosEntries]),
+            assigned_entries = UpdatedAssignedEntries}
+        }
     end,
 
     ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, NewDoc)).
@@ -177,7 +185,7 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId, TargetStorage) ->
 -spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
 is_replica_protected(FileUuid, StorageId) ->
     QosStorages = case get_effective(FileUuid) of
-        {ok, #effective_file_qos{target_storages = TS}} -> TS;
+        {ok, #effective_file_qos{assigned_entries = AssignedEntries}} -> AssignedEntries;
         _ -> #{}
     end,
     maps:is_key(StorageId, QosStorages).
@@ -192,14 +200,14 @@ get_qos_entries(FileQos) ->
     FileQos#effective_file_qos.qos_entries.
 
 
--spec get_target_storages(effective_file_qos()) -> target_storages().
-get_target_storages(FileQos) ->
-    FileQos#effective_file_qos.target_storages.
+-spec get_assigned_entries(effective_file_qos()) -> assigned_entries().
+get_assigned_entries(FileQos) ->
+    FileQos#effective_file_qos.assigned_entries.
 
 
 -spec get_qos_to_update(storage:id(), effective_file_qos()) -> [qos_entry:id()].
 get_qos_to_update(StorageId, EffectiveFileQos) ->
-    maps:get(StorageId, EffectiveFileQos#effective_file_qos.target_storages, []).
+    maps:get(StorageId, EffectiveFileQos#effective_file_qos.assigned_entries, []).
 
 
 %%%===================================================================
@@ -219,20 +227,20 @@ merge_file_qos(ParentQos, ChildQos) ->
         qos_entries = lists:usort(
             ParentQos#file_qos.qos_entries ++ ChildQos#file_qos.qos_entries
         ),
-        target_storages = merge_target_storages(
-            ParentQos#file_qos.target_storages,
-            ChildQos#file_qos.target_storages
+        assigned_entries = merge_assigned_entries(
+            ParentQos#file_qos.assigned_entries,
+            ChildQos#file_qos.assigned_entries
         )
     }.
 
 
--spec merge_target_storages(target_storages(), target_storages()) -> target_storages().
-merge_target_storages(ParentTargetStorages, ChildTargetStorages) ->
+-spec merge_assigned_entries(assigned_entries(), assigned_entries()) -> assigned_entries().
+merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
     maps:fold(fun(StorageId, StorageQosEntries, Acc) ->
         maps:update_with(StorageId, fun(ParentStorageQosEntries) ->
             ParentStorageQosEntries ++ StorageQosEntries
         end, StorageQosEntries, Acc)
-    end, ParentTargetStorages, ChildTargetStorages).
+    end, ParentAssignedEntries, ChildAssignedEntries).
 
 
 -spec get_effective_internal(file_meta:doc(), od_space:id()) ->
@@ -257,7 +265,7 @@ get_effective_internal(FileMeta, SpaceId) ->
         {ok, EffQosAsFileQos, _} ->
             {ok, #effective_file_qos{
                 qos_entries = EffQosAsFileQos#file_qos.qos_entries,
-                target_storages = EffQosAsFileQos#file_qos.target_storages
+                assigned_entries = EffQosAsFileQos#file_qos.assigned_entries
             }};
         {error, {file_meta_missing, _MissingUuid}} = Error ->
             % documents are not synchronized yet
@@ -283,5 +291,5 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {qos_entries, [string]},
-        {target_storages, #{string => [string]}}
+        {assigned_entries, #{string => [string]}}
     ]}.

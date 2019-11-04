@@ -24,7 +24,8 @@
     init_group/0,
     ensure_exists_for_all_spaces/0,
     ensure_exists_on_all_nodes/1,
-    ensure_exists/1, invalidate_on_all_nodes/1
+    ensure_exists/1, invalidate_on_all_nodes/1,
+    init_qos_cache_for_space/1
 ]).
 
 
@@ -116,9 +117,29 @@ ensure_exists(SpaceId) ->
     CacheTableInfo = ets:info(CacheTableName),
     case CacheTableInfo of
         undefined ->
+            % call to worker as process that will hold ets is needed
             qos_worker:init_qos_cache_for_space(SpaceId);
         _ ->
             ok
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes cache for given space. This function should be called be
+%% some long living process as it will hold ets table.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_qos_cache_for_space(od_space:id()) -> ok.
+init_qos_cache_for_space(SpaceId) ->
+    try bounded_cache:init_cache(?CACHE_TABLE_NAME(SpaceId), #{group => ?QOS_BOUNDED_CACHE_GROUP}) of
+        ok ->
+            ok;
+        Error = {error, _} ->
+            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
     end.
 
 

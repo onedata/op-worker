@@ -501,7 +501,7 @@ add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
     ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
 
 -spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:target_storages()}} | lfm:error_reply().
+    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 

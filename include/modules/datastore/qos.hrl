@@ -50,7 +50,7 @@
     % TODO: This field will be necessary after resolving VFS-5567. For now all
     % traverses starts from file/directory for which QoS has been added.
     start_file_uuid :: file_meta:uuid(),
-    target_storage :: storage:id()
+    assigned_entry :: storage:id()
 }).
 
 % This record has the same fields as file_qos record (see file_qos.erl).
@@ -60,7 +60,7 @@
 % of the file and all its parents.
 -record(effective_file_qos, {
     qos_entries = [] :: [qos_entry:id()],
-    target_storages = #{} :: file_qos:target_storages()
+    assigned_entries = #{} :: file_qos:assigned_entries()
 }).
 
 -endif.

@@ -351,34 +351,34 @@ assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther
         workers = WorkersOrUndef,
         path = FilePath,
         qos_entries = ExpectedQosEntriesNames,
-        target_storages = ExpectedTargetStorages
+        assigned_entries = ExpectedAssignedEntries
     }) ->
         % if not specified in tests spec, check document on all nodes
         Workers = ensure_workers(Config, WorkersOrUndef),
         ExpectedQosEntriesId = map_qos_names_to_ids(ExpectedQosEntriesNames, QosNameIdMapping),
-        ExpectedTargetStoragesId = maps:map(fun(_, QosNamesList) ->
+        ExpectedAssignedEntriesId = maps:map(fun(_, QosNamesList) ->
             map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
-        end, ExpectedTargetStorages),
+        end, ExpectedAssignedEntries),
 
         lists:foreach(fun(W) ->
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
             FileUuid = ?GET_FILE_UUID(W, SessId, FilePath),
             assert_file_qos_document(
-                W, FileUuid, ExpectedQosEntriesId, ExpectedTargetStoragesId, 
+                W, FileUuid, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
                 FilePath, FilterOther, Attempts
             )
         end, Workers)
     end, ExpectedFileQos).
 
 
-assert_file_qos_document(Worker, FileUuid, QosEntries, TargetStorages, FilePath, FilterTS, Attempts) ->
+assert_file_qos_document(Worker, FileUuid, QosEntries, AssignedEntries, FilePath, FilterTS, Attempts) ->
     ExpectedFileQos = #file_qos{
         qos_entries = QosEntries,
-        target_storages = case FilterTS of
+        assigned_entries = case FilterTS of
             true ->
-                maps:filter(fun(Key, _Val) -> Key == ?PROVIDER_ID(Worker) end, TargetStorages);
+                maps:filter(fun(Key, _Val) -> Key == ?PROVIDER_ID(Worker) end, AssignedEntries);
             false ->
-                TargetStorages
+                AssignedEntries
         end
     },
     ExpectedFileQosSorted = sort_file_qos(ExpectedFileQos),
@@ -409,20 +409,20 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS, 
         workers = WorkersOrUndef,
         path = FilePath,
         qos_entries = ExpectedQosEntriesWithNames,
-        target_storages = ExpectedTargetStorages
+        assigned_entries = ExpectedAssignedEntries
     }) ->
         % if not specified in tests spec, check document on all nodes
         Workers = ensure_workers(Config, WorkersOrUndef),
         ExpectedQosEntriesId = qos_tests_utils:map_qos_names_to_ids(ExpectedQosEntriesWithNames, QosNameIdMapping),
-        ExpectedTargetStoragesId = maps:map(fun(_, QosNamesList) ->
+        ExpectedAssignedEntriesId = maps:map(fun(_, QosNamesList) ->
             qos_tests_utils:map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
-        end, ExpectedTargetStorages),
+        end, ExpectedAssignedEntries),
 
         lists:foreach(fun(Worker) ->
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
             FileUuid = ?GET_FILE_UUID(Worker, SessId, FilePath),
             assert_effective_qos(
-                Worker, FileUuid, FilePath, ExpectedQosEntriesId, ExpectedTargetStoragesId,
+                Worker, FileUuid, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
                 FilterTS, Attempts
             ),
 
@@ -432,12 +432,14 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterTS, 
         end, Workers)
     end, ExpectedEffQosEntries).
 
-assert_effective_qos(Worker, FileUuid, FilePath, QosEntries, TargetStorages, FilterTS, Attempts) ->
+assert_effective_qos(
+    Worker, FileUuid, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts
+) ->
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
-        target_storages = case FilterTS of
-            true -> maps:filter(fun(Key, _Val) -> Key == ?PROVIDER_ID(Worker) end, TargetStorages);
-            false -> TargetStorages
+        assigned_entries = case FilterAssignedEntries of
+            true -> maps:filter(fun(Key, _Val) -> Key == ?PROVIDER_ID(Worker) end, AssignedEntries);
+            false -> AssignedEntries
         end
     },
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
@@ -567,17 +569,17 @@ mock_synchronize_transfers(Config) ->
 sort_file_qos(FileQos) ->
     FileQos#file_qos{
         qos_entries = lists:sort(FileQos#file_qos.qos_entries),
-        target_storages = maps:map(fun(_, QosEntriesForStorage) ->
+        assigned_entries = maps:map(fun(_, QosEntriesForStorage) ->
             lists:sort(QosEntriesForStorage)
-        end, FileQos#file_qos.target_storages)
+        end, FileQos#file_qos.assigned_entries)
     }.
 
 sort_effective_qos(EffectiveQos) ->
     EffectiveQos#effective_file_qos{
         qos_entries = lists:sort(EffectiveQos#effective_file_qos.qos_entries),
-        target_storages = maps:map(fun(_, QosEntriesForStorage) ->
+        assigned_entries = maps:map(fun(_, QosEntriesForStorage) ->
             lists:sort(QosEntriesForStorage)
-        end, EffectiveQos#effective_file_qos.target_storages)
+        end, EffectiveQos#effective_file_qos.assigned_entries)
     }.
 
 

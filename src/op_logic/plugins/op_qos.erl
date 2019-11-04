@@ -208,11 +208,11 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req)
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) ->
     SessionId = Auth#auth.session_id,
     case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
-        {ok, {QosEntries, TargetStorages}} ->
+        {ok, {QosEntries, AssignedEntries}} ->
             {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntries, {guid, FileGuid})),
             {ok, #{
                 <<"qosEntries">> => QosEntries,
-                <<"targetStorages">> => TargetStorages,
+                <<"assignedEntries">> => AssignedEntries,
                 <<"fulfilled">> => Fulfilled
             }};
         ?ERROR_NOT_FOUND ->
