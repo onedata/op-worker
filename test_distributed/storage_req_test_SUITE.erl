@@ -117,7 +117,7 @@ create_storage_test_file_test(Config) ->
 
     Response1 = ?req(Worker, SessId, #create_storage_test_file{
         storage_id = StorageId,
-        file_guid = tak
+        file_guid = FileGuid
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?OK},
         fuse_response = #storage_test_file{}}, Response1),

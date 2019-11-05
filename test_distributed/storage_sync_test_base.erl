@@ -4369,7 +4369,8 @@ end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_chang
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
     end_per_testcase(default, Config, Readonly);
 
-end_per_testcase(_Case, Config, Readonly) ->    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+end_per_testcase(_Case, Config, Readonly) ->
+    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     storage_sync_test_base:clean_reverse_luma_cache(W1),
     storage_sync_test_base:disable_storage_sync(Config),
