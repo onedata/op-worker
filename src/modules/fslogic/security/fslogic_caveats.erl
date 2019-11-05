@@ -196,7 +196,12 @@ verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
 
     IsFileInAllowedSubPath = lists:any(fun(AllowedPath) ->
-        str_utils:binary_starts_with(FilePath, AllowedPath)
+        AllowedPathLen = size(AllowedPath),
+        case FilePath of
+            AllowedPath -> true;
+            <<AllowedPath:AllowedPathLen/binary, "/", _/binary>> -> true;
+            _ -> false
+        end
     end, AllowedPaths),
 
     case IsFileInAllowedSubPath of
@@ -250,10 +255,14 @@ check_data_path_relation(FileCtx0, AllowedPaths) ->
             case FilePathLen >= AllowedPathLen of
                 true ->
                     % Check if FilePath is allowed by caveats
-                    % (AllowedPath is ancestor to FilePath)
-                    case str_utils:binary_starts_with(FilePath, AllowedPath) of
-                        true -> {subpath, undefined};
-                        false -> Acc
+                    % (AllowedPath is ancestor to FilePath or FilePath itself)
+                    case FilePath of
+                        AllowedPath ->
+                            {subpath, undefined};
+                        <<AllowedPath:AllowedPathLen/binary, "/", _/binary>> ->
+                            {subpath, undefined};
+                        _ ->
+                            Acc
                     end;
                 false ->
                     % Check if FilePath is ancestor to AllowedPath
