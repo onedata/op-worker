@@ -34,7 +34,7 @@
 %% with given Uid and Gid on storage named StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(integer(), od_storage:id(), storage_config:name(), luma_config:config()) ->
+-spec get_user_id(integer(), od_storage:id(), storage:name(), luma_config:config()) ->
     {ok, od_user:id()} | {error, term()}.
 get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_user", [LumaUrl]),
@@ -59,7 +59,7 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
 %% with given Uid and Gid on storage named StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id_by_name(binary(), od_storage:id(), storage_config:name(),
+-spec get_user_id_by_name(binary(), od_storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()} | {error, term()}.
 get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_acl_user", [LumaUrl]),
@@ -84,7 +84,7 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
 %% with given Gid on storage named StorageId
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_id(integer(), od_space:id(), od_storage:id(), storage_config:name(),
+-spec get_group_id(integer(), od_space:id(), od_storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()} |  {error, term()}.
 get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_group", [LumaUrl]),
@@ -113,7 +113,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
 %% with given Gid on storage named StorageId
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_id_by_name(binary(), od_space:id(), od_storage:id(), storage_config:name(),
+-spec get_group_id_by_name(binary(), od_space:id(), od_storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()} |  {error, term()}.
 get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     LumaConfig = #luma_config{url = LumaUrl}
@@ -177,7 +177,7 @@ idp_to_onedata_user_id(Idp, IdpUserId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_group_request_body(integer(), od_space:id(), od_storage:id(),
-    storage_config:name()) -> binary().
+    storage:name()) -> binary().
 get_group_request_body(Gid, SpaceId, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{
@@ -193,7 +193,7 @@ get_group_request_body(Gid, SpaceId, StorageId, StorageName) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_group_request_body_by_name(binary(), od_space:id(), od_storage:id(),
-    storage_config:name()) -> binary().
+    storage:name()) -> binary().
 get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{
@@ -218,7 +218,7 @@ get_user_request_body(Uid, StorageId, StorageName) ->
 %% Prepares request body for resolving user aclname.
 %% @end
 %%-------------------------------------------------------------------
--spec get_user_request_body_by_name(binary(), od_storage:id(), storage_config:name()) -> binary().
+-spec get_user_request_body_by_name(binary(), od_storage:id(), storage:name()) -> binary().
 get_user_request_body_by_name(Name, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{<<"name">> => Name}).
@@ -229,7 +229,7 @@ get_user_request_body_by_name(Name, StorageId, StorageName) ->
 %% Returns generic arguments for given POSIX storage in request body.
 %% @end
 %%-------------------------------------------------------------------
--spec get_posix_generic_request_body_part(od_storage:id(), storage_config:name()) -> map().
+-spec get_posix_generic_request_body_part(od_storage:id(), storage:name()) -> map().
 get_posix_generic_request_body_part(StorageId, StorageName) ->
     #{
         <<"storageId">> => StorageId,

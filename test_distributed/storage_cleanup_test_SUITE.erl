@@ -664,6 +664,6 @@ get_supporting_storage_id(Worker, SpaceId) ->
     StorageId.
 
 storage_mount_point(Worker, StorageId) ->
-    [Helper | _] = rpc:call(Worker, storage_config, get_helpers, [StorageId]),
+    Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).

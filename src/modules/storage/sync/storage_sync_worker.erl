@@ -193,9 +193,16 @@ maybe_start_update_scan(SpaceId, StorageId, SyncConfig) ->
     end.
 
 
--spec is_syncable(storage_config:doc() | od_storage:id()) -> boolean().
-is_syncable(StorageDoc = #document{value = #storage_config{}}) ->
-    Helper = storage_config:get_helper(StorageDoc),
+-spec is_syncable(storage:record() | od_storage:id()) -> boolean().
+is_syncable(StorageId) when is_binary(StorageId) ->
+    case storage:get(StorageId) of
+        {ok, StorageDoc} ->
+            is_syncable(StorageDoc);
+        _ ->
+            false
+    end;
+is_syncable(StorageRecord) ->
+    Helper = storage:get_helper(StorageRecord),
     HelperName = helper:get_name(Helper),
     case lists:member(HelperName,
         [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?WEBDAV_HELPER_NAME])
@@ -203,19 +210,12 @@ is_syncable(StorageDoc = #document{value = #storage_config{}}) ->
         true ->
             true;
         false ->
-            is_syncable_object_storage(StorageDoc)
-    end;
-is_syncable(StorageId) when is_binary(StorageId) ->
-    case storage_config:get(StorageId) of
-        {ok, StorageDoc} ->
-            is_syncable(StorageDoc);
-        _ ->
-            false
+            is_syncable_object_storage(StorageRecord)
     end.
 
--spec is_syncable_object_storage(storage_config:doc()) -> boolean().
-is_syncable_object_storage(StorageDoc = #document{value = #storage_config{}}) ->
-    Helper = storage_config:get_helper(StorageDoc),
+-spec is_syncable_object_storage(storage:record()) -> boolean().
+is_syncable_object_storage(StorageRecord) ->
+    Helper = storage:get_helper(StorageRecord),
     HelperName = helper:get_name(Helper),
     StoragePathType = helper:get_storage_path_type(Helper),
     Args = helper:get_args(Helper),

@@ -33,7 +33,7 @@
 %%-------------------------------------------------------------------
 -spec space_id(od_space:id(), od_storage:id()) -> helpers:file_id().
 space_id(SpaceId, StorageId) ->
-    case storage_config:is_imported_storage(StorageId) of
+    case storage:is_imported_storage(StorageId) of
         true ->
             ?DIRECTORY_SEPARATOR_BINARY;
         false ->

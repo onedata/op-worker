@@ -84,8 +84,8 @@
 
 
 -define(STORAGE_ID(Worker), begin
-  {ok, [__Storage]} = rpc:call(Worker, storage_config, list, []),
-  storage_config:get_id(__Storage)
+  {ok, [__Storage]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+  __Storage
   end
 ).
 

@@ -47,8 +47,8 @@ start_rtransfer() ->
     prepare_graphite_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
-    StorageConfigs = get_storages(10),
-    lists:foreach(fun add_storage/1, StorageConfigs),
+    StorageIds = get_storages(10),
+    lists:foreach(fun add_storage/1, StorageIds),
     {ok, RtransferPid}.
 
 %%--------------------------------------------------------------------
@@ -207,9 +207,9 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %% Adds storage to rtransfer.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(storage_config:doc()) -> any().
-add_storage(#document{key = StorageId, value = #storage_config{}} = Storage) ->
-    Helper = hd(storage_config:get_helpers(Storage)),
+-spec add_storage(od_storage:id()) -> any().
+add_storage(StorageId) ->
+    Helper = storage:get_helper(StorageId),
     HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
     HelperName = helper:get_name(HelperParams),
     HelperArgs = maps:to_list(helper:get_args(HelperParams)),
@@ -402,11 +402,13 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %% Get storages list. Retry if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages(non_neg_integer()) -> [storage_config:doc()] | {error, term()}.
+-spec get_storages(non_neg_integer()) -> [od_storage:id()] | {error, term()}.
 get_storages(Num) ->
-    case {storage_config:list(), Num} of
-        {{ok, StorageConfigs}, _} ->
-            StorageConfigs;
+    case {provider_logic:get_storage_ids(), Num} of
+        {{ok, StorageIds}, _} ->
+            StorageIds;
+        {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->
+            [];
         {Error, 0} ->
             Error;
         _ ->

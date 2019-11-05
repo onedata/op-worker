@@ -51,7 +51,6 @@
 installed_cluster_generation() ->
     ?INSTALLED_CLUSTER_GENERATION.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:oldest_known_cluster_generation/0}.
@@ -193,7 +192,7 @@ before_init([]) ->
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(1) ->
-    storage_logic:migrate_to_zone(),
+    storage:migrate_to_zone(),
     {ok, 2}.
 
 %%--------------------------------------------------------------------

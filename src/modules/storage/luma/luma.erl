@@ -52,15 +52,18 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_server_user_ctx(session:id(), od_user:id(), od_space:id(),
-    od_storage:id() | storage_config:doc()) -> {ok, user_ctx()} | {error, Reason :: term()}.
-get_server_user_ctx(SessionId, UserId, SpaceId, StorageConfig = #document{value = #storage_config{}}) ->
-    Helper = storage_config:get_helper(StorageConfig),
+    od_storage:id() | storage:record()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+get_server_user_ctx(SessionId, UserId, SpaceId, StorageId) when is_binary(StorageId) ->
+    {ok, StorageRecord} = storage:get(StorageId),
+    get_server_user_ctx(SessionId, UserId, SpaceId, StorageRecord);
+get_server_user_ctx(SessionId, UserId, SpaceId, StorageRecord) ->
+    Helper = storage:get_helper(StorageRecord),
     HelperName = helper:get_name(Helper),
-    StorageId = storage_config:get_id(StorageConfig),
+    StorageId = storage:get_id(StorageRecord),
     Result = luma_cache:get_user_ctx(UserId, StorageId, fun() ->
         get_user_ctx([
             {fun luma:get_admin_ctx/2, [UserId, Helper]},
-            {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageConfig, Helper]},
+            {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageRecord, Helper]},
             {fun maybe_generate_user_ctx/3, [UserId, SpaceId, HelperName]},
             {fun luma:get_insecure_user_ctx/1, [Helper]}
         ])
@@ -70,10 +73,7 @@ get_server_user_ctx(SessionId, UserId, SpaceId, StorageConfig = #document{value 
             add_helper_specific_fields(UserId, SessionId, UserCtx, Helper);
         Error ->
             Error
-    end;
-get_server_user_ctx(SessionId, UserId, SpaceId, StorageId) when is_binary(StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    get_server_user_ctx(SessionId, UserId, SpaceId, StorageConfig).
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -84,14 +84,14 @@ get_server_user_ctx(SessionId, UserId, SpaceId, StorageId) when is_binary(Storag
 %% @end
 %%--------------------------------------------------------------------
 -spec get_client_user_ctx(session:id(), od_user:id(), od_space:id(),
-    storage_config:doc()) -> {ok, user_ctx()} | {error, Reason :: term()}.
-get_client_user_ctx(SessionId, UserId, SpaceId, StorageConfig) ->
-    Helper = storage_config:get_helper(StorageConfig),
+    storage:record()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+get_client_user_ctx(SessionId, UserId, SpaceId, StorageRecord) ->
+    Helper = storage:get_helper(StorageRecord),
     HelperName = helper:get_name(Helper),
-    StorageId = storage_config:get_id(StorageConfig),
+    StorageId = storage:get_id(StorageRecord),
     Result = luma_cache:get_user_ctx(UserId, StorageId, fun() ->
         get_user_ctx([
-            {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageConfig, Helper]},
+            {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageRecord, Helper]},
             {fun luma:get_insecure_user_ctx/1, [Helper]},
             {fun maybe_generate_user_ctx/3, [UserId, SpaceId, HelperName]}
         ])
@@ -113,8 +113,8 @@ get_client_user_ctx(SessionId, UserId, SpaceId, StorageConfig) ->
     posix_user_ctx().
 get_posix_user_ctx(SessionId, UserId, SpaceId) ->
     {ok, UserCtx} = case select_posix_compatible_storage(SpaceId) of
-        {ok, StorageConfig} ->
-            luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageConfig);
+        {ok, StorageRecord} ->
+            luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageRecord);
         {error, not_found} ->
             maybe_generate_user_ctx(UserId, SpaceId, ?POSIX_HELPER_NAME)
     end,
@@ -131,8 +131,8 @@ get_posix_user_ctx(SessionId, UserId, SpaceId) ->
     od_space:id()) -> posix_user_ctx().
 get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
     {ok, UserCtx} = case select_posix_compatible_storage(SpaceId) of
-        {ok, StorageConfig} ->
-            get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageConfig);
+        {ok, StorageRecord} ->
+            get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageRecord);
         {error, not_found} ->
             maybe_generate_user_ctx(UserId, GroupId, SpaceId, ?POSIX_HELPER_NAME)
     end,
@@ -150,18 +150,21 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_server_user_ctx(session:id(), od_user:id(), undefined | od_group:id(),
-    od_space:id(), storage_config:doc() | od_storage:id()) ->
+    od_space:id(), storage:record() | od_storage:id()) ->
     {ok, user_ctx()} | {error, Reason :: term()}.
-get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageConfig = #document{value = #storage_config{}}) ->
-    Helper = storage_config:get_helper(StorageConfig),
+get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageId) when is_binary(StorageId)->
+    {ok, StorageRecord} = storage:get(StorageId),
+    get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageRecord);
+get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageRecord) ->
+    Helper = storage:get_helper(StorageRecord),
     HelperName = helper:get_name(Helper),
-    StorageId = storage_config:get_id(StorageConfig),
+    StorageId = storage:get_id(StorageRecord),
     Result = luma_cache:get_user_ctx(UserId, StorageId,
         utils:ensure_defined(GroupId, undefined, SpaceId), fun() ->
             get_user_ctx([
                 {fun luma:get_admin_ctx/2, [UserId, Helper]},
                 {fun fetch_user_ctx/6, [SessionId, UserId, GroupId,
-                    SpaceId, StorageConfig, Helper]},
+                    SpaceId, StorageRecord, Helper]},
                 {fun maybe_generate_user_ctx/4, [UserId, GroupId,
                 SpaceId, HelperName]},
                 {fun luma:get_insecure_user_ctx/1, [Helper]}
@@ -173,10 +176,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageConfig = #docume
             add_helper_specific_fields(UserId, SessionId, UserCtx, Helper);
         Error ->
             Error
-    end;
-get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageId) when is_binary(StorageId)->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageConfig).
+    end.
 
 %%%===================================================================
 %%% Exported for CT tests
@@ -187,7 +187,7 @@ get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageId) when is_bina
 %% For the root user returns storage admin context, otherwise 'undefined'.
 %% @end
 %%--------------------------------------------------------------------
--spec get_admin_ctx(od_user:id(), storage_config:helper()) -> {ok, user_ctx()} | undefined.
+-spec get_admin_ctx(od_user:id(), helpers:helper()) -> {ok, user_ctx()} | undefined.
 get_admin_ctx(?ROOT_USER_ID, #helper{admin_ctx = AdminCtx}) ->
     {ok, AdminCtx};
 get_admin_ctx(_UserId, _Helper) ->
@@ -199,7 +199,7 @@ get_admin_ctx(_UserId, _Helper) ->
 %% 'undefined'.
 %% @end
 %%--------------------------------------------------------------------
--spec get_insecure_user_ctx(storage_config:helper()) -> {ok, user_ctx()} | undefined.
+-spec get_insecure_user_ctx(helpers:helper()) -> {ok, user_ctx()} | undefined.
 get_insecure_user_ctx(#helper{name = HelperName})
     when HelperName =:= ?POSIX_HELPER_NAME
     orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
@@ -280,16 +280,15 @@ get_user_ctx(Strategies) ->
 %% Fails with an error if the response is erroneous.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_user_ctx(session:id(), od_user:id(), od_space:id(), storage_config:doc(),
-    storage_config:helper()) ->
-    {ok, user_ctx()} | {error, Reason :: term()} | undefined.
-fetch_user_ctx(SessionId, UserId, SpaceId, StorageConfig, Helper) ->
-    case storage_config:is_luma_enabled(StorageConfig) of
+-spec fetch_user_ctx(session:id(), od_user:id(), od_space:id(), storage:record(),
+    helpers:helper()) -> {ok, user_ctx()} | {error, Reason :: term()} | undefined.
+fetch_user_ctx(SessionId, UserId, SpaceId, StorageRecord, Helper) ->
+    case storage:is_luma_enabled(StorageRecord) of
         false ->
             undefined;
         true ->
             Result = luma_proxy:get_user_ctx(SessionId, UserId, SpaceId,
-                StorageConfig, Helper),
+                StorageRecord, Helper),
             case Result of
                 {error, Reason} ->
                     {error, {luma_server, Reason}};
@@ -370,16 +369,16 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_user_ctx(session:id(), od_user:id(), od_group:id() | undefined,
-    od_space:id(), storage_config:doc(), storage_config:helper()) ->
+    od_space:id(), storage:record(), helpers:helper()) ->
     {ok, user_ctx()} | {error, Reason :: term()} | undefined.
-fetch_user_ctx(SessionId, UserId, _GroupId, SpaceId, StorageConfig,
+fetch_user_ctx(SessionId, UserId, _GroupId, SpaceId, StorageRecord,
     Helper = #helper{name = ?WEBDAV_HELPER_NAME}
 ) ->
-    fetch_user_ctx(SessionId, UserId, SpaceId, StorageConfig, Helper);
-fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageConfig, Helper) ->
-    case fetch_user_ctx(SessionId, UserId, SpaceId, StorageConfig, Helper) of
+    fetch_user_ctx(SessionId, UserId, SpaceId, StorageRecord, Helper);
+fetch_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageRecord, Helper) ->
+    case fetch_user_ctx(SessionId, UserId, SpaceId, StorageRecord, Helper) of
         {ok, UserCtx} ->
-            Result = luma_proxy:get_group_ctx(GroupId, SpaceId, StorageConfig, Helper),
+            Result = luma_proxy:get_group_ctx(GroupId, SpaceId, StorageRecord, Helper),
             case Result of
                 {ok, GroupCtx} ->
                     {ok, maps:merge(UserCtx, GroupCtx)};
@@ -483,18 +482,18 @@ generate_posix_identifier(Id, {Low, High}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec select_posix_compatible_storage(od_space:id()) ->
-    {ok, storage_config:doc(), helper:name()} | {error, Reason :: term()}.
+    {ok, storage:record(), helper:name()} | {error, Reason :: term()}.
 select_posix_compatible_storage(SpaceId) ->
     case space_logic:get_local_storage_ids(SpaceId) of
         {ok, StorageIds} ->
-            StorageConfig = lists:foldl(fun
+            StorageRecord = lists:foldl(fun
                 (StorageId, undefined) ->
-                    case storage_config:get(StorageId) of
-                        {ok, SC} ->
-                            Helper = storage_config:get_helper(SC),
+                    case storage:get(StorageId) of
+                        {ok, SR} ->
+                            Helper = storage:get_helper(SR),
                             HelperName = helper:get_name(Helper),
                             case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
-                                true -> SC;
+                                true -> SR;
                                 false -> undefined
                             end;
                         {error, not_found} ->
@@ -503,9 +502,9 @@ select_posix_compatible_storage(SpaceId) ->
                 (_, PosixCompatibleSC) ->
                     PosixCompatibleSC
             end, undefined, StorageIds),
-            case StorageConfig =:= undefined of
+            case StorageRecord =:= undefined of
                 true -> {error, not_found};
-                false -> {ok, StorageConfig}
+                false -> {ok, StorageRecord}
             end;
         Error = {error, _} ->
             Error

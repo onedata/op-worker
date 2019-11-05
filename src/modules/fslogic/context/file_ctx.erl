@@ -41,7 +41,7 @@
     storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
-    storage_doc :: undefined | storage_config:doc(),
+    storage_record :: undefined | storage:record(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_space_synced :: undefined | boolean(),
@@ -75,7 +75,7 @@
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
-    get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
+    get_storage_id/1, get_storage_record/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
@@ -348,8 +348,8 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %%--------------------------------------------------------------------
 -spec is_imported_storage(ctx()) -> {boolean(), ctx()}.
 is_imported_storage(FileCtx = #file_ctx{is_imported_storage = undefined}) ->
-    {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
-    ImportedStorage = storage_config:is_imported_storage(StorageConfig),
+    {StorageRecord, FileCtx2} = get_storage_record(FileCtx),
+    ImportedStorage = storage:is_imported_storage(StorageRecord),
     {ImportedStorage, FileCtx2#file_ctx{is_imported_storage = ImportedStorage}};
 is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) ->
     {ImportedStorage, FileCtx}.
@@ -497,8 +497,8 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 
 -spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
-    {StorageConfig, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    Helper = storage_config:get_helper(StorageConfig),
+    {StorageRecord, FileCtx2} = file_ctx:get_storage_record(FileCtx),
+    Helper = storage:get_helper(StorageRecord),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
             {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
@@ -752,21 +752,21 @@ get_file_children_whitelisted(
 %%--------------------------------------------------------------------
 -spec get_storage_id(ctx()) -> {od_storage:id(), ctx()}.
 get_storage_id(FileCtx) ->
-    {#document{key = StorageId}, FileCtx2} = get_storage_doc(FileCtx),
-    {StorageId, FileCtx2}.
+    {StorageRecord, FileCtx2} = get_storage_record(FileCtx),
+    {storage:get_id(StorageRecord), FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local storage_config document of file's space.
-%% @TODO VFS-5853 return here higher level storage record
+%% Returns record of storage supporting space in which file was created.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_doc(ctx()) -> {storage_config:doc(), ctx()}.
-get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
+-spec get_storage_record(ctx()) -> {storage:record(), ctx()}.
+get_storage_record(FileCtx = #file_ctx{storage_record = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    {ok, StorageConfig} = fslogic_storage:select_storage(SpaceId),
-    {StorageConfig, FileCtx#file_ctx{storage_doc = StorageConfig}};
-get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageConfig}) ->
+    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+    {ok, StorageRecord} = storage:get(StorageId),
+    {StorageRecord, FileCtx#file_ctx{storage_record = StorageRecord}};
+get_storage_record(FileCtx = #file_ctx{storage_record = StorageConfig}) ->
     {StorageConfig, FileCtx}.
 
 

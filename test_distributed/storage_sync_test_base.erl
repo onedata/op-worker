@@ -3607,8 +3607,8 @@ create_init_file(Config, Readonly) ->
     end.
 
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
-    {ok, Storage} = rpc:call(Worker, storage_config, get, [StorageId]),
-    Helper = storage_config:get_helper(Storage),
+    {ok, StorageRecord} = rpc:call(Worker, storage, get, [StorageId]),
+    Helper = storage:get_helper(StorageRecord),
     HelperName = helper:get_name(Helper),
     case HelperName of
         ?POSIX_HELPER_NAME ->
@@ -3617,24 +3617,24 @@ is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
             sd_test_utils:listobjects(Worker, SDHandle, <<"/">>, 0, 1)
     end.
 
-cancel(Worker, SpaceId, #document{key = StorageId}) ->
-    cancel(Worker, SpaceId, StorageId);
-cancel(Worker, SpaceId, StorageId) ->
-    ?assertMatch(ok, rpc:call(Worker, storage_sync, cancel, [SpaceId, StorageId])).
+cancel(Worker, SpaceId, StorageId) when is_binary(StorageId) ->
+    ?assertMatch(ok, rpc:call(Worker, storage_sync, cancel, [SpaceId, StorageId]));
+cancel(Worker, SpaceId, StorageRecord) ->
+    StorageId = storage:get_id(StorageRecord),
+    cancel(Worker, SpaceId, StorageId).
 
 schedule_spaces_check(Worker, IntervalSeconds) ->
     rpc:call(Worker, storage_sync_worker, schedule_spaces_check, [IntervalSeconds]).
 
-enable_import(Config, SpaceId, #document{key = StorageId}) ->
-    enable_import(Config, SpaceId, StorageId);
-enable_import(Config, SpaceId, StorageId) ->
+enable_import(Config, SpaceId, StorageId) when is_binary(StorageId) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     ?assertMatch(ok, rpc:call(W1, storage_sync, enable_import,
-        [SpaceId, StorageId, #{max_depth => ?MAX_DEPTH, sync_acl => ?SYNC_ACL}])).
+        [SpaceId, StorageId, #{max_depth => ?MAX_DEPTH, sync_acl => ?SYNC_ACL}]));
+enable_import(Config, SpaceId, StorageRecord) ->
+    StorageId = storage:get_id(StorageRecord),
+    enable_import(Config, SpaceId, StorageId).
 
-enable_update(Config, SpaceId, #document{key = StorageId}) ->
-    enable_update(Config, SpaceId, StorageId);
-enable_update(Config, SpaceId, StorageId) ->
+enable_update(Config, SpaceId, StorageId) when is_binary(StorageId) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     UpdateConfig = ?config(update_config, Config, #{}),
     ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
@@ -3648,7 +3648,10 @@ enable_update(Config, SpaceId, StorageId) ->
             write_once => WriteOnce,
             delete_enable => DeleteEnable,
             sync_acl => SyncAcl
-        }]).
+        }]);
+enable_update(Config, SpaceId, StorageRecord) ->
+    StorageId = storage:get_id(StorageRecord),
+    enable_update(Config, SpaceId, StorageId).
 
 disable_import(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -3758,16 +3761,20 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
     end.
 
 clean_reverse_luma_cache(Worker) ->
-    {ok, Storages} = rpc:call(Worker, storage_config, list, []),
-    lists:foreach(fun(#document{key = StorageId}) ->
+    {ok, StorageIds} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+    lists:foreach(fun(StorageId) ->
         ok = rpc:call(Worker, luma_cache, invalidate, [StorageId])
-    end, Storages).
+    end, StorageIds).
 
 add_synced_storages(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SyncedStorages = lists:foldl(fun(W, AccIn) ->
-        {ok, Storages} = rpc:call(W, storage_config, list, []),
-        case find_synced_storage(Storages) of
+        {ok, StorageIds} = rpc:call(W, provider_logic, get_storage_ids, []),
+        StorageRecords = lists:map(fun(StorageId) ->
+            {ok, StorageRecord} = rpc:call(W, storage, get, [StorageId]),
+            StorageRecord
+        end, StorageIds),
+        case find_synced_storage(StorageRecords) of
             undefined -> AccIn;
             SyncedStorage -> AccIn#{W => SyncedStorage}
         end
@@ -3777,8 +3784,12 @@ add_synced_storages(Config) ->
 add_rdwr_storages(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     RDWRStorages = lists:foldl(fun(W, AccIn) ->
-        {ok, Storages} = rpc:call(W, storage_config, list, []),
-        case find_rdwr_storage(Storages) of
+        {ok, StorageIds} = rpc:call(W, provider_logic, get_storage_ids, []),
+        StorageRecords = lists:map(fun(StorageId) ->
+            {ok, StorageRecord} = rpc:call(W, storage, get, [StorageId]),
+            StorageRecord
+        end, StorageIds),
+        case find_rdwr_storage(StorageRecords) of
             undefined -> AccIn;
             RDWRStorage -> AccIn#{W => RDWRStorage}
         end
@@ -3797,46 +3808,50 @@ get_synced_storage(Config, Worker) ->
 
 get_supporting_storage(Worker, SpaceId) ->
     StorageId = sd_test_utils:get_storage_id(Worker, SpaceId),
-    {ok, StorageDoc} = sd_test_utils:get_storage_doc(Worker, StorageId),
-    StorageDoc.
+    {ok, StorageRecord} = sd_test_utils:get_storage_record(Worker, StorageId),
+    StorageRecord.
 
-find_rdwr_storage(Storages) ->
+find_rdwr_storage(StorageRecords) ->
     lists:foldl(fun
-        (StorageDoc = #document{value = Storage}, undefined) ->
-            case is_rdwr(Storage) of
-                true -> StorageDoc;
+        (StorageRecord, undefined) ->
+            Helper = storage:get_helper(StorageRecord),
+            Name = storage:get_name(StorageRecord),
+            case is_rdwr(Name, Helper) of
+                true -> StorageRecord;
                 false -> undefined
             end;
         (_, RDWRStorage) ->
             RDWRStorage
-    end, undefined, Storages).
+    end, undefined, StorageRecords).
 
-is_rdwr(#storage_config{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
+is_rdwr(MountPoint, #helper{name = ?POSIX_HELPER_NAME}) ->
     <<"rdwr_storage">> =:= filename:basename(MountPoint);
-is_rdwr(#storage_config{name = <<"rdwr_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
+is_rdwr(<<"rdwr_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
     true;
-is_rdwr(_) ->
+is_rdwr(_, _) ->
     false.
 
-find_synced_storage(Storages) ->
+find_synced_storage(StorageRecords) ->
     lists:foldl(fun
-        (StorageDoc = #document{value = Storage}, undefined) ->
-            case is_synced(Storage) of
-                true -> StorageDoc;
+        (StorageRecord, undefined) ->
+            Helper = storage:get_helper(StorageRecord),
+            Name = storage:get_name(StorageRecord),
+            case is_synced(Name, Helper) of
+                true -> StorageRecord;
                 false -> undefined
             end;
         (_, RDWRStorageIn) ->
             RDWRStorageIn
-    end, undefined, Storages).
+    end, undefined, StorageRecords).
 
-is_synced(#storage_config{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
+is_synced(MountPoint, #helper{name = ?POSIX_HELPER_NAME}) ->
     <<"synced_storage">> =:= filename:basename(MountPoint);
-is_synced(#storage_config{name = <<"synced_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
+is_synced(<<"synced_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
     true.
 
 get_mount_point(Storage) ->
     % works only on POSIX storages!!!
-    Helper = storage_config:get_helper(Storage),
+    Helper = storage:get_helper(Storage),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
@@ -3846,7 +3861,7 @@ get_host_mount_point(Config, Storage) ->
     get_storage_path(Config, MountPoint).
 
 get_host_storage_file_id(Config, CanonicalPath, Storage, ImportedStorage) ->
-    Helper = storage_config:get_helper(Storage),
+    Helper = storage:get_helper(Storage),
     case helper:get_name(Helper) of
         ?POSIX_HELPER_NAME ->
             get_host_posix_storage_file_id(Config, CanonicalPath, Storage, ImportedStorage);

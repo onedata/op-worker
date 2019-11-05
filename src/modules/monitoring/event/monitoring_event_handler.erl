@@ -334,16 +334,4 @@ all_supporting_storages_are_readonly(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec all_storages_are_readonly([od_storage:id()]) -> boolean().
 all_storages_are_readonly(StorageIds) ->
-    lists:all(fun is_storage_readonly/1, StorageIds).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks if given storage is read-only.
-%% @end
-%%--------------------------------------------------------------------
--spec is_storage_readonly(od_storage:id()) -> boolean().
-is_storage_readonly(StorageId) ->
-    {ok, #document{value=#storage_config{readonly=ReadOnly}}} = storage_config:get(StorageId),
-    ReadOnly.
+    lists:all(fun storage:is_readonly/1, StorageIds).

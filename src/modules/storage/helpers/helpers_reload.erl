@@ -47,18 +47,18 @@ refresh_helpers_by_storage(StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec refresh_handle_params(helpers:helper_handle() | helpers:file_handle(),
-    session:id(), od_space:id(), storage_config:doc() | od_storage:id()) -> ok.
-refresh_handle_params(Handle, SessionId, SpaceId, StorageConfig = #document{value = #storage_config{}}) ->
+    session:id(), od_space:id(), storage:record() | od_storage:id()) -> ok.
+refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(StorageId) ->
+    {ok, StorageRecord} = storage:get(StorageId),
+    refresh_handle_params(Handle, SessionId, SpaceId, StorageRecord);
+refresh_handle_params(Handle, SessionId, SpaceId, StorageRecord) ->
     % gather information
-    {ok, Helper} = fslogic_storage:select_helper(StorageConfig),
+    Helper = storage:get_helper(StorageRecord),
     {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageConfig),
+    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageRecord),
     {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
     % do the refresh
-    helpers:refresh_params(Handle, ArgsWithUserCtx);
-refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    refresh_handle_params(Handle, SessionId, SpaceId, StorageConfig).
+    helpers:refresh_params(Handle, ArgsWithUserCtx).
 
 %%%===================================================================
 %%% RPC exports
@@ -66,18 +66,18 @@ refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(Stor
 
 -spec local_refresh_helpers(StorageId :: od_storage:id()) -> ok.
 local_refresh_helpers(StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
+    {ok, StorageRecord} = storage:get(StorageId),
     {ok, Sessions} = session:list(),
     try
         lists:foreach(fun(#document{key = SessId}) ->
             {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
             lists:foreach(fun({HandleId, SpaceId}) ->
                 {ok, #document{value = Handle}} = helper_handle:get(HandleId),
-                refresh_handle_params(Handle, SessId, SpaceId, StorageConfig)
+                refresh_handle_params(Handle, SessId, SpaceId, StorageRecord)
             end, HandlesSpaces)
         end, Sessions)
     catch Type:Error ->
-        #document{value = #storage_config{name = StorageName}} = StorageConfig,
+        StorageName = storage:get_name(StorageRecord),
         ?error("Error updating active helper for storage ~tp with new args: ~p:~tp",
             [StorageName, Type, Error])
     end.

@@ -297,7 +297,7 @@
     % should be stored are calculated using QoS expression. Calculated storages
     % are used to create traverse requests in qos_entry document. When provider
     % notices change in qos_entry document, it checks whether traverse request
-    % for his storage is present. If yes provider updates entry in assigned_entries
+    % for his storage is present. If so, provider updates entry in assigned_entries
     % map for his local storage.
     assigned_entries = #{} :: file_qos:assigned_entries()
 }).
@@ -332,7 +332,7 @@
 
 -record(storage_config, {
     name = <<>> :: storage_config:name(),
-    helpers = [] :: [storage_config:helper()],
+    helper :: helpers:helper(),
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config(),
     imported_storage = false :: boolean()
@@ -342,7 +342,7 @@
 %%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 -record(storage, {
     name = <<>> :: storage_config:name(),
-    helpers = [] :: [storage_config:helper()],
+    helpers = [] :: [helpers:helper()],
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config()
 }).

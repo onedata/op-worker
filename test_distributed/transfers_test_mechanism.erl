@@ -1446,16 +1446,14 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
 %% trigger helper reload and restore previous value.
 -spec modify_storage_timeout(node(), od_storage:id(), NewValue :: binary()) -> ok.
 modify_storage_timeout(Node, StorageId, NewValue) ->
-    {ok, Doc} = rpc:call(Node, storage_config, get, [StorageId]),
-    [Helper] = storage_config:get_helpers(Doc),
-    HelperName = helper:get_name(Helper),
+    Helper = rpc:call(Node, storage, get_helper, [StorageId]),
     OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),
         integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
 
-    ?assertEqual(ok, rpc:call(Node, storage_config, update_helper_args,
-        [StorageId, HelperName, #{<<"timeout">> => NewValue}])),
-    ?assertEqual(ok, rpc:call(Node, storage_config, update_helper_args,
-        [StorageId, HelperName, #{<<"timeout">> => OldValue}])),
+    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
+        [StorageId, #{<<"timeout">> => NewValue}])),
+    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
+        [StorageId, #{<<"timeout">> => OldValue}])),
     ok.
 
 

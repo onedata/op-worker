@@ -53,8 +53,8 @@ all() -> [
 
 -define(SPACE_ID, <<"space1">>).
 -define(STORAGE_ID(Worker), begin
-    {ok, [__Storage]} = rpc:call(Worker, storage_config, list, []),
-    storage_config:get_id(__Storage)
+    {ok, [__Storage]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+    __Storage
     end
 ).
 -define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
@@ -260,9 +260,6 @@ mock_fetch_token(Worker, Token, TTL) ->
     ok = test_utils:mock_expect(Worker, user_logic, fetch_idp_access_token,
         fun (_, _, _) -> {ok, {Token, TTL}} end).
 
-storage_update(Worker, StorageId, UpdateFun) ->
-    rpc:call(Worker, storage_config, update, [StorageId, UpdateFun]).
-
 enable_webdav_test_mode_secure_storage(Worker, StorageId) ->
     enable_webdav_test_mode(Worker, StorageId, false).
 
@@ -275,13 +272,12 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
         false -> #luma_config{}
     end,
 
-    {ok, _} = storage_update(Worker, StorageId, fun(Storage = #storage_config{helpers = [Helper]}) ->
-        #helper{args = Args, admin_ctx = AdminCtx}  = Helper,
+    UpdateHelperFun = fun(#helper{args = Args, admin_ctx = AdminCtx}  = Helper) ->
         Args2 = Args#{
             <<"testTokenRefreshMode">> => <<"true">>,
             <<"oauth2IdP">> => ?IDP
         },
-        {ok, Storage#storage_config{helpers = [Helper#helper{
+        {ok, Helper#helper{
             args = Args2,
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
@@ -290,10 +286,11 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
                 <<"credentials">> => <<"ADMIN">>
             },
             insecure = Insecure
-        }],
-            luma_config = LumaConfig
         }}
-    end).
+    end,
+    rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]),
+    rpc:call(Worker, storage, set_luma_config, [StorageId, LumaConfig]).
+
 
 get_sd_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
     rpc:call(Worker, storage_driver, new_handle,

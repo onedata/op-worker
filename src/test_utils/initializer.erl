@@ -41,6 +41,7 @@
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
+-export([storage_logic_mock_setup/1, storage_logic_mock_teardown/1]).
 -export([put_into_cache/1]).
 -export([local_ip_v4/0]).
 
@@ -191,7 +192,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, cluster_logic, harvester_logic, provider_auth]),
+        provider_logic, cluster_logic, harvester_logic, storage_logic, provider_auth]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -366,11 +367,10 @@ setup_storage([Worker | Rest], Config) ->
         false,
         ?CANONICAL_STORAGE_PATH
     ),
-    StorageConfig = storage_config:new(
-        <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
-        [Helper]),
-    {ok, StorageId} = rpc:call(Worker, storage_config, save_doc, [StorageConfig]),
-    ok = rpc:call(Worker, storage_config, on_storage_created, [StorageId]),
+    StorageId = datastore_utils:gen_key(),
+    StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
+    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageId, StorageName, Helper, false, undefined, false]),
+    rpc:call(Worker, storage, on_storage_created, [StorageId]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
@@ -565,6 +565,17 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
+-spec storage_logic_mock_setup(Workers :: node() | [node()]) -> ok.
+storage_logic_mock_setup(Workers) ->
+    ok = test_utils:mock_new(Workers, storage_logic),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(_,_) -> {ok, #{}} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(_) -> {ok, #{}} end).
+
+
+-spec storage_logic_mock_teardown(Workers :: node() | [node()]) -> ok.
+storage_logic_mock_teardown(Workers) ->
+    test_utils:mock_unload(Workers, storage_logic).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -662,12 +673,12 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     end, #{}, GroupUsers),
 
     StorageMappings = lists:foldl(fun(Worker, OuterAcc) ->
-        {ok, WorkerStorageList} = rpc:call(Worker, storage_config, list, []),
+        {ok, WorkerStorageConfigList} = rpc:call(Worker, storage_config, list, []),
         maps:merge(OuterAcc, lists:foldl(fun(StorageConfig, InnerAcc) ->
             StorageName = rpc:call(Worker, storage_config, get_name, [StorageConfig]),
             StorageId = rpc:call(Worker, storage_config, get_id, [StorageConfig]),
             InnerAcc#{{StorageName, domain_to_provider_id(?GET_DOMAIN(Worker))} => StorageId}
-        end, #{}, WorkerStorageList))
+        end, #{}, WorkerStorageConfigList))
     end, #{}, MasterWorkers),
 
     SpacesSupports = lists:filtermap(fun({SpaceId, SpaceConfig}) ->
@@ -731,6 +742,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
+    storage_logic_mock_setup(AllWorkers),
     ok = init_qos_bounded_cache(Config),
 
     %% Setup storage
@@ -1139,6 +1151,12 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         end
     end,
 
+    GetStorageIdsFun = fun(ProviderId) ->
+        {ok, #document{value = #od_provider{storages = StorageIds}}} =
+            GetProviderFun(?ROOT_SESS_ID, ProviderId),
+        {ok, StorageIds}
+    end,
+
     HasEffUserFun = fun(?ROOT_SESS_ID, ProviderId, UserId) ->
         {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
         lists:any(fun(SpaceId) ->
@@ -1215,6 +1233,17 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces,
         fun() ->
             GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id())
+        end),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+        fun(PID) ->
+            GetStorageIdsFun(PID)
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+        fun() ->
+            GetStorageIdsFun(oneprovider:get_id())
         end),
 
 
@@ -1306,6 +1335,7 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
         {ok, _} = put_into_cache(Doc),
         {ok, Doc}
     end).
+
 
 %%--------------------------------------------------------------------
 %% @private

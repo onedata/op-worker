@@ -122,7 +122,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) when is_atom(Pool) 
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     RootStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
     RootStorageFileCtx = storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId),
-    StorageType = storage_config:get_type(StorageId),
+    StorageType = storage:get_type(StorageId),
     DefinedTaskId = case TaskId =:= undefined of
         true -> datastore_utils:gen_key();
         false -> TaskId

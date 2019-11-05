@@ -276,7 +276,7 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage_config:get_type(StorageId),
+        storage_type => storage:get_type(StorageId),
         space_storage_file_id => SpaceStorageFileId,
         file_ctx => FileCtx,
         detect_deletions => true,
@@ -312,7 +312,7 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage_config:get_type(StorageId),
+        storage_type => storage:get_type(StorageId),
         space_storage_file_id => SpaceStorageFileId
     },
     RunOpts = #{

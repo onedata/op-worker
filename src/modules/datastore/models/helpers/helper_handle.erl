@@ -44,9 +44,9 @@
 -spec create(session:id(), od_user:id(), od_space:id(), od_storage:id()) ->
     {ok, doc()}.
 create(SessionId, UserId, SpaceId, StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    Helper = storage_config:get_helper(StorageConfig),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageConfig),
+    {ok, StorageRecord} = storage:get(StorageId),
+    Helper = storage:get_helper(StorageRecord),
+    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageRecord),
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},
     datastore_model:create(?CTX, HelperDoc).
