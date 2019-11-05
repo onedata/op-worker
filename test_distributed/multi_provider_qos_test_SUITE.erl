@@ -6,6 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
+%%% Empty test SUITE to be implemented in the future major version
 %%% @end
 %%%--------------------------------------------------------------------
 -module(multi_provider_qos_test_SUITE).
