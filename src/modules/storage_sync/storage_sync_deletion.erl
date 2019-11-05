@@ -527,7 +527,7 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateS
 delete_file(FileCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        delete_req:delete(RootUserCtx, FileCtx, false, true)
+        delete_req:delete(RootUserCtx, FileCtx, false, false)
     catch
         throw:?ENOENT ->
             ok

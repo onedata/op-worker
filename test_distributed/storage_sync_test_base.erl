@@ -4141,7 +4141,7 @@ clean_traverse_tasks(Worker) ->
     Pool = <<"storage_sync_traverse">>,
     {ok, TaskIds, _} = rpc:call(Worker, traverse_task_list, list, [Pool, ended]),
     lists:foreach(fun(T) ->
-        rpc:call(Worker, traverse_task, delete_ended, [Pool, T])
+        ok = rpc:call(Worker, traverse_task, delete_ended, [Pool, T])
     end, TaskIds),
     ?assertMatch({ok, [], _}, rpc:call(Worker, traverse_task_list, list, [Pool, ended])).
 
