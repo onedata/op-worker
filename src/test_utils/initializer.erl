@@ -866,7 +866,6 @@ user_logic_mock_setup(Workers, Users) ->
                     end;
                 _ ->
                     {error, forbidden}
-
             end;
         (_, SessionId, UserId) ->
             {ok, #document{value = #session{
