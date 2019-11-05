@@ -53,7 +53,11 @@ assert_no_data_caveats(Caveats) when is_list(Caveats) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO WRITEME
+%% Verifies whether FileCtx:
+%% - lies in path allowed by location caveats,
+%% - is ancestor to path allowed by location caveats
+%%   (only if AllowAncestors flag is set to true).
+%% If none of the above holds then ?EACCES is thrown.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_data_location_caveats(file_ctx:ctx(), [data_location_caveat()],
@@ -101,7 +105,7 @@ verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
         false ->
             throw(?EACCES)
     end;
-verify_data_location_caveat(FileCtx, ?CV_PATH(AllowedPaths), false) ->
+verify_data_location_caveat(FileCtx, ?CV_PATH(AllowedPaths), true) ->
     check_data_path_relation(FileCtx, AllowedPaths);
 
 verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), false) ->
