@@ -294,7 +294,7 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     },
     RunOpts = #{
         execute_slave_on_dir => false,
-        async_master_jobs => true,
+        async_children_master_jobs => true,
         async_next_batch_job => true,
         next_batch_job_prehook => get_next_batch_job_prehook(TraverseInfo),
         children_master_job_prehook => get_children_master_job_prehook(TraverseInfo),
@@ -439,10 +439,10 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
 
 -spec traverse_only_directories(master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
-traverse_only_directories(TraverseJob = #storage_traverse_master{storage_file_ctx = StorageFileCtx}, Args) ->
+traverse_only_directories(TraverseJob, Args) ->
     case storage_traverse:do_master_job(TraverseJob, Args) of
         {ok, MasterJobMap} ->
-            schedule_jobs_for_directories_only(MasterJobMap, StorageFileCtx);
+            schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, false);
         Error = {error, _} ->
             Error
     end.
@@ -450,7 +450,6 @@ traverse_only_directories(TraverseJob = #storage_traverse_master{storage_file_ct
 -spec traverse(master_job(), traverse:master_job_extended_args(), boolean()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
 traverse(TraverseJob = #storage_traverse_master{
-    storage_file_ctx = StorageFileCtx,
     offset = Offset,
     batch_size = BatchSize,
     info = #{storage_sync_info_doc := SSIDoc}
@@ -460,19 +459,19 @@ traverse(TraverseJob = #storage_traverse_master{
             BatchHash = storage_sync_hash:hash(lists:reverse(HashesReversed)),
             case storage_sync_hash:children_attrs_hash_has_changed(BatchHash, Offset, BatchSize, SSIDoc) of
                 true ->
-                    schedule_jobs_for_all_files(TraverseJob, MasterJobMap, StorageFileCtx, BatchHash, DeleteEnable);
+                    schedule_jobs_for_all_files(TraverseJob, MasterJobMap, BatchHash, DeleteEnable);
                 false ->
                     % Hash hasn't changed, therefore we can schedule jobs only for directories
-                    schedule_jobs_for_directories_only(MasterJobMap, StorageFileCtx)
+                    schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, DeleteEnable)
             end;
         Error = {error, _} ->
             Error
     end.
 
 
--spec schedule_jobs_for_directories_only(traverse:master_job_map(), storage_file_ctx:ctx()) ->
+-spec schedule_jobs_for_directories_only(master_job(), traverse:master_job_map(), boolean()) ->
     {ok, traverse:master_job_map()}.
-schedule_jobs_for_directories_only(MasterJobMap, StorageFileCtx) ->
+schedule_jobs_for_directories_only(#storage_traverse_master{storage_file_ctx = StorageFileCtx}, MasterJobMap, false) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     MasterJobMap2 = maps:remove(slave_jobs, MasterJobMap),
@@ -484,12 +483,45 @@ schedule_jobs_for_directories_only(MasterJobMap, StorageFileCtx) ->
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
+    {ok, MasterJobMap2#{finish_callback => FinishCallback}};
+schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    info = Info
+}, MasterJobMap, true
+) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    MasterJobMap2 = maps:remove(slave_jobs, MasterJobMap),
+    {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+
+
+    FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, SlavesDescription) ->
+        case maps:get(slave_jobs_failed, SlavesDescription) of
+            0 ->
+                StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
+                {ok, SSI} = storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime),
+                case storage_sync_info:are_all_batches_processed(SSI) of
+                    true -> MasterJobCallback([TraverseJob#storage_traverse_master{info = Info#{detect_deletions => true}}]);
+                    false -> ok
+                end;
+            _ ->
+                ok
+        end
+    end,
+
+    AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
+    ToProcess = length(AsyncMasterJobs),
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}}.
 
--spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_file_ctx:ctx(),
-    storage_sync_hash:hash(), boolean()) -> {ok, traverse:master_job_map()}.
-schedule_jobs_for_all_files(#storage_traverse_master{offset = Offset, batch_size = BatchSize},
-    MasterJobMap, StorageFileCtx, BatchHash,false
+-spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_sync_hash:hash(), boolean()) ->
+    {ok, traverse:master_job_map()}.
+schedule_jobs_for_all_files(#storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    offset = Offset,
+    batch_size = BatchSize
+}, MasterJobMap, BatchHash, false
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -503,8 +535,12 @@ schedule_jobs_for_all_files(#storage_traverse_master{offset = Offset, batch_size
         storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash)
     end),
     {ok, MasterJobMap#{finish_callback => FinishCallback}};
-schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{offset = Offset, batch_size = BatchSize, info = Info},
-    MasterJobMap, StorageFileCtx, BatchHash, true
+schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    offset = Offset,
+    batch_size = BatchSize,
+    info = Info
+}, MasterJobMap, BatchHash, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),

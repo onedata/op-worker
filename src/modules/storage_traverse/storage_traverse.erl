@@ -63,7 +63,7 @@
     % flag that informs whether slave_job should be scheduled on directories
     execute_slave_on_dir => boolean(),
     % flag that informs whether children master jobs should be scheduled asynchronously
-    async_master_jobs => boolean(),
+    async_children_master_jobs => boolean(),
     % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
     async_next_batch_job => boolean(),
     % prehook executed before scheduling job for processing next batch of given directory
@@ -132,7 +132,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         iterator = Iterator,
         execute_slave_on_dir = maps:get(execute_slave_on_dir, RunOpts, ?DEFAULT_EXECUTE_SLAVE_ON_DIR),
         async_next_batch_job = maps:get(async_next_batch_job, RunOpts, ?DEFAULT_ASYNC_NEXT_BATCH_JOB),
-        async_master_jobs = maps:get(async_master_jobs, RunOpts, ?DEFAULT_ASYNC_MASTER_JOBS),
+        async_children_master_jobs = maps:get(async_children_master_jobs, RunOpts, ?DEFAULT_ASYNC_CHILDREN_MASTER_JOBS),
         offset = maps:get(offset, RunOpts, 0),
         batch_size = maps:get(batch_size, RunOpts, ?DEFAULT_BATCH_SIZE),
         marker = maps:get(marker, RunOpts, undefined),
@@ -156,9 +156,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     {ok, traverse:master_job_map()} |{ok, traverse:master_job_map(), term()} | {error, term()}.
 do_master_job(StorageTraverse = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    iterator = Iterator,
-    depth = Depth,
-    max_depth = MaxDepth
+    iterator = Iterator
 }, Args) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -166,7 +164,6 @@ do_master_job(StorageTraverse = #storage_traverse_master{
         {ok, ChildrenIdsWithDepths, StorageTraverse2} ->
             generate_master_and_slave_jobs(StorageTraverse2, ChildrenIdsWithDepths, Args);
         Error = {error, ?ENOENT} ->
-            ?alert("Depth: ~p, MaxDepth = ~p", [Depth, MaxDepth]),
             ?warning("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
             Error;
         Error = {error, _} ->
@@ -237,7 +234,7 @@ generate_master_and_slave_jobs(#storage_traverse_master{
 generate_master_and_slave_jobs(StorageTraverse = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     execute_slave_on_dir = OnDir,
-    async_master_jobs = AsyncMasterJobs,
+    async_children_master_jobs = AsyncChildrenMasterJobs,
     offset = Offset,
     compute_fun = ComputeFun,
     compute_enabled = ComputeEnabled,
@@ -250,7 +247,7 @@ generate_master_and_slave_jobs(StorageTraverse = #storage_traverse_master{
         {true, true} -> [get_slave_job(StorageFileCtx, Info)]; %execute slave job only once per directory
         _ -> []
     end,
-    MasterJobsKey = case AsyncMasterJobs of
+    MasterJobsKey = case AsyncChildrenMasterJobs of
         true -> async_master_jobs;
         false -> master_jobs
     end,

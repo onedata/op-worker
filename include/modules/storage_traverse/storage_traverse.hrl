@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 
 -define(DEFAULT_EXECUTE_SLAVE_ON_DIR, false).
--define(DEFAULT_ASYNC_MASTER_JOBS, false).
+-define(DEFAULT_ASYNC_CHILDREN_MASTER_JOBS, false).
 -define(DEFAULT_ASYNC_NEXT_BATCH_JOB, false).
 -define(DEFAULT_OFFSET, 0).
 -define(DEFAULT_BATCH_SIZE, application:get_env(?APP_NAME, storage_traverse_batch_size, 100)).
@@ -49,7 +49,7 @@
     % flag that informs whether slave_job should be scheduled on directories
     execute_slave_on_dir = ?DEFAULT_EXECUTE_SLAVE_ON_DIR :: boolean(),
     % flag that informs whether children master jobs should be scheduled asynchronously
-    async_master_jobs = ?DEFAULT_ASYNC_MASTER_JOBS :: boolean(),
+    async_children_master_jobs = ?DEFAULT_ASYNC_CHILDREN_MASTER_JOBS :: boolean(),
     % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
     async_next_batch_job = ?DEFAULT_ASYNC_NEXT_BATCH_JOB :: boolean(),
     % prehook executed before scheduling job for processing next batch of given directory

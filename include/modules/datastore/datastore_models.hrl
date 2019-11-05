@@ -512,7 +512,7 @@
     % flag that informs whether slave_job should be scheduled on directories
     execute_slave_on_dir :: boolean(),
     % flag that informs whether children master jobs should be scheduled asynchronously
-    async_master_jobs :: boolean(),
+    async_children_master_jobs :: boolean(),
     % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
     async_next_batch_job :: boolean(),
     % initial argument for compute function (see storage_traverse.erl for more info)

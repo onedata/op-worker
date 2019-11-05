@@ -91,7 +91,6 @@
 %todo test jak zmienimy katalog na plik o tej samej nazwie i vice versa
 
 -define(TEST_CASES, [
-    % todo jakis test na to,z e zostął zapisany hash po imporcie
     % tests of import
     empty_import_test,
     create_directory_import_test,
@@ -110,13 +109,13 @@
     create_file_in_dir_import_test,
     create_subfiles_import_many_test,
     create_subfiles_import_many2_test,
-%%    cancel_scan, % todo
+    cancel_scan,
     import_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
     create_file_import_race_test,
     close_file_import_race_test,
 
-%%    % tests of update
+    % tests of update
     update_syncs_files_after_import_failed_test,
     update_syncs_files_after_previous_update_failed_test,
     % todo VFS-5203 add more tests of sync handling suffixed files
