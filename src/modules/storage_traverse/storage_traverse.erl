@@ -154,15 +154,15 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
 
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} |{ok, traverse:master_job_map(), term()} | {error, term()}.
-do_master_job(StorageTraverse = #storage_traverse_master{
+do_master_job(MasterJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     iterator = Iterator
 }, Args) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    case Iterator:get_children_batch(StorageTraverse) of
-        {ok, ChildrenIdsWithDepths, StorageTraverse2} ->
-            generate_master_and_slave_jobs(StorageTraverse2, ChildrenIdsWithDepths, Args);
+    case Iterator:get_children_and_next_batch_job(MasterJob) of
+        {ok, ChildrenIdsWithDepths, NextBatchMasterJob} ->
+            generate_master_and_slave_jobs(MasterJob, NextBatchMasterJob, ChildrenIdsWithDepths, Args);
         Error = {error, ?ENOENT} ->
             ?warning("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
             Error;
@@ -194,9 +194,9 @@ get_job(DocOrID) ->
 %%% Internal functions
 %%%===================================================================
 
-reset_info(#storage_traverse_master{callback_module = CallbackModule, info = Info}, Args) ->
-    case erlang:function_exported(CallbackModule, reset_info, length(Args)) of
-        true -> apply(CallbackModule, reset_info, Args);
+reset_info(MasterJob = #storage_traverse_master{callback_module = CallbackModule, info = Info}) ->
+    case erlang:function_exported(CallbackModule, reset_info, 1) of
+        true -> apply(CallbackModule, reset_info, [MasterJob]);
         false -> Info
     end.
 
@@ -213,7 +213,7 @@ get_iterator(?BLOCK_STORAGE) ->
 get_iterator(?OBJECT_STORAGE) ->
     canonical_object_storage_iterator.
 
--spec generate_master_and_slave_jobs(master_job(), [{helpers:file_id(), Depth :: non_neg_integer()}],
+-spec generate_master_and_slave_jobs(master_job(), master_job() | undefined, [{helpers:file_id(), Depth :: non_neg_integer()}],
     traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} |
     {ok, traverse:master_job_map(), compute_result()}.
@@ -223,15 +223,15 @@ generate_master_and_slave_jobs(#storage_traverse_master{
     depth = MaxDepth,
     execute_slave_on_dir = true,
     info = Info
-}, _ChildrenIds, _Args) ->
+}, _NextBatchMaterJob, _ChildrenIds, _Args) ->
     {ok, #{sequential_slave_jobs => [get_slave_job(StorageFileCtx, Info)]}};
 generate_master_and_slave_jobs(#storage_traverse_master{
     depth = MaxDepth,
     max_depth = MaxDepth,
     execute_slave_on_dir = false
-}, _ChildrenIds, _Args) ->
+}, _NextBatchMaterJob, _ChildrenIds, _Args) ->
     {ok, #{}};
-generate_master_and_slave_jobs(StorageTraverse = #storage_traverse_master{
+generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     execute_slave_on_dir = OnDir,
     async_children_master_jobs = AsyncChildrenMasterJobs,
@@ -239,11 +239,11 @@ generate_master_and_slave_jobs(StorageTraverse = #storage_traverse_master{
     compute_fun = ComputeFun,
     compute_enabled = ComputeEnabled,
     info = Info
-}, ChildrenBatch, Args) ->
-    MasterJobs = maybe_schedule_next_batch_job(StorageTraverse, ChildrenBatch, Args),
-    {MasterJobs2, SlaveJobs, ComputeResult} = process_children_batch(StorageTraverse, ChildrenBatch),
+}, NextBatchMaterJob, ChildrenBatch, Args) ->
+    MasterJobs = maybe_schedule_next_batch_job(CurrentMasterJob, NextBatchMaterJob, Args),
+    {MasterJobs2, SlaveJobs, ComputeResult} = process_children_batch(CurrentMasterJob, ChildrenBatch),
 
-    SeqSlaveJobs = case {OnDir, Offset =:= length(ChildrenBatch)} of
+    SeqSlaveJobs = case {OnDir, Offset =:= 0} of
         {true, true} -> [get_slave_job(StorageFileCtx, Info)]; %execute slave job only once per directory
         _ -> []
     end,
@@ -261,31 +261,31 @@ generate_master_and_slave_jobs(StorageTraverse = #storage_traverse_master{
         false -> {ok, MasterJobsMap, ComputeResult}
     end.
 
--spec maybe_schedule_next_batch_job(master_job(), children_batch(), traverse:master_job_extended_args()) -> [master_job()].
-maybe_schedule_next_batch_job(TraverseJob = #storage_traverse_master{
-    batch_size = BatchSize,
+-spec maybe_schedule_next_batch_job(master_job(), master_job() | undefined, traverse:master_job_extended_args()) ->
+    [master_job()].
+maybe_schedule_next_batch_job(_CurrentMasterJob, undefined, _Args) ->
+    [];
+maybe_schedule_next_batch_job(#storage_traverse_master{
     async_next_batch_job = AsyncNextBatchJob,
     next_batch_job_prehook = NextBatchJobPrehook
-}, ChildrenBatch, #{master_job_starter_callback := MasterJobStarterCallback})
-    when length(ChildrenBatch) =:= BatchSize ->
-
+}, NextBatchMasterJob = #storage_traverse_master{}, #{master_job_starter_callback := MasterJobStarterCallback}) ->
     % it is not the last batch
-    NextBatchJobPrehook(TraverseJob),
+    NextBatchJobPrehook(NextBatchMasterJob),
     case AsyncNextBatchJob of
         true ->
             % schedule job for next batch in this directory asynchronously
-            MasterJobStarterCallback([TraverseJob]),
+            MasterJobStarterCallback([NextBatchMasterJob]),
             [];
         false ->
             % job for next batch in this directory will be scheduled with children master jobs
-            [TraverseJob]
+            [NextBatchMasterJob]
     end;
-maybe_schedule_next_batch_job(_TraverseJob, _ChildrenBatch, _Args) ->
+maybe_schedule_next_batch_job(_CurrentMasterJob, _NextBatchMasterJob, _Args) ->
     [].
 
 
 -spec process_children_batch(master_job(), children_batch()) -> {[master_job()], [slave_job()], compute_result()}.
-process_children_batch(StorageTraverse = #storage_traverse_master{
+process_children_batch(CurrentMasterJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     iterator = Iterator,
     max_depth = MaxDepth,
@@ -295,7 +295,7 @@ process_children_batch(StorageTraverse = #storage_traverse_master{
     compute_enabled = ComputeEnabled,
     info = Info
 }, ChildrenBatch) ->
-    ResetInfo = reset_info(StorageTraverse, [StorageTraverse]),
+    ResetInfo = reset_info(CurrentMasterJob),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     {MasterJobsRev, SlaveJobsRev, ComputeResult} = lists:foldl(
@@ -309,7 +309,7 @@ process_children_batch(StorageTraverse = #storage_traverse_master{
                         {false, ChildCtx3} ->
                             {MasterJobsIn, [get_slave_job(ChildCtx3, ResetInfo) | SlaveJobsIn], ComputePartialResult};
                         {true, ChildCtx3} ->
-                            ChildMasterJob = get_child_master_job(ChildCtx3, StorageTraverse, ResetInfo, ChildDepth),
+                            ChildMasterJob = get_child_master_job(ChildCtx3, CurrentMasterJob, ResetInfo, ChildDepth),
                             ChildrenMasterJobPrehook(ChildMasterJob),
                             {[ChildMasterJob | MasterJobsIn], SlaveJobsIn, ComputePartialResult}
                     end;

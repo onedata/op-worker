@@ -19,7 +19,7 @@
 -include("modules/storage_traverse/storage_traverse.hrl").
 
 %% storage_iterator callbacks
--export([init/2, get_children_batch/1, is_dir/1]).
+-export([init/2, get_children_and_next_batch_job/1, is_dir/1]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
@@ -43,14 +43,14 @@ init(StorageTraverse = #storage_traverse_master{storage_file_ctx = StorageFileCt
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link storage_iterator} callback get_children_batch/1.
+%% {@link storage_iterator} callback get_children_and_next_batch_job/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_batch(storage_traverse:master_job()) ->
-    {ok, storage_traverse:children_batch(), storage_traverse:master_job()} | {error, term()}.
-get_children_batch(StorageTraverse = #storage_traverse_master{max_depth = 0}) ->
+-spec get_children_and_next_batch_job(storage_traverse:master_job()) ->
+    {ok, storage_traverse:children_batch(), storage_traverse:master_job() | undefined} | {error, term()}.
+get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{max_depth = 0}) ->
     {ok, [], StorageTraverse};
-get_children_batch(StorageTraverse = #storage_traverse_master{
+get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = Offset,
     batch_size = BatchSize,
@@ -59,15 +59,22 @@ get_children_batch(StorageTraverse = #storage_traverse_master{
     Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
     case storage_file_manager:listobjects(Handle, Marker, Offset, BatchSize) of
         {ok, []} ->
-            {ok, [], StorageTraverse};
+            {ok, [], undefined};
         {ok, ChildrenIds} ->
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ParentTokens = filename:split(ParentStorageFileId),
             ChildrenBatch = [{ChildId, depth(ChildId, ParentTokens)} || ChildId <- ChildrenIds],
-            {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{
-                offset = Offset + length(ChildrenIds),
-                marker = lists:last(ChildrenIds)
-            }};
+            case length(ChildrenBatch) < BatchSize of
+                true ->
+                    {ok, ChildrenBatch, undefined};
+                false ->
+                    NextOffset = Offset + length(ChildrenIds),
+                    NextMarker = lists:last(ChildrenIds),
+                    {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{
+                        offset = NextOffset,
+                        marker = NextMarker
+                    }}
+            end;
         Error = {error, _} ->
             Error
     end.

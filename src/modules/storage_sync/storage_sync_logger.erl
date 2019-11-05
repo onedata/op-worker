@@ -5,32 +5,37 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains helper functions for storage_sync
+%%% This module contains functions for adding log entries in sync audit log
+%%% file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_logger).
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([log_scan_started/2, log_scan_finished/2, log_scan_cancelled/2,
+-export([log_scan_started/3, log_scan_finished/3, log_scan_cancelled/3,
     log_import/2, log_update/2, log_deletion/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec log_scan_started(od_space:id(), non_neg_integer()) -> ok.
-log_scan_started(SpaceId, ScanNum) ->
+-spec log_scan_started(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
+log_scan_started(SpaceId, ScanNum, TaskId) ->
+    ?debug("Storage sync scan ~p started", [TaskId]),
     log("Storage sync scan no. ~p started.", [ScanNum], SpaceId).
 
--spec log_scan_finished(od_space:id(), non_neg_integer()) -> ok.
-log_scan_finished(SpaceId, ScanNum) ->
+-spec log_scan_finished(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
+log_scan_finished(SpaceId, ScanNum, TaskId) ->
+    ?debug("Storage sync scan ~p finished", [TaskId]),
     log("Storage sync scan no. ~p finished.", [ScanNum], SpaceId).
 
--spec log_scan_cancelled(od_space:id(), non_neg_integer()) -> ok.
-log_scan_cancelled(SpaceId, ScanNum) ->
+-spec log_scan_cancelled(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
+log_scan_cancelled(SpaceId, ScanNum, TaskId) ->
+    ?debug("Storage sync scan ~p canceled", [TaskId]),
     log("Storage sync scan no. ~p cancelled.", [ScanNum], SpaceId).
 
 %%-------------------------------------------------------------------

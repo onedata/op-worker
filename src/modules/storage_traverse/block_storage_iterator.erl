@@ -20,7 +20,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% storage_iterator callbacks
--export([init/2, get_children_batch/1, is_dir/1]).
+-export([init/2, get_children_and_next_batch_job/1, is_dir/1]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
@@ -37,14 +37,14 @@ init(StorageTraverse = #storage_traverse_master{}, _Opts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link storage_iterator} callback get_children_batch/1.
+%% {@link storage_iterator} callback get_children_and_next_batch_job/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_batch(storage_traverse:master_job()) ->
-    {ok, storage_traverse:children_batch(), storage_traverse:master_job()} | {error, term()}.
-get_children_batch(StorageTraverse = #storage_traverse_master{max_depth = 0}) ->
+-spec get_children_and_next_batch_job(storage_traverse:master_job()) ->
+    {ok, storage_traverse:children_batch(), storage_traverse:master_job() | undefined} | {error, term()}.
+get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{max_depth = 0}) ->
     {ok, [], StorageTraverse};
-get_children_batch(StorageTraverse = #storage_traverse_master{
+get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     depth = ParentDepth,
     offset = Offset,
@@ -56,9 +56,13 @@ get_children_batch(StorageTraverse = #storage_traverse_master{
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ChildDepth = ParentDepth + 1,
             ChildrenBatch = [{filename:join([StorageFileId, ChildName]), ChildDepth} || ChildName <- ChildrenNames],
-            {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{
-                offset = Offset + length(ChildrenNames)
-            }};
+            case length(ChildrenBatch) < BatchSize of
+                true ->
+                    {ok, ChildrenBatch, undefined};
+                false ->
+                    NextOffset = Offset + length(ChildrenNames),
+                    {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{offset = NextOffset}}
+            end;
         Error = {error, _} ->
             Error
     end.

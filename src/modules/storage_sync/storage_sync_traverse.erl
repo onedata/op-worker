@@ -20,7 +20,8 @@
 %%%   * storage_sync_monitoring - this module is used to store data for monitoring
 %%%                         performance of storage_sync
 %%%   * storage_sync_info - a helper module that implements a model that is
-%%%                         used store information required by sync to determine
+%%%                         used store information (timestamp of last stat operation, last synced mtime,
+%%%                         last computed hash of children attrs) required by sync to determine
 %%%                         whether there were changes introduced to file or children
 %%%                         files on storage since last scan.
 %%%   * storage_sync_hash - helper module used to compute hashes of children file attributes.
@@ -74,7 +75,7 @@
 -export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_compute_fun/1]).
 
 %% exported for tests
--export([mtime_has_changed/2]).
+-export([has_mtime_changed/2]).
 
 %%%===================================================================
 %%% Macros
@@ -175,26 +176,19 @@ get_job(DocOrID) ->
 -spec task_started(traverse:id()) -> ok.
 task_started(TaskId) ->
     {SpaceId, _StorageId, ScanNum} = decode_task_id(TaskId),
-    ?debug("Storage sync scan ~p started", [TaskId]),
-    storage_sync_logger:log_scan_started(SpaceId, ScanNum).
+    storage_sync_logger:log_scan_started(SpaceId, ScanNum, TaskId).
 
 -spec task_finished(traverse:id()) -> ok.
 task_finished(TaskId) ->
     {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
-    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
-    ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
-    storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
-    ?debug("Storage sync scan ~p finished", [TaskId]),
-    storage_sync_logger:log_scan_finished(SpaceId, ScanNum).
+    scan_finished(SpaceId, StorageId),
+    storage_sync_logger:log_scan_finished(SpaceId, ScanNum, TaskId).
 
 -spec task_canceled(traverse:id()) -> ok.
 task_canceled(TaskId) ->
     {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
-    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
-    ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
-    storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
-    ?debug("Storage sync scan ~p canceled", [TaskId]),
-    storage_sync_logger:log_scan_cancelled(SpaceId, ScanNum).
+    scan_finished(SpaceId, StorageId),
+    storage_sync_logger:log_scan_cancelled(SpaceId, ScanNum, TaskId).
 
 -spec to_string(slave_job() | master_job()) -> binary().
 to_string(#storage_traverse_slave{
@@ -269,10 +263,10 @@ get_compute_fun(TraverseInfo) ->
 %%% Functions exported for tests
 %%%===================================================================
 
--spec mtime_has_changed(undefined | storage_sync_info:doc(), storage_file_ctx:ctx()) -> boolean().
-mtime_has_changed(undefined, _StorageFileCtx) ->
+-spec has_mtime_changed(undefined | storage_sync_info:doc(), storage_file_ctx:ctx()) -> boolean().
+has_mtime_changed(undefined, _StorageFileCtx) ->
     true;
-mtime_has_changed(SSIDoc, StorageFileCtx) ->
+has_mtime_changed(SSIDoc, StorageFileCtx) ->
     {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
     storage_sync_info:get_mtime(SSIDoc) =/= STMtime.
 
@@ -394,7 +388,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             % we perform stat here to ensure that jobs for all batches for given directory
             % will be scheduled with the same stat result
             {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
-            MTimeHasChanged = storage_sync_traverse:mtime_has_changed(SSIDoc, StorageFileCtx3),
+            MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
             TraverseJob2 = TraverseJob#storage_traverse_master{
                 storage_file_ctx = StorageFileCtx3,
                 info = Info2 = Info#{
@@ -676,3 +670,9 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
         _ ->
             ok
     end.
+
+-spec scan_finished(od_space:id(), storage:id()) -> ok.
+scan_finished(SpaceId, StorageId) ->
+    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
+    storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId).

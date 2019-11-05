@@ -35,8 +35,8 @@
 %% Initialises iterator specific options.
 %% @end
 %%-------------------------------------------------------------------
--callback init(StorageTraverse :: storage_traverse:master_job(), RunOpts :: storage_traverse:run_opts()) ->
-    InitialisedStorageTraverse :: storage_traverse:master_job().
+-callback init(MasterJob :: storage_traverse:master_job(), RunOpts :: storage_traverse:run_opts()) ->
+    InitialisedMasterJob :: storage_traverse:master_job().
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -45,8 +45,8 @@
 %% Each ChildId is associated with its depth in the tree structure.
 %% @end
 %%-------------------------------------------------------------------
--callback get_children_batch(StorageTraverse :: storage_traverse:master_job()) ->
-    {ok, ChildrenBatch :: storage_traverse:children_batch(), StorageTraverse2 :: storage_traverse:master_job()} |
+-callback get_children_and_next_batch_job(MasterJob :: storage_traverse:master_job()) ->
+    {ok, ChildrenBatch :: storage_traverse:children_batch(), NextBatchMasterJob :: storage_traverse:master_job() | undefined} |
     {error, term()}.
 
 

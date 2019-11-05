@@ -78,50 +78,52 @@
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1]).
 
 all() -> ?ALL([
-    posix_files_only_test,
-    posix_files_only_mount_in_root_test,
-    canonical_s3_files_only_test,
-    canonical_s3_files_only_mount_in_root_test,
-    posix_files_and_dirs_test,
-    posix_files_and_dirs_mount_in_root_test,
-    posix_files_only_async_master_jobs_test,
-    posix_files_only_async_master_jobs_mount_in_root_test,
-    canonical_s3_files_only_async_master_jobs_test,
-    canonical_s3_files_only_async_master_jobs_mount_in_root_test,
-    posix_files_and_dirs_async_master_jobs_test,
-    posix_files_and_dirs_async_master_jobs_mount_in_root_test,
-    posix_files_only_max_depth0_test,
-    posix_files_only_max_depth1_test,
-    posix_files_only_max_depth2_test,
-    posix_files_only_max_depth3_test,
-    posix_files_only_mount_in_root_max_depth0_test,
-    posix_files_only_mount_in_root_max_depth1_test,
-    posix_files_only_mount_in_root_max_depth2_test,
-    posix_files_only_mount_in_root_max_depth3_test,
-    canonical_s3_files_only_max_depth0_test,
-    canonical_s3_files_only_max_depth1_test,
-    canonical_s3_files_only_max_depth2_test,
-    canonical_s3_files_only_max_depth3_test,
-    canonical_s3_files_only_mount_in_root_max_depth0_test,
-    canonical_s3_files_only_mount_in_root_max_depth1_test,
-    canonical_s3_files_only_mount_in_root_max_depth2_test,
-    canonical_s3_files_only_mount_in_root_max_depth3_test,
-    posix_files_and_dirs_max_depth0_test,
-    posix_files_and_dirs_max_depth1_test,
-    posix_files_and_dirs_max_depth2_test,
-    posix_files_and_dirs_max_depth3_test,
-    posix_files_and_dirs_mount_in_root_max_depth0_test,
-    posix_files_and_dirs_mount_in_root_max_depth1_test,
-    posix_files_and_dirs_mount_in_root_max_depth2_test,
-    posix_files_and_dirs_mount_in_root_max_depth3_test,
+%%    posix_files_only_test,
+%%    posix_files_only_mount_in_root_test,
+%%    canonical_s3_files_only_test,
+%%    canonical_s3_files_only_mount_in_root_test,
+%%    posix_files_and_dirs_test,
+%%    posix_files_and_dirs_mount_in_root_test,
+%%    posix_files_only_async_master_jobs_test,
+%%    posix_files_only_async_master_jobs_mount_in_root_test,
+%%    canonical_s3_files_only_async_master_jobs_test,
+%%    canonical_s3_files_only_async_master_jobs_mount_in_root_test,
+%%    posix_files_and_dirs_async_master_jobs_test,
+%%    posix_files_and_dirs_async_master_jobs_mount_in_root_test
+%%    ,
+%%    posix_files_only_max_depth0_test,
+%%    posix_files_only_max_depth1_test,
+%%    posix_files_only_max_depth2_test,
+%%    posix_files_only_max_depth3_test,
+%%    posix_files_only_mount_in_root_max_depth0_test,
+%%    posix_files_only_mount_in_root_max_depth1_test,
+%%    posix_files_only_mount_in_root_max_depth2_test,
+%%    posix_files_only_mount_in_root_max_depth3_test,
+%%    canonical_s3_files_only_max_depth0_test,
+%%    canonical_s3_files_only_max_depth1_test,
+%%    canonical_s3_files_only_max_depth2_test,
+%%    canonical_s3_files_only_max_depth3_test,
+%%    canonical_s3_files_only_mount_in_root_max_depth0_test,
+%%    canonical_s3_files_only_mount_in_root_max_depth1_test,
+%%    canonical_s3_files_only_mount_in_root_max_depth2_test,
+%%    canonical_s3_files_only_mount_in_root_max_depth3_test,
+%%    posix_files_and_dirs_max_depth0_test,
+%%    posix_files_and_dirs_max_depth1_test,
+%%    posix_files_and_dirs_max_depth2_test,
+%%    posix_files_and_dirs_max_depth3_test,
+%%    posix_files_and_dirs_mount_in_root_max_depth0_test,
+%%    posix_files_and_dirs_mount_in_root_max_depth1_test,
+%%    posix_files_and_dirs_mount_in_root_max_depth2_test,
+%%    posix_files_and_dirs_mount_in_root_max_depth3_test,
     posix_files_only_synchronous_next_batch_test,
     posix_files_only_synchronous_next_batch_mount_in_root_test,
     canonical_s3_files_only_synchronous_next_batch_test,
     canonical_s3_files_only_synchronous_next_batch_mount_in_root_test,
     posix_files_and_dirs_synchronous_next_batch_test,
-    posix_files_and_dirs_synchronous_next_batch_mount_in_root_test,
-    posix_custom_compute_test,
-    canonical_s3_custom_compute_test
+    posix_files_and_dirs_synchronous_next_batch_mount_in_root_test
+%%    ,
+%%    posix_custom_compute_test,
+%%    canonical_s3_custom_compute_test
 ]).
 
 -define(SPACES, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space1">>, <<"space4">>]).
@@ -152,22 +154,22 @@ posix_files_and_dirs_mount_in_root_test(Config) ->
 
 
 posix_files_only_async_master_jobs_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{async_master_jobs => true}).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{async_children_master_jobs => true}).
 
 posix_files_only_async_master_jobs_mount_in_root_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{async_master_jobs => true}).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{async_children_master_jobs => true}).
 
 canonical_s3_files_only_async_master_jobs_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{async_master_jobs => true}).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{async_children_master_jobs => true}).
 
 canonical_s3_files_only_async_master_jobs_mount_in_root_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{async_master_jobs => true}).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{async_children_master_jobs => true}).
 
 posix_files_and_dirs_async_master_jobs_test(Config) ->
-    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{async_master_jobs => true}).
+    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{async_children_master_jobs => true}).
 
 posix_files_and_dirs_async_master_jobs_mount_in_root_test(Config) ->
-    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_master_jobs => true}).
+    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_children_master_jobs => true}).
 
 
 posix_files_only_max_depth0_test(Config) ->
@@ -244,34 +246,22 @@ posix_files_and_dirs_mount_in_root_max_depth3_test(Config) ->
 
 
 posix_files_only_synchronous_next_batch_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{
-        async_next_batch_job_predicate => fun(StorageFileCtx, _) -> {false, StorageFileCtx} end
-    }).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{async_next_batch_job => false}).
 
 posix_files_only_synchronous_next_batch_mount_in_root_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{
-        async_next_batch_job_predicate => fun(StorageFileCtx, _) -> {false, StorageFileCtx} end
-    }).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{async_next_batch_job => false}).
 
 canonical_s3_files_only_synchronous_next_batch_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{
-        async_next_batch_job_predicate => fun(StorageFileCtx, _) -> {false, StorageFileCtx} end
-    }).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{async_next_batch_job => false}).
 
 canonical_s3_files_only_synchronous_next_batch_mount_in_root_test(Config) ->
-    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{
-        async_next_batch_job_predicate => fun(StorageFileCtx, _) -> {false, StorageFileCtx} end
-    }).
+    traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{async_next_batch_job => false}).
 
 posix_files_and_dirs_synchronous_next_batch_test(Config) ->
-    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{
-        async_next_batch_job_predicate => fun(StorageFileCtx, _) -> {false, StorageFileCtx} end
-    }).
+    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{async_next_batch_job => false}).
 
 posix_files_and_dirs_synchronous_next_batch_mount_in_root_test(Config) ->
-    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{
-        async_next_batch_job_predicate => fun(StorageFileCtx, _) -> {false, StorageFileCtx} end
-    }).
+    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_next_batch_job => false}).
 
 posix_custom_compute_test(Config) ->
     custom_compute_test_base(Config, <<"space1">>, #{}, 1110).

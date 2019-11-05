@@ -234,12 +234,12 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1001,
+        <<"toProcess">> => 1002,
         <<"imported">> => 1000,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 1,
         <<"importedSum">> => 1000,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -253,13 +253,13 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     }, ?SPACE_ID).
 
 cancel_scan(Config, MountSpaceInRoot) ->
-    % storage_sync_dir_batch_size is set to 100 in init_per_testcase
+    % storage_sync_dir_batch_size is set to 1 in init_per_testcase
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
     RootPath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, MountSpaceInRoot),
-    DirStructure = [10, 10, 20],
+    DirStructure = [10, 10, 10],
     RootSFMHandle = sfm_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     Timeout = 600,
 
@@ -293,8 +293,8 @@ cancel_scan(Config, MountSpaceInRoot) ->
         <<"imported">> := Imported
     } = SSM,
 
-    ?assert(ToProcess < 2000),
-    ?assert((OtherProcessed + Updated + Imported) < 2000),
+    ?assert(ToProcess < 1000),
+    ?assert((OtherProcessed + Updated + Imported) < 1000),
 
     % check whether next scan will import missing files
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
@@ -305,9 +305,9 @@ cancel_scan(Config, MountSpaceInRoot) ->
         <<"scans">> => 2,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"importedSum">> => 2000,
+        <<"importedSum">> => 1000,
         <<"deletedSum">> => 0,
-        <<"importedDayHist">> => 2000,
+        <<"importedDayHist">> => 1000,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -825,12 +825,12 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1001,
+        <<"toProcess">> => 1002,
         <<"imported">> => 1000,
         <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 1,
         <<"importedSum">> => 1000,
         <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
@@ -1579,7 +1579,7 @@ init_per_testcase(create_file_in_dir_update_test, Config, Readonly) ->
 init_per_testcase(cancel_scan, Config, Readonly) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
-    test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 100),
+    test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 1),
     Config2 = [
         {update_config, #{
             delete_enable => false,
