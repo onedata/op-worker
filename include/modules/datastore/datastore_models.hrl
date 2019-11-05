@@ -213,7 +213,7 @@
     type :: undefined | session:type(),
     identity :: undefined | session:identity(),
     auth :: undefined | session:auth(),
-    caveats = [] :: [caveats:caveat()],
+    caveats :: [caveats:caveat()],
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),

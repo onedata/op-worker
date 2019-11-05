@@ -135,7 +135,8 @@ create_root_session() ->
             type = root,
             status = active,
             identity = #user_identity{user_id = ?ROOT_USER_ID},
-            auth = ?ROOT_AUTH
+            auth = ?ROOT_AUTH,
+            caveats = []
         }
     }).
 
@@ -153,7 +154,8 @@ create_guest_session() ->
             type = guest,
             status = active,
             identity = #user_identity{user_id = ?GUEST_USER_ID},
-            auth = ?GUEST_AUTH
+            auth = ?GUEST_AUTH,
+            caveats = []
         }
     }).
 
@@ -238,6 +240,9 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 %%--------------------------------------------------------------------
 %% @doc @private
 %% Creates session or if session exists reuses it.
+%% NOTE !!!
+%% To avoid races during session creation this function should be run in
+%% critical section.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
@@ -273,7 +278,9 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, Caveats, ProxyVia) ->
         {error, not_found} ->
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
-                    reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia);
+                    reuse_or_create_session(
+                        SessId, SessType, Iden, Auth, Caveats, ProxyVia
+                    );
                 Other ->
                     Other
             end;

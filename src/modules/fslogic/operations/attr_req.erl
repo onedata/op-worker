@@ -37,8 +37,8 @@
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:authorize(
-        UserCtx, FileCtx0, [traverse_ancestors], false
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [traverse_ancestors], true
     ),
     get_file_attr_insecure(UserCtx, FileCtx1).
 
@@ -132,7 +132,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
 get_child_attr(UserCtx, ParentFileCtx0, Name) ->
-    ParentFileCtx1 = fslogic_authz:authorize(
+    ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container]
     ),
@@ -146,7 +146,7 @@ get_child_attr(UserCtx, ParentFileCtx0, Name) ->
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod(UserCtx, FileCtx0, Mode) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, owner]
     ),
@@ -162,7 +162,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, {owner, 'or', ?write_attributes}]
     ),

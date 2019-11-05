@@ -645,7 +645,7 @@ open_with_permissions_check(#sfm_handle{
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(SessionId),
 
-    fslogic_authz:authorize(UserCtx, FileCtx, AccessRequirements),
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, AccessRequirements),
     open_insecure(SFMHandle, OpenFlag).
 
 %%--------------------------------------------------------------------

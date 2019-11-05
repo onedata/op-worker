@@ -244,7 +244,7 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
     AccessDefinitions = Mod:required_permissions(),
 
     try
-        FileCtx1 = fslogic_authz:authorize(UserCtx, FileCtx0, AccessDefinitions),
+        FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
         transfer_data_insecure(UserCtx, FileCtx1, State, Params)
     of
         ok ->

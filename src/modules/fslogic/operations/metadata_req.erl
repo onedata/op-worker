@@ -32,7 +32,7 @@
     custom_metadata:filter(), Inherited :: boolean()) ->
     fslogic_worker:provider_response().
 get_metadata(UserCtx, FileCtx0, MetadataType, Names, Inherited) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_metadata]
     ),
@@ -47,7 +47,7 @@ get_metadata(UserCtx, FileCtx0, MetadataType, Names, Inherited) ->
     custom_metadata:value(), custom_metadata:filter(), Create :: boolean(),
     Replace :: boolean()) -> fslogic_worker:provider_response().
 set_metadata(UserCtx, FileCtx0, MetadataType, Value, Names, Create, Replace) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
@@ -64,7 +64,7 @@ set_metadata(UserCtx, FileCtx0, MetadataType, Value, Names, Create, Replace) ->
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
 remove_metadata(UserCtx, FileCtx0, MetadataType) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),

@@ -55,11 +55,11 @@ delete(UserCtx, FileCtx, Silent) ->
     fslogic_worker:fuse_response().
 delete_dir(UserCtx, FileCtx0, Silent) ->
     {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-    FileCtx2 = fslogic_authz:authorize(
+    FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
         [traverse_ancestors, ?delete, ?list_container]
     ),
-    fslogic_authz:authorize(
+    fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
         [traverse_ancestors, ?delete_subcontainer]
     ),
@@ -75,11 +75,11 @@ delete_dir(UserCtx, FileCtx0, Silent) ->
     fslogic_worker:fuse_response().
 delete_file(UserCtx, FileCtx0, Silent) ->
     {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-    FileCtx2 = fslogic_authz:authorize(
+    FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    fslogic_authz:authorize(
+    fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
         [traverse_ancestors, ?delete_object]
     ),

@@ -37,7 +37,7 @@
 -spec get_transfer_encoding(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_transfer_encoding(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_attributes]
     ),
@@ -52,7 +52,7 @@ get_transfer_encoding(UserCtx, FileCtx0) ->
     xattr:transfer_encoding(), Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
 set_transfer_encoding(UserCtx, FileCtx0, Encoding, Create, Replace) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_attributes]
     ),
@@ -69,7 +69,7 @@ set_transfer_encoding(UserCtx, FileCtx0, Encoding, Create, Replace) ->
 -spec get_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_cdmi_completion_status(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_attributes]
     ),
@@ -84,7 +84,7 @@ get_cdmi_completion_status(UserCtx, FileCtx0) ->
     xattr:cdmi_completion_status(), Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
 set_cdmi_completion_status(UserCtx, FileCtx0, CompletionStatus, Create, Replace) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_attributes]
     ),
@@ -101,7 +101,7 @@ set_cdmi_completion_status(UserCtx, FileCtx0, CompletionStatus, Create, Replace)
 -spec get_mimetype(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_mimetype(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_attributes]
     ),
@@ -116,7 +116,7 @@ get_mimetype(UserCtx, FileCtx0) ->
     xattr:mimetype(), Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
 set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_attributes]
     ),

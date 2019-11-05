@@ -18,7 +18,7 @@
 
 %% API
 -export([
-    authorize/3, authorize/4
+    ensure_authorized/3, ensure_authorized/4
 ]).
 
 -define(DATA_LOCATION_CAVEATS, [cv_data_path, cv_data_objectid]).
@@ -34,24 +34,26 @@
 %% @equiv authorize(UserCtx, FileCtx0, AccessRequirements, true).
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(user_ctx:ctx(), file_ctx:ctx(), [fslogic_access:requirement()]) ->
-    file_ctx:ctx() | no_return().
-authorize(UserCtx, FileCtx0, AccessRequirements) ->
-    authorize(UserCtx, FileCtx0, AccessRequirements, true).
+-spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
+    [fslogic_access:requirement()]) -> file_ctx:ctx() | no_return().
+ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
+    ensure_authorized(UserCtx, FileCtx0, AccessRequirements, false).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks access to specified file and verifies data caveats.
-%% StrictCaveatVerification means that permission can be granted only
-%% for files in subpaths allowed by caveats. Otherwise caveats paths
-%% ancestors will be also allowed.
+%% AllowAncestorsOfLocationCaveats means that permission can be granted
+%% not only for files in subpaths allowed by caveats but also for their
+%% ancestors.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(user_ctx:ctx(), file_ctx:ctx(), [fslogic_access:requirement()],
-    boolean()) -> file_ctx:ctx() | no_return().
-authorize(UserCtx, FileCtx0, AccessRequirements, StrictCaveatsCheck) ->
-    FileCtx2 = case check_caveats(UserCtx, FileCtx0, StrictCaveatsCheck) of
+-spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
+    [fslogic_access:requirement()], boolean()) -> file_ctx:ctx() | no_return().
+ensure_authorized(
+    UserCtx, FileCtx0, AccessRequirements, AllowAncestorsOfLocationCaveats
+) ->
+    FileCtx2 = case check_caveats(UserCtx, FileCtx0, AllowAncestorsOfLocationCaveats) of
         {subpath, FileCtx1} -> FileCtx1;
         {ancestor, FileCtx1, _} -> FileCtx1
     end,
@@ -67,7 +69,7 @@ authorize(UserCtx, FileCtx0, AccessRequirements, StrictCaveatsCheck) ->
 -spec check_caveats(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     {subpath, file_ctx:ctx()} |
     {ancestor, file_ctx:ctx(), [file_meta:name()]}.
-check_caveats(UserCtx, FileCtx, StrictCaveatsCheck) ->
+check_caveats(UserCtx, FileCtx, AllowAncestorsOfLocationCaveats) ->
     case user_ctx:get_caveats(UserCtx) of
         [] ->
             {subpath, FileCtx};
@@ -79,7 +81,8 @@ check_caveats(UserCtx, FileCtx, StrictCaveatsCheck) ->
                     SessionAuth
             end,
             check_data_location_caveats(
-                SessionDiscriminator, FileCtx, StrictCaveatsCheck,
+                SessionDiscriminator, FileCtx,
+                AllowAncestorsOfLocationCaveats,
                 caveats:filter(?DATA_LOCATION_CAVEATS, Caveats)
             )
     end.
@@ -94,7 +97,7 @@ check_caveats(UserCtx, FileCtx, StrictCaveatsCheck) ->
 check_data_location_caveats(_SerializedToken, FileCtx, _, []) ->
     FileCtx;
 check_data_location_caveats(
-    SerializedToken, FileCtx0, StrictCaveatsCheck, Caveats
+    SerializedToken, FileCtx0, AllowAncestorsOfLocationCaveats, Caveats
 ) ->
     Guid = file_ctx:get_guid_const(FileCtx0),
     StrictCacheKey = {strict_data_location_caveats, SerializedToken, Guid},
@@ -106,13 +109,8 @@ check_data_location_caveats(
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
-            case StrictCaveatsCheck of
+            case AllowAncestorsOfLocationCaveats of
                 true ->
-                    check_and_cache_data_location_caveats(
-                        FileCtx0, Caveats, StrictCaveatsCheck,
-                        StrictCacheKey, LooseCacheKey, StrictCacheKey
-                    );
-                false ->
                     case permissions_cache:check_permission(LooseCacheKey) of
                         {ok, ?EACCES} ->
                             throw(?EACCES);
@@ -120,10 +118,16 @@ check_data_location_caveats(
                             {ancestor, FileCtx0, Children};
                         _ ->
                             check_and_cache_data_location_caveats(
-                                FileCtx0, Caveats, StrictCaveatsCheck,
+                                FileCtx0, Caveats,
+                                AllowAncestorsOfLocationCaveats,
                                 StrictCacheKey, LooseCacheKey, LooseCacheKey
                             )
-                    end
+                    end;
+                false ->
+                    check_and_cache_data_location_caveats(
+                        FileCtx0, Caveats, AllowAncestorsOfLocationCaveats,
+                        StrictCacheKey, LooseCacheKey, StrictCacheKey
+                    )
             end
     end.
 
@@ -131,7 +135,7 @@ check_data_location_caveats(
 %% @private
 -spec check_and_cache_data_location_caveats(
     file_ctx:ctx(), [caveats:caveat()],
-    StrictCaveatsCheck :: boolean(),
+    AllowAncestorsOfLocationCaveats :: boolean(),
     StrictCacheKey :: term(),
     LooseCacheKey :: term(),
     EaccesCacheKey :: term()
@@ -139,12 +143,12 @@ check_data_location_caveats(
     {subpath, file_ctx:ctx()} |
     {ancestor, file_ctx:ctx(), [file_meta:name()]}.
 check_and_cache_data_location_caveats(
-    FileCtx0, Caveats, StrictCaveatsCheck,
+    FileCtx0, Caveats, AllowAncestorsOfLocationCaveats,
     StrictCacheKey, LooseCacheKey, EaccesCacheKey
 ) ->
     try
         Result = fslogic_caveats:verify_data_location_caveats(
-            FileCtx0, Caveats, StrictCaveatsCheck
+            FileCtx0, Caveats, AllowAncestorsOfLocationCaveats
         ),
         case Result of
             {subpath, FileCtx1, _} ->

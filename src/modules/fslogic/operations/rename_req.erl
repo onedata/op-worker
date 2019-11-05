@@ -270,15 +270,15 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targe
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    SourceFileCtx2 = fslogic_authz:authorize(
+    SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    fslogic_authz:authorize(
+    fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
         [traverse_ancestors, ?delete_subcontainer]
     ),
-    TargetParentFileCtx1 = fslogic_authz:authorize(
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_subcontainer]
     ),
@@ -390,15 +390,15 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    SourceFileCtx2 = fslogic_authz:authorize(
+    SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    fslogic_authz:authorize(
+    fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
         [traverse_ancestors, ?delete_object]
     ),
-    TargetParentFileCtx1 = fslogic_authz:authorize(
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]
     ),
@@ -420,15 +420,15 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
         SourceFileCtx0, UserCtx
     ),
-    SourceFileCtx2 = fslogic_authz:authorize(
+    SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
         [traverse_ancestors, ?delete]
     ),
-    fslogic_authz:authorize(
+    fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
         [traverse_ancestors, ?delete_subcontainer]
     ),
-    TargetParentFileCtx1 = fslogic_authz:authorize(
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_subcontainer]
     ),

@@ -135,7 +135,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 %%--------------------------------------------------------------------
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
 get_file_distribution(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_metadata]
     ),
@@ -156,7 +156,7 @@ schedule_file_replication(
     UserCtx, FileCtx0, TargetProviderId, Callback,
     ViewName, QueryViewParams
 ) ->
-    FileCtx1 = fslogic_authz:authorize(
+    FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors]
     ),
