@@ -72,6 +72,7 @@ operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
 operation_supported(get, providers, private) -> true;
 operation_supported(get, transfers, private) -> true;
+operation_supported(get, transfers_active_channels, private) -> true;
 operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
@@ -168,6 +169,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
         <<"page_token">> => {page_token, any}
     }
 };
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = transfers_active_channels}}) ->
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_charts, _}}}) -> #{
     required => #{
@@ -293,8 +297,11 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = transfers
-}}, _) ->
+    aspect = As
+}}, _) when
+    As =:= transfers;
+    As =:= transfers_active_channels
+->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
@@ -374,7 +381,10 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) whe
 ->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= transfers;
+    As =:= transfers_active_channels
+->
     op_logic_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{
@@ -549,6 +559,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
             #{}
     end,
     {ok, value, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
+
+get(#op_req{gri = #gri{id = SpaceId, aspect = transfers_active_channels}}, _) ->
+    {ok, ActiveLinks} = space_transfer_stats_cache:get_active_links(SpaceId),
+    {ok, value, #{<<"channelDestinations">> => ActiveLinks}};
 
 get(#op_req{data = Data, gri = #gri{
     id = SpaceId,
