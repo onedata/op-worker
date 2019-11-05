@@ -4139,6 +4139,7 @@ storage_sync_monitoring_description(SSM) ->
 
 clean_traverse_tasks(Worker) ->
     Pool = <<"storage_sync_traverse">>,
+    ?assertMatch({ok, [], _}, rpc:call(Worker, traverse_task_list, list, [Pool, ongoing]), ?ATTEMPTS),
     {ok, TaskIds, _} = rpc:call(Worker, traverse_task_list, list, [Pool, ended]),
     lists:foreach(fun(T) ->
         ok = rpc:call(Worker, traverse_task, delete_ended, [Pool, T])
