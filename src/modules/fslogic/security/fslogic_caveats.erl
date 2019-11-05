@@ -19,7 +19,7 @@
 %% API
 -export([
     assert_no_data_caveats/1,
-    verify_data_location_caveats/3
+    verify_data_caveats/3
 ]).
 
 -define(DATA_CAVEATS, [cv_data_path, cv_data_objectid]).
@@ -54,12 +54,117 @@ assert_no_data_caveats(Caveats) when is_list(Caveats) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Verifies whether FileCtx:
-%% - lies in path allowed by location caveats,
-%% - is ancestor to path allowed by location caveats
-%%   (only if AllowAncestors flag is set to true).
-%% If none of the above holds then ?EACCES is thrown.
+%% - lies in path allowed by location caveats or is ancestor to path
+%%   allowed by location caveats (only if AllowAncestors flag is
+%%   set to true).
+%% If above condition doesn't hold then ?EACCES is thrown.
 %% @end
 %%--------------------------------------------------------------------
+-spec verify_data_caveats(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    {subpath, file_ctx:ctx()} |
+    {ancestor, file_ctx:ctx(), [file_meta:name()]}.
+verify_data_caveats(UserCtx, FileCtx, AllowAncestorsOfLocationCaveats) ->
+    case user_ctx:get_caveats(UserCtx) of
+        [] ->
+            {subpath, FileCtx};
+        Caveats ->
+            SessionDiscriminator = case user_ctx:get_auth(UserCtx) of
+                #token_auth{token = SerializedToken} ->
+                    SerializedToken;
+                SessionAuth ->
+                    SessionAuth
+            end,
+            verify_data_location_caveats(
+                SessionDiscriminator, FileCtx,
+                caveats:filter(?DATA_LOCATION_CAVEATS, Caveats),
+                AllowAncestorsOfLocationCaveats
+            )
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec verify_data_location_caveats(
+    binary(), file_ctx:ctx(), [caveats:caveat()], boolean()
+) ->
+    {subpath, file_ctx:ctx()} |
+    {ancestor, file_ctx:ctx(), [file_meta:name()]}.
+verify_data_location_caveats(_SerializedToken, FileCtx, [], _) ->
+    FileCtx;
+verify_data_location_caveats(
+    SerializedToken, FileCtx0, Caveats, AllowAncestorsOfLocationCaveats
+) ->
+    Guid = file_ctx:get_guid_const(FileCtx0),
+    StrictCacheKey = {strict_data_location_caveats, SerializedToken, Guid},
+    LooseCacheKey = {loose_data_location_caveats, SerializedToken, Guid},
+
+    case permissions_cache:check_permission(StrictCacheKey) of
+        {ok, ok} ->
+            {subpath, FileCtx0};
+        {ok, ?EACCES} ->
+            throw(?EACCES);
+        _ ->
+            case AllowAncestorsOfLocationCaveats of
+                true ->
+                    case permissions_cache:check_permission(LooseCacheKey) of
+                        {ok, ?EACCES} ->
+                            throw(?EACCES);
+                        {ok, Children} ->
+                            {ancestor, FileCtx0, Children};
+                        _ ->
+                            verify_and_cache_data_location_caveats(
+                                FileCtx0, Caveats,
+                                AllowAncestorsOfLocationCaveats,
+                                StrictCacheKey, LooseCacheKey, LooseCacheKey
+                            )
+                    end;
+                false ->
+                    verify_and_cache_data_location_caveats(
+                        FileCtx0, Caveats, AllowAncestorsOfLocationCaveats,
+                        StrictCacheKey, LooseCacheKey, StrictCacheKey
+                    )
+            end
+    end.
+
+
+%% @private
+-spec verify_and_cache_data_location_caveats(
+    file_ctx:ctx(), [caveats:caveat()],
+    AllowAncestorsOfLocationCaveats :: boolean(),
+    StrictCacheKey :: term(),
+    LooseCacheKey :: term(),
+    EaccesCacheKey :: term()
+) ->
+    {subpath, file_ctx:ctx()} |
+    {ancestor, file_ctx:ctx(), [file_meta:name()]}.
+verify_and_cache_data_location_caveats(
+    FileCtx0, Caveats, AllowAncestorsOfLocationCaveats,
+    StrictCacheKey, LooseCacheKey, EaccesCacheKey
+) ->
+    try
+        Result = verify_data_location_caveats(
+            FileCtx0, Caveats, AllowAncestorsOfLocationCaveats
+        ),
+        case Result of
+            {subpath, FileCtx1, _} ->
+                permissions_cache:cache_permission(StrictCacheKey, ok),
+                {subpath, FileCtx1};
+            {ancestor, FileCtx1, ChildrenSet} ->
+                ChildrenList = gb_sets:to_list(ChildrenSet),
+                permissions_cache:cache_permission(LooseCacheKey, ChildrenList),
+                {ancestor, FileCtx1, ChildrenList}
+        end
+    catch _:?EACCES ->
+        permissions_cache:cache_permission(EaccesCacheKey, ?EACCES),
+        throw(?EACCES)
+    end.
+
+
+%% @private
 -spec verify_data_location_caveats(file_ctx:ctx(), [data_location_caveat()],
     AllowAncestors :: boolean()
 ) ->
@@ -80,11 +185,6 @@ verify_data_location_caveats(FileCtx0, Caveats, AllowAncestors) ->
                 {ancestor, FileCtx2, Names}
         end
     end, {undefined, FileCtx0, undefined}, Caveats).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 
 %% @private
@@ -180,29 +280,28 @@ check_data_path_relation(FileCtx0, AllowedPaths) ->
 %% @private
 -spec objectids_to_guids([file_id:objectid()]) -> [file_id:file_guid()].
 objectids_to_guids(Objectids) ->
-    lists:foldl(fun(ObjectId, Guids) ->
+    lists:filtermap(fun(ObjectId) ->
         try
-            {ok, Guid} = file_id:objectid_to_guid(ObjectId),
-            [Guid | Guids]
+            {true, element(2, {ok, _} = file_id:objectid_to_guid(ObjectId))}
         catch _:_ ->
             % Invalid objectid does not make entire token invalid
-            Guids
+            false
         end
-    end, [], Objectids).
+    end, Objectids).
 
 
 %% @private
 -spec objectids_to_paths([file_id:objectid()]) -> [file_meta:path()].
 objectids_to_paths(ObjectIds) ->
-    lists:foldl(fun(ObjectId, Paths) ->
+    lists:filtermap(fun(ObjectId) ->
         try
             {ok, Guid} = file_id:objectid_to_guid(ObjectId),
             FileCtx = file_ctx:new_by_guid(Guid),
             {Path, _} = file_ctx:get_canonical_path(FileCtx),
-            [Path | Paths]
+            {true, Path}
         catch _:_ ->
             % File may have been deleted so it is not possible to resolve
             % it's path so skip it (it does not make token invalid)
-            Paths
+            false
         end
-    end, [], ObjectIds).
+    end, ObjectIds).
