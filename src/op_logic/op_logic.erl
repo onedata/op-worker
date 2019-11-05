@@ -294,14 +294,16 @@ ensure_authorized(#req_ctx{
     versioned_entity = {Entity, _},
     req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
 }) ->
+    Caveats = Auth#auth.caveats,
+
     case Plugin of
         op_file ->
-            % Only op_file endpoints allows data caveats
+            % Only op_file endpoints allow data caveats
             ok;
         _ ->
-            fslogic_caveats:assert_none_data_caveats(Auth#auth.caveats)
+            fslogic_caveats:assert_no_data_caveats(Caveats)
     end,
-    token_caveats:verify_api_caveats(Auth#auth.caveats, Operation, GRI),
+    token_utils:verify_api_caveats(Caveats, Operation, GRI),
 
     Result = try
         Plugin:authorize(OpReq, Entity)
@@ -314,7 +316,7 @@ ensure_authorized(#req_ctx{
         true ->
             ok;
         false ->
-            case OpReq#op_req.auth of
+            case Auth of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);

@@ -89,9 +89,9 @@ handle_client_handshake(#client_handshake_request{
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
-    case token_caveats:is_interface_allowed(Token, oneclient) of
-        true -> ok;
-        false -> throw(invalid_token)
+    case catch token_utils:assert_interface_allowed(Token, oneclient) of
+        ok -> ok;
+        _ -> throw(invalid_token)
     end,
 
     Auth1 = Auth0#token_auth{peer_ip = IpAddress},

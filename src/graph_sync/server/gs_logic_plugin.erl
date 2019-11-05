@@ -52,9 +52,11 @@ verify_handshake_auth({token, SerializedToken}, PeerIp) ->
         token = SerializedToken,
         peer_ip = PeerIp
     },
-    case catch http_auth:authenticate(Credentials, gui, false) of
+    case http_auth:authenticate(Credentials, gui, false) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
+        {ok, ?NOBODY} ->
+            ?ERROR_UNAUTHORIZED;
         {error, _} = Error ->
             Error
     end.

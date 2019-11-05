@@ -178,24 +178,13 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
 -spec is_authorized(cowboy_req:req(), cdmi_req()) ->
     {stop | true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
 is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
-    try http_auth:authenticate(Req, rest, true) of
+    case http_auth:authenticate(Req, rest, true) of
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
         {ok, ?NOBODY} ->
             {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
-        {error, not_found} ->
-            {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
-        {error, Reason} ->
-            ?debug("Authentication error in ~p due to: ~p", [?MODULE, Reason]),
-            {{false, <<"authentication_error">>}, Req, CdmiReq}
-    catch
-        throw:Err ->
-            {stop, send_error_response(Err, Req), CdmiReq};
-        Type:Message ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
-                ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
-            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
+        {error, _} = Error ->
+            {stop, send_error_response(Error, Req), CdmiReq}
     end;
 is_authorized(Req, CdmiReq) ->
     {true, Req, CdmiReq}.
@@ -463,7 +452,7 @@ resolve_resource_by_id(Req) ->
 
     {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
-            case catch http_auth:authenticate(Req, rest, true) of
+            case http_auth:authenticate(Req, rest, true) of
                 {ok, ?USER(_UserId, SessionId) = Auth0} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->
@@ -471,8 +460,10 @@ resolve_resource_by_id(Req) ->
                         {error, Errno} ->
                             throw(?ERROR_POSIX(Errno))
                     end;
-                _ ->
-                    throw(?ERROR_UNAUTHORIZED)
+                {ok, ?NOBODY} ->
+                    throw(?ERROR_UNAUTHORIZED);
+                {error, _} = Error ->
+                    throw(Error)
             end;
         CapabilityPath ->
             {?NOBODY, CapabilityPath}

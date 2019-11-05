@@ -18,7 +18,7 @@
 
 %% API
 -export([
-    assert_none_data_caveats/1,
+    assert_no_data_caveats/1,
     verify_data_location_caveats/3
 ]).
 
@@ -41,18 +41,13 @@
 %%%===================================================================
 
 
--spec assert_none_data_caveats([caveats:caveat()]) -> ok | no_return().
-assert_none_data_caveats(Caveats) when is_list(Caveats) ->
+-spec assert_no_data_caveats([caveats:caveat()]) -> ok | no_return().
+assert_no_data_caveats(Caveats) when is_list(Caveats) ->
     case caveats:filter(?DATA_CAVEATS, Caveats) of
-        [] -> ok;
-        _ -> throw(?ERROR_TOKEN_INVALID)
-    end;
-assert_none_data_caveats(SerializedToken) ->
-    case tokens:deserialize(SerializedToken) of
-        {ok, Token} ->
-            assert_none_data_caveats(tokens:get_caveats(Token));
-        {error, _} ->
-            throw(?ERROR_TOKEN_INVALID)
+        [] ->
+            ok;
+        [DataCaveat | _] ->
+            throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
     end.
 
 

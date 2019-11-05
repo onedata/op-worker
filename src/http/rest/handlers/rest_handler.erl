@@ -139,20 +139,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 -spec is_authorized(cowboy_req:req(), state()) ->
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
-    % Check if the request carries any authorization
-    Result = try
-        http_auth:authenticate(Req, rest, true)
-    catch
-        throw:Err ->
-            Err;
-        Type:Message ->
-            ?error_stacktrace("Unexpected error in ~p:is_authorized - ~p:~p", [
-                ?MODULE, Type, Message
-            ]),
-            ?ERROR_INTERNAL_SERVER_ERROR
-    end,
-
-    case Result of
+    case http_auth:authenticate(Req, rest, true) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};

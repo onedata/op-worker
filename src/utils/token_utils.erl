@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This modules handles token caveats checks.
+%%% This modules provides utility functions for token management in op.
 %%% @end
 %%%-------------------------------------------------------------------
--module(token_caveats).
+-module(token_utils).
 -author("Bartosz Walkowicz").
 
 -include_lib("ctool/include/aai/aai.hrl").
@@ -17,15 +17,11 @@
 
 %% API
 -export([
-    is_interface_allowed/2,
+    assert_interface_allowed/2,
     verify_api_caveats/3
 ]).
 
 -type interface() :: gui | rest | oneclient.
--type caveats_source() ::
-    [caveats:caveat()] |
-    tokens:serialized() |
-    tokens:token().
 
 
 %%%===================================================================
@@ -33,20 +29,18 @@
 %%%===================================================================
 
 
--spec is_interface_allowed(caveats_source(), interface()) -> boolean().
-is_interface_allowed(Caveats, _Interface) when is_list(Caveats) ->
+-spec assert_interface_allowed([caveats:caveat()] | tokens:serialized(),
+    interface()) -> ok | no_return().
+assert_interface_allowed(Caveats, _Interface) when is_list(Caveats) ->
     % TODO VFS-5719 check interface caveats
-    true;
-is_interface_allowed(#token{} = Token, Interface) ->
-    Caveats = tokens:get_caveats(Token),
-    is_interface_allowed(Caveats, Interface);
-is_interface_allowed(SerializedToken, Interface) ->
+    ok;
+assert_interface_allowed(SerializedToken, Interface) ->
     case tokens:deserialize(SerializedToken) of
         {ok, Token} ->
             Caveats = tokens:get_caveats(Token),
-            is_interface_allowed(Caveats, Interface);
-        {error, _} ->
-            false
+            assert_interface_allowed(Caveats, Interface);
+        {error, _} = Error ->
+            throw(Error)
     end.
 
 
