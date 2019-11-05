@@ -22,18 +22,22 @@
     verify_data_caveats/3
 ]).
 
--define(DATA_CAVEATS, [cv_data_path, cv_data_objectid]).
--define(DATA_LOCATION_CAVEATS, [cv_data_path, cv_data_objectid]).
-
--define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
--define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
-
+-ifdef(TEST).
+-export([check_data_path_relation/2]).
+-endif.
 
 -type relation() :: subpath | ancestor.
 -type children() :: gb_sets:set(file_meta:name()).
 -type data_location_caveat() :: #cv_data_objectid{} | #cv_data_path{}.
 
 -export_type([relation/0, children/0, data_location_caveat/0]).
+
+
+-define(DATA_CAVEATS, [cv_data_path, cv_data_objectid]).
+-define(DATA_LOCATION_CAVEATS, [cv_data_path, cv_data_objectid]).
+
+-define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
+-define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
 
 
 %%%===================================================================
@@ -210,8 +214,12 @@ verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
         false ->
             throw(?EACCES)
     end;
-verify_data_location_caveat(FileCtx, ?CV_PATH(AllowedPaths), true) ->
-    check_data_path_relation(FileCtx, AllowedPaths);
+verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), true) ->
+    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+    case check_data_path_relation(FilePath, AllowedPaths) of
+        {undefined, _} -> throw(?EACCES);
+        {Relation, Names} -> {Relation, FileCtx1, Names}
+    end;
 
 verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), false) ->
     AllowedGuids = objectids_to_guids(ObjectIds),
@@ -227,27 +235,31 @@ verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), false) ->
         false ->
             throw(?EACCES)
     end;
-verify_data_location_caveat(FileCtx, ?CV_OBJECTID(ObjectIds), true) ->
-    check_data_path_relation(FileCtx, objectids_to_paths(ObjectIds)).
+verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), true) ->
+    AllowedPaths = objectids_to_paths(ObjectIds),
+    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+    case check_data_path_relation(FilePath, AllowedPaths) of
+        {undefined, _} -> throw(?EACCES);
+        {Relation, Names} -> {Relation, FileCtx1, Names}
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether file is ancestor or subpath to any of specified paths.
-%% In case when file is ancestor to one path and subpath to another, then
+%% Checks whether FilePath is ancestor or subpath to any of specified paths.
+%% In case when FilePath is ancestor to one path and subpath to another, then
 %% subpath takes precedence.
 %% Additionally, if it is ancestor, it returns list of it's immediate
 %% children.
 %% @end
 %%--------------------------------------------------------------------
--spec check_data_path_relation(file_ctx:ctx(), [file_meta:path()]) ->
-    {relation(), file_ctx:ctx(), undefined | children()} | no_return().
-check_data_path_relation(FileCtx0, AllowedPaths) ->
-    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+-spec check_data_path_relation(file_meta:path(), [file_meta:path()]) ->
+    {undefined | relation(), undefined | children()}.
+check_data_path_relation(FilePath, AllowedPaths) ->
     FilePathLen = size(FilePath),
 
-    {Relation, Names} = lists:foldl(fun
+    lists:foldl(fun
         (_AllowedPath, {subpath, _NamesAcc} = Acc) ->
             Acc;
         (AllowedPath, {_Relation, NamesAcc} = Acc) ->
@@ -276,14 +288,7 @@ check_data_path_relation(FileCtx0, AllowedPaths) ->
                             Acc
                     end
             end
-    end, {undefined, undefined}, AllowedPaths),
-
-    case Relation of
-        undefined ->
-            throw(?EACCES);
-        _ ->
-            {Relation, FileCtx1, Names}
-    end.
+    end, {undefined, undefined}, AllowedPaths).
 
 
 %% @private
